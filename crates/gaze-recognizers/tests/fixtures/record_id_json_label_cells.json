@@ -121,11 +121,11 @@
     "owned": "SYN731284"
   },
   {
-    "text": "{\"Customer ID:\":{\"v\":\"SYN731284\"}}",
+    "text": "{\"Customer ID:\":{\"value\":\"SYN731284\"}}",
     "owned": "SYN731284"
   },
   {
-    "text": "{\"Customer ID:\":[{\"v\":[\"SYN731284\"]}]}",
+    "text": "{\"Customer ID:\":[{\"value\":[\"SYN731284\"]}]}",
     "owned": "SYN731284"
   },
   {

@@ -214,7 +214,7 @@ const MAX_ESCAPED_REPEAT_DEPTH: usize = 32;
 
 /// How a swept copy relates to the value it was found from. Audit rows carry
 /// this instead of the source token: the audit contract never holds tokens.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum SweepLink {
     /// Byte-identical after normalization: the copy reuses the source token.
     Exact,
@@ -446,7 +446,7 @@ impl SweepMatcher {
             for _ in 0..=MAX_ESCAPED_REPEAT_DEPTH {
                 for found in derived.matcher.find_overlapping_iter(&view.text) {
                     let span = view.source[found.start()].start..view.source[found.end() - 1].end;
-                    if let Some(sources) = derived.sources.get(&text[span.clone()]) {
+                    if let Some(sources) = derived.sources.get(&view.text[found.range()]) {
                         for source in sources {
                             self.push_hit(
                                 text,
@@ -465,6 +465,16 @@ impl SweepMatcher {
                 view = decoded;
             }
         }
+        let mut seen = HashSet::new();
+        hits.retain(|hit| {
+            seen.insert((
+                hit.span.start,
+                hit.span.end,
+                hit.family.clone(),
+                hit.class.clone(),
+                hit.link,
+            ))
+        });
         hits
     }
 
@@ -481,9 +491,6 @@ impl SweepMatcher {
             return;
         }
         let source = &self.sources[source];
-        if source.repeat_seed.is_some() && !json.allows(&span) {
-            return;
-        }
         // A name copy glued to more name (`Vasquez-Ellery`, `O'Brien`) covers
         // the whole compound; stopping at the source's edge ships the rest raw.
         let span = if source.class == PiiClass::Name {
@@ -491,7 +498,7 @@ impl SweepMatcher {
         } else {
             span
         };
-        if inside_url(text, &span) {
+        if !json.allows(&span) || inside_url(text, &span) {
             return;
         }
         let link = match link {
@@ -510,7 +517,7 @@ impl SweepMatcher {
 }
 
 /// Deep source spelling may be long even though its decoded identifier is short.
-/// Match a bounded decoded pattern, then require byte-exact source spelling.
+/// Match a bounded decoded body and project each spelling to verified source bytes.
 struct DerivedExactMatcher {
     matcher: AhoCorasick,
     sources: HashMap<String, Vec<usize>>,
@@ -530,12 +537,6 @@ impl DerivedExactMatcher {
             .filter(|(_, source)| source.field_owned_scalar())
         {
             let raw = normalize(&source.raw).text;
-            let body = trim_labelled_repeat(&raw);
-            let expanded_fold = body.len() <= MAX_LABELLED_REPEAT_BYTES
-                && fold(body).text.len() > MAX_LABELLED_REPEAT_BYTES;
-            if !raw.contains('\\') && !expanded_fold {
-                continue;
-            }
             let mut view = EscapedView::identity(&raw);
             let mut depth = 0;
             while let Some(decoded) = view.decode() {
@@ -557,10 +558,8 @@ impl DerivedExactMatcher {
                     && source.class.clears_repeat_floor(body.trim())
                 {
                     patterns.insert(body.to_owned());
-                    let raw_body =
-                        &raw[view.source[span.start].start..view.source[span.end - 1].end];
                     raw_sources
-                        .entry(raw_body.to_owned())
+                        .entry(body.to_owned())
                         .or_default()
                         .entry((source.family.clone(), source.class.clone()))
                         .or_insert(index);
@@ -619,49 +618,12 @@ impl EscapedView {
     }
 
     fn decode(&self) -> Option<Self> {
-        let mut text = String::with_capacity(self.text.len());
-        let mut source = Vec::with_capacity(self.text.len());
-        let mut at = 0;
-        let mut changed = false;
-        while at < self.text.len() {
-            let start = at;
-            let escape = (self.text.as_bytes()[at] == b'\\')
-                .then(|| {
-                    let len = if self.text.as_bytes().get(at + 1) == Some(&b'u') {
-                        let code = self
-                            .text
-                            .get(at + 2..at + 6)
-                            .and_then(|hex| u16::from_str_radix(hex, 16).ok());
-                        if code.is_some_and(|code| (0xd800..=0xdbff).contains(&code)) {
-                            12
-                        } else {
-                            6
-                        }
-                    } else {
-                        2
-                    };
-                    let raw = self.text.get(at..at + len)?;
-                    serde_json::from_str::<String>(&format!("\"{raw}\""))
-                        .ok()
-                        .map(|decoded| (len, decoded))
-                })
-                .flatten();
-            let decoded = if let Some((len, decoded)) = escape {
-                at += len;
-                changed = true;
-                decoded
-            } else {
-                let ch = self.text[at..].chars().next().expect("character");
-                at += ch.len_utf8();
-                ch.to_string()
-            };
-            text.push_str(&decoded);
-            source.extend(std::iter::repeat_n(
-                self.source[start].start..self.source[at - 1].end,
-                decoded.len(),
-            ));
-        }
-        changed.then_some(Self { text, source })
+        let (text, projection) = gaze_types::json_regions::unescape_json_fragments(&self.text)?;
+        let source = projection
+            .into_iter()
+            .map(|span| self.source[span.start].start..self.source[span.end - 1].end)
+            .collect();
+        Some(Self { text, source })
     }
 }
 
@@ -676,7 +638,19 @@ impl JsonSweepIndex {
     fn new(text: &str) -> Self {
         let mut forbidden = Vec::new();
         let mut escape_interiors = Vec::new();
-        Self::collect(text, None, &mut forbidden, &mut escape_interiors);
+        let mut view = EscapedView::identity(text);
+        for _ in 0..=MAX_ESCAPED_REPEAT_DEPTH {
+            Self::collect(
+                &view.text,
+                Some(&view.source),
+                &mut forbidden,
+                &mut escape_interiors,
+            );
+            let Some(decoded) = view.decode() else {
+                break;
+            };
+            view = decoded;
+        }
         Self {
             forbidden: merge_json_ranges(forbidden),
             escape_interiors: merge_json_ranges(escape_interiors),
@@ -739,39 +713,6 @@ impl JsonSweepIndex {
                 } else {
                     at += text[at..].chars().next().expect("character").len_utf8();
                 }
-            }
-        }
-        // A serialized document can also be the whole input JSON string.
-        let interiors: Vec<_> = strings
-            .into_iter()
-            .filter(|(_, key)| !key)
-            .map(|(span, _)| span)
-            .collect();
-        for span in interiors {
-            let Ok(decoded) = serde_json::from_str::<String>(&text[span.start - 1..span.end + 1])
-            else {
-                continue;
-            };
-            if decoded == text[span.clone()] || !decoded.contains(['{', '[']) {
-                continue;
-            }
-            let mut projection = Vec::with_capacity(decoded.len());
-            let mut at = span.start;
-            while at < span.end {
-                let start = at;
-                let len = if text.as_bytes()[at] == b'\\' {
-                    at = json_escape_end(text, at);
-                    serde_json::from_str::<String>(&format!("\"{}\"", &text[start..at]))
-                        .map_or(0, |s| s.len())
-                } else {
-                    let len = text[at..].chars().next().expect("character").len_utf8();
-                    at += len;
-                    len
-                };
-                projection.extend(std::iter::repeat_n(project(start, at), len));
-            }
-            if projection.len() == decoded.len() {
-                Self::collect(&decoded, Some(&projection), forbidden, escape_interiors);
             }
         }
     }
@@ -1454,6 +1395,160 @@ mod tests {
                 "{text}"
             );
         }
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    fn json_value_types(value: &serde_json::Value) -> serde_json::Value {
+        use serde_json::Value;
+        match value {
+            Value::Object(fields) => Value::Object(
+                fields
+                    .iter()
+                    .map(|(key, value)| (key.clone(), json_value_types(value)))
+                    .collect(),
+            ),
+            Value::Array(values) => Value::Array(values.iter().map(json_value_types).collect()),
+            Value::String(_) => Value::String("string".into()),
+            Value::Number(_) => Value::String("number".into()),
+            other => other.clone(),
+        }
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn mixed_carriers_preserve_json_keys_types_and_string_boundaries() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
+        let mut checked = 0;
+        for seed in [
+            "customerId: 731284",
+            "Customer ID = 731284",
+            "customer_id: 731284",
+            r#"{"customerId":"731284"}"#,
+        ] {
+            for prefix in ["", "TV 55\" screen ", "path C:\\\" ", "msg \"oops "] {
+                for body in [
+                    r#"{"731284":true,"n":731284,"a":[731284,null,false],"copy":"731284"}"#,
+                    r#"{"Customer ID:":"C-731284"}"#,
+                    r#"{"properties":{"customerId":{"type":"string","maxLength":36}},"required":["customerId"]}"#,
+                    r#"{"customerId":{"type":"integer","minimum":1,"maximum":999999}}"#,
+                    r#"{"customerId":{"format":"int64","pattern":"^C-[0-9]{6}$","description":"6 digit id","examples":["C-123456"],"enum":["C-123456"],"version":2}}"#,
+                ] {
+                    let original: serde_json::Value = serde_json::from_str(body).unwrap();
+                    for encoding in 0..3 {
+                        let encoded = serde_json::to_string(body).unwrap();
+                        let carrier = match encoding {
+                            0 => body.to_owned(),
+                            1 => encoded[1..encoded.len() - 1].to_owned(),
+                            _ => encoded,
+                        };
+                        for separate_turn in [false, true] {
+                            let session = Session::new(Scope::Ephemeral).unwrap();
+                            let input = if separate_turn {
+                                pipeline
+                                    .redact(&session, RawDocument::Text(seed.into()))
+                                    .unwrap();
+                                format!("CARRIER {prefix}{carrier}")
+                            } else {
+                                format!("{seed}\nCARRIER {prefix}{carrier}")
+                            };
+                            let CleanDocument::Text(clean) = pipeline
+                                .redact(&session, RawDocument::Text(input.clone()))
+                                .unwrap()
+                            else {
+                                panic!("text")
+                            };
+                            assert_eq!(
+                                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                                input
+                            );
+                            let output = clean
+                                .split_once("CARRIER ")
+                                .unwrap()
+                                .1
+                                .strip_prefix(prefix)
+                                .unwrap_or_else(|| panic!("prefix changed: {clean}"));
+                            let decoded =
+                                match encoding {
+                                    0 => output.to_owned(),
+                                    1 => serde_json::from_str::<String>(&format!("\"{output}\""))
+                                        .unwrap_or_else(|error| {
+                                            panic!("{input:?} -> {clean:?}: {error}")
+                                        }),
+                                    _ => serde_json::from_str::<String>(output).unwrap_or_else(
+                                        |error| panic!("{input:?} -> {clean:?}: {error}"),
+                                    ),
+                                };
+                            let parsed: serde_json::Value = serde_json::from_str(&decoded)
+                                .unwrap_or_else(|error| panic!("{input:?} -> {clean:?}: {error}"));
+                            assert_eq!(
+                                json_value_types(&original),
+                                json_value_types(&parsed),
+                                "{input:?} -> {clean:?}"
+                            );
+                            if !original["properties"].is_null()
+                                || original["customerId"].is_object()
+                            {
+                                assert_eq!(original, parsed, "schema changed: {clean}");
+                            }
+                            for key in ["copy", "Customer ID:"] {
+                                if original[key].is_string() {
+                                    assert_ne!(parsed[key], original[key], "value leaked: {clean}");
+                                }
+                            }
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 480);
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn decoded_record_ids_repeat_between_raw_spellings_and_turns() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
+        let mut checked = 0;
+        for (seed, copy) in [
+            (r"SYN\u0037\u0033\u0031\u0032\u0038\u0034", "SYN731284"),
+            ("SYN731284", r"SYN\u0037\u0033\u0031\u0032\u0038\u0034"),
+        ] {
+            for separate_turn in [false, true] {
+                for quoted in [false, true] {
+                    let session = Session::new(Scope::Ephemeral).unwrap();
+                    let seed = format!(r#"{{"customerId":"{seed}"}}"#);
+                    let copy = if quoted {
+                        format!(r#"{{"m":"{copy}"}}"#)
+                    } else {
+                        format!("Ref {copy} noted.")
+                    };
+                    let input = if separate_turn {
+                        pipeline.redact(&session, RawDocument::Text(seed)).unwrap();
+                        copy
+                    } else {
+                        format!("{copy}\n{seed}")
+                    };
+                    let CleanDocument::Text(clean) = pipeline
+                        .redact(&session, RawDocument::Text(input.clone()))
+                        .unwrap()
+                    else {
+                        panic!("text")
+                    };
+                    assert!(
+                        !clean.contains("SYN731284") && !clean.contains(r"SYN\u0037"),
+                        "{input} -> {clean}"
+                    );
+                    assert_eq!(
+                        pipeline.restore_strict_text(&session, &clean).unwrap(),
+                        input
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 8);
     }
 
     #[cfg(feature = "bundled-recognizers")]

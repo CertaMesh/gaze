@@ -756,3 +756,70 @@ fn padded_record_ids_keep_repeat_protection_on_second_daemon_turn() {
         );
     }
 }
+
+#[test]
+fn mixed_record_ids_keep_json_structure_on_second_daemon_turn() {
+    let dir = tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(&policy, "[session]\nscope = \"conversation\"\n[policy.rulepacks]\nbundled = [\"core\"]\n[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n").unwrap();
+    let mut daemon = Daemon::start(&policy);
+    let mut checked = 0;
+    for (index, (seed, text, encoded)) in [
+        (
+            "customerId: 731284",
+            r#"{"731284":true,"total":731284,"copy":"731284"}"#,
+            false,
+        ),
+        (
+            "Customer ID = 731284",
+            r#"{\"731284\":true,\"total\":731284,\"copy\":\"731284\"}"#,
+            true,
+        ),
+        (
+            r#"{"customerId":"SYN\u0037\u0033\u0031\u0032\u0038\u0034"}"#,
+            r#"{"copy":"SYN731284"}"#,
+            false,
+        ),
+        (
+            r#"{"customerId":"SYN731284"}"#,
+            r#"{"copy":"SYN\u0037\u0033\u0031\u0032\u0038\u0034"}"#,
+            false,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let session = format!("mixed-record-{index}");
+        let opened = daemon.request(json!({"version":1,"op":"open","session_id":session}));
+        assert_eq!(opened["op"], "open", "{opened}");
+        let first =
+            daemon.request(json!({"version":1,"op":"clean","session_id":session,"text":seed}));
+        assert!(first["clean_text"].is_string(), "{first}");
+        let input = format!("log: {text}");
+        let next =
+            daemon.request(json!({"version":1,"op":"clean","session_id":session,"text":input}));
+        let clean = next["clean_text"].as_str().unwrap();
+        let body = clean.strip_prefix("log: ").unwrap();
+        let decoded = if encoded {
+            serde_json::from_str::<String>(&format!("\"{body}\"")).unwrap()
+        } else {
+            body.to_owned()
+        };
+        let parsed: Value = serde_json::from_str(&decoded).unwrap();
+        if index < 2 {
+            assert_eq!(parsed["731284"], true);
+            assert_eq!(parsed["total"], 731284);
+            assert_ne!(parsed["copy"], "731284");
+        } else {
+            assert!(
+                !clean.contains("SYN731284") && !clean.contains(r"SYN\u0037"),
+                "{clean}"
+            );
+        }
+        let restored =
+            daemon.request(json!({"version":1,"op":"restore","session_id":session,"text":clean}));
+        assert_eq!(restored["text"], input, "{restored}");
+        checked += 1;
+    }
+    assert_eq!(checked, 4);
+}

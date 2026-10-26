@@ -391,9 +391,20 @@ impl RegexDetector {
                     .as_ref()
                     .and_then(|parts| Some(parts.first()?.start..parts.last()?.end))
                     .or(captured);
+                let mut additional = Vec::new();
                 let span = captured.clone().map(|span| {
                     if self.complete_labelled_value {
                         if self.labelled_value_mode == LabelledValueMode::FieldOwned {
+                            if let Some(scans) =
+                                scalar_index.scan_json_label_cells(input, span.clone())
+                            {
+                                let mut scans = scans.into_iter();
+                                let first = scans
+                                    .next()
+                                    .expect("JSON ownership always returns a decision");
+                                additional.extend(scans);
+                                return first;
+                            }
                             return scan_field_owned_value_indexed(input, span, &mut scalar_index);
                         }
                         // Only these new fallbacks may trim a field cue inside their broad
@@ -464,7 +475,21 @@ impl RegexDetector {
                     }
                     span.rejected |= self.ipv4_phone_tail(input, &span.span);
                     return Some(match phone_parts {
-                        None => vec![span],
+                        None => {
+                            let rejected = span.rejected;
+                            let mut scans = vec![span];
+                            scans.extend(
+                                additional
+                                    .into_iter()
+                                    .filter(|scan| self.boundary_accepts(input, &scan.span))
+                                    .map(|mut scan| {
+                                        scan.rejected |=
+                                            rejected || self.ipv4_phone_tail(input, &scan.span);
+                                        scan
+                                    }),
+                            );
+                            scans
+                        }
                         Some(parts) => parts
                             .into_iter()
                             .map(|part| LabelledValueScan {

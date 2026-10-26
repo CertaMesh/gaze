@@ -8,6 +8,7 @@ use std::ops::Range;
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
     json_label_values: Option<JsonLabelValues>,
+    embedded_json: Option<Option<Box<DecodedFrame>>>,
     paired: Option<PairedCloseIndex>,
     prefix: PrefixCursor,
     provisional: Option<(usize, PrefixCursor)>,
@@ -102,6 +103,16 @@ impl ScalarBoundaryIndex {
         input: &str,
         capture: Range<usize>,
     ) -> Option<LabelledValueScan> {
+        self.scan_json_label_cells(input, capture)?
+            .into_iter()
+            .next()
+    }
+
+    pub(super) fn scan_json_label_cells(
+        &mut self,
+        input: &str,
+        capture: Range<usize>,
+    ) -> Option<Vec<LabelledValueScan>> {
         if self.json_label_values.is_none() {
             let encoded = self.encoded(input);
             self.json_label_values = Some(json_label_values(input, &encoded.json));
@@ -158,26 +169,78 @@ impl ScalarBoundaryIndex {
                     .and_then(|at| values.direct.get(&at))
             })
             .cloned()
-            .or_else(|| enclosing_key.map(|_| capture.start..capture.start))
+            .or_else(|| enclosing_key.map(|_| vec![capture.start..capture.start]))
         {
             let span = if span.is_empty() {
-                capture.start..capture.start
+                vec![capture.start..capture.start]
             } else {
                 span
             };
-            return Some(LabelledValueScan {
-                quoted_value: true,
-                capture: span.clone(),
-                extension: span.end..span.end,
-                repeat_seed: (!span.is_empty()).then_some(gaze_types::LabelledValueRepeatSeed {
-                    span: span.clone(),
-                    kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
-                }),
-                reason: labelled_value_over_limit(&input[span.clone()])
-                    .then_some(LabelledValueScanReason::LimitExceeded),
-                rejected: span.is_empty(),
-                span,
-            });
+            return Some(
+                span.into_iter()
+                    .map(|span| {
+                        let span = if span.is_empty() {
+                            capture.start..capture.start
+                        } else {
+                            span
+                        };
+                        LabelledValueScan {
+                            quoted_value: true,
+                            capture: span.clone(),
+                            extension: span.end..span.end,
+                            repeat_seed: (!span.is_empty()).then_some(
+                                gaze_types::LabelledValueRepeatSeed {
+                                    span: span.clone(),
+                                    kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+                                },
+                            ),
+                            reason: labelled_value_over_limit(&input[span.clone()])
+                                .then_some(LabelledValueScanReason::LimitExceeded),
+                            rejected: span.is_empty(),
+                            span,
+                        }
+                    })
+                    .collect(),
+            );
+        }
+        // Escaped JSON can be a log fragment with no enclosing JSON string.
+        let embedded = self.embedded_json.get_or_insert_with(|| {
+            scanner_work(input.len());
+            let (text, source) = gaze_types::json_regions::unescape_json_fragments(input)?;
+            (!gaze_types::json_regions::json_regions(&text).is_empty()).then(|| {
+                Box::new(DecodedFrame {
+                    view: ScalarSourceView { text, source },
+                    index: ScalarBoundaryIndex::default(),
+                })
+            })
+        });
+        if let Some(decoded) = embedded {
+            if let Some(start) = source_anchor(&decoded.view.source, capture.start) {
+                let end = decoded
+                    .view
+                    .source
+                    .partition_point(|range| range.end < capture.end)
+                    .saturating_add(1)
+                    .min(decoded.view.text.len());
+                if let Some(scans) = decoded
+                    .index
+                    .scan_json_label_cells(&decoded.view.text, start..end)
+                {
+                    return Some(
+                        scans
+                            .into_iter()
+                            .map(|scan| {
+                                let mut scan = project_scan(scan, &decoded.view.source, &capture);
+                                scan.reason = scan.reason.or_else(|| {
+                                    labelled_value_over_limit(&input[scan.span.clone()])
+                                        .then_some(LabelledValueScanReason::LimitExceeded)
+                                });
+                                scan
+                            })
+                            .collect(),
+                    );
+                }
+            }
         }
         let encoded = self.encoded(input);
         let frame = encoded.json_frame_at(capture.start)?;
@@ -189,15 +252,22 @@ impl ScalarBoundaryIndex {
             .partition_point(|range| range.end < capture.end)
             .saturating_add(1)
             .min(decoded.view.text.len());
-        let scan = decoded
+        let scans = decoded
             .index
-            .scan_json_label_cell(&decoded.view.text, start..end)?;
-        let mut scan = project_scan(scan, &decoded.view.source, &capture);
-        scan.reason = scan.reason.or_else(|| {
-            labelled_value_over_limit(&input[scan.span.clone()])
-                .then_some(LabelledValueScanReason::LimitExceeded)
-        });
-        Some(scan)
+            .scan_json_label_cells(&decoded.view.text, start..end)?;
+        Some(
+            scans
+                .into_iter()
+                .map(|scan| {
+                    let mut scan = project_scan(scan, &decoded.view.source, &capture);
+                    scan.reason = scan.reason.or_else(|| {
+                        labelled_value_over_limit(&input[scan.span.clone()])
+                            .then_some(LabelledValueScanReason::LimitExceeded)
+                    });
+                    scan
+                })
+                .collect(),
+        )
     }
 
     pub(super) fn scan_encoded_wrapper(
@@ -850,8 +920,8 @@ impl EncodedIndex {
 // NDJSON, fences, or prose; the rest of the document need not be valid JSON.
 struct JsonLabelValues {
     keys: std::collections::HashSet<usize>,
-    labels: HashMap<usize, Range<usize>>,
-    direct: HashMap<usize, Range<usize>>,
+    labels: HashMap<usize, Vec<Range<usize>>>,
+    direct: HashMap<usize, Vec<Range<usize>>>,
     frames: Vec<JsonFrame>,
 }
 
@@ -888,9 +958,12 @@ fn json_label_values(input: &str, _frames: &[JsonFrame]) -> JsonLabelValues {
                     .get(&start)
                     .cloned()
                     .filter(|span| {
-                        !array_cell || !json_scalar_is_label(input, &values.frames, span)
+                        !array_cell
+                            || !span
+                                .iter()
+                                .any(|span| json_scalar_is_label(input, &values.frames, span))
                     })
-                    .unwrap_or(close..close);
+                    .unwrap_or_else(|| vec![close..close]);
                 values.labels.insert(close, span.clone());
                 if key {
                     values.keys.insert(close);
@@ -939,7 +1012,7 @@ fn json_skip_space(input: &str, mut at: usize) -> usize {
 fn json_label_tail_is_whitespace(mut tail: &str) -> bool {
     while let Some(ch) = tail.chars().next() {
         scanner_work(1);
-        if ch.is_whitespace() {
+        if ch.is_whitespace() || ch == '\u{200b}' {
             tail = &tail[ch.len_utf8()..];
         } else if let Some(len) = gaze_types::json_regions::json_whitespace_escape_len(tail) {
             tail = &tail[len..];
@@ -973,48 +1046,82 @@ fn json_scalar_is_label(input: &str, frames: &[JsonFrame], span: &Range<usize>) 
             .all(|ch| ch.is_alphabetic() || ch.is_whitespace() || "_-.".contains(ch))
 }
 
-// Nested ownership selects an ID-like scalar, never a schema word or array number.
-fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range<usize>> {
+struct JsonContainer {
+    opening: usize,
+    kind: u8,
+    id_key: bool,
+    schema: bool,
+    spans: Vec<Range<usize>>,
+}
+
+fn json_schema_keyword(key: &str) -> bool {
+    matches!(
+        key,
+        "type"
+            | "$ref"
+            | "properties"
+            | "format"
+            | "pattern"
+            | "enum"
+            | "examples"
+            | "const"
+            | "default"
+    ) || key.starts_with("min")
+        || key.starts_with("max")
+}
+
+// A container owns direct array strings or explicit id-like object children.
+fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Vec<Range<usize>>> {
     let mut values = HashMap::new();
-    let mut containers: Vec<(usize, Option<Range<usize>>, bool)> = Vec::new();
+    let mut containers: Vec<JsonContainer> = Vec::new();
     let mut at = 0;
     let mut strings = frames.iter().peekable();
     while at < input.len() {
         scanner_work(1);
         let start = at;
         let mut eligible = false;
-        let span = if let Some(frame) = strings.peek().filter(|frame| frame.range.start == at) {
+        let spans = if let Some(frame) = strings.peek().filter(|frame| frame.range.start == at) {
             at = frame.range.end;
             strings.next();
             if input.as_bytes().get(json_skip_space(input, at)) == Some(&b':') {
                 let key = serde_json::from_str::<String>(&input[start..at]).unwrap_or_default();
-                if let Some((_, _, id_key)) = containers.last_mut() {
-                    *id_key = ["id", "value", "number", "no", "nr"]
+                if let Some(container) = containers.last_mut() {
+                    container.id_key = ["id", "value", "number", "no", "nr"]
                         .iter()
                         .any(|id| key.eq_ignore_ascii_case(id));
+                    container.schema |= json_schema_keyword(&key);
                 }
                 None
             } else {
-                let span = start + 1..at - 1;
-                eligible = input[span.clone()].chars().any(|ch| ch.is_ascii_digit())
-                    || containers.last().is_some_and(|(_, _, id_key)| *id_key);
-                Some(span)
+                eligible = containers
+                    .last()
+                    .is_some_and(|container| container.kind == b'[' || container.id_key);
+                Some(vec![start + 1..at - 1])
             }
         } else {
             match input.as_bytes()[at] {
                 b'{' | b'[' => {
-                    containers.push((at, None, false));
+                    containers.push(JsonContainer {
+                        opening: at,
+                        kind: input.as_bytes()[at],
+                        id_key: false,
+                        schema: false,
+                        spans: Vec::new(),
+                    });
                     at += 1;
                     None
                 }
                 b'}' | b']' => {
                     at += 1;
-                    if let Some((opening, span, _)) = containers.pop() {
-                        if let Some(span) = &span {
-                            values.insert(opening, span.clone());
+                    if let Some(mut container) = containers.pop() {
+                        if container.schema {
+                            container.spans.clear();
                         }
-                        eligible = true;
-                        span
+                        values.insert(container.opening, container.spans.clone());
+                        eligible = containers.last().is_some_and(|parent| {
+                            parent.id_key || (parent.kind == b'[' && container.kind == b'{')
+                        });
+                        Some(container.spans)
                     } else {
                         None
                     }
@@ -1029,8 +1136,8 @@ fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range
                     }
                     eligible = containers
                         .last()
-                        .is_some_and(|(opening, _, _)| input.as_bytes()[*opening] == b'{');
-                    Some(start..at)
+                        .is_some_and(|container| container.kind == b'{' && container.id_key);
+                    Some(vec![start..at])
                 }
                 _ => {
                     at += 1;
@@ -1038,13 +1145,13 @@ fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range
                 }
             }
         };
-        if let Some(span) = span {
-            values.insert(start, span.clone());
-            if let Some((_, first, id_key)) = containers.last_mut() {
-                if eligible && first.is_none() {
-                    *first = Some(span);
+        if let Some(spans) = spans {
+            values.insert(start, spans.clone());
+            if let Some(container) = containers.last_mut() {
+                if eligible {
+                    container.spans.extend(spans);
                 }
-                *id_key = false;
+                container.id_key = false;
             }
         }
     }
@@ -2311,7 +2418,7 @@ mod json_label_cells {
                 }
                 let regions = gaze_types::json_regions::json_regions(text);
                 if regions.is_empty() {
-                    Value::String("scalar".into())
+                    Value::String("string".into())
                 } else {
                     Value::Array(
                         regions
@@ -2321,7 +2428,7 @@ mod json_label_cells {
                     )
                 }
             }
-            Value::Number(_) => Value::String("scalar".into()),
+            Value::Number(_) => Value::String("number".into()),
             other => other.clone(),
         }
     }
@@ -2347,8 +2454,8 @@ mod json_label_cells {
                 "731284.5",
                 "731284e2",
                 r#"["SYN731284"]"#,
-                r#"{"v":"SYN731284"}"#,
-                r#"{"type":"customer","id":"SYN731284"}"#,
+                r#"{"value":"SYN731284"}"#,
+                r#"{"version":2,"id":"SYN731284"}"#,
                 r#"{"type":"string","description":"The id"}"#,
                 r##"{"$ref":"#/defs/Id"}"##,
                 r#"{"a":[1,2]}"#,
@@ -2444,8 +2551,11 @@ mod json_label_cells {
                                             serde_json::from_str::<serde_json::Value>(value)
                                                 .unwrap()
                                                 .is_number();
+                                        // Direct numeric IDs retain the separately tracked
+                                        // numeric-emission limitation; preserve their type in
+                                        // this recognizer-only span substitution.
                                         let mut marker = if numeric || !in_string {
-                                            "\"MASK\"".to_owned()
+                                            "0".to_owned()
                                         } else {
                                             "MASK".to_owned()
                                         };
@@ -2506,6 +2616,87 @@ mod json_label_cells {
     }
 
     #[test]
+    fn containers_own_all_and_only_explicit_record_values() {
+        let rules = super::regression_tests::rules();
+        let mut checked = 0;
+        for (body, expected) in [
+            (
+                r#"["SYN731284","SYN731285"]"#,
+                vec!["SYN731284", "SYN731285"],
+            ),
+            (
+                r#"[{"id":"SYN731284"},{"ID":"SYN731285"}]"#,
+                vec!["SYN731284", "SYN731285"],
+            ),
+            (
+                r#"{"version":2,"id":"SYN731284","value":"SYN731285"}"#,
+                vec!["SYN731284", "SYN731285"],
+            ),
+            (r#"{"version":2,"other":"SYN731284"}"#, vec![]),
+            (
+                r#"{"type":"string","id":"SYN731284","maxLength":36}"#,
+                vec![],
+            ),
+            (r#"{"format":"int64","examples":["SYN731284"]}"#, vec![]),
+        ] {
+            let mut input = format!(r#"{{"customerId":{body}}}"#);
+            for _ in 0..=4 {
+                let mut spans: Vec<_> = rules
+                    .iter()
+                    .flat_map(|rule| rule.scanned_spans(&input, None))
+                    .filter(|scan| !scan.rejected)
+                    .map(|scan| scan.span)
+                    .collect();
+                spans.sort_by_key(|span| (span.start, span.end));
+                spans.dedup();
+                let actual: Vec<_> = spans.iter().map(|span| &input[span.clone()]).collect();
+                assert_eq!(actual, expected, "{input}");
+                checked += 1;
+                input = serde_json::to_string(&input).unwrap();
+            }
+        }
+        assert_eq!(checked, 30);
+    }
+
+    #[test]
+    fn schema_containers_never_own_metadata_or_id_children() {
+        let rules = super::regression_tests::rules();
+        let mut checked = 0;
+        for key in [
+            "type",
+            "$ref",
+            "properties",
+            "format",
+            "pattern",
+            "minimum",
+            "maximum",
+            "minItems",
+            "maxLength",
+            "enum",
+            "examples",
+            "const",
+            "default",
+        ] {
+            for array in [false, true] {
+                let object = serde_json::json!({"id":"SYN731284", key: "int64"});
+                let mut input = serde_json::json!({"customerId": if array { serde_json::json!([object]) } else { object }}).to_string();
+                for _ in 0..=4 {
+                    assert!(
+                        rules
+                            .iter()
+                            .flat_map(|rule| rule.scanned_spans(&input, None))
+                            .all(|scan| scan.rejected),
+                        "{input}"
+                    );
+                    checked += 1;
+                    input = serde_json::to_string(&input).unwrap();
+                }
+            }
+        }
+        assert_eq!(checked, 130);
+    }
+
+    #[test]
     fn unicode_label_whitespace_owns_the_value() {
         let rules = super::regression_tests::rules();
         let mut checked = 0;
@@ -2525,6 +2716,8 @@ mod json_label_cells {
             "\\u2003",
             "\\u202F",
             "\\f",
+            "\\u200b",
+            "\u{200b}",
         ] {
             let mut input = format!(r#"{{"Customer ID:{escape}":"SYN731284"}}"#);
             for _ in 0..=4 {
@@ -2540,7 +2733,7 @@ mod json_label_cells {
                 input = serde_json::to_string(&input).unwrap();
             }
         }
-        assert_eq!(checked, 75);
+        assert_eq!(checked, 85);
     }
 
     #[test]
@@ -2563,7 +2756,7 @@ mod json_label_cells {
                 "731284.5",
                 "731284e2",
                 r#"["SYN731284"]"#,
-                r#"{"v":"SYN731284"}"#,
+                r#"{"value":"SYN731284"}"#,
             ] {
                 let body = format!("{{{}:{value}}}", serde_json::to_string(key).unwrap());
                 for container in [
