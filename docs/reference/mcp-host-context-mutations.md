@@ -97,10 +97,11 @@ record processing. Exclusion follows the recognizer's compilation mode and allow
 match kinds. The preparation regression counts normalization and fold calls without
 a clock assertion. Streamed pair matches are checked against materialized joins.
 
-The named Anvil check now runs eleven baseline/mutant pairs:
+The named Anvil check runs twelve baseline/mutant pairs:
 
 | Probe | Regression contract |
 | --- | --- |
+| `duplicate-views` | Identical scalar views run 4,960 pair checks once; decoded views that differ retain 9,920 checks. |
 | `normalization-drift` | Fullwidth and normalized echoes cannot reveal record membership. |
 | `split-argument-echo` | Scalar joins, including decoded JSON leaves, cannot reveal membership. |
 | `argument-budget` | A boundary-separated enumeration is rejected before any record-dependent step. |
@@ -123,5 +124,6 @@ Each baseline must execute and pass its named test. Each mutant must compile,
 execute that test, and fail it. The runner restores source bytes in `finally`.
 The Anvil result records the tested commit and input provenance. Per-probe logs and
 `results.json` are written to `target/gate/mcp-host-context-mutations/`. The PR body
-records the completed run's candidate and result. Benchmark certification remains
-a separate requirement before this draft can merge.
+records the completed run's candidate and result. These mutations do not provide
+detection benchmark certification. See the [verification report](mcp-host-context-verification.md)
+for default-clean projection equality and separate MCP transport measurements.
