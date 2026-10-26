@@ -1,0 +1,26 @@
+{
+  "base_sha": "8e2ed551187e06d83e2556a04579e2d788da839e",
+  "binary_sha256": [
+    "6c500eabcdec3f8cf5fe5d197820bb93b2d42dfab8530e5008a59478e2e8e29c",
+    "2de283103f1c44e697a5f8446d1a57a915fc7503df8c25d32dc136d01748d02f"
+  ],
+  "candidate_sha": "5a01ba0bf3e285e64836f4263ab0e1551789573c",
+  "cases": 1072,
+  "detections": [
+    103,
+    103
+  ],
+  "difference_count": 0,
+  "differences": [],
+  "exit_codes": [
+    {
+      "0": 1072
+    },
+    {
+      "0": 1072
+    }
+  ],
+  "manifest_sha256": "52e491458f33111d60c4b07e4ef472df0f88084f23a37dcb767a70fb2f42c0f1",
+  "schema": "gaze-clean-equality-v1",
+  "script_sha256": "d13a3072b671c23c9584086600cfceb07470d655850416367238335e0e753567"
+}
