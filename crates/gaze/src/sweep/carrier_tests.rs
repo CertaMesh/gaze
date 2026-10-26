@@ -380,7 +380,7 @@ fn lexical_sweep_keeps_whole_private_values_with_key_looking_content() {
 
 #[cfg(feature = "bundled-recognizers")]
 #[test]
-fn closed_wrapper_set_needs_letters_and_digits_outside_data() {
+fn closed_wrapper_set_requires_id_shape_outside_data() {
     use crate::{CleanDocument, RawDocument, Scope, Session};
     let pipeline = labelled_pipeline();
     let mut checked = 0;
@@ -394,7 +394,7 @@ fn closed_wrapper_set_needs_letters_and_digits_outside_data() {
             else {
                 panic!("text")
             };
-            if value == "C731284" {
+            if value != "placeholder" {
                 assert_eq!(session.snapshot_entries()[0].raw, value);
                 assert!(!clean.contains(value));
             } else {
@@ -598,8 +598,8 @@ fn non_tags_never_hide_record_values_or_repeats() {
     ];
     let mut checked = 0;
     for prefix in prefixes.into_iter().map(str::to_owned).chain([
-        format!("<a title='{}' ", "x".repeat(512)),
-        "<a title='x'\n ".to_owned(),
+        format!("<a title='{}' ", "x".repeat(2048)),
+        "<a title='x'\n ; ".to_owned(),
     ]) {
         for (label, value) in [("Customer ID", "C-731284"), ("employee_id", "E-4471")] {
             for separate_turn in [false, true] {
@@ -609,7 +609,7 @@ fn non_tags_never_hide_record_values_or_repeats() {
                     pipeline.redact(&session, RawDocument::Text(seed)).unwrap();
                 }
                 let input = if separate_turn {
-                    format!("{prefix}again {value} here then x > y;")
+                    format!("{prefix}again {value} here; then x > y;")
                 } else {
                     format!("{prefix}{label}: {value} then x > y;\nagain {value} here")
                 };
@@ -645,6 +645,7 @@ fn labelled_value_starts_keep_connectors_hashes_equals_and_numeric_wrappers() {
             (" (", "731284", ") called"),
             (": [", "731284", "]"),
             ("=⟨", "731284", "⟩"),
+            (": ", "C731284", " NOT NULL"),
         ] {
             let input = format!("{label}{start}{value}{end}");
             let session = Session::new(Scope::Ephemeral).unwrap();
@@ -659,7 +660,7 @@ fn labelled_value_starts_keep_connectors_hashes_equals_and_numeric_wrappers() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 27);
+    assert_eq!(checked, 30);
 }
 
 #[cfg(feature = "bundled-recognizers")]
@@ -692,7 +693,7 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         "customerId: x=+y",
         "customerId: =>",
         "customerId: #abcdef",
-        "customerId: (731284\nnext)",
+        "customerId: (731284\n)",
         "CREATE TABLE records (customer_id (731284));",
         "let customer_id: (731284);",
     ];

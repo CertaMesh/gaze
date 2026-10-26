@@ -26,55 +26,12 @@ impl MarkupRegions {
                 at += 1;
                 continue;
             }
-            let tail = text[at + 1..].strip_prefix('/').unwrap_or(&text[at + 1..]);
-            if !tail
-                .chars()
-                .next()
-                .is_some_and(|ch| ch.is_alphabetic() || matches!(ch, '_' | ':'))
-            {
-                at += 1;
-                continue;
-            }
-            let start = at;
-            let syntax_before = result.syntax.len();
-            let mut syntax = at;
-            let mut assignment = false;
-            at += 1;
-            while at < bytes.len() {
-                match bytes[at] {
-                    b'=' => {
-                        assignment = true;
-                        at += 1;
-                    }
-                    b'"' | b'\'' => {
-                        let quote = bytes[at];
-                        result.syntax.push(syntax..at + 1);
-                        at += 1;
-                        let mut escaped = false;
-                        while at < bytes.len() {
-                            if bytes[at] == quote && !escaped {
-                                break;
-                            }
-                            escaped = bytes[at] == b'\\' && !escaped;
-                            at += 1;
-                        }
-                        syntax = at;
-                        at += usize::from(at < bytes.len());
-                    }
-                    b'>' => {
-                        at += 1;
-                        break;
-                    }
-                    _ => at += 1,
-                }
-            }
-            if syntax < at {
-                result.syntax.push(syntax..at);
-            }
-            if assignment {
-                result.assignments.push(start..at);
+            if let Some((end, syntax)) = assignment_tag(text, at) {
+                result.assignments.push(at..end);
+                result.syntax.extend(syntax);
+                at = end;
             } else {
-                result.syntax.truncate(syntax_before);
+                at += 1;
             }
         }
         result
@@ -93,6 +50,94 @@ impl MarkupRegions {
             .get(index)
             .is_some_and(|range| range.start <= span.start && span.end <= range.end)
     }
+}
+
+fn assignment_tag(text: &str, start: usize) -> Option<(usize, Vec<Range<usize>>)> {
+    const MAX_TAG_BYTES: usize = 2048;
+    let bytes = text.as_bytes();
+    let limit = start.saturating_add(MAX_TAG_BYTES).min(bytes.len());
+    let mut at = start + 1;
+    if bytes.get(at) == Some(&b'/') {
+        at += 1;
+    }
+    let name_start = |byte: u8| byte.is_ascii_alphabetic() || byte == b'_';
+    let name_char = |byte: u8| name_start(byte) || byte.is_ascii_digit() || byte == b'-';
+    if !bytes.get(at).copied().is_some_and(name_start) {
+        return None;
+    }
+    while at < limit && name_char(bytes[at]) {
+        at += 1;
+    }
+    let mut syntax_start = start;
+    let mut syntax = Vec::new();
+    let mut assignment = false;
+    while at < limit {
+        if bytes[at] == b'>' || bytes.get(at..at + 2) == Some(b"/>") {
+            at += if bytes[at] == b'>' { 1 } else { 2 };
+            if at > limit || !assignment {
+                return None;
+            }
+            syntax.push(syntax_start..at);
+            return Some((at, syntax));
+        }
+        if !bytes[at].is_ascii_whitespace() {
+            return None;
+        }
+        while at < limit && bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        if at == limit {
+            return None;
+        }
+        if bytes[at] == b'>' || bytes.get(at..at + 2) == Some(b"/>") {
+            continue;
+        }
+        if !name_start(bytes[at]) {
+            return None;
+        }
+        while at < limit && name_char(bytes[at]) {
+            at += 1;
+        }
+        if at == limit {
+            return None;
+        }
+        if bytes[at] != b'=' {
+            continue;
+        }
+        assignment = true;
+        at += 1;
+        if at == limit {
+            return None;
+        }
+        if matches!(bytes[at], b'"' | b'\'') {
+            let quote = bytes[at];
+            syntax.push(syntax_start..at + 1);
+            at += 1;
+            while at < limit && bytes[at] != quote && bytes[at] != b'<' {
+                at += 1;
+            }
+            if at == limit || bytes[at] != quote {
+                return None;
+            }
+            syntax_start = at;
+            at += 1;
+        } else {
+            let value_start = at;
+            while at < limit && !bytes[at].is_ascii_whitespace() && bytes[at] != b'>' {
+                if bytes.get(at..at + 2) == Some(b"/>") {
+                    break;
+                }
+                if b"<,;:=\"'`".contains(&bytes[at]) {
+                    return None;
+                }
+                at += 1;
+            }
+            if at == value_start {
+                return None;
+            }
+        }
+    }
+    None
 }
 
 fn data_scalars(text: &str) -> Vec<Range<usize>> {

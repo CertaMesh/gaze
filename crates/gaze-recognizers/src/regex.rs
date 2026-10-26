@@ -475,7 +475,7 @@ impl RegexDetector {
                         search_at = Some(span.capture.end);
                     }
                     span.rejected |= self.ipv4_phone_tail(input, &span.span);
-                    return Some(match phone_parts {
+                    let mut scans = match phone_parts {
                         None => {
                             let rejected = span.rejected;
                             let mut scans = vec![span];
@@ -504,25 +504,26 @@ impl RegexDetector {
                                 rejected: span.rejected,
                             })
                             .collect::<Vec<_>>(),
-                    });
+                    };
+                    if self.labelled_value_mode == LabelledValueMode::FieldOwned {
+                        for scan in &mut scans {
+                            if !scan.quoted_value {
+                                scan.parent_scalar |=
+                                    scalar_index.parent_scalar(input, scan.span.start);
+                            }
+                            let markup = !scan.parent_scalar
+                                && scalar_index.inside_markup_assignment(input, scan.span.start);
+                            constrain_owned_identifier(input, scan, markup, full.start());
+                        }
+                    }
+                    return Some(scans);
                 }
             }
             None
         })
         .flatten();
         if !self.card_runs {
-            let mut scans: Vec<_> = matches.collect();
-            if self.labelled_value_mode == LabelledValueMode::FieldOwned {
-                for scan in &mut scans {
-                    if !scan.quoted_value {
-                        scan.parent_scalar |= scalar_index.parent_scalar(input, scan.span.start);
-                    }
-                    let markup = !scan.parent_scalar
-                        && scalar_index.inside_markup_assignment(input, scan.span.start);
-                    constrain_owned_identifier(input, scan, markup);
-                }
-            }
-            return scans;
+            return matches.collect();
         }
         matches
             .flat_map(|run| {
@@ -899,7 +900,7 @@ struct LabelledValueScan {
 }
 
 fn owned_id_start(value: &str) -> bool {
-    let value = value.strip_prefix(['-', '@', '_']).unwrap_or(value);
+    let value = value.strip_prefix(['-', '@', '_', '#']).unwrap_or(value);
     value.chars().next().is_some_and(char::is_alphanumeric)
 }
 
@@ -923,7 +924,12 @@ fn padded_base64_identifier(value: &str, suffix: &str, quote_end_allowed: bool) 
             || (quote_end_allowed && suffix.trim_start_matches('\\').starts_with(['"', '\''])))
 }
 
-fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_markup_tag: bool) {
+fn constrain_owned_identifier(
+    input: &str,
+    scan: &mut LabelledValueScan,
+    in_markup_tag: bool,
+    cue_start: usize,
+) {
     // Ownership establishes the field, never permission to consume its carrier syntax.
     let raw = &input[scan.span.clone()];
     let mut keep = raw.len();
@@ -961,12 +967,22 @@ fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_mark
                     || groups == 4
                     || at >= 40
                     || !next.chars().next().is_some_and(char::is_alphanumeric)
+                    || sql_continuation(next.split_whitespace().next().unwrap_or(""))
                 {
                     keep = at;
                     break;
                 }
                 groups += 1;
             }
+        }
+        // A separator inside an opaque ID cannot turn its digit-free prefix into a veto.
+        let prefix = &raw[..keep];
+        if !prefix.chars().any(char::is_numeric)
+            && raw[..run_end].chars().any(char::is_numeric)
+            && raw[..run_end].chars().all(field_value_char)
+            && !raw[..run_end].contains("==")
+        {
+            keep = run_end;
         }
     }
     scan.span.end = scan.span.start + keep;
@@ -995,10 +1011,11 @@ fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_mark
     let opener = input[..scan.span.start].chars().next_back();
     let paired = scan.quoted_value
         && opener.is_some_and(|ch| field_wrapper_opens(ch) && !matches!(ch, '"' | '\''));
+    let numeric_wrapper = paired && numeric_prose_wrapper(input, scan, cue_start);
     let wrapper_rejected = paired
         && !scan.parent_scalar
         && (!body.chars().next().is_some_and(char::is_alphanumeric)
-            || !body.chars().any(char::is_alphabetic)
+            || (!body.chars().any(char::is_alphabetic) && !numeric_wrapper)
             || body.chars().any(|ch| "<>&|!${}[]()?=;".contains(ch))
             || in_markup_tag
             || !opener.is_some_and(record_id_wrapper));
@@ -1011,19 +1028,117 @@ fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_mark
         || wrapper_rejected
         || (in_markup_tag && !scan.quoted_value)
         || member_path.is_match(body);
+    if !scan.parent_scalar {
+        scan.rejected |= code_identifier(input, scan, cue_start, paired);
+    }
+}
+
+fn numeric_prose_wrapper(input: &str, scan: &LabelledValueScan, cue_start: usize) -> bool {
+    let Some(opener) = input[..scan.span.start].chars().next_back() else {
+        return false;
+    };
+    let opening = scan.span.start - opener.len_utf8();
+    let separated = input[..opening]
+        .chars()
+        .next_back()
+        .is_some_and(|ch| ch.is_whitespace() || matches!(ch, ':' | '='));
+    let close = field_wrapper_closing_chars(opener).0;
+    separated
+        && input[scan.span.end..].starts_with(close)
+        && !input[opening..scan.span.end].contains(['\r', '\n'])
+        && !code_carrier_prefix(input, cue_start)
+}
+
+fn code_carrier_prefix(input: &str, cue_start: usize) -> bool {
+    let start = input[..cue_start]
+        .char_indices()
+        .rev()
+        .take_while(|(_, ch)| !matches!(ch, '\r' | '\n'))
+        .take(256)
+        .last()
+        .map_or(cue_start, |(at, _)| at);
+    static CODE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    CODE.get_or_init(|| {
+        Regex::new(
+            r"(?i)(?:\b(?:pub|let(?:\s+mut)?|const|var)\s+\z|\b(?:create|alter)\s+table\b|\bselect\b)",
+        )
+        .expect("code carrier prefix")
+    })
+    .is_match(&input[start..cue_start])
+}
+
+fn sql_continuation(token: &str) -> bool {
+    matches!(
+        token,
+        "NOT"
+            | "NULL"
+            | "REFERENCES"
+            | "PRIMARY"
+            | "DEFAULT"
+            | "UNIQUE"
+            | "CHECK"
+            | "CONSTRAINT"
+            | "GENERATED"
+            | "COLLATE"
+            | "FOREIGN"
+    )
+}
+
+fn code_identifier(input: &str, scan: &LabelledValueScan, cue_start: usize, paired: bool) -> bool {
+    if scan.quoted_value && !paired {
+        return false;
+    }
+    let body = &input[scan.span.clone()];
+    let token = body.split_whitespace().next().unwrap_or("");
+    let suffix = &input[scan.span.start + token.len()..];
+    let prefix = &input[cue_start..scan.span.start];
+    let assignment = prefix.trim_end().ends_with('=');
+    static TYPE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let type_name = TYPE.get_or_init(|| {
+        Regex::new(r"(?i)\A(?:[iu](?:8|16|32|64|128)|u?int\d*|float\d+|f(?:16|32|64|128))\z")
+            .expect("type name")
+    });
+    let normalized = |value: &str| {
+        value
+            .chars()
+            .filter(|ch| ch.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+    };
+    let value_name = normalized(token.trim_end_matches(char::is_numeric));
+    let label = normalized(prefix.trim_end_matches(|ch: char| {
+        ch.is_whitespace() || matches!(ch, ':' | '=' | '(' | '[' | '⟨')
+    }));
+    let reference = assignment
+        && token
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        && (value_name.ends_with("id") || (!label.is_empty() && value_name.ends_with(&label)));
+    suffix.starts_with('(')
+        || type_name.is_match(token)
+        || reference
+        || (assignment && matches!(body, "0" | "1"))
+        || (token.chars().all(|ch| ch.is_ascii_digit())
+            && suffix.trim_start().starts_with("non-null"))
+        || (paired && code_carrier_prefix(input, cue_start))
 }
 
 fn field_value_char(ch: char) -> bool {
     ch.is_alphanumeric()
         || unicode_normalization::char::is_combining_mark(ch)
-        || matches!(ch, '@' | '+' | '/' | '_' | '=' | '-' | '.' | ':' | '\\')
+        || matches!(
+            ch,
+            '@' | '+' | '/' | '_' | '#' | '=' | '-' | '.' | ':' | '\\'
+        )
 }
 
 const LABELLED_CUE_HORIZONTAL: &str = r"[ \t\u{00A0}\u{202F}]";
 
 fn labelled_assignment_connector() -> String {
     let horizontal = LABELLED_CUE_HORIZONTAL;
-    format!(r"(?:{horizontal}*[:=]{horizontal}*|{horizontal}+(?:(?:is|ist|lautet){horizontal}+)?)")
+    format!(
+        r"(?:{horizontal}*[:=]{horizontal}*|{horizontal}+(?:(?:is|ist|lautet|[-–—]){horizontal}+)?)"
+    )
 }
 
 fn labelled_licence_connector() -> String {
