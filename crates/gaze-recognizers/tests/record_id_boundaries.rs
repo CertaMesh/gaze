@@ -2284,3 +2284,23 @@ fn sql_quoted_identifiers_cannot_fabricate_an_absent_private_value() {
         }
     }
 }
+
+#[test]
+fn record_ids_keep_label_suffixes_and_quotes_inside_wrappers() {
+    let pipeline = record_pipeline();
+    for (label, value) in [
+        ("Customer ID number", "2024 10 15"),
+        ("Employee ID number", "2024 10 15"),
+        ("Member ID number", "2024 10 15"),
+        ("customerId", "(ZX-48\"2619)"),
+        ("employeeId", "§ZX-48'2619§"),
+    ] {
+        let input = format!("{label} {value}\npublic_version=FRAME");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let clean = pipeline.clean_text(&session, &input, &[LocaleTag::Global]).unwrap();
+        let CleanDocument::Text(clean) = clean else { panic!("text") };
+        assert!(!session.snapshot_entries().is_empty(), "{input:?}");
+        assert!(clean.ends_with("\npublic_version=FRAME"), "{clean:?}");
+        assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
+    }
+}
