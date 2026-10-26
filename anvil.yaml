@@ -60,7 +60,7 @@ checks:
     inputs: *rust-inputs
     toolchain: *rust-tools
     commands:
-      - cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
   fast:
     description: Format and lint before full verification
     reusable: true
@@ -69,7 +69,7 @@ checks:
     toolchain: *rust-tools
     commands:
       - cargo fmt --all -- --check
-      - cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
   test:
     description: Workspace tests, with at least one executed test
     expensive: true
@@ -78,7 +78,7 @@ checks:
     toolchain: *rust-tools
     commands:
       - python3 -m unittest discover -s scripts/anvil -p 'test_test_*.py'
-      - python3 scripts/anvil/test_nonempty.py cargo test --workspace --all-features
+      - python3 scripts/anvil/test_nonempty.py env CARGO_BUILD_JOBS=2 nice -n 10 cargo test --workspace --all-features
   feature-matrix:
     expensive: true
     locks: [workspace-build]
