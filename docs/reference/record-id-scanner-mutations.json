@@ -1,7 +1,8 @@
 [
   {
     "mutation": "drop-json-label-ownership",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-json_label_close_owns_following_value.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -16,13 +17,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "cd64426e45b110764063ebd67464528794de6f45cda1e130b012eedd6e2435ce",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "drop-json-label-ownership.log",
-    "restored_sha256": "cd64426e45b110764063ebd67464528794de6f45cda1e130b012eedd6e2435ce"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "a7971b7237354225848c361c3d151f8ee23ba949a6adb54a7149b02e8d8e5cd6",
+    "log_sha256": "7b1e05cb818409fe34967e636ea27772356af3293b5cba7f9d89c345601d9ff6",
+    "baseline_passed": true
   },
   {
     "mutation": "rebuild-quote-events-per-query",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-doubled_apostrophe_prefix_work_is_linear.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -37,13 +42,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "rebuild-quote-events-per-query.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "706c3818084cfc4dfcce492c3ee1aea45c8ce6b6180bc02bc0765b346878852a",
+    "log_sha256": "fe70e4e5ac2aba7045f8dd09274445ac21f6a42139d974a3c1c2b3c0f70a05b4",
+    "baseline_passed": true
   },
   {
     "mutation": "require-whole-json-document",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-json_label_close_owns_following_value.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -58,13 +67,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "require-whole-json-document.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "a7971b7237354225848c361c3d151f8ee23ba949a6adb54a7149b02e8d8e5cd6",
+    "log_sha256": "7797d914d433061aa9306794a8e3a3d192bb4a2386af3da58c5550e580da3e61",
+    "baseline_passed": true
   },
   {
     "mutation": "ignore-enclosing-label-key",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-json_label_close_owns_following_value.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -79,13 +92,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "ignore-enclosing-label-key.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "a7971b7237354225848c361c3d151f8ee23ba949a6adb54a7149b02e8d8e5cd6",
+    "log_sha256": "b0e8668c14ff6baf6fde0319ec8ed2c49a52593e25d103466e6b4a56e16b1a89",
+    "baseline_passed": true
   },
   {
     "mutation": "drop-container-value-ownership",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-json_label_close_owns_following_value.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -100,13 +117,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "drop-container-value-ownership.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "a7971b7237354225848c361c3d151f8ee23ba949a6adb54a7149b02e8d8e5cd6",
+    "log_sha256": "932b256f97e482082941e9bbafd62ae826e82878dc0db796222924f59b8d33cc",
+    "baseline_passed": true
   },
   {
     "mutation": "allow-header-label-as-value",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-array_header_label_is_not_a_private_value.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -121,13 +142,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "allow-header-label-as-value.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "83fd86a50d358ae67b2435c5d3f61426d25e31fdbe3339212fbee7df460f057c",
+    "log_sha256": "be30669cb2c03aab34dc28378124e8c6d977d90126f845b1e339e6c69d4f0f69",
+    "baseline_passed": true
   },
   {
     "mutation": "remove-labelled-sweep-bound",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-pipeline_labelled_sweep_work_and_size_are_bounded.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -142,13 +167,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "remove-labelled-sweep-bound.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "73fe7254286f4a6413133de202854e293694544e52f7666586d0784afbd87a47",
+    "log_sha256": "935ca6545b8cfea2ea7a634055300e3fa5607d0db4063e7c61b022660617506f",
+    "baseline_passed": true
   },
   {
     "mutation": "discard-oversized-session-provenance",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-pipeline_labelled_sweep_work_and_size_are_bounded.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -165,11 +194,15 @@
     "killed": true,
     "original_sha256": "15ea815241f9d0a4835c46767de7e428c813f479ae51601ea86130594ffb49b6",
     "log": "discard-oversized-session-provenance.log",
-    "restored_sha256": "15ea815241f9d0a4835c46767de7e428c813f479ae51601ea86130594ffb49b6"
+    "restored_sha256": "15ea815241f9d0a4835c46767de7e428c813f479ae51601ea86130594ffb49b6",
+    "baseline_sha256": "73fe7254286f4a6413133de202854e293694544e52f7666586d0784afbd87a47",
+    "log_sha256": "d40eb70d6265f6773b11c0125137b39853daa79effb3dc7b1a93a37b87fc30b8",
+    "baseline_passed": true
   },
   {
     "mutation": "repeat-alphabetic-labelled-values",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-labelled_repeat_preserves_json_keys_literals_and_schema.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -184,13 +217,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "repeat-alphabetic-labelled-values.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "19ebfd9ab37bc717395fa85668d658763969b91a743a618ea0cf2f5d83ffa4fa",
+    "log_sha256": "b4b7e092f4402ca981078b8bd55d9839c2c81cf75b99a53f308930d741ad07d3",
+    "baseline_passed": true
   },
   {
     "mutation": "sweep-json-keys-and-atoms",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-labelled_repeat_preserves_json_keys_literals_and_schema.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -205,34 +242,42 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "sweep-json-keys-and-atoms.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "19ebfd9ab37bc717395fa85668d658763969b91a743a618ea0cf2f5d83ffa4fa",
+    "log_sha256": "093dac22622d8213b0c5a373733dba17fe5e9b41d8dc11d0404c8ca94b887b14",
+    "baseline_passed": true
   },
   {
-    "mutation": "own-first-benign-container-scalar",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "mutation": "own-incidental-container-strings",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-containers_own_all_and_only_explicit_record_values.baseline.log",
     "command": [
       "cargo",
       "test",
       "-p",
       "gaze-recognizers",
       "--lib",
-      "json_record_structure_and_covered_values_are_preserved",
+      "containers_own_all_and_only_explicit_record_values",
       "--",
       "--nocapture"
     ],
-    "test": "json_record_structure_and_covered_values_are_preserved",
+    "test": "containers_own_all_and_only_explicit_record_values",
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
-    "log": "own-first-benign-container-scalar.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "log": "own-incidental-container-strings.log",
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "478f453d940aef218611315724ba908eb55d0e2a36a77c066a7820bbd7cff1b7",
+    "log_sha256": "5a1e9e676a44476c7b745528b2c7a2fc74848400e78839a34e38a5180f0f8860",
+    "baseline_passed": true
   },
   {
     "mutation": "ignore-plain-key-value-ownership",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-json_record_structure_and_covered_values_are_preserved.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -247,34 +292,42 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "ignore-plain-key-value-ownership.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "630d29c191710af7cfb144c380a94bbbd822fd6d7b5e531fd69347055f99b917",
+    "log_sha256": "618bc5b1aa6274b856690e50e42b10bad0f23ae58e77714a84701156f5abe137",
+    "baseline_passed": true
   },
   {
-    "mutation": "retain-broken-prefix-quote-state",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "mutation": "hide-same-line-json-after-stray-quotes",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-types-truncated_prefixes_do_not_hide_complete_records.baseline.log",
     "command": [
       "cargo",
       "test",
       "-p",
-      "gaze-recognizers",
+      "gaze-types",
       "--lib",
-      "json_record_structure_and_covered_values_are_preserved",
+      "truncated_prefixes_do_not_hide_complete_records",
       "--",
       "--nocapture"
     ],
-    "test": "json_record_structure_and_covered_values_are_preserved",
+    "test": "truncated_prefixes_do_not_hide_complete_records",
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "46c15e67639481f7f2f777d1633256a7f615c0b2f6903bbb05042a94e9c63a72",
-    "log": "retain-broken-prefix-quote-state.log",
-    "restored_sha256": "46c15e67639481f7f2f777d1633256a7f615c0b2f6903bbb05042a94e9c63a72"
+    "original_sha256": "61e4bee9060bd8cc74e0b1cfb93787a8bb57dac15ce81ee2f4354c8edea3eb50",
+    "log": "hide-same-line-json-after-stray-quotes.log",
+    "restored_sha256": "61e4bee9060bd8cc74e0b1cfb93787a8bb57dac15ce81ee2f4354c8edea3eb50",
+    "baseline_sha256": "47059cdc3d21f54d92ea0c5023f44215f4d40259e2f49bac1a55ecf900d01100",
+    "log_sha256": "c754d56c827c8d0ee56d81759b0fe1ba8565d99012b7385ab7f083c6145cacfb",
+    "baseline_passed": true
   },
   {
     "mutation": "ignore-unicode-label-whitespace",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-unicode_label_whitespace_owns_the_value.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -289,13 +342,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "ignore-unicode-label-whitespace.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "a4938ef011c782b4bc723f6349c7e8d03b84ccfc64cd9ee30c2725258cfdacd5",
+    "log_sha256": "0883e2ccefa46057a0430ea590fc972d97e976d393dd311d3ad2daf1db521611",
+    "baseline_passed": true
   },
   {
     "mutation": "drop-padded-labelled-sources",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-padded_labelled_values_repeat_in_document_and_session.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -310,34 +367,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "drop-padded-labelled-sources.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
-  },
-  {
-    "mutation": "keep-trailing-padding-in-patterns",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
-    "command": [
-      "cargo",
-      "test",
-      "-p",
-      "gaze-pii",
-      "--lib",
-      "padded_labelled_values_repeat_in_document_and_session",
-      "--",
-      "--nocapture"
-    ],
-    "test": "padded_labelled_values_repeat_in_document_and_session",
-    "compiled": true,
-    "exit": 101,
-    "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
-    "log": "keep-trailing-padding-in-patterns.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "1ec48844ae93765b414a807c995d4f14ba64346325d7b0508dbd184cbf68bca5",
+    "log_sha256": "31152fb487d3500ed80074d1f2840a6cd269603696b727057fdfe5b2ff1a01d3",
+    "baseline_passed": true
   },
   {
     "mutation": "tokenize-labels-inside-json-keys",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-json_object_keys_are_never_private_value_spans.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -352,13 +392,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16",
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
     "log": "tokenize-labels-inside-json-keys.log",
-    "restored_sha256": "ede6e6c0d4c682e4399e7a9ffc661ff7da6b1d7562c5c898fe2e8011b2ad7d16"
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "a2f5b2d412e4acbadff954a3c2358837d94796a1face47ba6266332ee1e5ba43",
+    "log_sha256": "1215b87a590f2f264a3bd1fe05e0de786ba22d21dcee01de246e0d5766f39102",
+    "baseline_passed": true
   },
   {
     "mutation": "split-json-escape-on-repeat",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-labelled_repeats_cannot_split_json_escapes.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -373,13 +417,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "split-json-escape-on-repeat.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "f96458d0a2a147323f4a51490450563e5573231abae9281c1c07a10e37801839",
+    "log_sha256": "1df4dc095378298c75a5f626d7091df600ecb2cfdf0ef86f7d328e9555289568",
+    "baseline_passed": true
   },
   {
     "mutation": "discard-derived-exact-patterns",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-pipeline_deep_escaped_repeat_patterns_remain_bounded.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -394,13 +442,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "discard-derived-exact-patterns.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "10e615b42d62d3460ede51712655df60f5bd11109b247928222bf9434946aa28",
+    "log_sha256": "3da3d3ab7ce68d01e6767961be6fb01ad0c79219ad329c5ebaa8744251c1f1d9",
+    "baseline_passed": true
   },
   {
     "mutation": "cap-legacy-uncertain-prefixes",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-legacy_uncertain_prefixes_keep_their_floor_and_long_values.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -415,13 +467,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "cap-legacy-uncertain-prefixes.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "31bff8e89fd051f2c6829554d5e933431d723f84a29b723ec679b74b82d2a1f8",
+    "log_sha256": "289305feefcd81b7287afd3e0e2ff8a61a5bbea190c8acd3cc5e5b53019eb3e6",
+    "baseline_passed": true
   },
   {
     "mutation": "apply-field-digit-floor-to-legacy-prefixes",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-legacy_uncertain_prefixes_keep_their_floor_and_long_values.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -436,13 +492,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "apply-field-digit-floor-to-legacy-prefixes.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "31bff8e89fd051f2c6829554d5e933431d723f84a29b723ec679b74b82d2a1f8",
+    "log_sha256": "88d484b7312119b95860e2849a02d8d2126b2539644b119b79f5672b5b81ea00",
+    "baseline_passed": true
   },
   {
     "mutation": "bound-decoded-padding-before-trimming",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-deeply_escaped_padding_keeps_trimmed_repeats_across_turns.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -457,13 +517,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "bound-decoded-padding-before-trimming.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "82a659827a09507bd76211fbe36cf08bec6d831c3b04ac55d9223afa3bdc905d",
+    "log_sha256": "b0b4ce8d4eb32529a886478f2d19ffc34804154bd188a5a3e18743a9690d8d1d",
+    "baseline_passed": true
   },
   {
     "mutation": "allow-unbounded-decoding-cascade",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-cascading_unicode_escapes_cannot_create_unbounded_repeat_work.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -478,13 +542,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "allow-unbounded-decoding-cascade.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "7e61f34623ecaa3860bd6f56b40f7cc667a61e910db1c244516d18ed7cf3e559",
+    "log_sha256": "35cb1718554d3ab9753af959af554014d154fe90da12e2b857953d5b2705192f",
+    "baseline_passed": true
   },
   {
     "mutation": "fold-exact-family-scalar-seeds",
-    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-field_owned_families_keep_byte_exact_matching.baseline.log",
     "command": [
       "cargo",
       "test",
@@ -499,8 +567,236 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
     "log": "fold-exact-family-scalar-seeds.log",
-    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "71af397e81ab0a3b67aec3edc0ebc9e23d8dbf2ec8102eb8b4c7cf26d852811d",
+    "log_sha256": "a34963d0ecec7ff67f9ab3ae11ae29c1ceafafea297b96fbc8fa7bbc4e0a43a7",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "skip-mixed-source-json-gate",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-mixed_carriers_preserve_json_keys_types_and_string_boundaries.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "mixed_carriers_preserve_json_keys_types_and_string_boundaries",
+      "--",
+      "--nocapture"
+    ],
+    "test": "mixed_carriers_preserve_json_keys_types_and_string_boundaries",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "log": "skip-mixed-source-json-gate.log",
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "d455f5db7fea9aebf3735f2556be488ff1890366a99a81f376d9dcc53ee91830",
+    "log_sha256": "d2d8baf255219b19cf8cd9a3b97211ce00174b7248761f89b1620e4abe577227",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "ignore-escaped-json-sweep-layers",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-mixed_carriers_preserve_json_keys_types_and_string_boundaries.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "mixed_carriers_preserve_json_keys_types_and_string_boundaries",
+      "--",
+      "--nocapture"
+    ],
+    "test": "mixed_carriers_preserve_json_keys_types_and_string_boundaries",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "log": "ignore-escaped-json-sweep-layers.log",
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "d455f5db7fea9aebf3735f2556be488ff1890366a99a81f376d9dcc53ee91830",
+    "log_sha256": "1869edf9b2d3875a4f4ee4d9173efb743a89e3563ee1e106e49a96508781c37f",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "allow-schema-container-ownership",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-schema_containers_never_own_metadata_or_id_children.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "schema_containers_never_own_metadata_or_id_children",
+      "--",
+      "--nocapture"
+    ],
+    "test": "schema_containers_never_own_metadata_or_id_children",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "log": "allow-schema-container-ownership.log",
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "4e7d40a1355f0acd2076d49e99ceda68650a3bc0f2949ca35a633ee254844126",
+    "log_sha256": "ab88f9c0f83f957b24eaa37acd785bd280fa4058b56c59396ef74d25db523181",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "own-only-first-container-scalar",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-containers_own_all_and_only_explicit_record_values.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "containers_own_all_and_only_explicit_record_values",
+      "--",
+      "--nocapture"
+    ],
+    "test": "containers_own_all_and_only_explicit_record_values",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "dbfa2384e105875eff985fddc932437fa785ef3e268573f5944e95e3981a7c99",
+    "log": "own-only-first-container-scalar.log",
+    "restored_sha256": "dbfa2384e105875eff985fddc932437fa785ef3e268573f5944e95e3981a7c99",
+    "baseline_sha256": "478f453d940aef218611315724ba908eb55d0e2a36a77c066a7820bbd7cff1b7",
+    "log_sha256": "4f61906fafadedd31abdbea47e564fdece49bd85c8f5c2f38b69c08c2b7a6eb2",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "require-identical-raw-repeat-spelling",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-decoded_record_ids_repeat_between_raw_spellings_and_turns.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "decoded_record_ids_repeat_between_raw_spellings_and_turns",
+      "--",
+      "--nocapture"
+    ],
+    "test": "decoded_record_ids_repeat_between_raw_spellings_and_turns",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "log": "require-identical-raw-repeat-spelling.log",
+    "restored_sha256": "3a165f10180d628d917b0456f8aff82ad10ed7315685d4de38ea8158f1e67416",
+    "baseline_sha256": "3643af18a5dcd52471f757fffe4aaa2840ff375b9968854ab06b1055363bd6c1",
+    "log_sha256": "75ceafd83913c0236cdb2164b43a6cfaa0c8643915e13a06bdffeee1c33a710c",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "skip-escaped-prose-label-index",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-pii-mixed_carriers_preserve_json_keys_types_and_string_boundaries.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "mixed_carriers_preserve_json_keys_types_and_string_boundaries",
+      "--",
+      "--nocapture"
+    ],
+    "test": "mixed_carriers_preserve_json_keys_types_and_string_boundaries",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "log": "skip-escaped-prose-label-index.log",
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "d455f5db7fea9aebf3735f2556be488ff1890366a99a81f376d9dcc53ee91830",
+    "log_sha256": "f24f0b0ae3381106681cf9369d6609ffbc0455ed2e66e619c9692b22e54a512b",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "ignore-escaped-zero-width-label-tail",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-unicode_label_whitespace_owns_the_value.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "unicode_label_whitespace_owns_the_value",
+      "--",
+      "--nocapture"
+    ],
+    "test": "unicode_label_whitespace_owns_the_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "61e4bee9060bd8cc74e0b1cfb93787a8bb57dac15ce81ee2f4354c8edea3eb50",
+    "log": "ignore-escaped-zero-width-label-tail.log",
+    "restored_sha256": "61e4bee9060bd8cc74e0b1cfb93787a8bb57dac15ce81ee2f4354c8edea3eb50",
+    "baseline_sha256": "a4938ef011c782b4bc723f6349c7e8d03b84ccfc64cd9ee30c2725258cfdacd5",
+    "log_sha256": "db6d0ae4ef420dcaceeb2b4657e5e653e8c851cc868ed6c96e4879c21359b011",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "ignore-literal-zero-width-label-tail",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-unicode_label_whitespace_owns_the_value.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "unicode_label_whitespace_owns_the_value",
+      "--",
+      "--nocapture"
+    ],
+    "test": "unicode_label_whitespace_owns_the_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "log": "ignore-literal-zero-width-label-tail.log",
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "a4938ef011c782b4bc723f6349c7e8d03b84ccfc64cd9ee30c2725258cfdacd5",
+    "log_sha256": "6a091d6e31f33e0a8bc228316df1ec53f0da2c752cf0f9cf7b67299e160431ad",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "let-empty-container-value-veto-later-ids",
+    "head": "2b59c22a7b0a1c9d82f2ce5c5cb164cf2f7668bb",
+    "baseline": "gaze-recognizers-containers_own_all_and_only_explicit_record_values.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "containers_own_all_and_only_explicit_record_values",
+      "--",
+      "--nocapture"
+    ],
+    "test": "containers_own_all_and_only_explicit_record_values",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "log": "let-empty-container-value-veto-later-ids.log",
+    "restored_sha256": "83e809c3f5224704438195eae07867abf2c0591773877e76adb1301b8157cbf8",
+    "baseline_sha256": "478f453d940aef218611315724ba908eb55d0e2a36a77c066a7820bbd7cff1b7",
+    "log_sha256": "4643da2a917eee1681ae5621ecfcfe3dc2c691d74cfb40e797e33da424b21bc6",
+    "baseline_passed": true
   }
 ]

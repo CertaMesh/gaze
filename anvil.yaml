@@ -123,7 +123,7 @@ checks:
       - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-recognizers --lib
       - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-pii --lib
       - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-cli --test record_ids
-      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-cli --test daemon_reversible padded_record_ids
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-cli --test daemon_reversible record_ids
   record-id-mutations:
     description: Compiled mutations for record ownership and repeat protection
     inputs: *rust-inputs

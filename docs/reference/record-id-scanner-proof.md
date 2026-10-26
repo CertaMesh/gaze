@@ -2,49 +2,59 @@
 
 JSON label keys and array label cells own scalar values in independently
 validated JSON regions. Complete records remain detectable after truncated
-containers or an unclosed quote on an earlier log line. Trailing label-key
-whitespace can use literal spaces, JSON escapes, or Unicode whitespace escapes.
+containers, including a stray quote on the same line. Trailing label-key
+whitespace accepts literal and escaped Unicode whitespace and zero-width space.
 
-An object or array under a label key owns its first ID-like child. A child is
-ID-like when its key is `id`, `value`, `number`, `no`, or `nr`, or its string
-value contains a digit. Nested array numbers and ordinary schema words do not
-become container-owned identifiers. Object keys never become private values.
+A labelled array owns every direct string element and each object element's
+explicit ID children. Objects own only `id`, `value`, `number`, `no`, or `nr`
+children, matched without case. Numbers require a direct label or an explicit
+ID child key. A container with JSON-Schema keywords owns no values. These
+restrictions intentionally leave arbitrary child fields and schema examples
+unprotected rather than rewriting metadata or JSON syntax.
 
 The structure generator checks 34,560 cases across label keys, scalar and
 container values, wrappers, broken prefixes, suffixes, and serialization depths
-0–4. Each case checks covered identifier bytes and parses the replacement with
-a quoted placeholder in number positions. Parsed results retain the same object
-keys, containers, array lengths, and JSON keywords. The existing 4,900-case leak
-generator remains a separate check. Unicode label tails add 75 cases.
+0–4. Its projection distinguishes strings from numbers and retains object keys,
+array lengths, literals, and container types. Direct numeric ID spans use a
+numeric placeholder in this recognizer-only test because numeric token quoting
+remains a separate limitation. The existing 4,900-case covered-value generator
+remains a separate check. Unicode label tails add 85 cases.
 
-Field-owned scalar repeats require a digit in the labelled value. A repeat cannot replace
-an object key, JSON syntax, or an unquoted scalar. These restrictions also apply
-inside serialized JSON strings and across session turns. Repeat spans cannot
-split a JSON escape or replace a standalone JSON number. Fifteen additional
-cases check escaped tabs, newlines, and Unicode in object values and standalone
-JSON strings. The 40-byte pattern
-limit applies after trimming each derived pattern. Literal and JSON-escaped whitespace
-padding therefore preserve repeat protection without creating oversized matcher
-patterns. Pipeline tests cover 45 repeat/schema cases and 28 padded-value cases;
-a daemon test checks three padded values on a second turn. Nine serialization-depth cases and one Unicode fold-expansion case check
-short effective patterns despite longer transformed spellings. Short
-decoded and trimmed patterns map back to byte-exact source spans. This protects
-escaped values without placing their expanded spelling into the DFA. Forty
-additional cases verify deeply escaped padding and imported second-turn state.
-An escape cascade beyond 32 decode passes fails closed before matcher creation;
-ordinary serialized inputs shrink at each layer and the corpus reaches depth 9.
+A separate pipeline invariant checks 600 mixed-carrier cases with prose,
+key-value and YAML seeds followed by JSON, same-line stray quotes, escaped JSON
+in prose, and quoted payloads. It checks both one-document and second-turn
+sessions. Cleaned layers must parse with unchanged keys and value types, and
+private string copies must disappear. It also requires exact restore. Another
+130 cases exclude every supported JSON-Schema keyword from container ownership;
+40 cases verify all and only explicit container values across five depths.
 
-The field-scalar cap does not change legacy `UncertainPrefix` eligibility or its
-precision floor. Long legacy patterns use a contiguous NFA to keep construction
-linear. The recognizer's separate 40-byte diagnostic preserves primary ownership;
-it does not discard values or repeat patterns. Collision-family scalar repeats
-retain byte-exact matching. Session storage retains provenance.
-Restore remains exact.
+Every sweep source follows the JSON structural gate, including sources labelled
+in prose and prior turns. A repeat cannot replace an object key, JSON syntax,
+an unquoted scalar, or part of a JSON escape. The gate indexes decoded JSON
+fragments even without an enclosing JSON string. Field-owned repeats require a
+digit. Their 40-byte bound applies after decoding and trimming. Eight pipeline
+cases and four daemon cases check escaped seeds against plain copies and the
+reverse direction, together with second-turn JSON structure and exact restore.
+
+Fifteen cases check escape integrity, 45 check pipeline repeats and schema,
+and 28 check padding. Three daemon padding cases protect second-turn copies.
+Nine serialization-depth cases and one Unicode fold-expansion case check short
+effective patterns despite longer source spellings. Forty more cases check
+deeply escaped padding and imported session state. Derived exact patterns match
+the decoded body and project each hit to verified source bytes. Duplicate hits
+retain one copy. An escape cascade beyond 32 decode passes fails closed before
+matcher creation; ordinary serialized inputs shrink at each layer.
+
+The field-scalar cap preserves legacy `UncertainPrefix` eligibility and its
+precision floor. Long legacy patterns use a contiguous NFA. The recognizer's
+40-byte diagnostic retains primary ownership. Collision-family matching remains
+case-sensitive. Session storage retains provenance. Restore remains exact.
 
 Direct numeric JSON IDs retain the existing plain-text token format, which may
-make cleaned JSON invalid before restore. Quoted numeric emission and labels
-with escaped letters remain follow-ups. The structure invariant tests replace
-numeric tokens with a quoted placeholder; they do not claim quoted emission.
+make cleaned JSON invalid before restore. Numeric token quoting, escaped-letter
+labels, plural ID keys, pair-key records, and header-column mapping remain
+follow-ups. The strict mixed-carrier invariant covers numeric counterweights;
+it does not claim that direct numeric ID emission preserves JSON validity.
 
 ## Differential counts
 
@@ -87,18 +97,20 @@ within fivefold scanner work and 60 steps per source byte. Encoded ambiguous
 strings can own the entire scalar, so their recognizer scan count is one.
 
 The named `record-id-focused` Anvil check runs recognizer and core unit tests,
-the CLI record-ID tests, and the daemon padding regression with two build jobs
+the CLI record-ID tests, and both daemon record-ID regressions with two build jobs
 and nice 10. Workspace checks retain the shared build lock.
 
 The `record-id-mutations` check runs
 `scripts/verify_record_id_scanner_mutations.py` from a clean checkout with a
-signed HEAD. Each mutant must compile and fail its named regression test. The
+signed HEAD. Each named baseline must execute exactly one passing test before
+mutation. All 32 mutants compile and fail their named regression test. The
 script restores each source byte-for-byte and writes logs and hash receipts
 under `target/scanner-mutations/`. It never creates commits or uses a stash.
 
 The committed [mutation receipt](record-id-scanner-mutations.json) pins the
 implementation commit and records the compiled mutants, named failures, and
-matching source hashes before and after restoration. The probes cover quote
+matching source hashes before and after restoration, plus baseline and mutant
+log hashes. The probes cover quote
 cache reuse, JSON region recovery, object-key and container ownership, escaped
 whitespace, repeat eligibility, JSON sweep boundaries, derived pattern bounds,
 padded values, and session provenance.
