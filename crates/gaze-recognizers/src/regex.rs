@@ -999,14 +999,13 @@ fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_mark
         && !scan.parent_scalar
         && (!body.chars().next().is_some_and(char::is_alphanumeric)
             || !body.chars().any(char::is_alphabetic)
-            || body.chars().any(|ch| "<>&|!${}[]()?=;\"'".contains(ch))
+            || body.chars().any(|ch| "<>&|!${}[]()?=;".contains(ch))
             || in_markup_tag
             || !opener.is_some_and(record_id_wrapper));
     let base64 = base64_context
         && (!in_markup_tag || scan.quoted_value)
         && padded_base64_identifier(body, &input[scan.span.end..], quote_end_allowed);
-    scan.rejected |= (!owned_id_start(shape) && !base64)
-        || (!body.chars().any(char::is_numeric) && !base64)
+    scan.rejected |= !(base64 || owned_id_start(shape) && body.chars().any(char::is_numeric))
         || body.contains("{{")
         || body.contains("${")
         || wrapper_rejected
