@@ -17,7 +17,7 @@ a quoted placeholder in number positions. Parsed results retain the same object
 keys, containers, array lengths, and JSON keywords. The existing 4,900-case leak
 generator remains a separate check. Unicode label tails add 75 cases.
 
-Repeat patterns require a digit in the labelled value. A repeat cannot replace
+Field-owned scalar repeats require a digit in the labelled value. A repeat cannot replace
 an object key, JSON syntax, or an unquoted scalar. These restrictions also apply
 inside serialized JSON strings and across session turns. Repeat spans cannot
 split a JSON escape or replace a standalone JSON number. Fifteen additional
