@@ -124,3 +124,16 @@ checks:
     toolchain: *rust-tools
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/mcp-host-context-mutation-probe.py --run --probe duplicate-views --probe normalization-drift --probe split-argument-echo --probe argument-budget --probe argument-scalars --probe argument-entries --probe guess-preparation --probe guess-case-mode --probe guess-allowed-kinds --probe guess-boundaries --probe folded-boundary-view --probe guess-whitespace
+
+  mcp-host-release:
+    identity_env: [GAZE_CLEAN_BASE_WORKTREE]
+    description: Release binaries for clean equality and synthetic MCP measurements
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --release -p gaze-cli
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --release -p gaze-mcp-rmcp --example host_context_measure
+      - python3 scripts/verification/build_clean_equality_base.py
