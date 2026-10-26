@@ -36,7 +36,10 @@ def sha256(data):
 def binary_hashes(parser, binaries):
     if binaries[0] == binaries[1]:
         parser.error("supply two independently built binaries")
-    return [sha256(binary.read_bytes()) for binary in binaries]
+    hashes = [sha256(binary.read_bytes()) for binary in binaries]
+    if hashes[0] == hashes[1]:
+        parser.error("identical binary contents: supply two independently built binaries")
+    return hashes
 
 
 def inputs():
