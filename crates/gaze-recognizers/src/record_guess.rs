@@ -182,7 +182,8 @@ impl<'a> RecordGuessMatcher<'a> {
             .automaton
             .start_state(Anchored::No)
             .expect("unanchored NFA");
-        let ring_size = self.max_length + 1;
+        let available = parts.iter().map(|part| part.folded.len()).sum::<usize>();
+        let ring_size = self.max_length.min(available) + 1;
         let mut starts = vec![None; ring_size];
         let mut ends = vec![None; ring_size];
         let mut offset = 0;
@@ -352,6 +353,7 @@ mod tests {
         )
         .unwrap();
         let separator = RecordGuessText::new(" ");
+        matcher.check_join(&texts.iter().collect::<Vec<_>>(), &separator);
         for left in &texts {
             matcher.check(left);
             for right in &texts {
