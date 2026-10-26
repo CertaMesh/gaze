@@ -88,12 +88,13 @@ Upgrade every process that restores a blob before, or together with, every
 process that writes one.
 
 A session now records whether each value was captured inside a JSON string
-literal in its escaped spelling. A manifest that holds such a value exports as
-envelope version 7. Every other manifest still exports as version 6.
+literal in its escaped spelling. Unless the session uses the private host identifier namespace described above,
+a manifest that holds such a value exports as envelope version 7; other
+manifests export as version 6.
 
 - A v0.17 or older reader refuses a v7 blob with `InvalidSnapshotVersion(7)`.
   It fails closed; nothing is restored.
-- This release imports v2 to v7 blobs. Older blobs restore exactly as before;
+- This release imports v2 to v8 blobs. Older blobs restore exactly as before;
   their values read as plain text.
 
 `gaze-proxy` restores such a value into Anthropic `tool_use.input` as the value
