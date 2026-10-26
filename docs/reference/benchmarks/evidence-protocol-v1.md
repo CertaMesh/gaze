@@ -778,8 +778,11 @@ This larger allowance applies only to archive stdout; archive stderr, Cargo outp
 and bridge output retain their 64 MiB ceilings. Only ordinary USTAR files and expected ancestor
 directories are supported. Links, devices, escapes, duplicates, unexpected entries
 and extension metadata fail closed. Source, native inputs, tool bytes, original
-and private cache copies, and configuration absence are rechecked at the build,
-capture, launch and success boundaries. Persistent changes are refused; a
+and private cache copies, and Cargo configuration restrictions are rechecked at
+the build, capture, launch and success boundaries. The snapshot root may contain
+only `.cargo/config.toml` with the forced `GAZE_DISABLE_OS_KEYSTORE=1` environment
+setting. Its bytes remain in the verified source inventory. All other settings,
+ancestor configuration, alternate filenames and credentials remain rejected. Persistent changes are refused; a
 mutate-and-restore interval between checks remains outside the proof.
 
 The parent supplies actual Rust 1.96.0 `cargo`, `rustc` and `rustdoc` executables,
@@ -791,8 +794,8 @@ of approved registry index/cache files; `registry/src` is extracted privately.
 No user Cargo configuration or credentials are imported or read. Cache input
 copies are read-only files, and no compiled target is copied or reused for a build.
 
-The child environment is constructed explicitly, with isolated `HOME`, mandatory
-`RUSTC`/`RUSTDOC`, controlled SDK `PATH`, `CARGO_NET_OFFLINE=true`,
+The child environment is constructed explicitly, with `GAZE_DISABLE_OS_KEYSTORE=1`,
+isolated `HOME`, mandatory `RUSTC`/`RUSTDOC`, controlled SDK `PATH`, `CARGO_NET_OFFLINE=true`,
 `ORT_SKIP_DOWNLOAD=true`, and `ORT_LIB_LOCATION`. Conflicting ORT aliases,
 wrappers, flags, loader and proxy settings are absent. The explicit native branch
 avoids the known ORT download path. Arbitrary trusted build scripts are not

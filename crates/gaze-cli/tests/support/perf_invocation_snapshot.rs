@@ -52,6 +52,7 @@ fn attribution_invocation_snapshot_covers_model_free_inventory() {
         let mut child = command
             .env_clear()
             .envs(environment)
+            .env("GAZE_DISABLE_OS_KEYSTORE", "1")
             .env("GAZE_PERF", "1")
             .arg("--policy")
             .arg(policy)

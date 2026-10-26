@@ -1,0 +1,5 @@
+# Fail closed before entering any native credential backend. Cargo propagates
+# this to integration tests, doctests, nested Cargo commands and CLI children.
+# This also disables native keystores for `cargo run`; explicit index keys work.
+[env]
+GAZE_DISABLE_OS_KEYSTORE = { value = "1", force = true }

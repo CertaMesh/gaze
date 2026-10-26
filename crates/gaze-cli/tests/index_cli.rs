@@ -1218,3 +1218,31 @@ fn bytes_contain(haystack: &[u8], needle: &[u8]) -> bool {
         .windows(needle.len())
         .any(|window| window == needle)
 }
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_without_explicit_key_fails_closed_before_os_keystore() {
+    assert!(
+        std::env::var_os("CARGO_MANIFEST_DIR").is_some()
+            || std::env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some()
+    );
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    fs::create_dir(&corpus).unwrap();
+    fs::write(corpus.join("note.md"), "Email: alice@example.invalid").unwrap();
+    let env = index_ner(&temp);
+    let output = gaze_index_command(&env)
+        .current_dir(temp.path())
+        .env_remove("GAZE_INDEX_KEY")
+        .arg("ingest")
+        .arg(&corpus)
+        .arg("--index-path")
+        .arg(&index)
+        .output()
+        .expect("run index without key");
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("failed closed"), "{error}");
+    assert!(!index.join("index.json").exists());
+}
