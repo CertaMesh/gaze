@@ -504,9 +504,15 @@ fn clean_command<S: AsRef<std::ffi::OsStr>>(program: &str, args: &[S]) -> Result
     let mut cmd = ProcessCommand::new(program);
     cmd.args(args);
     cmd.env_clear();
-    // Bound artifacts in this build and inherited nested/adversarial builds.
-    // These are fixed policy values, never caller-controlled overrides.
-    cmd.env("CARGO_BUILD_JOBS", "4")
+    // Bound artifacts and retain a caller's stricter shared-machine job cap.
+    let jobs = std::env::var("CARGO_BUILD_JOBS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|jobs| *jobs > 0)
+        .unwrap_or(4)
+        .min(4);
+    cmd.env("GAZE_DISABLE_OS_KEYSTORE", "1")
+        .env("CARGO_BUILD_JOBS", jobs.to_string())
         .env("CARGO_INCREMENTAL", "0")
         .env("CARGO_PROFILE_DEV_DEBUG", "0")
         .env("CARGO_PROFILE_TEST_DEBUG", "0");

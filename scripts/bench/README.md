@@ -633,9 +633,13 @@ schemas, canonical document descriptors, measuring runtime, and execution protoc
 is preserved under its content hash. The
 [previous admission specification](../../docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json)
 binds the effective validation vocabulary and executing-source admission checks.
-The [current admission specification](../../docs/reference/benchmarks/specifications/0635170f7142114d6b666e65945a194c0041cfa61e685dfee6f6c3c9bc56900b.json)
+The [qualified-runtime specification](../../docs/reference/benchmarks/specifications/d19a7b56c45899d1d91fe470db0f1e0de8b31540c7ede989ed53105d61a9bdf1.json)
 also binds the qualified runtime and canonical document descriptors.
-Both previous manifests remain archived under their original identities.
+The [capture-reuse specification](../../docs/reference/benchmarks/specifications/0635170f7142114d6b666e65945a194c0041cfa61e685dfee6f6c3c9bc56900b.json)
+binds native-capture reuse admission. The
+[current specification](../../docs/reference/benchmarks/specifications/5b09cd287f0453aadc605a8136219378b56bacdfe4eb57a49bc01b53d9c785be.json)
+also includes the bounded inference-equivalence and key-mutation tools in the
+measuring source closure. Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
 inputs does not itself change the benchmark specification.

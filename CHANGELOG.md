@@ -80,6 +80,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Workspace tests and their CLI children refuse native OS keystore access before
+  credential construction, including Cargo invoked outside the repository via
+  `--manifest-path`. `cargo run` requires `GAZE_INDEX_KEY` for index access.
+  This prevents macOS Keychain prompt floods when features
+  are unified. Index fixtures use explicit encryption keys; installed binaries
+  retain the existing opt-in keystore behavior and fail-closed key handling.
+
 - MCP owned-token operations retain full expansion and Rule coverage up to
   16 times the existing 2 MiB sizing constant, currently 32 MiB. Leak-free arguments and
   responses above the former 2 MiB expansion cap now succeed, including decoded
