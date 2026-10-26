@@ -1984,6 +1984,10 @@ fn record_repeat_seed_in_state(
     {
         return false;
     }
+    state.semantic_revision = state
+        .semantic_revision
+        .checked_add(1)
+        .expect("semantic revision exhausted");
     state.repeat_seeds_by_value.insert(key, seed);
     state.sweep_matcher_cache = None;
     true
