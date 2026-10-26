@@ -112,7 +112,7 @@ def main():
         ('allow-schema-container-ownership', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if container.schema {', 'if false && container.schema {', 'schema_containers_never_own_metadata_or_id_children', 'gaze-recognizers'),
         ('own-only-first-container-scalar', 'crates/gaze-recognizers/src/regex.rs', 'additional.extend(scans);', 'additional.extend(scans.take(0));', 'containers_own_all_and_only_explicit_record_values', 'gaze-recognizers'),
         ('require-identical-raw-repeat-spelling', 'crates/gaze/src/sweep.rs', 'derived.sources.get(&view.text[found.range()])', 'derived.sources.get(&text[span.clone()])', 'decoded_record_ids_repeat_between_raw_spellings_and_turns', 'gaze-pii'),
-        ('skip-escaped-prose-label-index', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if let Some(decoded) = embedded {', 'if let Some(decoded) = embedded.as_mut().filter(|_| false) {', 'mixed_carriers_preserve_json_keys_types_and_string_boundaries', 'gaze-pii'),
+        ('skip-escaped-prose-label-index', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if let Some(decoded) = embedded {', 'if let Some(decoded) = embedded.as_mut().filter(|_| false) {', 'escaped_prose_label_index_owns_the_value_cell', 'gaze-recognizers'),
         ('ignore-escaped-zero-width-label-tail', 'crates/gaze-types/src/json_regions.rs', "ch.is_whitespace() || *ch == '\\u{200b}'", 'ch.is_whitespace()', 'unicode_label_whitespace_owns_the_value', 'gaze-recognizers'),
         ('ignore-literal-zero-width-label-tail', 'crates/gaze-recognizers/src/regex/scalar_index.rs', "ch.is_whitespace() || ch == '\\u{200b}'", 'ch.is_whitespace()', 'unicode_label_whitespace_owns_the_value', 'gaze-recognizers'),
         ('let-empty-container-value-veto-later-ids', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'span.retain(|span| !span.is_empty());', 'span.retain(|_| true);', 'containers_own_all_and_only_explicit_record_values', 'gaze-recognizers'),
@@ -125,6 +125,7 @@ def main():
         ('let-unterminated-quotes-cross-lines', 'crates/gaze-recognizers/src/regex.rs', 'uncertain_scalar_end(input, start, enclosing.end)', 'enclosing.end', 'unterminated_id_quotes_never_own_next_line_syntax', 'gaze-pii'),
         ('block-whole-id-on-key-looking-content', 'crates/gaze/src/sweep.rs', 'atom.start <= span.start && span.end <= atom.end', 'atom.start < span.end', 'lexical_sweep_keeps_whole_private_values_with_key_looking_content', 'gaze-pii'),
         ('drop-digit-free-base64-ids', 'crates/gaze-recognizers/src/regex.rs', '    let base64 = (!in_markup_tag || scan.quoted_value)\n        && padded_base64_identifier(body, &input[scan.span.end..]);', '    let base64 = false;', 'base64_record_ids_keep_padding_without_owning_operators', 'gaze-pii'),
+        ('allow-unquoted-html-value-emission', 'crates/gaze-recognizers/src/regex.rs', '        || (in_markup_tag && !scan.quoted_value)', '        || false', 'record_value_shape_preserves_carrier_syntax', 'gaze-pii'),
     ]
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}

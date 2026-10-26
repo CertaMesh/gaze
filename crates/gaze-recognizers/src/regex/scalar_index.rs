@@ -45,7 +45,13 @@ impl ScalarBoundaryIndex {
                 }
                 match byte {
                     b'<' => {
-                        in_tag = true;
+                        let tail = input[offset + 1..]
+                            .strip_prefix('/')
+                            .unwrap_or(&input[offset + 1..]);
+                        in_tag = tail
+                            .chars()
+                            .next()
+                            .is_some_and(|ch| ch.is_alphabetic() || matches!(ch, '_' | ':'));
                         tag_start = offset;
                         assignment = false;
                     }
@@ -2910,6 +2916,20 @@ mod json_label_cells {
                 input = serde_json::to_string(&input).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn escaped_prose_label_index_owns_the_value_cell() {
+        let rules = super::regression_tests::rules();
+        let input = r#"tool {\"Customer ID:\":\"C-731284\"}"#;
+        let captures = rules[0].regex.captures(input).unwrap();
+        let capture = rules[0].span_from_captures(&captures).unwrap();
+        let decisions = ScalarBoundaryIndex::default()
+            .scan_json_label_cells(input, capture)
+            .expect("escaped prose JSON needs an ownership decision");
+        assert_eq!(decisions.len(), 1);
+        assert!(!decisions[0].rejected);
+        assert_eq!(&input[decisions[0].span.clone()], "C-731284");
     }
 
     #[test]

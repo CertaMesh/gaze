@@ -996,6 +996,7 @@ fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_mark
         || body.contains("{{")
         || body.contains("${")
         || wrapper_rejected
+        || (in_markup_tag && !scan.quoted_value)
         || member_path.is_match(body);
 }
 

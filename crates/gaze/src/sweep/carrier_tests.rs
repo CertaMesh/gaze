@@ -27,6 +27,8 @@ fn record_value_shape_preserves_carrier_syntax() {
         "{L}:&quot;{V}&quot;",
         "<field name=\"{L}\" value=\"{V}\"/>",
         "<input name=\"{L}\" value=\"{V}\">",
+        "<input {L}={V}>",
+        "<input\n {L}={V}>",
         "<meta name=\"{L}\" content=\"{V}\">",
         "<field key=\"{L}\" val=\"{V}\"/>",
         "<{L} value=\"{V}\"/>",
@@ -73,6 +75,7 @@ fn record_value_shape_preserves_carrier_syntax() {
                 structure = structure.replace(&entry.token, &entry.raw);
             }
             assert_eq!(structure, input, "carrier changed: {clean}");
+            assert_eq!(clean, input, "uncovered carrier syntax must stay exact");
             assert_eq!(
                 pipeline.restore_strict_text(&session, &clean).unwrap(),
                 input
@@ -80,7 +83,7 @@ fn record_value_shape_preserves_carrier_syntax() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 288);
+    assert_eq!(checked, 304);
     let mut placeholders = 0;
     for label in labels {
         for value in [
@@ -460,5 +463,54 @@ fn base64_record_ids_keep_padding_without_owning_operators() {
             panic!("text")
         };
         assert_eq!(clean, input);
+    }
+}
+
+#[cfg(feature = "bundled-recognizers")]
+#[test]
+fn quoted_html_attributes_and_json_data_remain_owned() {
+    use crate::{CleanDocument, RawDocument, Scope, Session};
+    let pipeline = labelled_pipeline();
+    let mut checked = 0;
+    for label in ["customerId", "employee_id", "member_id"] {
+        for input in [
+            format!("<input {label}=\"C-731284\">"),
+            format!("<input {label}='C-731284'>"),
+            format!("<div data='{{\"{label}\":\"C-731284\"}}'>"),
+        ] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = pipeline
+                .redact(&session, RawDocument::Text(input.clone()))
+                .unwrap()
+            else {
+                panic!("text")
+            };
+            let entries = session.snapshot_entries();
+            assert_eq!(entries.len(), 1, "{input} -> {clean}");
+            assert_eq!(entries[0].raw, "C-731284");
+            assert_eq!(clean, input.replace("C-731284", &entries[0].token));
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                input
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 9);
+    for prefix in ["x < 2; ", "x < 2\n", "x <= y; "] {
+        let input = format!("{prefix}customerId=C-731284");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .redact(&session, RawDocument::Text(input.clone()))
+            .unwrap()
+        else {
+            panic!("text")
+        };
+        assert_eq!(session.snapshot_entries()[0].raw, "C-731284");
+        assert!(!clean.contains("C-731284"));
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
     }
 }
