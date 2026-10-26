@@ -354,7 +354,8 @@ Exclusion uses the detection pipeline's normalization and the response matcher's
 token-boundary rule. It follows each recognizer's compilation mode and allowed
 match kinds: Unicode case folding applies to Name records, while exact-only
 fields retain their case and whitespace requirements. Flexible whitespace is
-considered only when that match kind is allowed. Folded matches map back to the same normalized, pre-casefold text for boundary checks. A superstring
+considered only when that match kind is allowed, with no run-length cap
+(the response matcher caps a whitespace run at 32). Folded matches map back to the same normalized, pre-casefold text for boundary checks. A superstring
 such as `Joanna Lim` does not exclude `Anna Li`. Coverage includes single fields
 and all scalar fields joined in lexicographic key order with empty or space
 separators. Arrays retain index order. It also checks every scalar pair in both

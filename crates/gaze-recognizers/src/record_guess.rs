@@ -32,8 +32,8 @@ pub struct RecordGuessTerm<'a> {
 pub struct RecordGuessText {
     normalized: String,
     folded: String,
-    starts: std::collections::HashMap<usize, usize>,
-    ends: std::collections::HashMap<usize, usize>,
+    starts: Vec<Option<usize>>,
+    ends: Vec<Option<usize>>,
     literal_folded: String,
     literal_offsets: std::collections::HashMap<usize, usize>,
 }
@@ -54,8 +54,8 @@ impl RecordGuessText {
             literal_offsets.insert(raw, folded);
         }
         let mut folded = String::new();
-        let mut starts = std::collections::HashMap::new();
-        let mut ends = std::collections::HashMap::new();
+        let mut starts = vec![None; literal_folded.len() + 1];
+        let mut ends = vec![None; literal_folded.len() + 1];
         let mut whitespace_count = 0usize;
         for (index, ch) in literal_folded.char_indices() {
             let end = index + ch.len_utf8();
@@ -63,19 +63,19 @@ impl RecordGuessText {
                 whitespace_count += 1;
                 if whitespace_count == 1 {
                     if let Some(raw) = literal_starts.get(&index) {
-                        starts.insert(folded.len(), *raw);
+                        starts[folded.len()] = Some(*raw);
                     }
                     folded.push(' ');
                 }
             } else {
                 whitespace_count = 0;
                 if let Some(raw) = literal_starts.get(&index) {
-                    starts.insert(folded.len(), *raw);
+                    starts[folded.len()] = Some(*raw);
                 }
                 folded.push(ch);
             }
             if let Some(raw) = literal_ends.get(&end) {
-                ends.insert(folded.len(), *raw);
+                ends[folded.len()] = Some(*raw);
             }
         }
         Self {
@@ -203,14 +203,13 @@ impl<'a> RecordGuessMatcher<'a> {
                 let byte = part.folded.as_bytes()[index];
                 // Each part already collapses whitespace; collapse at seams too.
                 if index == 0 && byte == b' ' && previous_space {
-                    ends[offset % ring_size] = part.ends.get(&1).map(|end| raw_offset + end);
+                    ends[offset % ring_size] = part.ends[1].map(|end| raw_offset + end);
                     continue;
                 }
                 previous_space = byte == b' ';
-                starts[offset % ring_size] =
-                    part.starts.get(&index).map(|start| raw_offset + start);
+                starts[offset % ring_size] = part.starts[index].map(|start| raw_offset + start);
                 offset += 1;
-                ends[offset % ring_size] = part.ends.get(&(index + 1)).map(|end| raw_offset + end);
+                ends[offset % ring_size] = part.ends[index + 1].map(|end| raw_offset + end);
                 state = self.automaton.next_state(Anchored::No, state, byte);
                 if !self.automaton.is_match(state) {
                     continue;

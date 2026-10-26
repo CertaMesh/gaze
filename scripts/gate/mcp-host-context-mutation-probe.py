@@ -79,6 +79,12 @@ def ignore_http(source):
 
 
 PROBES = [
+    ("duplicate-views", CORE,
+     lambda source: replace(source,
+                            "if material.scalars.first() != Some(&scalars) {",
+                            "if true {"),
+     ["cargo", "test", "-p", "gaze-mcp-core", "--lib", "dispatch::tests::host_argument_identical_views_scan_pairs_once", "--", "--exact"],
+     "dispatch::tests::host_argument_identical_views_scan_pairs_once"),
     ("normalization-drift", GUESS,
      lambda source: replace(source,
                             "Self::from_normalized(crate::normalize::normalize(value).text)",

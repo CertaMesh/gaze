@@ -571,7 +571,9 @@ fn argument_guess_material(
             }
             Ok(())
         })?;
-        material.scalars.push(scalars);
+        if material.scalars.first() != Some(&scalars) {
+            material.scalars.push(scalars);
+        }
     }
     Ok(material)
 }
