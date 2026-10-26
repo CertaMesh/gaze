@@ -800,6 +800,8 @@ async fn host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed(
 #[tokio::test]
 async fn host_context_normalized_echo_has_no_membership_oracle_or_promotion() {
     for guess in [
+        "\u{0345}Synthetic Qorvex",
+        "Synthetic Qorvex\u{0345}",
         "Ｓynthetic Qorvex",
         "Synthetic Ｑorvex",
         "ＳＹＮＴＨＥＴＩＣ　ＱＯＲＶＥＸ",
@@ -1102,7 +1104,13 @@ async fn host_context_enumeration_rejected_before_record_processing() {
 async fn host_context_substring_guess_keeps_unguessed_record_protected() {
     let record = "Anna Li";
     let returned = format!("closest match: {record}");
-    for guess in ["Bob", "Joanna Lim", "ＪＯＡＮＮＡ ＬＩＭ", "Anna Li-suffix"] {
+    for guess in [
+        "Bob",
+        "Joanna Lim",
+        "ＪＯＡＮＮＡ ＬＩＭ",
+        "Anna Li-suffix",
+        "İAnna Li",
+    ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let out = call(
             &session,

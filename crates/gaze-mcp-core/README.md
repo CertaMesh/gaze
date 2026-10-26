@@ -348,7 +348,8 @@ Raising either limit increases the guess budget. `Absent` calls use the ordinary
 MCP operation limits.
 
 Exclusion uses the detection pipeline's normalization, Unicode case folding,
-whitespace collapse, and the response matcher's token-boundary rule. A superstring
+whitespace collapse, and the response matcher's token-boundary rule. Folded matches
+map back to the same normalized, pre-casefold text for boundary checks. A superstring
 such as `Joanna Lim` does not exclude `Anna Li`. Coverage includes single fields
 and all scalar fields joined in lexicographic key order with empty or space
 separators. Arrays retain index order. It also checks every scalar pair in both

@@ -365,11 +365,17 @@ pub fn normalize_record_guess(value: &str) -> String {
 /// are ignored: this is an exclusion filter, never detection evidence.
 pub fn contains_record_guess(input: &str, term: &str) -> bool {
     let term = normalize_record_guess(term);
-    let input = normalize_record_guess(input);
+    let view = crate::normalize::normalize(input);
+    let (folded, starts, ends) = fold_with_original_offsets(&view.text, true, true);
     !term.is_empty()
-        && input.char_indices().any(|(start, _)| {
-            input[start..].starts_with(&term)
-                && is_token_boundary_match(&input, start, start + term.len())
+        && folded.char_indices().any(|(start, _)| {
+            let Some((&raw_start, &raw_end)) =
+                starts.get(&start).zip(ends.get(&(start + term.len())))
+            else {
+                return false;
+            };
+            folded[start..].starts_with(&term)
+                && is_token_boundary_match(&view.text, raw_start, raw_end)
         })
 }
 
@@ -576,6 +582,9 @@ mod tests {
     fn record_guess_exclusion_uses_response_token_boundaries() {
         for (input, term, expected) in [
             ("Joanna Lim", "Anna Li", false),
+            ("İAnna Li", "Anna Li", false),
+            ("\u{0345}Anna Li", "Anna Li", false),
+            ("Anna Li\u{0345}", "Anna Li", false),
             ("Anna Li-suffix", "Anna Li", false),
             ("prefix_Anna Li", "Anna Li", false),
             ("(ANNA   LI)", "Anna Li", true),
