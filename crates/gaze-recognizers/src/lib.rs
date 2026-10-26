@@ -44,7 +44,7 @@ pub mod validators;
 pub use anchored_match::{
     is_person_name_candidate, AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape,
 };
-pub use dictionary::{contains_record_guess, DictionaryRecognizer};
+pub use dictionary::{contains_record_guess, normalize_record_guess, DictionaryRecognizer};
 pub use dob_judge::{
     verify_gliner_dob_bundle, DobJudgeLoadError, DobJudgeRecognizer, GLINER_DOB_BUNDLE_SHA256,
     GLINER_DOB_HF_COMMIT, GLINER_DOB_HF_REPO, GLINER_DOB_MODEL_DIR_NAME, GLINER_DOB_SHA256SUMS,

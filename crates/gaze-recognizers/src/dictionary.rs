@@ -347,27 +347,34 @@ fn record_name_is_common(name: &str) -> bool {
         .any(|hit| hit.start() == 0 && hit.end() == folded.len())
 }
 
-// Full Unicode folds can expand one character (for example, ß -> ss).
-// Only complete original-character boundaries may become token spans.
-/// Whether untrusted input contains a possible record guess. This deliberately ignores
-/// corroboration, boundaries and allowed-kind restrictions; it is an exclusion filter,
-/// never evidence for detection or token creation.
-pub fn contains_record_guess(input: &str, term: &str) -> bool {
-    fn normalize(value: &str) -> String {
-        let mut normalized = String::with_capacity(value.len());
-        let view = crate::normalize::normalize(value);
-        for part in view.text.split_whitespace() {
-            if !normalized.is_empty() {
-                normalized.push(' ');
-            }
-            normalized.extend(part.case_fold());
+/// Shared normalized, case-folded view for record-guess exclusion and its budget.
+pub fn normalize_record_guess(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    let view = crate::normalize::normalize(value);
+    for part in view.text.split_whitespace() {
+        if !normalized.is_empty() {
+            normalized.push(' ');
         }
-        normalized
+        normalized.extend(part.case_fold());
     }
-    let term = normalize(term);
-    !term.is_empty() && normalize(input).contains(&term)
+    normalized
 }
 
+/// Whether untrusted input contains a possible record guess at the same token
+/// boundaries as the response matcher. Corroboration and allowed-kind restrictions
+/// are ignored: this is an exclusion filter, never detection evidence.
+pub fn contains_record_guess(input: &str, term: &str) -> bool {
+    let term = normalize_record_guess(term);
+    let input = normalize_record_guess(input);
+    !term.is_empty()
+        && input.char_indices().any(|(start, _)| {
+            input[start..].starts_with(&term)
+                && is_token_boundary_match(&input, start, start + term.len())
+        })
+}
+
+// Full Unicode folds can expand one character (for example, ß -> ss).
+// Only complete original-character boundaries may become token spans.
 fn fold_with_original_offsets(
     input: &str,
     case_fold: bool,
@@ -564,6 +571,19 @@ mod tests {
             "Synthetic Qorvex"
         ));
         assert!(!super::contains_record_guess("anything", ""));
+    }
+    #[test]
+    fn record_guess_exclusion_uses_response_token_boundaries() {
+        for (input, term, expected) in [
+            ("Joanna Lim", "Anna Li", false),
+            ("Anna Li-suffix", "Anna Li", false),
+            ("prefix_Anna Li", "Anna Li", false),
+            ("(ANNA   LI)", "Anna Li", true),
+            ("ba a a", "a a", true),
+            ("Anna Li--", "Anna Li", true),
+        ] {
+            assert_eq!(super::contains_record_guess(input, term), expected);
+        }
     }
     use std::collections::HashMap;
 

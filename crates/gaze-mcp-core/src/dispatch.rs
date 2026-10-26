@@ -109,6 +109,7 @@ pub struct PiiEnvelope<'a> {
     pub dictionaries: &'a gaze::DictionaryBundle,
     /// Transport-supplied session id validation policy.
     pub session_id_policy: &'a SessionIdPolicy,
+    host_context_policy: crate::HostContextPolicy,
     context_policy: Option<(&'a gaze::Policy, &'a [gaze::Rulepack])>,
 }
 
@@ -141,6 +142,7 @@ impl<'a> PiiEnvelope<'a> {
     ) -> Self {
         Self {
             context_policy: None,
+            host_context_policy: crate::HostContextPolicy::default(),
             dictionaries: default_dictionaries(),
             registry,
             auth,
@@ -166,6 +168,13 @@ impl<'a> PiiEnvelope<'a> {
         rulepacks: &'a [gaze::Rulepack],
     ) -> Self {
         self.context_policy = Some((policy, rulepacks));
+        self
+    }
+
+    /// Set the record-independent argument budget for calls with Present context.
+    /// Raising limits increases the per-call guess budget; hosts must rate-limit calls.
+    pub fn with_host_context_policy(mut self, policy: crate::HostContextPolicy) -> Self {
+        self.host_context_policy = policy;
         self
     }
 
@@ -249,6 +258,18 @@ impl<'a> PiiEnvelope<'a> {
             ToolTier::Operator => self.auth.authorize_operator(principal, tool_name).await?,
         };
 
+        // Admit argument size before parsing a record, inspecting session mappings,
+        // or allocating private labels. Rejection cannot depend on record content.
+        let argument_text = if matches!(host_context, crate::HostContextSelection::Present(_)) {
+            let args = match &request {
+                RequestState::Protected(args) => args,
+                RequestState::Untrusted(args) => args.as_value(),
+            };
+            argument_guess_material(args, self.host_context_policy)?
+        } else {
+            Vec::new()
+        };
+
         // Static policy aliases let matched private custom classes remain protected
         // on later calls without retaining a record or context class map.
         crate::host_context::validate_session(self.session)?;
@@ -270,10 +291,6 @@ impl<'a> PiiEnvelope<'a> {
                 .context_policy
                 .ok_or(crate::HostContextError::Unsupported)?;
             let policy = crate::host_context::opaque_context(self.session, context, policy)?;
-            let args = match &request {
-                RequestState::Protected(args) => args,
-                RequestState::Untrusted(args) => args.as_value(),
-            };
             if context
                 .class_map
                 .values()
@@ -295,20 +312,6 @@ impl<'a> PiiEnvelope<'a> {
                 &gaze::LocaleChain::from(self.locale_chain),
             )
             .map_err(|_| crate::HostContextError::Policy)?;
-            let mut argument_text = Vec::new();
-            for decode_json in [false, true] {
-                let mut argument_scalars = Vec::new();
-                visit_argument_text(args, decode_json, &mut |text, is_scalar| {
-                    argument_text.push(text.to_owned());
-                    if is_scalar {
-                        argument_scalars.push(text.to_owned());
-                    }
-                    Ok(())
-                })?;
-                // Keys and JSON wrappers must not interrupt joined scalar values.
-                // Check both original strings and decoded JSON leaves.
-                argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);
-            }
             for dictionary in context.dictionaries.values_mut() {
                 dictionary.terms.retain(|term| {
                     !argument_text.iter().any(|text| {
@@ -524,6 +527,51 @@ impl<'a> PiiEnvelope<'a> {
 
         Ok(ToolResponse::json(response_payload))
     }
+}
+
+fn argument_guess_material(
+    args: &serde_json::Value,
+    policy: crate::HostContextPolicy,
+) -> Result<Vec<String>, crate::HostContextError> {
+    let mut argument_text = Vec::new();
+    for decode_json in [false, true] {
+        let mut argument_scalars = Vec::new();
+        let mut raw_bytes = 0usize;
+        let mut normalized_bytes = 0usize;
+        visit_argument_text(args, decode_json, &mut |text, is_scalar| {
+            raw_bytes = raw_bytes
+                .checked_add(text.len())
+                .filter(|size| *size <= policy.max_argument_bytes)
+                .ok_or(crate::HostContextError::ArgumentLimit)?;
+            let normalized = gaze_recognizers::normalize_record_guess(text);
+            normalized_bytes = normalized_bytes
+                .checked_add(normalized.len())
+                .filter(|size| *size <= policy.max_argument_bytes)
+                .ok_or(crate::HostContextError::ArgumentLimit)?;
+            if is_scalar {
+                if argument_scalars.len() >= policy.max_argument_scalars {
+                    return Err(crate::HostContextError::ArgumentLimit);
+                }
+                argument_scalars.push(text.to_owned());
+            }
+            argument_text.push(text.to_owned());
+            Ok(())
+        })?;
+        // Keys and JSON wrappers must not interrupt joined scalar values.
+        // Check both original strings and decoded JSON leaves.
+        argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);
+        // A bounded scalar set also covers schema order and interleaved fields.
+        for (left_index, left) in argument_scalars.iter().enumerate() {
+            for (right_index, right) in argument_scalars.iter().enumerate() {
+                if left_index != right_index {
+                    for separator in ["", " ", "@", "-", "/"] {
+                        argument_text.push(format!("{left}{separator}{right}"));
+                    }
+                }
+            }
+        }
+    }
+    Ok(argument_text)
 }
 
 fn visit_argument_text(

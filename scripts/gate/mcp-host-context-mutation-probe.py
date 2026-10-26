@@ -37,6 +37,12 @@ def without_exclusions(source):
     return source[:start] + source[end:]
 
 
+def without_joined_guesses(source):
+    start = source.index('        argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);')
+    end = source.index('    Ok(argument_text)', start)
+    return source[:start] + '    }\n' + source[end:]
+
+
 def replace_opaque_name(source, body):
     start = source.index("fn opaque_name(")
     end = source.index("\n}\n", start) + 3
@@ -76,16 +82,25 @@ def ignore_http(source):
 PROBES = [
     ("normalization-drift", DICTIONARY,
      lambda source: replace(source,
-                            "        let view = crate::normalize::normalize(value);\n        for part in view.text.split_whitespace() {",
-                            "        for part in value.split_whitespace() {"),
+                            "    let view = crate::normalize::normalize(value);\n    for part in view.text.split_whitespace() {",
+                            "    for part in value.split_whitespace() {"),
      CONTRACT + ["host_context_normalized_echo_has_no_membership_oracle_or_promotion"],
      "host_context::host_context_normalized_echo_has_no_membership_oracle_or_promotion"),
-    ("split-argument-echo", CORE,
-     lambda source: replace(source,
-                            '                argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);',
-                            '                drop(argument_scalars);'),
+    ("split-argument-echo", CORE, without_joined_guesses,
      CONTRACT + ["host_context_joined_echo_has_no_membership_oracle_or_promotion"],
      "host_context::host_context_joined_echo_has_no_membership_oracle_or_promotion"),
+    ("argument-budget", CORE,
+     lambda source: replace(source,
+                            "argument_guess_material(args, self.host_context_policy)?",
+                            "argument_guess_material(args, crate::HostContextPolicy { max_argument_bytes: usize::MAX, max_argument_scalars: usize::MAX })?"),
+     CONTRACT + ["host_context_enumeration_rejected_before_record_processing"],
+     "host_context::host_context_enumeration_rejected_before_record_processing"),
+    ("guess-boundaries", DICTIONARY,
+     lambda source: replace(source,
+                            "&& is_token_boundary_match(&input, start, start + term.len())",
+                            "&& true"),
+     CONTRACT + ["host_context_substring_guess_keeps_unguessed_record_protected"],
+     "host_context::host_context_substring_guess_keeps_unguessed_record_protected"),
     ("drop-present", CORE,
      lambda source: replace(source, "let mut host_context = crate::host_context::parse(host_context)?;",
                             "let mut host_context = { drop(host_context); None::<gaze::Context> };"),

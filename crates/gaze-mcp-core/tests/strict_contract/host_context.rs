@@ -24,6 +24,23 @@ async fn call(
     output: Option<Value>,
     selection: HostContextSelection,
 ) -> Result<ToolResponse, DispatchError> {
+    call_with_budget(
+        session,
+        args,
+        output,
+        selection,
+        HostContextPolicy::default(),
+    )
+    .await
+}
+
+async fn call_with_budget(
+    session: &Session,
+    args: Value,
+    output: Option<Value>,
+    selection: HostContextSelection,
+    budget: HostContextPolicy,
+) -> Result<ToolResponse, DispatchError> {
     let store = Store::default();
     let registry = registry(
         &store,
@@ -61,6 +78,7 @@ async fn call(
         &SessionIdPolicy::default_strict(),
     )
     .with_context_policy(&policy, &[])
+    .with_host_context_policy(budget)
     .dispatch(&Principal::new("agent"), "test", args, None, selection)
     .await;
     if matches!(result, Err(DispatchError::HostContext(_))) {
@@ -345,7 +363,6 @@ async fn host_context_guesses_in_json_escapes_and_new_cues_cannot_create_an_orac
     for guess in [
         json!(r#"{"guess":"\u0053ynthetic Qorvex"}"#),
         json!(r#""\u0053ynthetic Qorvex""#),
-        json!("prefixSynthetic Qorvexsuffix"),
     ] {
         for name in [KNOWN, UNUSED] {
             let session = Session::new(Scope::Ephemeral).unwrap();
@@ -1011,5 +1028,247 @@ async fn host_context_record_returning_lookup_retains_documented_confirmation_or
                 .unwrap(),
             returned
         );
+    }
+}
+
+fn de_bruijn_digits(n: usize) -> String {
+    // B(10, n): every n-digit string appears as a substring.
+    let k = 10usize;
+    let mut a = vec![0usize; k * n];
+    let mut seq = Vec::new();
+    fn db(t: usize, p: usize, n: usize, k: usize, a: &mut [usize], seq: &mut Vec<usize>) {
+        if t > n {
+            if n.is_multiple_of(p) {
+                seq.extend_from_slice(&a[1..=p]);
+            }
+        } else {
+            a[t] = a[t - p];
+            db(t + 1, p, n, k, a, seq);
+            for j in a[t - p] + 1..k {
+                a[t] = j;
+                db(t + 1, t, n, k, a, seq);
+            }
+        }
+    }
+    db(1, 1, n, k, &mut a, &mut seq);
+    let mut s: String = seq.iter().map(|d| char::from(b'0' + *d as u8)).collect();
+    s.push_str(&s[..n - 1].to_owned());
+    s
+}
+
+#[tokio::test]
+async fn host_context_enumeration_rejected_before_record_processing() {
+    let enumeration = de_bruijn_digits(5);
+    assert_eq!(enumeration.len(), 100_004);
+    assert!(enumeration.contains("48213"));
+    for selection in [
+        split_context("48213"),
+        raw_context(KNOWN),
+        HostContextSelection::present("invalid private_canary".into()),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let error = call(
+            &session,
+            json!({"guess":enumeration}),
+            Some(json!("found 48213")),
+            selection,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_string(), "host context argument limit exceeded");
+        assert!(session.tokens().is_empty());
+        assert!(!session.has_opaque_identifier_key());
+    }
+}
+
+#[tokio::test]
+async fn host_context_substring_guess_keeps_unguessed_record_protected() {
+    let record = "Anna Li";
+    let returned = format!("closest match: {record}");
+    for guess in ["Bob", "Joanna Lim", "ＪＯＡＮＮＡ ＬＩＭ", "Anna Li-suffix"] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let out = call(
+            &session,
+            json!({"guess":guess}),
+            Some(json!(returned)),
+            raw_context(record),
+        )
+        .await
+        .unwrap();
+        assert!(!out.payload.as_str().unwrap().contains(record));
+        assert_eq!(session.tokens().len(), 1);
+        assert_eq!(
+            session
+                .restore_strict_text(out.payload.as_str().unwrap())
+                .unwrap(),
+            returned
+        );
+    }
+}
+
+struct GivenFamilyTool {
+    descriptor: ToolDescriptor,
+}
+
+#[async_trait]
+impl Tool for GivenFamilyTool {
+    fn descriptor(&self) -> &ToolDescriptor {
+        &self.descriptor
+    }
+    async fn invoke(&self, ctx: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
+        let a = ctx.redacted_args();
+        let s = |k: &str| a[k].as_str().unwrap_or_default().to_owned();
+        let text = if a.get("given").is_some() {
+            format!("no match for {} {}", s("given"), s("family"))
+        } else if a.get("user").is_some() {
+            format!("no match for {}@{}", s("user"), s("domain"))
+        } else {
+            format!("no match for {} {}", s("first"), s("last"))
+        };
+        Ok(ToolResponse::json(json!(text)))
+    }
+}
+
+async fn template_call(term: &str, args: Value) -> (Value, usize) {
+    let mut registry = ToolRegistry::new();
+    let members = ["given", "family", "user", "domain", "first", "kind", "last"]
+        .iter()
+        .map(|m| vec![CarrierSegment::Member((*m).into())])
+        .collect::<Vec<_>>();
+    registry
+        .register(GivenFamilyTool {
+            descriptor: ToolDescriptor::agent("test", json!({})).with_carriers(
+                CarrierDeclaration::new(members, vec![]),
+                CarrierDeclaration::text_fields(&[]),
+            ),
+        })
+        .unwrap();
+    let store = Store::default();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut policy = host_policy();
+    policy.detectors[0].pattern = Some("unmatched-sentinel@example\\.invalid".into());
+    policy.rules = vec![gaze::RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let locales = gaze::LocaleChain::from(&[gaze::LocaleTag::Global][..]);
+    let context = gaze::Context::from_json_str("{}").unwrap();
+    let pipeline = gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+    let out = PiiEnvelope::new(
+        &registry,
+        &Auth,
+        &store,
+        &pipeline,
+        &session,
+        locales.as_slice(),
+        &SessionIdPolicy::default_strict(),
+    )
+    .with_context_policy(&policy, &[])
+    .dispatch(
+        &Principal::new("agent"),
+        "test",
+        args,
+        None,
+        split_context(term),
+    )
+    .await;
+    match out {
+        Ok(out) => (out.payload, session.tokens().len()),
+        Err(e) => (json!(format!("ERR {e}")), session.tokens().len()),
+    }
+}
+
+#[tokio::test]
+async fn host_context_pair_echo_has_no_membership_oracle_or_promotion() {
+    for (term, args) in [
+        (KNOWN, json!({"given":"Synthetic","family":"Qorvex"})),
+        (
+            KNOWN,
+            json!({"first":"Synthetic","kind":"exact","last":"Qorvex"}),
+        ),
+        (
+            "synthetic@example.invalid",
+            json!({"user":"synthetic","domain":"example.invalid"}),
+        ),
+    ] {
+        let hit = template_call(term, args.clone()).await;
+        let miss = template_call("Synthetic Nonmatching", args.clone()).await;
+        assert_eq!(hit, miss, "args={args}");
+        assert_eq!(hit.1, 0);
+    }
+}
+
+#[tokio::test]
+async fn host_context_argument_budget_counts_bytes_scalars_and_decoded_views() {
+    for (args, bytes, scalars, admitted) in [
+        (json!({"guess":"abcd"}), 9, 1, true),
+        (json!({"guess":"abcd"}), 8, 1, false),
+        (json!({"guess":"İİİİ"}), 15, 1, false),
+        (json!(["a", "b"]), 32, 2, true),
+        (json!(["a", "b", "c"]), 32, 2, false),
+        (json!(r#"["a","b","c"]"#), 32, 2, false),
+        (json!({"long_key":""}), 4, 1, false),
+        (json!({"nested":"[null,true,12]"}), 32, 3, true),
+        (json!({"nested":"[null,true,12]"}), 32, 2, false),
+    ] {
+        for selection in [raw_context(KNOWN), raw_context(UNUSED)] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let result = call_with_budget(
+                &session,
+                args.clone(),
+                Some(json!("plain response")),
+                selection,
+                HostContextPolicy {
+                    max_argument_bytes: bytes,
+                    max_argument_scalars: scalars,
+                },
+            )
+            .await;
+            assert_eq!(result.is_ok(), admitted, "args={args} result={result:?}");
+            if !admitted {
+                assert!(matches!(
+                    result,
+                    Err(DispatchError::HostContext(HostContextError::ArgumentLimit))
+                ));
+                assert!(!session.has_opaque_identifier_key());
+            }
+            assert!(session.tokens().is_empty());
+        }
+    }
+    for args in [
+        json!({"guess":"x".repeat(4096)}),
+        json!({"nested":vec!["x";33]}),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert!(matches!(
+            call(
+                &session,
+                args.clone(),
+                Some(json!("plain response")),
+                raw_context(KNOWN)
+            )
+            .await,
+            Err(DispatchError::HostContext(HostContextError::ArgumentLimit))
+        ));
+        let output = call(
+            &session,
+            args,
+            Some(json!("plain response")),
+            HostContextSelection::Absent,
+        )
+        .await
+        .unwrap();
+        assert_eq!(output.payload, json!("plain response"));
+    }
+}
+
+#[tokio::test]
+async fn host_context_pair_punctuation_echo_has_no_membership_oracle() {
+    for separator in ["@", "-", "/"] {
+        let term = format!("Synthetic{separator}Qorvex");
+        let args = json!({"nested":["Synthetic", "Qorvex"]});
+        let hit = concat_call(&term, args.clone(), separator).await;
+        let miss = concat_call(UNUSED, args, separator).await;
+        assert_eq!(hit, miss);
+        assert_eq!(hit.1, 0);
     }
 }

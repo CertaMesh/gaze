@@ -40,12 +40,35 @@ impl fmt::Debug for HostContextSelection {
     }
 }
 
+/// Host-owned per-call guess budget. Never derive these limits from a record.
+/// Each original/decoded argument view must fit both raw and normalized byte
+/// limits, including keys, and the scalar limit. Defaults suit small lookup tools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HostContextPolicy {
+    /// Maximum aggregate bytes per view, before and after normalization.
+    pub max_argument_bytes: usize,
+    /// Maximum scalar values per view, including decoded JSON leaves.
+    pub max_argument_scalars: usize,
+}
+
+impl Default for HostContextPolicy {
+    fn default() -> Self {
+        Self {
+            max_argument_bytes: 4096,
+            max_argument_scalars: 32,
+        }
+    }
+}
+
 /// Value-free context failures; no underlying diagnostic or source chain escapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum HostContextError {
     /// Shared context parser rejected the original JSON.
     #[error("invalid host context")]
     Invalid,
+    /// Arguments exceeded a host-owned, record-independent guess budget.
+    #[error("host context argument limit exceeded")]
+    ArgumentLimit,
     /// The host has not supplied matching resident policy inputs.
     #[error("host context unsupported")]
     Unsupported,
@@ -206,8 +229,7 @@ pub(crate) fn opaque_context(
     Ok(policy)
 }
 
-/// Conservative guess exclusion uses the shared record normalization without cues or
-/// token boundaries: tool-added punctuation/cues must not turn a guess into an oracle.
+/// Guess exclusion shares response normalization and token boundaries, without cues.
 pub(crate) fn contains_guess(text: &str, terms: &[String]) -> bool {
     terms
         .iter()
