@@ -189,6 +189,8 @@ impl RmcpFrontend {
 
     /// Build an embeddable rmcp handler. HTTP hosts install middleware on their own
     /// StreamableHttpService and insert HostCallContext in request extensions.
+    /// Private context requires a fresh host and Session per conversation. Construct
+    /// both inside the service factory; cloning a shared host does not isolate sessions.
     pub fn into_server_handler(self, host: Arc<dyn DispatchHost>) -> impl ServerHandler {
         RmcpServer::new(host, self.config.principal_resolver)
     }

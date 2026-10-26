@@ -113,10 +113,18 @@ NER and safety-net handles remain resident. No default implementation discards
 
 The resident pipeline protects model-authored arguments. Private context applies
 only to responses, with any value guessed in the original arguments excluded.
-The exclusion uses conservative Unicode and whitespace matching without requiring
-cues. A tool that adds a cue to an echoed guess must not reveal record membership.
-This trades context recall for resistance to guessing attacks. Ordinary recognizers
-and existing session mappings continue to protect those values.
+Exclusion shares the detection pipeline's normalization, then applies Unicode case
+folding and whitespace collapse without requiring cues. It covers only verbatim
+normalized echoes from single fields or scalar fields joined in traversal order
+with empty or space separators, including echoes with tool-added cues.
+Ordinary recognizers and existing session mappings continue to protect those values.
+
+A record-returning lookup tool still provides a confirmation oracle. A correct
+guess excludes the returned record value from private-context detection. A wrong
+guess leaves that value eligible for a token. The difference can reveal whether
+the guess was correct, even though the model supplied the guessed bytes itself.
+Arbitrary tool transformations and field reorderings can also evade echo exclusion.
+The exclusion therefore does not provide general resistance to guessing attacks.
 
 Only matched response values persist as Rule evidence. Later turns protect those
 values without retaining the record. Unused values and raw context do not enter the
@@ -126,6 +134,12 @@ labels stable across turns and trusted snapshot imports, with separate domains
 for classes and dictionaries. Version 8 snapshots carry that key in the signed
 owner-only payload. Older keyless snapshots still restore, but MCP dispatch
 refuses their opaque classes before invocation or audit. The host retains restore authority.
+
+Private context requires one `Session` and one `DispatchHost` per conversation.
+Sharing a host across MCP sessions shares Rule-evidence mappings, HMAC labels,
+and restore authority. Audit session ids do not partition any of this state.
+The [rmcp example](../../../crates/gaze-mcp-rmcp/README.md#host-context-and-session-ids)
+creates hosts inside the per-MCP-session service factory.
 
 Embedded HTTP middleware sets `HostCallContext` in request extensions. Raw context
 in `_meta`, arguments, headers, or provider bodies is never trusted input. Stock

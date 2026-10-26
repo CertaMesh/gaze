@@ -83,10 +83,18 @@ parts into the handler. Build your `StreamableHttpService` with
 `audit_session_id` supplies optional host-owned audit correlation.
 
 Context protects tool responses. A context value already present in model-authored
-arguments is excluded for that call, including case and whitespace variants.
-An echo therefore cannot reveal record membership. Only values first matched in
-a response become Rule-evidence session entries for later turns. Unmatched values
-are dropped. Restoration still uses the owner's manifest.
+arguments is excluded for that call. Exclusion shares the detection pipeline's
+normalization, then applies Unicode case folding and whitespace collapse. Only
+verbatim normalized echoes from single fields or scalar fields joined in traversal
+order with empty or space separators are covered. Arbitrary tool transformations
+and field reorderings can evade exclusion.
+
+A record-returning lookup tool can still confirm guesses. A correct guess
+excludes the returned record value from private-context detection, while a wrong
+guess leaves that value eligible for a token. This known residual confirmation
+oracle means exclusion does not provide general resistance to guessing attacks.
+Only values first matched in a response become Rule-evidence session entries for
+later turns. Unmatched values are dropped. Restoration still uses the owner's manifest.
 
 Context never enters `ToolCtx`, tool schemas, arguments, `_meta`, or manifest call
 metadata. `Present` is rejected for an operator tool that bypasses response
@@ -97,6 +105,46 @@ The adapter removes the legacy `_session_id` argument and ignores its value.
 It cannot change audit correlation or select a Session. Use host-owned
 `HostCallContext::audit_session_id` for correlation. `SessionIdPolicy` validates
 that id before dispatch; the id never grants access or selects a Session.
+
+Private context requires one `Session` and one `DispatchHost` per conversation.
+Sharing a host across MCP sessions shares Rule-evidence mappings, HMAC labels,
+and restore authority. Audit session ids do not partition this state. The built-in
+`Frontend::serve(host, ...)` HTTP path reuses the supplied host across MCP sessions.
+For private conversations, embed the service and create the host inside its
+per-MCP-session factory:
+
+```rust,no_run
+use std::sync::Arc;
+use gaze_mcp_core::DispatchHost;
+use gaze_mcp_rmcp::RmcpFrontend;
+use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
+
+# #[cfg(feature = "transport-http")]
+# fn embed_http(
+# 	frontend: RmcpFrontend,
+# 	new_conversation_host: impl Fn() -> std::io::Result<Arc<dyn DispatchHost>> + Send + Sync + 'static,
+# ) {
+let service = StreamableHttpService::new(
+	move || {
+		// Allocate a fresh Session and DispatchHost on every factory invocation.
+		let host = new_conversation_host()?;
+		Ok(frontend.clone().into_server_handler(host))
+	},
+	Arc::new(LocalSessionManager::default()),
+	StreamableHttpServerConfig::default(),
+);
+# }
+# fn main() {}
+```
+
+Enable `gaze-mcp-rmcp/transport-http` and add `rmcp` 2.x with
+`transport-streamable-http-server` to use this example. Implement
+`new_conversation_host` so each call constructs a new host with its own `Session`.
+Resident policies, pipelines, and model handles can be shared. Install trusted
+`HostCallContext` middleware on the router that serves this service. Authenticate
+MCP session ownership before reusing a session across requests. On reconnect,
+restore only that conversation's trusted snapshot into its host.
 
 ## rmcp version policy
 

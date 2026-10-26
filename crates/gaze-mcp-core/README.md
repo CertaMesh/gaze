@@ -117,7 +117,14 @@ Snapshot refs use `sha256(audit_session_id || 0x00 || call_id || 0x00 || payload
 
 ## Session ownership boundary
 
-Use one `gaze::Session` per authorization domain. `export_session_tokens` exposes the session’s entire token/raw map without per-call filtering. Sharing a session across users or agents lets one authorized operator read another’s PII. Hosts must create and pass separate sessions to `PiiEnvelope::new`.
+Use one `gaze::Session` per authorization domain. With private record context,
+use one `Session` and one `DispatchHost` per conversation. Sharing either across
+conversations shares Rule-evidence token mappings, HMAC labels, and restore
+authority. An audit session id labels calls but does not partition this state.
+
+`export_session_tokens` exposes the session's entire token/raw map without per-call
+filtering. Sharing a session across users or agents lets one authorized operator
+read another's PII. Hosts must create and pass separate sessions to `PiiEnvelope::new`.
 
 ## Operator-tier tools and audit storage
 
@@ -327,9 +334,18 @@ exact resident assembly inputs. `CorePipeline::policy` and `rulepacks` expose
 those inputs for the bundled configuration. Unsupported hosts reject `Present`.
 
 The shared Context parser preserves CLI and daemon limits. Context affects only
-tool responses. Any private term present in model-authored arguments is excluded
-for the call, including Unicode case and whitespace variants, so an echo cannot
-confirm a guess. Ordinary detection still protects arguments and responses.
+tool responses. Private terms present in model-authored arguments are excluded
+for the call. Exclusion uses the detection pipeline's normalization, then Unicode
+case folding and whitespace collapse. It covers only verbatim normalized echoes
+from single fields or scalar fields joined in traversal order with empty or space
+separators. Ordinary detection still protects arguments and responses.
+
+This is not general resistance to guessing attacks. A record-returning lookup
+tool can still confirm a guess: a correct guess excludes the returned value from
+private-context detection, while a wrong guess leaves that value eligible for a
+token. Arbitrary tool transformations and field reorderings can also evade echo
+exclusion. Treat these as known residual membership oracles when exposing tools.
+
 Only actual response matches enter the session as Rule evidence. Unused record
 values do not persist; matched values restore exactly and remain protected on
 later turns. `Present` cannot accompany an operator response bypass.
