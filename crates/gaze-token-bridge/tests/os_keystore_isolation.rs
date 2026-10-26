@@ -28,7 +28,17 @@ impl CredentialBuilderApi for ForbiddenBackend {
 #[test]
 fn cargo_tests_and_children_never_enter_the_os_keystore() {
     keyring::set_default_credential_builder(Box::new(ForbiddenBackend));
-    assert!(std::env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some());
+    match std::env::var("GAZE_KEYSTORE_PROBE_LAYER").as_deref() {
+        Ok("marker") => std::env::remove_var("CARGO_MANIFEST_DIR"),
+        Ok("cargo-env") => std::env::remove_var("GAZE_DISABLE_OS_KEYSTORE"),
+        Err(std::env::VarError::NotPresent) => {}
+        other => panic!("unexpected probe layer: {other:?}"),
+    }
+    assert!(
+        std::env::var_os("CARGO_MANIFEST_DIR").is_some()
+            || std::env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some(),
+        "test needs an inherited isolation layer"
+    );
     std::env::remove_var("GAZE_INDEX_KEY");
     let dir = std::env::temp_dir().join(format!("gaze-keystore-{}", std::process::id()));
     fs::create_dir(&dir).expect("isolated index directory");

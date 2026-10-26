@@ -103,3 +103,14 @@ checks:
     toolchain: *rust-tools
     commands:
       - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --workspace
+
+  keystore-cwd:
+    description: Independent keystore guards, outside-cwd regression, focused tests and clippy
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/gate/os-keystore-mutation-probe.py, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - cargo fmt --all -- --check
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --focused

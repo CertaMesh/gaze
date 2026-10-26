@@ -5,69 +5,86 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "crates/gaze-token-bridge/src/persistent.rs"
-CONFIG = ROOT / ".cargo/config.toml"
 TEST = "cargo_tests_and_children_never_enter_the_os_keystore"
 COMMAND = ["cargo", "test", "-p", "gaze-token-bridge", "--features", "os-keychain",
            "--test", "os_keystore_isolation", "--", "--exact", TEST, "--nocapture"]
 
 
-def run(tag, expected):
+def run(tag, expected, *, layer=None, outside=False):
     output = ROOT / "target/gate/os-keystore"
     output.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env.pop("GAZE_DISABLE_OS_KEYSTORE", None)
-    with (output / f"{tag}.log").open("w") as log:
-        result = subprocess.run(COMMAND, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+    env.pop("GAZE_KEYSTORE_PROBE_LAYER", None)
+    if layer:
+        env["GAZE_KEYSTORE_PROBE_LAYER"] = layer
+    command = [*COMMAND[:2], "--manifest-path", str(ROOT / "Cargo.toml"), *COMMAND[2:]]
+    with tempfile.TemporaryDirectory(prefix="gaze-keystore-cwd-") as cwd:
+        with (output / f"{tag}.log").open("w") as log:
+            result = subprocess.run(command, cwd=cwd if outside else ROOT, env=env,
+                                    stdout=log, stderr=subprocess.STDOUT)
     text = (output / f"{tag}.log").read_text()
     outcome = "ok" if expected == 0 else "FAILED"
     assert result.returncode == expected, f"{tag}: unexpected exit; inspect log"
     assert f"test {TEST} ... {outcome}" in text, f"{tag}: named test did not execute"
     if expected:
-        assert "panicked at" in text, f"{tag}: no executed assertion failure"
+        assert "native backend reached on save" in text, f"{tag}: fake backend did not catch guard removal"
     print(f"{tag}: compiled and executed named test: {outcome}", flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--focused", action="store_true", help="also run focused tests and clippy")
     parser.add_argument("--workspace", action="store_true", help="also run focused checks and the full feature matrix")
     args = parser.parse_args()
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT), "commit before probing; no stash"
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     source = SOURCE.read_text()
-    config = CONFIG.read_text()
     assert "Box::new(ForbiddenBackend)" in (ROOT / "crates/gaze-token-bridge/tests/os_keystore_isolation.rs").read_text()
     run("baseline", 0)
-    try:
-        before = 'if cfg!(test) || env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some() {'
-        assert source.count(before) == 1
-        SOURCE.write_text(source.replace(before, "if cfg!(test) {"))
-        run("remove-runtime-guard", 101)
-    finally:
-        SOURCE.write_text(source)
-    try:
-        before = 'GAZE_DISABLE_OS_KEYSTORE = { value = "1", force = true }'
-        assert config.count(before) == 1
-        CONFIG.write_text(config.replace(before, ""))
-        run("remove-cargo-marker", 101)
-    finally:
-        CONFIG.write_text(config)
+    run("marker-only", 0, layer="marker")
+    run("cargo-env-only", 0, layer="cargo-env")
+    run("outside-cwd", 0, outside=True)
+    mutations = {
+        "remove-runtime-guard": (None, None),
+        "remove-cargo-env-guard": ('        || env::var_os("CARGO_MANIFEST_DIR").is_some()\n', "cargo-env"),
+        "remove-marker-guard": ('        || env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some()\n', "marker"),
+    }
+    for tag, (guard, layer) in mutations.items():
+        try:
+            if guard is None:
+                start = source.index('    if cfg!(test)\n')
+                end = source.index('    {\n', start) + len('    {\n')
+                mutated = source[:start] + "    if cfg!(test) {\n" + source[end:]
+            else:
+                assert source.count(guard) == 1
+                mutated = source.replace(guard, "")
+            SOURCE.write_text(mutated)
+            run(tag, 101, layer=layer)
+        finally:
+            SOURCE.write_text(source)
     run("restored", 0)
     (ROOT / "target/gate/os-keystore/results.json").write_text(json.dumps({
         "head": head, "baseline": "pass", "restored": "pass",
-        "mutations": {"remove-runtime-guard": "compiled_executed_and_killed", "remove-cargo-marker": "compiled_executed_and_killed"},
+        "independent_layers": {"marker": "pass", "cargo-env": "pass", "outside-cwd": "pass"},
+        "mutations": {tag: "compiled_executed_and_killed" for tag in mutations},
         "native_backend_calls": 0,
     }, indent=2) + "\n")
-    if args.workspace:
+    if args.workspace or args.focused:
         commands = [
-            ["uv", "run", "--project", "scripts/bench", "python", "scripts/bench/test_producer_build_binding.py", "--mutation-proof"],
+            ["cargo", "test", "-p", "gaze-token-bridge"],
             ["cargo", "test", "-p", "gaze-token-bridge", "--features", "os-keychain"],
-            ["cargo", "test", "-p", "gaze-cli", "--all-features", "--features", "gaze-token-bridge/os-keychain", "--test", "index_cli", "--test", "audit_cross_version", "--test", "cli_pipe"],
+            ["cargo", "test", "-p", "gaze-cli", "--all-features", "--features", "gaze-token-bridge/os-keychain", "--test", "index_cli"],
             ["cargo", "clippy", "-p", "gaze-token-bridge", "-p", "gaze-cli", "--all-features", "--all-targets", "--", "-D", "warnings"],
-            ["cargo", "run", "-p", "xtask", "--", "ci-feature-matrix"],
         ]
+        if args.workspace:
+            commands.insert(0, ["uv", "run", "--project", "scripts/bench", "python", "scripts/bench/test_producer_build_binding.py", "--mutation-proof"])
+            commands.append(["cargo", "test", "-p", "gaze-cli", "--all-features", "--test", "audit_cross_version", "--test", "cli_pipe"])
+            commands.append(["cargo", "run", "-p", "xtask", "--", "ci-feature-matrix"])
         for command in commands:
             print("keystore verification: " + " ".join(command), flush=True)
             subprocess.run(command, cwd=ROOT, check=True)

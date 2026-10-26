@@ -866,9 +866,12 @@ fn generate_and_store_keychain_index_key(
 
 #[cfg(feature = "os-keychain")]
 fn keychain_entry(account: &str) -> Result<keyring::Entry, BridgeError> {
-    // Cargo sets the inherited switch for integration tests and spawned binaries.
-    // Unit tests also refuse access when run directly, outside Cargo.
-    if cfg!(test) || env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some() {
+    // Cargo supplies CARGO_MANIFEST_DIR regardless of cwd; children inherit it.
+    // The workspace marker is independent, and unit builds always refuse access.
+    if cfg!(test)
+        || env::var_os("CARGO_MANIFEST_DIR").is_some()
+        || env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some()
+    {
         return Err(index_crypto_error(
             "OS key store disabled; set GAZE_INDEX_KEY",
         ));
