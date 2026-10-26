@@ -1425,7 +1425,7 @@ fn scan_field_owned_value_indexed(
     if let Some(opener) = input[capture.start + escapes..]
         .chars()
         .next()
-        .filter(|ch| field_wrapper_opens(*ch))
+        .filter(|ch| *ch != '#' && field_wrapper_opens(*ch))
     {
         let start = capture.start + escapes + opener.len_utf8();
         return scan_paired_field_value(
@@ -1442,7 +1442,7 @@ fn scan_field_owned_value_indexed(
         let group_start = end;
         end += input[end..]
             .chars()
-            .take_while(|ch| field_value_char(*ch))
+            .take_while(|ch| *ch == '#' || field_value_char(*ch))
             .map(char::len_utf8)
             .sum::<usize>();
         if end == group_start {
@@ -1475,7 +1475,7 @@ fn scan_field_owned_value_indexed(
         }
         let group: String = input[next..]
             .chars()
-            .take_while(|ch| field_value_char(*ch))
+            .take_while(|ch| *ch == '#' || field_value_char(*ch))
             .collect();
         let value_like = group.chars().any(char::is_numeric)
             || (group.chars().any(char::is_alphabetic)

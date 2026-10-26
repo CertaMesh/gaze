@@ -1,6 +1,7 @@
 #[cfg(test)]
 fn legacy_capture_pattern(pattern: &str) -> String {
     let (prefix, _) = pattern.rsplit_once("|(").expect("record scalar seed");
+    let prefix = prefix.replace("|[-–—]", "");
     format!(r"{prefix}|([^\r\n]))")
 }
 
