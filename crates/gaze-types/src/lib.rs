@@ -1,6 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod inspection;
+#[doc(hidden)]
+pub mod json_regions;
 pub mod nym;
 pub mod payment_card;
 pub mod perf;

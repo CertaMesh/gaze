@@ -1647,16 +1647,7 @@ fn record_repeat_seed_in_state(
     raw: &str,
     seed: RepeatSeed,
 ) -> bool {
-    // Ordinary exact values already have their complete sweep pattern. Keep
-    // oversized field provenance so later turns also apply the sweep bound.
-    if matches!(
-        seed.kind,
-        gaze_types::LabelledValueRepeatSeedKind::ExactScalar
-    ) && raw.trim() == raw
-        && raw.len() <= crate::sweep::MAX_LABELLED_REPEAT_BYTES
-    {
-        return false;
-    }
+    // Keep field ownership provenance so every turn applies the same repeat rules.
     let seed = StoredRepeatSeed {
         end: seed.raw.len(),
         kind: seed.kind,

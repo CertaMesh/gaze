@@ -114,3 +114,19 @@ checks:
     commands:
       - cargo fmt --all -- --check
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --focused
+
+  record-id-focused:
+    description: Focused labelled-record JSON and sweep regression tests
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-recognizers --lib
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-pii --lib
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-cli --test record_ids
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-cli --test daemon_reversible padded_record_ids
+  record-id-mutations:
+    description: Compiled mutations for record ownership and repeat protection
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/verify_record_id_scanner_mutations.py

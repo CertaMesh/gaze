@@ -343,15 +343,6 @@ impl SweepMatcher {
                     work.set(count);
                 });
             })
-            // Oversized field ownership still tokenizes and restores in full.
-            // It must not become an unbounded repeat pattern, in this turn or
-            // after the source is persisted into the session.
-            .filter(|source| {
-                source.repeat_seed.as_ref().is_none_or(|seed| {
-                    source.raw.len() <= MAX_LABELLED_REPEAT_BYTES
-                        && seed.raw.len() <= MAX_LABELLED_REPEAT_BYTES
-                })
-            })
             .filter(|source| seen.insert(source.clone()))
             .collect::<Vec<_>>();
         let mut patterns = Vec::new();
@@ -410,6 +401,7 @@ impl SweepMatcher {
     /// outside URL-shaped runs. Hits may overlap; [`select`] picks the cover.
     pub(crate) fn find(&self, text: &str) -> Vec<SweepHit> {
         let mut hits = Vec::new();
+        let json = JsonSweepIndex::new(text);
         if let Some((matcher, meta)) = &self.folded {
             let folded = fold(text);
             for found in matcher.find_overlapping_iter(&folded.text) {
@@ -419,13 +411,13 @@ impl SweepMatcher {
                 }
                 let span = folded.raw_start[start]..folded.raw_end[end - 1];
                 let (source, link) = meta[found.pattern().as_usize()];
-                self.push_hit(text, span, source, link, &mut hits);
+                self.push_hit(text, span, source, link, &json, &mut hits);
             }
         }
         if let Some((matcher, meta)) = &self.exact {
             for found in matcher.find_overlapping_iter(text) {
                 let (source, link) = meta[found.pattern().as_usize()];
-                self.push_hit(text, found.range(), source, link, &mut hits);
+                self.push_hit(text, found.range(), source, link, &json, &mut hits);
             }
         }
         hits
@@ -437,12 +429,16 @@ impl SweepMatcher {
         span: Range<usize>,
         source: usize,
         link: SweepLink,
+        json: &JsonSweepIndex,
         hits: &mut Vec<SweepHit>,
     ) {
         if span.is_empty() || is_inside_word(text, span.start) || is_inside_word(text, span.end) {
             return;
         }
         let source = &self.sources[source];
+        if source.repeat_seed.is_some() && !json.allows(&span) {
+            return;
+        }
         // A name copy glued to more name (`Vasquez-Ellery`, `O'Brien`) covers
         // the whole compound; stopping at the source's edge ships the rest raw.
         let span = if source.class == PiiClass::Name {
@@ -465,6 +461,148 @@ impl SweepMatcher {
             class: source.class.clone(),
             link,
         });
+    }
+}
+
+/// Valid JSON permits a repeat only inside a string value. Index decoded
+/// string layers too, so serialized tool schemas retain their keys and syntax.
+struct JsonSweepIndex {
+    forbidden: Vec<Range<usize>>,
+}
+
+impl JsonSweepIndex {
+    fn new(text: &str) -> Self {
+        let mut forbidden = Vec::new();
+        Self::collect(text, None, &mut forbidden);
+        forbidden.sort_unstable_by_key(|span| span.start);
+        let mut merged: Vec<Range<usize>> = Vec::new();
+        for span in forbidden {
+            if let Some(last) = merged.last_mut().filter(|last| last.end >= span.start) {
+                last.end = last.end.max(span.end);
+            } else {
+                merged.push(span);
+            }
+        }
+        Self { forbidden: merged }
+    }
+
+    fn collect(text: &str, source: Option<&[Range<usize>]>, forbidden: &mut Vec<Range<usize>>) {
+        let project = |start: usize, end: usize| {
+            source.map_or(start..end, |source| {
+                source[start].start..source[end - 1].end
+            })
+        };
+        let regions = gaze_types::json_regions::json_regions(text);
+        let strings = gaze_types::json_regions::json_strings(text, &regions);
+        for region in &regions {
+            let mut start = region.start;
+            let first = strings.partition_point(|(span, _)| span.end <= region.start);
+            for (span, key) in strings[first..]
+                .iter()
+                .take_while(|(span, _)| span.start < region.end)
+            {
+                if !key {
+                    if start < span.start {
+                        forbidden.push(project(start, span.start));
+                    }
+                    start = span.end;
+                }
+            }
+            if start < region.end {
+                forbidden.push(project(start, region.end));
+            }
+        }
+        // A serialized document can also be the whole input JSON string.
+        let mut interiors: Vec<_> = strings
+            .into_iter()
+            .filter(|(_, key)| !key)
+            .map(|(span, _)| span)
+            .collect();
+        if text.starts_with('"') && serde_json::from_str::<String>(text).is_ok() {
+            interiors.push(1..text.len() - 1);
+        }
+        for span in interiors {
+            let Ok(decoded) = serde_json::from_str::<String>(&text[span.start - 1..span.end + 1])
+            else {
+                continue;
+            };
+            if decoded == text[span.clone()] || !decoded.contains(['{', '[']) {
+                continue;
+            }
+            let mut projection = Vec::with_capacity(decoded.len());
+            let mut at = span.start;
+            while at < span.end {
+                let start = at;
+                let len = if text.as_bytes()[at] == b'\\' {
+                    let mut end = at
+                        + if text.as_bytes().get(at + 1) == Some(&b'u') {
+                            6
+                        } else {
+                            2
+                        };
+                    if text.get(end..end + 2) == Some("\\u") {
+                        let first = u16::from_str_radix(&text[at + 2..end], 16).unwrap_or(0);
+                        if (0xd800..=0xdbff).contains(&first) {
+                            end += 6;
+                        }
+                    }
+                    at = end;
+                    serde_json::from_str::<String>(&format!("\"{}\"", &text[start..at]))
+                        .map_or(0, |s| s.len())
+                } else {
+                    let len = text[at..].chars().next().expect("character").len_utf8();
+                    at += len;
+                    len
+                };
+                projection.extend(std::iter::repeat_n(project(start, at), len));
+            }
+            if projection.len() == decoded.len() {
+                Self::collect(&decoded, Some(&projection), forbidden);
+            }
+        }
+    }
+
+    fn allows(&self, span: &Range<usize>) -> bool {
+        let at = self
+            .forbidden
+            .partition_point(|blocked| blocked.end <= span.start);
+        self.forbidden
+            .get(at)
+            .is_none_or(|blocked| blocked.start >= span.end)
+    }
+}
+
+fn labelled_repeat_has_digit(value: &str) -> bool {
+    serde_json::from_str::<String>(&format!("\"{value}\""))
+        .unwrap_or_else(|_| value.to_owned())
+        .chars()
+        .any(|ch| ch.is_ascii_digit())
+}
+
+fn trim_labelled_repeat(mut value: &str) -> &str {
+    loop {
+        let trimmed = value.trim();
+        value = trimmed;
+        let before = value.len();
+        for space in [
+            "\\t", "\\n", "\\r", "\\u0009", "\\u000a", "\\u000d", "\\u0020",
+        ] {
+            if value
+                .get(..space.len())
+                .is_some_and(|s| s.eq_ignore_ascii_case(space))
+            {
+                value = &value[space.len()..];
+            }
+            if value
+                .get(value.len().saturating_sub(space.len())..)
+                .is_some_and(|s| s.eq_ignore_ascii_case(space))
+            {
+                value = &value[..value.len() - space.len()];
+            }
+        }
+        if before == value.len() {
+            return value;
+        }
     }
 }
 
@@ -556,15 +694,24 @@ impl ValueShape {
 
 fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Pattern>) {
     let normalized = normalize(&source.raw).text;
-    let value = normalized.trim();
+    let value = if source.repeat_seed.is_some() {
+        trim_labelled_repeat(&normalized)
+    } else {
+        normalized.trim()
+    };
+    if source.repeat_seed.is_some() && !labelled_repeat_has_digit(value) {
+        return;
+    }
     let shape = ValueShape::of(&source.class, value);
     let mut push = |kind, text: String, link| {
-        patterns.push(Pattern {
-            kind,
-            text,
-            source: index,
-            link,
-        })
+        if source.repeat_seed.is_none() || text.len() <= MAX_LABELLED_REPEAT_BYTES {
+            patterns.push(Pattern {
+                kind,
+                text,
+                source: index,
+                link,
+            });
+        }
     };
     if source.class.clears_repeat_floor(value) {
         match shape {
@@ -581,8 +728,8 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
     }
     if let Some(seed) = &source.repeat_seed {
         let raw = normalize(&seed.raw).text;
-        let body = raw.trim();
-        if source.class.clears_repeat_floor(body) {
+        let body = trim_labelled_repeat(&raw);
+        if labelled_repeat_has_digit(body) && source.class.clears_repeat_floor(body) {
             let uncertain = matches!(
                 seed.kind,
                 gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix
@@ -592,9 +739,7 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
             } else {
                 SweepLink::Exact
             };
-            if uncertain {
-                push(PatternKind::Folded, fold(body).text, link);
-            }
+            push(PatternKind::Folded, fold(body).text, link);
             // Exact raw scalar bytes retain leading/trailing whitespace. The
             // floor is still evaluated on the body, never on those fringes.
             if raw != value {
@@ -802,10 +947,9 @@ fn fold(input: &str) -> Folded {
 #[cfg(test)]
 mod tests {
     #[cfg(feature = "bundled-recognizers")]
-    #[test]
-    fn pipeline_labelled_sweep_work_and_size_are_bounded() {
+    fn labelled_pipeline() -> crate::Pipeline {
         use crate::rule::DefaultRule;
-        use crate::{Action, CleanDocument, Pipeline, RawDocument, Scope, Session};
+        use crate::{Action, Pipeline};
         let core = crate::Rulepack::load(crate::RulepackSource::Embedded(
             gaze_recognizers::embedded("core").unwrap(),
         ))
@@ -839,11 +983,18 @@ mod tests {
         .unwrap()
         .with_complete_labelled_value(true)
         .with_labelled_value_mode(gaze_types::LabelledValueMode::FieldOwned);
-        let pipeline = Pipeline::builder()
+        Pipeline::builder()
             .recognizer(detector)
             .rule(DefaultRule::new(Action::Tokenize))
             .build()
-            .unwrap();
+            .unwrap()
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn pipeline_labelled_sweep_work_and_size_are_bounded() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
         for body in [
             "customerId: \"SYN731284 ",
             "customerId: ''SYN''x''\n",
@@ -885,6 +1036,111 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn labelled_repeat_preserves_json_keys_literals_and_schema() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
+        let mut checked = 0;
+        for value in [
+            "null",
+            "true",
+            "false",
+            "status",
+            "string",
+            "guest",
+            "unknown",
+            "SYN731284",
+            "731284",
+        ] {
+            let body = serde_json::json!({"customerId": value, (value): "public", "copy": value, "v":null, "active":true, "n":731284, "schema":{"type":"string"}}).to_string();
+            let mut input = body.clone();
+            for depth in 0..=4 {
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = pipeline
+                    .redact(&session, RawDocument::Text(input.clone()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                assert_eq!(
+                    pipeline.restore_strict_text(&session, &clean).unwrap(),
+                    input
+                );
+                let mut decoded = clean;
+                for _ in 0..depth {
+                    decoded = serde_json::from_str::<String>(&decoded).unwrap();
+                }
+                let parsed: serde_json::Value = serde_json::from_str(&decoded)
+                    .unwrap_or_else(|error| panic!("{decoded}: {error}"));
+                assert_eq!(parsed[value], "public", "object key changed: {decoded}");
+                assert_eq!(parsed["v"], serde_json::Value::Null);
+                assert_eq!(parsed["active"], true);
+                assert_eq!(parsed["n"], 731284);
+                assert_eq!(parsed["schema"]["type"], "string");
+                if !value.chars().any(|ch| ch.is_ascii_digit()) {
+                    assert_eq!(parsed["copy"], value);
+                }
+                let CleanDocument::Text(next) = pipeline
+                    .redact(
+                        &session,
+                        RawDocument::Text(format!("Follow-up about {value}")),
+                    )
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                if !value.chars().any(|ch| ch.is_ascii_digit()) {
+                    assert!(next.contains(value), "{next}");
+                }
+                checked += 1;
+                input = serde_json::to_string(&input).unwrap();
+            }
+        }
+        assert_eq!(checked, 45);
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn padded_labelled_values_repeat_in_document_and_session() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
+        let mut checked = 0;
+        for padding in [" ", "\u{00a0}", "\\t", "\\u0009", " \\t "] {
+            for count in [1, 16, 32, 64] {
+                let input = format!(
+                    r#"Ref SYN731284 noted.
+{{"customerId":"SYN731284{}"}}"#,
+                    padding.repeat(count)
+                );
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = pipeline
+                    .redact(&session, RawDocument::Text(input.clone()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                assert!(!clean.contains("SYN731284"), "{input:?} -> {clean}");
+                assert_eq!(
+                    pipeline.restore_strict_text(&session, &clean).unwrap(),
+                    input
+                );
+                let CleanDocument::Text(next) = pipeline
+                    .redact(
+                        &session,
+                        RawDocument::Text("Follow-up about SYN731284".into()),
+                    )
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                assert!(!next.contains("SYN731284"), "{padding:?}, {count}: {next}");
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 20);
     }
 
     use super::*;

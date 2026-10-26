@@ -7,7 +7,7 @@ use std::ops::Range;
 #[derive(Default)]
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
-    json_label_values: Option<HashMap<usize, Range<usize>>>,
+    json_label_values: Option<JsonLabelValues>,
     paired: Option<PairedCloseIndex>,
     prefix: PrefixCursor,
     provisional: Option<(usize, PrefixCursor)>,
@@ -106,13 +106,30 @@ impl ScalarBoundaryIndex {
             let encoded = self.encoded(input);
             self.json_label_values = Some(json_label_values(input, &encoded.json));
         }
-        let enclosing_close = {
-            let encoded = self.encoded(input);
-            let at = encoded
-                .json
+        let enclosing_key = {
+            let values = self
+                .json_label_values
+                .as_ref()
+                .expect("initialized JSON labels");
+            let at = values
+                .frames
                 .partition_point(|frame| frame.range.start < capture.start);
             at.checked_sub(1).and_then(|at| {
-                let frame = &encoded.json[at];
+                let frame = &values.frames[at];
+                let close = frame.range.end - 1;
+                (capture.start <= close && values.keys.contains(&close)).then_some(close)
+            })
+        };
+        let enclosing_close = {
+            let values = self
+                .json_label_values
+                .as_ref()
+                .expect("initialized JSON labels");
+            let at = values
+                .frames
+                .partition_point(|frame| frame.range.start < capture.start);
+            at.checked_sub(1).and_then(|at| {
+                let frame = &values.frames[at];
                 let close = frame.range.end - 1;
                 (frame.closed
                     && capture.start <= close
@@ -125,10 +142,23 @@ impl ScalarBoundaryIndex {
             .as_ref()
             .expect("initialized JSON labels");
         if let Some(span) = enclosing_close
-            .and_then(|close| values.get(&close))
-            .or_else(|| values.get(&capture.start))
-            .or_else(|| capture.start.checked_sub(1).and_then(|at| values.get(&at)))
+            .and_then(|close| values.labels.get(&close))
+            .or_else(|| values.labels.get(&capture.start))
+            .or_else(|| {
+                capture
+                    .start
+                    .checked_sub(1)
+                    .and_then(|at| values.labels.get(&at))
+            })
+            .or_else(|| values.direct.get(&capture.start))
+            .or_else(|| {
+                capture
+                    .start
+                    .checked_sub(1)
+                    .and_then(|at| values.direct.get(&at))
+            })
             .cloned()
+            .or_else(|| enclosing_key.map(|_| capture.start..capture.start))
         {
             let span = if span.is_empty() {
                 capture.start..capture.start
@@ -818,35 +848,59 @@ impl EncodedIndex {
 
 // Resolve locally from indexed string frames. Tool output may embed JSON in
 // NDJSON, fences, or prose; the rest of the document need not be valid JSON.
-fn json_label_values(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range<usize>> {
-    let regions = json_regions(input, frames);
-    let scalars = json_first_scalars(input, frames);
-    let mut values = HashMap::new();
+struct JsonLabelValues {
+    keys: std::collections::HashSet<usize>,
+    labels: HashMap<usize, Range<usize>>,
+    direct: HashMap<usize, Range<usize>>,
+    frames: Vec<JsonFrame>,
+}
+
+fn json_label_values(input: &str, _frames: &[JsonFrame]) -> JsonLabelValues {
+    let regions = json_regions(input, _frames);
+    let mut frames = Vec::new();
+    for region in &regions {
+        for mut frame in json_frames(&input[region.clone()]) {
+            frame.range = frame.range.start + region.start..frame.range.end + region.start;
+            frames.push(frame);
+        }
+    }
+    let scalars = json_first_scalars(input, &frames);
+    let mut values = JsonLabelValues {
+        keys: std::collections::HashSet::new(),
+        labels: HashMap::new(),
+        direct: HashMap::new(),
+        frames,
+    };
     let mut containers = Vec::new();
     let mut at = 0;
-    let mut strings = frames.iter().peekable();
+    let mut strings = values.frames.iter().peekable();
     while at < input.len() {
         scanner_work(1);
         if let Some(frame) = strings.peek().filter(|frame| frame.range.start == at) {
-            let region = regions.partition_point(|region| region.end <= at);
-            if frame.closed
-                && regions
-                    .get(region)
-                    .is_some_and(|region| region.contains(&at))
-            {
-                let close = frame.range.end - 1;
-                let next = json_skip_space(input, frame.range.end);
-                let connector = input.as_bytes().get(next);
-                let array_cell = connector == Some(&b',') && containers.last() == Some(&b'[');
-                let key = connector == Some(&b':') && containers.last() == Some(&b'{');
-                if key || array_cell {
-                    let start = json_skip_space(input, next + 1);
-                    let span = scalars
-                        .get(&start)
-                        .cloned()
-                        .filter(|span| !array_cell || !json_scalar_is_label(input, frames, span))
-                        .unwrap_or(close..close);
-                    values.insert(close, span);
+            let close = frame.range.end - 1;
+            let next = json_skip_space(input, frame.range.end);
+            let connector = input.as_bytes().get(next);
+            let array_cell = connector == Some(&b',') && containers.last() == Some(&b'[');
+            let key = connector == Some(&b':') && containers.last() == Some(&b'{');
+            if key || array_cell {
+                let start = json_skip_space(input, next + 1);
+                let span = scalars
+                    .get(&start)
+                    .cloned()
+                    .filter(|span| {
+                        !array_cell || !json_scalar_is_label(input, &values.frames, span)
+                    })
+                    .unwrap_or(close..close);
+                values.labels.insert(close, span.clone());
+                if key {
+                    values.keys.insert(close);
+                    if matches!(
+                        input.as_bytes().get(start),
+                        Some(b'{' | b'[' | b'n' | b't' | b'f')
+                    ) {
+                        values.direct.insert(start, span.clone());
+                        values.direct.insert(start + 1, span);
+                    }
                 }
             }
             at = frame.range.end;
@@ -865,49 +919,9 @@ fn json_label_values(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range<
     values
 }
 
-fn json_regions(input: &str, frames: &[JsonFrame]) -> Vec<Range<usize>> {
-    let mut regions = Vec::new();
-    let mut containers = Vec::new();
-    let mut start = 0;
-    let mut at = 0;
-    let mut strings = frames.iter().peekable();
-    while at < input.len() {
-        scanner_work(1);
-        if let Some(frame) = strings.peek().filter(|frame| frame.range.start == at) {
-            at = frame.range.end;
-            strings.next();
-            continue;
-        }
-        match input.as_bytes()[at] {
-            b'{' | b'[' => {
-                if containers.is_empty() {
-                    start = at;
-                }
-                containers.push(input.as_bytes()[at]);
-            }
-            b'}' | b']' => {
-                let expected = if input.as_bytes()[at] == b'}' {
-                    b'{'
-                } else {
-                    b'['
-                };
-                if containers.pop() == Some(expected) {
-                    if containers.is_empty() {
-                        scanner_work(at + 1 - start);
-                        if serde_json::from_str::<serde_json::Value>(&input[start..at + 1]).is_ok()
-                        {
-                            regions.push(start..at + 1);
-                        }
-                    }
-                } else {
-                    containers.clear();
-                }
-            }
-            _ => {}
-        }
-        at += 1;
-    }
-    regions
+fn json_regions(input: &str, _frames: &[JsonFrame]) -> Vec<Range<usize>> {
+    scanner_work(input.len());
+    gaze_types::json_regions::json_regions(input)
 }
 
 fn json_skip_space(input: &str, mut at: usize) -> usize {
@@ -929,6 +943,12 @@ fn json_label_tail_is_whitespace(mut tail: &str) -> bool {
             tail = &tail[1..];
         } else if tail.starts_with("\\t") || tail.starts_with("\\n") || tail.starts_with("\\r") {
             tail = &tail[2..];
+        } else if tail.get(..6).is_some_and(|escape| {
+            ["\\u0009", "\\u000a", "\\u000d", "\\u0020"]
+                .iter()
+                .any(|space| escape.eq_ignore_ascii_case(space))
+        }) {
+            tail = &tail[6..];
         } else {
             return false;
         }
@@ -959,35 +979,47 @@ fn json_scalar_is_label(input: &str, frames: &[JsonFrame], span: &Range<usize>) 
             .all(|ch| ch.is_alphabetic() || ch.is_whitespace() || "_-.".contains(ch))
 }
 
-// Each container receives its first string/number value when it closes. Only
-// its immediate parent is updated, keeping nested containers linear in size.
+// Nested ownership selects an ID-like scalar, never a schema word or array number.
 fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range<usize>> {
     let mut values = HashMap::new();
-    let mut containers: Vec<(usize, Option<Range<usize>>)> = Vec::new();
+    let mut containers: Vec<(usize, Option<Range<usize>>, bool)> = Vec::new();
     let mut at = 0;
     let mut strings = frames.iter().peekable();
     while at < input.len() {
         scanner_work(1);
         let start = at;
+        let mut eligible = false;
         let span = if let Some(frame) = strings.peek().filter(|frame| frame.range.start == at) {
             at = frame.range.end;
-            let closed = frame.closed;
             strings.next();
-            (closed && input.as_bytes().get(json_skip_space(input, at)) != Some(&b':'))
-                .then_some(start + 1..at - 1)
+            if input.as_bytes().get(json_skip_space(input, at)) == Some(&b':') {
+                let key = serde_json::from_str::<String>(&input[start..at]).unwrap_or_default();
+                if let Some((_, _, id_key)) = containers.last_mut() {
+                    *id_key = ["id", "value", "number", "no", "nr"]
+                        .iter()
+                        .any(|id| key.eq_ignore_ascii_case(id));
+                }
+                None
+            } else {
+                let span = start + 1..at - 1;
+                eligible = input[span.clone()].chars().any(|ch| ch.is_ascii_digit())
+                    || containers.last().is_some_and(|(_, _, id_key)| *id_key);
+                Some(span)
+            }
         } else {
             match input.as_bytes()[at] {
                 b'{' | b'[' => {
-                    containers.push((at, None));
+                    containers.push((at, None, false));
                     at += 1;
                     None
                 }
                 b'}' | b']' => {
                     at += 1;
-                    if let Some((opening, span)) = containers.pop() {
+                    if let Some((opening, span, _)) = containers.pop() {
                         if let Some(span) = &span {
                             values.insert(opening, span.clone());
                         }
+                        eligible = true;
                         span
                     } else {
                         None
@@ -1001,6 +1033,9 @@ fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range
                         scanner_work(1);
                         at += 1;
                     }
+                    eligible = containers
+                        .last()
+                        .is_some_and(|(opening, _, _)| input.as_bytes()[*opening] == b'{');
                     Some(start..at)
                 }
                 _ => {
@@ -1011,10 +1046,11 @@ fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Range
         };
         if let Some(span) = span {
             values.insert(start, span.clone());
-            if let Some((_, first)) = containers.last_mut() {
-                if first.is_none() {
+            if let Some((_, first, id_key)) = containers.last_mut() {
+                if eligible && first.is_none() {
                     *first = Some(span);
                 }
+                *id_key = false;
             }
         }
     }
@@ -2260,6 +2296,244 @@ mod scaling_regressions {
 
 #[cfg(test)]
 mod json_label_cells {
+    fn shape(value: &serde_json::Value) -> serde_json::Value {
+        use serde_json::Value;
+        match value {
+            Value::Object(fields) => Value::Object(
+                fields
+                    .iter()
+                    .map(|(key, value)| (key.clone(), shape(value)))
+                    .collect(),
+            ),
+            Value::Array(values) => Value::Array(values.iter().map(shape).collect()),
+            Value::String(text) => {
+                if let Ok(Value::String(decoded)) = serde_json::from_str::<Value>(text) {
+                    return shape(&Value::String(decoded));
+                }
+                let regions = gaze_types::json_regions::json_regions(text);
+                if regions.is_empty() {
+                    Value::String("scalar".into())
+                } else {
+                    Value::Array(
+                        regions
+                            .into_iter()
+                            .map(|span| shape(&serde_json::from_str::<Value>(&text[span]).unwrap()))
+                            .collect(),
+                    )
+                }
+            }
+            Value::Number(_) => Value::String("scalar".into()),
+            other => other.clone(),
+        }
+    }
+
+    #[test]
+    fn json_record_structure_and_covered_values_are_preserved() {
+        let rules = super::regression_tests::rules();
+        let mut checked = 0;
+        for key in [
+            "customerId",
+            "Customer ID:",
+            "Customer ID: ",
+            "Customer ID:\t",
+            "Customer ID:\n",
+            "Kundennummer:",
+            "Employee_ID=",
+            "member_id:",
+        ] {
+            for value in [
+                r#""SYN731284""#,
+                "731284",
+                "-731284",
+                "731284.5",
+                "731284e2",
+                r#"["SYN731284"]"#,
+                r#"{"v":"SYN731284"}"#,
+                r#"{"type":"customer","id":"SYN731284"}"#,
+                r#"{"type":"string","description":"The id"}"#,
+                r##"{"$ref":"#/defs/Id"}"##,
+                r#"{"a":[1,2]}"#,
+                r#"[{"k":"v"}]"#,
+                "null",
+                "true",
+                "false",
+                r#""null""#,
+                r#""true""#,
+                r#""status""#,
+            ] {
+                let body = format!(
+                    "{{{}:{value},\"status\":\"ok\",\"active\":true,\"empty\":null}}",
+                    serde_json::to_string(key).unwrap()
+                );
+                for container in [
+                    body.clone(),
+                    format!("[{body}]"),
+                    format!("{{\"outer\":{body}}}"),
+                    format!("{{\"rows\":[[{body}]]}}"),
+                ] {
+                    for prefix in [
+                        "",
+                        "tool output: ",
+                        "{\"n\":0}\n",
+                        "{\"n\":0\n",
+                        "log [truncated\n",
+                        "note: \"unbalanced quote\n",
+                    ] {
+                        for tail in ["", " trailing text"] {
+                            let mut input = format!("{prefix}{container}{tail}");
+                            for depth in 0..=4 {
+                                let mut spans: Vec<_> = rules
+                                    .iter()
+                                    .flat_map(|rule| rule.scanned_spans(&input, None))
+                                    .filter(|scan| !scan.rejected)
+                                    .map(|scan| scan.span)
+                                    .collect();
+                                spans.sort_by_key(|span| (span.start, std::cmp::Reverse(span.end)));
+                                spans.dedup();
+                                if input.contains("731284") {
+                                    let private = input.find("731284").unwrap();
+                                    assert!(
+                                        spans
+                                            .iter()
+                                            .any(|span| span.start <= private
+                                                && span.end >= private + 6),
+                                        "leak depth {depth}: {input:?}: {spans:?}"
+                                    );
+                                }
+                                let regions = if depth == 0 {
+                                    let mut regions =
+                                        vec![prefix.len()..prefix.len() + container.len()];
+                                    if prefix == "{\"n\":0}\n" {
+                                        regions.insert(0, 0..7);
+                                    }
+                                    regions
+                                } else {
+                                    vec![0..input.len()]
+                                };
+                                for region in regions {
+                                    let original: serde_json::Value =
+                                        serde_json::from_str(&input[region.clone()]).unwrap();
+                                    let strings = if depth == 0 {
+                                        gaze_types::json_regions::json_strings(
+                                            &input,
+                                            std::slice::from_ref(&region),
+                                        )
+                                    } else {
+                                        vec![(1..input.len() - 1, false)]
+                                    };
+                                    let mut clean = input[region.clone()].to_owned();
+                                    for span in spans.iter().rev().filter(|span| {
+                                        region.start <= span.start && span.end <= region.end
+                                    }) {
+                                        let in_string = strings.iter().any(|(string, key)| {
+                                            !key && string.start <= span.start
+                                                && span.end <= string.end
+                                        });
+                                        if !in_string {
+                                            let number = serde_json::from_str::<serde_json::Value>(
+                                                &input[span.clone()],
+                                            )
+                                            .unwrap_or(serde_json::Value::Null);
+                                            assert!(
+                                                number.is_number(),
+                                                "non-value span: {input:?}: {span:?}"
+                                            );
+                                        }
+                                        let numeric =
+                                            serde_json::from_str::<serde_json::Value>(value)
+                                                .unwrap()
+                                                .is_number();
+                                        let mut marker = if numeric || !in_string {
+                                            "\"MASK\"".to_owned()
+                                        } else {
+                                            "MASK".to_owned()
+                                        };
+                                        if numeric {
+                                            for _ in 0..depth {
+                                                let encoded =
+                                                    serde_json::to_string(&marker).unwrap();
+                                                marker = encoded[1..encoded.len() - 1].to_owned();
+                                            }
+                                        }
+                                        clean.replace_range(
+                                            span.start - region.start..span.end - region.start,
+                                            &marker,
+                                        );
+                                    }
+                                    let parsed: serde_json::Value = serde_json::from_str(&clean)
+                                        .unwrap_or_else(|error| {
+                                            panic!("{input:?} -> {clean:?}: {error}")
+                                        });
+                                    assert_eq!(
+                                        shape(&original),
+                                        shape(&parsed),
+                                        "depth {depth}: {input:?} -> {clean:?}"
+                                    );
+                                }
+                                checked += 1;
+                                input = serde_json::to_string(&input).unwrap();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 34560);
+    }
+
+    #[test]
+    fn json_object_keys_are_never_private_value_spans() {
+        let rules = super::regression_tests::rules();
+        for body in [
+            r#"{"customerId: SYN731284":"public"}"#,
+            r#"{"outer":{"Customer ID: SYN731284":"public"},"type":"string"}"#,
+            r#"{"customerId":{"customerId: SYN731284":"public"}}"#,
+        ] {
+            let mut input = body.to_owned();
+            for _ in 0..=4 {
+                let scans: Vec<_> = rules
+                    .iter()
+                    .flat_map(|rule| rule.scanned_spans(&input, None))
+                    .collect();
+                assert!(
+                    scans.iter().all(|scan| scan.rejected),
+                    "{input:?}: {scans:?}"
+                );
+                input = serde_json::to_string(&input).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn unicode_label_whitespace_owns_the_value() {
+        let rules = super::regression_tests::rules();
+        let mut checked = 0;
+        for escape in [
+            "\\u0009",
+            "\\u000a",
+            "\\u000A",
+            "\\u000d",
+            "\\u000D",
+            "\\u0020",
+            " \\u0009 \\t ",
+        ] {
+            let mut input = format!(r#"{{"Customer ID:{escape}":"SYN731284"}}"#);
+            for _ in 0..=4 {
+                let private = input.find("731284").unwrap();
+                assert!(
+                    rules
+                        .iter()
+                        .flat_map(|rule| rule.scanned_spans(&input, None))
+                        .any(|scan| !scan.rejected && scan.span.contains(&private)),
+                    "{input:?}"
+                );
+                checked += 1;
+                input = serde_json::to_string(&input).unwrap();
+            }
+        }
+        assert_eq!(checked, 35);
+    }
+
     #[test]
     fn json_label_regions_preserve_owned_bytes_at_every_depth() {
         let rules = super::regression_tests::rules();

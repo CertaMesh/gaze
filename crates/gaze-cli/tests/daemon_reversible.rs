@@ -728,3 +728,31 @@ fn context_requests_keep_resident_ner_and_its_learned_evidence_tier() {
         "caller-known rule evidence must propagate"
     );
 }
+
+#[test]
+fn padded_record_ids_keep_repeat_protection_on_second_daemon_turn() {
+    let dir = tempdir().unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(&policy, "[session]\nscope = \"conversation\"\n[policy.rulepacks]\nbundled = [\"core\"]\n[[rule]]\nkind = \"default\"\naction = \"tokenize\"\n").unwrap();
+    let mut daemon = Daemon::start(&policy);
+    for (index, padding) in [" ".repeat(32), "\u{00a0}".repeat(16), "\\t".repeat(32)]
+        .into_iter()
+        .enumerate()
+    {
+        let session = format!("padded-record-{index}");
+        let opened = daemon.request(json!({"version":1,"op":"open","session_id":session}));
+        assert_eq!(opened["op"], "open", "{opened}");
+        let text = format!(r#"{{"customerId":"SYN731284{padding}"}}"#);
+        let first =
+            daemon.request(json!({"version":1,"op":"clean","session_id":session,"text":text}));
+        assert!(
+            !first["clean_text"].as_str().unwrap().contains("SYN731284"),
+            "{first}"
+        );
+        let next = daemon.request(json!({"version":1,"op":"clean","session_id":session,"text":"Follow-up about SYN731284"}));
+        assert!(
+            !next["clean_text"].as_str().unwrap().contains("SYN731284"),
+            "{next}"
+        );
+    }
+}
