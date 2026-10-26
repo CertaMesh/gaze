@@ -520,6 +520,9 @@ impl<'a> PiiEnvelope<'a> {
     }
 }
 
+#[cfg(test)]
+thread_local! { static PAIR_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+
 #[derive(Default)]
 struct ArgumentGuessMaterial {
     texts: Vec<gaze_recognizers::RecordGuessText>,
@@ -618,6 +621,8 @@ fn exclude_argument_guesses(
             for (right_index, right) in texts.iter().enumerate() {
                 if left_index != right_index {
                     for separator in &separators {
+                        #[cfg(test)]
+                        PAIR_SCANS.with(|count| count.set(count.get() + 1));
                         matcher.check_pair(left, separator, right);
                     }
                 }
@@ -894,6 +899,23 @@ mod tests {
     use super::*;
     use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, RawDocument};
     use serde_json::json;
+
+    #[test]
+    fn host_argument_identical_views_scan_pairs_once() {
+        let policy = crate::HostContextPolicy::default();
+        let plain = json!((0..32).map(|i| format!("Synthetic{i}")).collect::<Vec<_>>());
+        let encoded = json!((0..32)
+            .map(|i| format!("\"Synthetic{i}\""))
+            .collect::<Vec<_>>());
+        for (args, views) in [(plain, 1), (encoded, 2)] {
+            let material = argument_guess_material(&args, policy).unwrap();
+            let mut context =
+                gaze::Context::from_json_str(r#"{"record":{"name":"Synthetic Qorvex"}}"#).unwrap();
+            PAIR_SCANS.with(|count| count.set(0));
+            exclude_argument_guesses(&mut context, &material).unwrap();
+            assert_eq!(PAIR_SCANS.with(|count| count.get()), views * 32 * 31 * 5);
+        }
+    }
 
     #[test]
     fn host_argument_entry_budget_counts_every_structural_entry_and_empty_key() {
