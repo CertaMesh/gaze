@@ -5786,6 +5786,40 @@ mod record_allocation_tests {
     use super::*;
 
     #[test]
+    fn repeat_provenance_advances_only_semantic_changes() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let class = PiiClass::custom("customer_id").unwrap();
+        let mut transaction = session.begin_transaction();
+        transaction.tokenize(&class, "C-731284").unwrap();
+        let before = transaction.semantic_revision();
+        let seed = RepeatSeed {
+            raw: "C-731284".into(),
+            kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+        };
+        transaction.record_repeat_seed(None, &class, "C-731284", seed.clone());
+        let exact = transaction.semantic_revision();
+        assert!(exact > before);
+        transaction.record_repeat_seed(None, &class, "C-731284", seed);
+        assert_eq!(transaction.semantic_revision(), exact);
+        transaction.record_repeat_seed(
+            None,
+            &class,
+            "C-731284",
+            RepeatSeed {
+                raw: "C-731".into(),
+                kind: gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix,
+            },
+        );
+        assert!(transaction.semantic_revision() > exact);
+        let final_revision = transaction.semantic_revision();
+        transaction.commit().unwrap();
+        assert_eq!(
+            session.begin_transaction().semantic_revision(),
+            final_revision
+        );
+    }
+
+    #[test]
     fn repeat_seed_growth_respects_manifest_limit_before_retaining_data() {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let class = PiiClass::custom("customer_id").unwrap();
