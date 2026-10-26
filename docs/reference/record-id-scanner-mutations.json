@@ -157,7 +157,7 @@
   },
   {
     "mutation": "remove-labelled-sweep-bound",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-pipeline_labelled_sweep_work_and_size_are_bounded.baseline.log",
     "command": [
       "cargo",
@@ -173,17 +173,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "remove-labelled-sweep-bound.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "cbfc50d67842b796d1088a20c1b84aa127b7de81caf3734362718067a6c4fd42",
+    "log_sha256": "a16f4bacf57f71a1018fcbd551288501ab26ab9cfdbf675fecedb9e1897cb27d",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "b567fc4d2ca130b8c5f5a419b8927cc6b026fd2470dd482e3a1b9387fe9b3686",
-    "baseline_passed": true,
-    "log_sha256": "fa6a93ef54aca9fa3ea2ea37417933e5eed6d710a7854cfdcaa5a770b503939b"
+    "baseline_passed": true
   },
   {
     "mutation": "discard-oversized-session-provenance",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-pipeline_labelled_sweep_work_and_size_are_bounded.baseline.log",
     "command": [
       "cargo",
@@ -199,17 +199,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "15ea815241f9d0a4835c46767de7e428c813f479ae51601ea86130594ffb49b6",
+    "original_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
     "log": "discard-oversized-session-provenance.log",
-    "restored_sha256": "15ea815241f9d0a4835c46767de7e428c813f479ae51601ea86130594ffb49b6",
+    "restored_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "baseline_sha256": "cbfc50d67842b796d1088a20c1b84aa127b7de81caf3734362718067a6c4fd42",
+    "log_sha256": "cf54bf87222bd0e36053933938f559a5f0552c2232c0615ec0622a2cd2da6ed4",
     "source_file": "crates/gaze/src/session.rs",
-    "baseline_sha256": "b567fc4d2ca130b8c5f5a419b8927cc6b026fd2470dd482e3a1b9387fe9b3686",
-    "baseline_passed": true,
-    "log_sha256": "20f19998a26c68708bda014968422db426e761a0b103dc5f7fb0dfea86a95746"
+    "baseline_passed": true
   },
   {
     "mutation": "repeat-alphabetic-labelled-values",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-labelled_repeat_preserves_json_keys_literals_and_schema.baseline.log",
     "command": [
       "cargo",
@@ -225,17 +225,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "repeat-alphabetic-labelled-values.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "490f954ae5166aa03e01a280aa604139023df49ad4a6ee315ad6686aac6cddbe",
+    "log_sha256": "17982ad00d4f4754641525db50398e81294ee1f095c10c069ca6b62f3dc4319b",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "b091bf736b7249a371424b6d735ceb7d083b156da362915a5bcda0c9adac0c77",
-    "baseline_passed": true,
-    "log_sha256": "a3e9daed18bcd7f0c00beb6bc69e794b3e7cf8ca8f94b6e11ceb15c0bb10cd43"
+    "baseline_passed": true
   },
   {
     "mutation": "sweep-json-keys-and-atoms",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-labelled_repeat_preserves_json_keys_literals_and_schema.baseline.log",
     "command": [
       "cargo",
@@ -251,13 +251,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "sweep-json-keys-and-atoms.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "490f954ae5166aa03e01a280aa604139023df49ad4a6ee315ad6686aac6cddbe",
+    "log_sha256": "ea06a2e432d06a8cef81796dc39fa1722c5939da70a0a2aa03f4ba75514010a8",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "b091bf736b7249a371424b6d735ceb7d083b156da362915a5bcda0c9adac0c77",
-    "baseline_passed": true,
-    "log_sha256": "f5571363ee5116ef5d64b123407d98a420f98f345214d289a4cf2cc8860dce69"
+    "baseline_passed": true
   },
   {
     "mutation": "own-incidental-container-strings",
@@ -365,7 +365,7 @@
   },
   {
     "mutation": "drop-padded-labelled-sources",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-padded_labelled_values_repeat_in_document_and_session.baseline.log",
     "command": [
       "cargo",
@@ -381,13 +381,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "drop-padded-labelled-sources.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "39c6c796ea3b8e3e4ccc6401ae6c45172446f01b2899be9709f50dff6e68753f",
+    "log_sha256": "3ce1784a164696b611107c4fe86b8bdb4650ddd11e6f1ac5b53a52e25bbd86a6",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "c481976c37861e79e0c459770d97ae6b078a594eda2597d115cdeefe7c0e7e3e",
-    "baseline_passed": true,
-    "log_sha256": "1c9d02545af9522a9956b5049a5e410cf8d67442cd48c32e171bf993eecb54c8"
+    "baseline_passed": true
   },
   {
     "mutation": "tokenize-labels-inside-json-keys",
@@ -417,7 +417,7 @@
   },
   {
     "mutation": "split-json-escape-on-repeat",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-labelled_repeats_cannot_split_json_escapes.baseline.log",
     "command": [
       "cargo",
@@ -433,17 +433,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "split-json-escape-on-repeat.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "ba9776836ee30a6743c543654947a4fb24baca4193c5332989062f1f8ad8c543",
+    "log_sha256": "aedfb9220d7740d7d0f46be6fb3ff6053459275e9fb1f64a009696baf34424c2",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "c3da81ac23d074e59e34f3ebed7376d7e1764ad8d63a7d27f963da1de2bcb1fc",
-    "baseline_passed": true,
-    "log_sha256": "4b1c571b0953b4e1278bbd6434183f4cacb5582e936047fc1da890e79bb1cc64"
+    "baseline_passed": true
   },
   {
     "mutation": "discard-derived-exact-patterns",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-pipeline_deep_escaped_repeat_patterns_remain_bounded.baseline.log",
     "command": [
       "cargo",
@@ -459,17 +459,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "discard-derived-exact-patterns.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "fdd09f546f64d832d8018dc73c735ab50a9a5abb89560cbb115d16918e1596e8",
+    "log_sha256": "143c4cebe65436ca7c3fe8768889909bb28e7e480d63a5ae70334331306ab4c4",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "75ae900bca65cf50be5fed09b431ede60964a2be358ee13ce5bd685393982ab9",
-    "baseline_passed": true,
-    "log_sha256": "5770fc27739e431645b4d5f63071581b662cf382e84e1afa288d5fb267ee3c7b"
+    "baseline_passed": true
   },
   {
     "mutation": "cap-legacy-uncertain-prefixes",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-legacy_uncertain_prefixes_keep_their_floor_and_long_values.baseline.log",
     "command": [
       "cargo",
@@ -485,17 +485,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "cap-legacy-uncertain-prefixes.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "1327826d014f2dc59c15b05b859d2b4a509acd10bfd59e663e0711784c52db75",
+    "log_sha256": "769f15519c10fa3d3bcfcdc9c7b5464b20f515e1b2d0a3906aef9d384338ef4c",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "5b4cfaeeb3cbaea668e549f8e0490489f30dc19c5eba1953cdc74084457a7484",
-    "baseline_passed": true,
-    "log_sha256": "a46871aa2098d5cca2b604289fb3a6136cd41d1661efdb595dd737ade31fbca2"
+    "baseline_passed": true
   },
   {
     "mutation": "apply-field-digit-floor-to-legacy-prefixes",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-legacy_uncertain_prefixes_keep_their_floor_and_long_values.baseline.log",
     "command": [
       "cargo",
@@ -511,17 +511,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "apply-field-digit-floor-to-legacy-prefixes.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "1327826d014f2dc59c15b05b859d2b4a509acd10bfd59e663e0711784c52db75",
+    "log_sha256": "f222491ff4c905e8072415864bc8cefaf95ca1288153a522aa7003044474fec9",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "5b4cfaeeb3cbaea668e549f8e0490489f30dc19c5eba1953cdc74084457a7484",
-    "baseline_passed": true,
-    "log_sha256": "60b37753e0dde76fb61bb4b3bad147dc96332a0c92ed71c205e1a0f825e586a8"
+    "baseline_passed": true
   },
   {
     "mutation": "bound-decoded-padding-before-trimming",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-deeply_escaped_padding_keeps_trimmed_repeats_across_turns.baseline.log",
     "command": [
       "cargo",
@@ -537,17 +537,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "bound-decoded-padding-before-trimming.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "d486aa148e01e7106536692d8076404ac24ed3cc70bb263579690b6d5e246a9d",
+    "log_sha256": "9b2a09d68b6da2ae9791cfc05ff56c03182dec13c376fc301a74d455e603740d",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "cfdd4f1e63af465200888126c2ab9ad5d5b6df6e02dc5ab4200aee2853162de2",
-    "baseline_passed": true,
-    "log_sha256": "35d5c27869ba7072716d6d6dcf40cd239b9b55f6e984d937bab7e2471337c035"
+    "baseline_passed": true
   },
   {
     "mutation": "allow-unbounded-decoding-cascade",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-cascading_unicode_escapes_cannot_create_unbounded_repeat_work.baseline.log",
     "command": [
       "cargo",
@@ -563,17 +563,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "allow-unbounded-decoding-cascade.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "c58c9dfa2ed70aa8cdd1cd53067ca15866c7d30f344ef32902b5d4e018cf95ca",
+    "log_sha256": "3ec6fb0500961cc84579e85571c478a6fbe04c5c2daf3aff4ca4c710dadf54da",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "83c81ab43e1b0223710cd77e107fa8f691ad2ea114203a2055c1995853b3d1c6",
-    "baseline_passed": true,
-    "log_sha256": "7da2129c6e901fadeec90a6b23316e4273b248cfcdb69b557486ee0d5750d0d9"
+    "baseline_passed": true
   },
   {
     "mutation": "fold-exact-family-scalar-seeds",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-field_owned_families_keep_byte_exact_matching.baseline.log",
     "command": [
       "cargo",
@@ -589,17 +589,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "fold-exact-family-scalar-seeds.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "a8f1d4fd18b42a68733f900528edfd6b749e29d206fe3f29bf1ea2f3b54e9de1",
+    "log_sha256": "57ea6f863aeca23dda748788e34b6ff6108276f3fe17b99f9461a9fbcd5ba32e",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "10a092942a411e60ed220074d92468686489d482d3700ab837592a6fbb63d653",
-    "baseline_passed": true,
-    "log_sha256": "f9c172b7c94a9850a4a08f698bbbfca1ba8ce22f9c81cb274807bc77a124c61c"
+    "baseline_passed": true
   },
   {
     "mutation": "skip-mixed-source-json-gate",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-mixed_carriers_preserve_json_keys_types_and_string_boundaries.baseline.log",
     "command": [
       "cargo",
@@ -615,17 +615,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "skip-mixed-source-json-gate.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "745039b15f6d78f245896507fdaac79934c5cf1091eb9d3558926be39d45e1ed",
+    "log_sha256": "f3412b4d97817ea877227576006574ad6f5e2f9f3f401e5678bbaf5073f5a417",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "6b14284c7c5428dc96bf09efd438962f0be44deb1ec2a9a39821a248f18933b7",
-    "baseline_passed": true,
-    "log_sha256": "2bdda153b3ebd3ed07add7ed8327c912ff5ca2ec0cb39b0aa307d6c357630d7d"
+    "baseline_passed": true
   },
   {
     "mutation": "ignore-escaped-json-sweep-layers",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-mixed_carriers_preserve_json_keys_types_and_string_boundaries.baseline.log",
     "command": [
       "cargo",
@@ -641,13 +641,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "ignore-escaped-json-sweep-layers.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "745039b15f6d78f245896507fdaac79934c5cf1091eb9d3558926be39d45e1ed",
+    "log_sha256": "d0b0dc4b3420c13477af2c88bf0c0cf84f6997fccdb479da6df3dc39982e298a",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "6b14284c7c5428dc96bf09efd438962f0be44deb1ec2a9a39821a248f18933b7",
-    "baseline_passed": true,
-    "log_sha256": "c44ac449a3d9bd02f89e8d0b88f0e2c85fe5178716c86eb55cbdc002cb312f77"
+    "baseline_passed": true
   },
   {
     "mutation": "allow-schema-container-ownership",
@@ -703,7 +703,7 @@
   },
   {
     "mutation": "require-identical-raw-repeat-spelling",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-decoded_record_ids_repeat_between_raw_spellings_and_turns.baseline.log",
     "command": [
       "cargo",
@@ -719,13 +719,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "require-identical-raw-repeat-spelling.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "d920d5fc9e6485cfa48d630b11b46ce2ebd4fd680af791a5d55f05cf37ebcbe4",
+    "log_sha256": "08d0a391c75b1608471f2ba85bd37670be50afdab85a3d609966441485207068",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "b15b6ea82c09f6c2567ebd06a7422e8e180eb1683d962afc34f9ddb21619b19b",
-    "baseline_passed": true,
-    "log_sha256": "ce23f9630b371be0d9352035acbcaf0b86a9b53c1360f5627e4828f62e09e3c7"
+    "baseline_passed": true
   },
   {
     "mutation": "skip-escaped-prose-label-index",
@@ -859,7 +859,7 @@
   },
   {
     "mutation": "skip-lexical-json-like-gate",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-lexical_sweep_preserves_non_strict_keys_numbers_and_literals.baseline.log",
     "command": [
       "cargo",
@@ -875,17 +875,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "skip-lexical-json-like-gate.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "872a9d83695cb22d3d35ea960b6869e8ed1204a60af197cd29ae5af347319bd4",
+    "log_sha256": "bbe419c477d1fb2d6d13beec3dd1f0b59ab9b97e1560cd4c4450dfd1eb384351",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "8b16e380267a2a6bbe98104bc0302e8d002c7f4f1150cd2577cab8f2e0a991be",
-    "baseline_passed": true,
-    "log_sha256": "038685069e7f6651eea07e3040f0064b39080543f70f6e13cd4bc5f32bc38135"
+    "baseline_passed": true
   },
   {
     "mutation": "rebuild-url-runs-per-hit",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-minified_record_url_lookup_work_is_linear.baseline.log",
     "command": [
       "cargo",
@@ -901,13 +901,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "rebuild-url-runs-per-hit.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "760d2f9118b139467c751103e85246644cfb47b9538f3fd7f298270643539b25",
+    "log_sha256": "cf746f98b72ca8ac46d82e90b94e98093d19b448fdfc7414d756612b652e4452",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "89c22c6d97fc9e35b2b189af127778311c2df5007c64af1c7dc5a83fcdf31440",
-    "baseline_passed": true,
-    "log_sha256": "e18580388e7638c8939d99af2f45112739724ab2a1986abe0075f8275536a544"
+    "baseline_passed": true
   },
   {
     "mutation": "drop-leading-symbol-ids",
@@ -1015,7 +1015,7 @@
   },
   {
     "mutation": "block-whole-id-on-key-looking-content",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-lexical_sweep_keeps_whole_private_values_with_key_looking_content.baseline.log",
     "command": [
       "cargo",
@@ -1031,13 +1031,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "block-whole-id-on-key-looking-content.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "47a9be47793873a1e8fb9948b7c84a619f4294e30ce01d1250e3011a3da22cf7",
+    "log_sha256": "4ca749b2b83721301c75fcbedb899ef6d7ae42de9dd105457b5a4490125ff08f",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "1bd2f4ef9fd00aa860523ca4309bdb590e78d932562f9258623e51e7875d9cd1",
-    "baseline_passed": true,
-    "log_sha256": "7d7a87031f4cf69c35483ca2b93447cd41d8363f6625358e0f359dacea516178"
+    "baseline_passed": true
   },
   {
     "mutation": "drop-digit-free-base64-ids",
@@ -1093,7 +1093,7 @@
   },
   {
     "mutation": "allow-unquoted-html-repeat-emission",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
     "baseline": "gaze-pii-seeded_html_repeats_preserve_unquoted_attribute_syntax.baseline.log",
     "command": [
       "cargo",
@@ -1109,13 +1109,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
     "log": "allow-unquoted-html-repeat-emission.log",
-    "restored_sha256": "d50e985b1064f896b0135924e051dbff663b07452a4d7df712257a3754ac5110",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "a8e6bfba45c0dd1049cb60cccf9d2c0e21046df5db82cfb30bf4e7ae4c616195",
+    "log_sha256": "95c86333dca54ee74bba491db4e2311de84ad40158ff8be6643b9c14af3992f0",
     "source_file": "crates/gaze/src/sweep.rs",
-    "baseline_sha256": "a4061233648f7c824f1e6eb086c1a4ae6607f4131f99e6f411865b7289b01aa7",
-    "baseline_passed": true,
-    "log_sha256": "6496e5e5fb5b588cc80f35387e8ed78ace2c5446fb5539a9626147ca188ec1c4"
+    "baseline_passed": true
   },
   {
     "mutation": "drop-decoded-markup-data-context",
@@ -1301,6 +1301,188 @@
     "baseline_sha256": "1661d6e1df71d6d61c4c42e2a326ae74280c242329ca44354d5a06af4ef88b0b",
     "log_sha256": "b7fdca1b2faf342877ca0bfd2630846fabbb0f415659c7f5d03cbe307b38005f",
     "source_file": "crates/gaze-recognizers/embedded/core.toml",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "skip-repeat-provenance-budget",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
+    "baseline": "gaze-pii-repeat_seed_growth_respects_manifest_limit_before_retaining_data.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "repeat_seed_growth_respects_manifest_limit_before_retaining_data",
+      "--",
+      "--nocapture"
+    ],
+    "test": "repeat_seed_growth_respects_manifest_limit_before_retaining_data",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "log": "skip-repeat-provenance-budget.log",
+    "restored_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "baseline_sha256": "4a5546ea8ca6e805463f4440d1ea43ae4c954f978175de9d0ceebb86cb88a932",
+    "log_sha256": "aa1f2d4e936f42c7ca05c4494435666419a35ec340ed19aeca28c1477d4bb8f2",
+    "source_file": "crates/gaze/src/session.rs",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "omit-repeat-provenance-capacity",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
+    "baseline": "gaze-pii-repeat_seed_charge_tracks_growth_and_duplicate_updates.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "repeat_seed_charge_tracks_growth_and_duplicate_updates",
+      "--",
+      "--nocapture"
+    ],
+    "test": "repeat_seed_charge_tracks_growth_and_duplicate_updates",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "log": "omit-repeat-provenance-capacity.log",
+    "restored_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "baseline_sha256": "6efb923138c80f08c6b05a0f547d6e3f12853ff0e362fc59e9881c137d4bf3d9",
+    "log_sha256": "17e9cfdd765b0ec1a7d9e993b02dca9c9920351b401893d21adc0cadc7506891",
+    "source_file": "crates/gaze/src/session.rs",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "omit-repeat-provenance-buckets",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
+    "baseline": "gaze-pii-repeat_seed_charge_tracks_growth_and_duplicate_updates.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "repeat_seed_charge_tracks_growth_and_duplicate_updates",
+      "--",
+      "--nocapture"
+    ],
+    "test": "repeat_seed_charge_tracks_growth_and_duplicate_updates",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "log": "omit-repeat-provenance-buckets.log",
+    "restored_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "baseline_sha256": "6efb923138c80f08c6b05a0f547d6e3f12853ff0e362fc59e9881c137d4bf3d9",
+    "log_sha256": "9bba561bed6879a4749849ec7c6ec69ef6670da2839fc81f54ee16aa0e24d7c3",
+    "source_file": "crates/gaze/src/session.rs",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "omit-repeat-provenance-key-payload",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
+    "baseline": "gaze-pii-repeat_seed_charge_tracks_growth_and_duplicate_updates.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "repeat_seed_charge_tracks_growth_and_duplicate_updates",
+      "--",
+      "--nocapture"
+    ],
+    "test": "repeat_seed_charge_tracks_growth_and_duplicate_updates",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "log": "omit-repeat-provenance-key-payload.log",
+    "restored_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "baseline_sha256": "6efb923138c80f08c6b05a0f547d6e3f12853ff0e362fc59e9881c137d4bf3d9",
+    "log_sha256": "102a83233cc3087ce71bb45669dbf61dd994d8943ae6e6f0c7c8bcadb40c26c0",
+    "source_file": "crates/gaze/src/session.rs",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "omit-decoded-matcher-allocation",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
+    "baseline": "gaze-pii-derived_matcher_and_repeat_payloads_are_charged.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "derived_matcher_and_repeat_payloads_are_charged",
+      "--",
+      "--nocapture"
+    ],
+    "test": "derived_matcher_and_repeat_payloads_are_charged",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "log": "omit-decoded-matcher-allocation.log",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "b63187ce1beb62f96c93228b07cd6e186729595e49a840c9808fdfb137a91daa",
+    "log_sha256": "3d8404f640465f9481a8c9888445820c595903aa6b6b953bac09cca1ee521360",
+    "source_file": "crates/gaze/src/sweep.rs",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "omit-sweep-repeat-seed-allocation",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
+    "baseline": "gaze-pii-derived_matcher_and_repeat_payloads_are_charged.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "derived_matcher_and_repeat_payloads_are_charged",
+      "--",
+      "--nocapture"
+    ],
+    "test": "derived_matcher_and_repeat_payloads_are_charged",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "log": "omit-sweep-repeat-seed-allocation.log",
+    "restored_sha256": "f13366fb9411cbc848582084f86eda46d75359f33cd522b16c9063b52e4fbdac",
+    "baseline_sha256": "b63187ce1beb62f96c93228b07cd6e186729595e49a840c9808fdfb137a91daa",
+    "log_sha256": "d00d80bccaa50fca9056d9c10cf27b97d4a40261a1a967fefb5b7649825be929",
+    "source_file": "crates/gaze/src/sweep.rs",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "omit-repeat-provenance-semantic-revision",
+    "head": "3b226cd712e0d60f6f784a56b1bba4ef676f2fb5",
+    "baseline": "gaze-pii-repeat_provenance_advances_only_semantic_changes.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "repeat_provenance_advances_only_semantic_changes",
+      "--",
+      "--nocapture"
+    ],
+    "test": "repeat_provenance_advances_only_semantic_changes",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "log": "omit-repeat-provenance-semantic-revision.log",
+    "restored_sha256": "0bfbde1c740834309f5be6f0ec399ee099a552af2510d67f7c8b74e64fefc6ed",
+    "baseline_sha256": "9f84b4baec54c02cc32262a4b73a8807741895a389cb4b1f66bed73709d563d6",
+    "log_sha256": "5ffd439ff189250100ac939eef6e1202236f27eea7939a6e41d36ad9a60fd5a8",
+    "source_file": "crates/gaze/src/session.rs",
     "baseline_passed": true
   }
 ]

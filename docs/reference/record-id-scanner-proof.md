@@ -184,7 +184,7 @@ and nice 10. Workspace checks retain the shared build lock.
 The `record-id-mutations` check runs
 `scripts/verify_record_id_scanner_mutations.py` from a clean checkout with a
 signed HEAD. Each named baseline must execute exactly one passing test before
-mutation. The catalog contains 50 compiled mutants that fail their named regression tests. The
+mutation. The catalog contains 57 compiled mutants that fail their named regression tests. The
 script restores each source byte-for-byte and writes logs and hash receipts
 under `target/scanner-mutations/`. It never creates commits or uses a stash.
 
@@ -210,11 +210,19 @@ regression checks the exact private bytes and strict restore for customer,
 employee, and member labels. The mutation runner accepts both unit and integration
 test execution receipts.
 
-Fourteen probes for the changed scanner and rulepack files were rerun: ten
-existing probes and four new probes for wrapper quotes and each label suffix.
-Their one-test baselines passed, all compiled mutants failed the named test, and
-source hashes matched after restoration. The receipt pins each observation's
-implementation commit; the other 36 probes retain their preceding evidence.
+The initial CI fixes reran fourteen scanner and rulepack probes. Main integration
+reran twenty-six session and sweep probes, including seven new guards. Every
+one-test baseline passed, each compiled mutant failed its named test, and source
+hashes matched after restoration. The receipt pins each observation's commit.
+The remaining thirty-one probes retain their preceding evidence.
+
+Daemon v2's manifest budget includes repeat-provenance keys, their table capacity,
+repeat-source strings, and the decoded matcher's automaton and owner index.
+Transactions refuse repeat-provenance growth before retaining data when the
+manifest budget is exhausted. Cached charges track table growth and repeated
+updates. A provenance change advances the semantic revision so daemon v2 revisits
+earlier blocks before publishing a stable inventory. Identical provenance updates
+leave the revision unchanged. Four focused regressions cover these boundaries.
 
 The original replay has 35,214 JSON cases and 176 carrier cases. Existing deferred
 leaks and 375 direct-numeric JSON validity failures remain explicit limits.
