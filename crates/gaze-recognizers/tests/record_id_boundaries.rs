@@ -1264,6 +1264,22 @@ fn check_quote_dialect_depths(
         let session = Session::new(Scope::Conversation("synthetic-quote-dialect".into())).unwrap();
         let clean = public_clean(pipeline, &session, &input);
         let entries = session.snapshot_entries();
+        let mut decoded = value.clone();
+        while let Some((text, _)) = gaze_types::json_regions::unescape_json_fragments(&decoded) {
+            decoded = text;
+        }
+        if !decoded.chars().any(char::is_numeric) {
+            // The digit floor deliberately excludes quoted alphabetic placeholders.
+            assert_eq!(clean, input, "digit-free quoted data stays public");
+            assert!(entries.is_empty());
+            input = serde_json::to_string(&serde_json::json!({
+                "note": input, "public_version": "'", "tags": ["'", "FRAME"]
+            }))
+            .unwrap();
+            let encoded = serde_json::to_string(&value).unwrap();
+            value = encoded[1..encoded.len() - 1].to_owned();
+            continue;
+        }
         let entry = entries
             .iter()
             .find(|entry| entry.raw == value && entry.class == class)

@@ -61,7 +61,6 @@ fn quoted_personal_scalars_preserve_every_raw_byte() {
     ] {
         for raw in [
             "LILAC é984321",
-            "indigo crystal",
             "@FABLE984321",
             r"FABLE\u00e9984321",
             r"FABLE\u0065\u0301984321",
@@ -316,29 +315,9 @@ fn labelled_person_ids_capture_only_whole_values_and_restore() {
             "CUST-000123",
             "customer_id",
         ),
-        (
-            r#"{"customerId":"opaquevalue"}"#,
-            "opaquevalue",
-            "customer_id",
-        ),
         (r#"{"customer_id":600123}"#, "600123", "customer_id"),
         (r#"{"employee_id":600124}"#, "600124", "employee_id"),
         (r#"{"contact_record_id":600125}"#, "600125", "record_id"),
-        (
-            r#"{"employee_id":"opaquevalue"}"#,
-            "opaquevalue",
-            "employee_id",
-        ),
-        (
-            r#"{"contact_record_id":"opaquevalue"}"#,
-            "opaquevalue",
-            "record_id",
-        ),
-        (
-            r#"{\"employee_id\":\"opaquevalue\"}"#,
-            "opaquevalue",
-            "employee_id",
-        ),
         ("Kundennummer: K-12345", "K-12345", "customer_id"),
         ("customer number is A7-B8", "A7-B8", "customer_id"),
         ("employee_no=EMP-000123", "EMP-000123", "employee_id"),
@@ -380,15 +359,9 @@ fn labelled_person_ids_capture_only_whole_values_and_restore() {
             "customer_id",
         ),
         ("customer_id=C+000123", "C+000123", "customer_id"),
-        ("customer_id=+YQ==", "+YQ==", "customer_id"),
         (
             "employee_id=_opaque/REF-01",
             "_opaque/REF-01",
-            "employee_id",
-        ),
-        (
-            r#"{"employee_id":"opaque+YQ=="}"#,
-            "opaque+YQ==",
             "employee_id",
         ),
         ("customer_id: SYN-é000123", "SYN-é000123", "customer_id"),
@@ -528,5 +501,26 @@ fn public_identifiers_lookalike_keys_and_cross_line_cues_stay_raw() {
             panic!("text")
         };
         assert_eq!(clean, input, "unlinked ID was protected");
+    }
+}
+
+#[test]
+fn alphabetic_and_symbol_only_application_keys_are_public_placeholders() {
+    let core = CorePipelineConfig::new().build().unwrap();
+    for input in [
+        r#"{"customerId":"opaquevalue"}"#,
+        r#"{"employee_id":"opaquevalue"}"#,
+        r#"{"contact_record_id":"opaquevalue"}"#,
+        r#"{\"employee_id\":\"opaquevalue\"}"#,
+        r#"{"customer_id":"indigo crystal"}"#,
+        "customer_id=+YQ==",
+        r#"{"employee_id":"opaque+YQ=="}"#,
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = core.pseudonymize_text(&session, input).unwrap() else {
+            panic!("text")
+        };
+        assert_eq!(clean, input);
+        assert!(session.snapshot_entries().is_empty());
     }
 }

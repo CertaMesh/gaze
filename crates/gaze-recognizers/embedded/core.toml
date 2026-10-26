@@ -2174,14 +2174,14 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|(?-i:\\+(?:[ntrbf]|u000[9a-dA-D])))(?:customer[ _-]?(?:record[ _-]?)?(?:id|number|no\.?|nr\.?)|kunden(?:[ _-]?(?:id|nummer|nr\.?)))[ \t\u{00A0}\u{202F}]*(?:\\*["'])?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)(?:(?:\\*["'])([\s\S])|([^\r\n]))'''
+pattern = '''(?i)(?:\b|(?-i:\\+(?:[ntrbf]|u000[9a-dA-D])))(?:customer[ _-]?(?:record[ _-]?)?(?:id|number|no\.?|nr\.?)|kunden(?:[ _-]?(?:id|nummer|nr\.?)))[ \t\u{00A0}\u{202F}]*(?:\\*["'])?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)(?:(?:\\*["'])([\s\S])|([\p{L}\p{N}@_\-"'\\\s\u{200b}(\[{«༺༼᚛‘‚‛“„‟‹⁅⁽₍⌈⌊〈❨❪❬❮❰❲❴⟅⟦⟨⟪⟬⟮⦃⦅⦇⦉⦋⦍⦏⦑⦓⦕⦗⧘⧚⧼⸂⸄⸉⸌⸜⸠⸢⸤⸦⸨⹂〈《「『【〔〖〘〚〝﴿︗︵︷︹︻︽︿﹁﹃﹇﹙﹛﹝（［｛｟｢`<⹕⹗⹙⹛`§🔐⏣]))'''
 capture_groups = [1, 2]
 complete_labelled_value = true
 labelled_value_mode = "field_owned"
 
 [recognizers.context]
-# An unquoted prose word is a schema placeholder, not identifier evidence.
-# Quoted field scalars may be opaque alphabetic application keys.
+# The scanner requires a digit in both quoted and unquoted ID values.
+# Container seeds only establish JSON ownership; they are never scalar IDs.
 reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ _\t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
 
 [recognizers.scoring]
@@ -2204,14 +2204,14 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|(?-i:\\+(?:[ntrbf]|u000[9a-dA-D])))(?:employee[ _-]?(?:record[ _-]?)?(?:id|number|no\.?)|personnel[ _-]?(?:id|number|no\.?)|personal[ _-]?(?:nummer|nr\.?)|mitarbeiter[ _-]?(?:id|nummer|nr\.?))[ \t\u{00A0}\u{202F}]*(?:\\*["'])?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)(?:(?:\\*["'])([\s\S])|([^\r\n]))'''
+pattern = '''(?i)(?:\b|(?-i:\\+(?:[ntrbf]|u000[9a-dA-D])))(?:employee[ _-]?(?:record[ _-]?)?(?:id|number|no\.?)|personnel[ _-]?(?:id|number|no\.?)|personal[ _-]?(?:nummer|nr\.?)|mitarbeiter[ _-]?(?:id|nummer|nr\.?))[ \t\u{00A0}\u{202F}]*(?:\\*["'])?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)(?:(?:\\*["'])([\s\S])|([\p{L}\p{N}@_\-"'\\\s\u{200b}(\[{«༺༼᚛‘‚‛“„‟‹⁅⁽₍⌈⌊〈❨❪❬❮❰❲❴⟅⟦⟨⟪⟬⟮⦃⦅⦇⦉⦋⦍⦏⦑⦓⦕⦗⧘⧚⧼⸂⸄⸉⸌⸜⸠⸢⸤⸦⸨⹂〈《「『【〔〖〘〚〝﴿︗︵︷︹︻︽︿﹁﹃﹇﹙﹛﹝（［｛｟｢`<⹕⹗⹙⹛`§🔐⏣]))'''
 capture_groups = [1, 2]
 complete_labelled_value = true
 labelled_value_mode = "field_owned"
 
 [recognizers.context]
-# An unquoted prose word is a schema placeholder, not identifier evidence.
-# Quoted field scalars may be opaque alphabetic application keys.
+# The scanner requires a digit in both quoted and unquoted ID values.
+# Container seeds only establish JSON ownership; they are never scalar IDs.
 reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ _\t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
 
 [recognizers.scoring]
@@ -2234,14 +2234,14 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|(?-i:\\+(?:[ntrbf]|u000[9a-dA-D])))(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id|(?:personen|kontakt)[ _-]?datensatz[ _-]?id)[ \t\u{00A0}\u{202F}]*(?:\\*["'])?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)(?:(?:\\*["'])([\s\S])|([^\r\n]))'''
+pattern = '''(?i)(?:\b|(?-i:\\+(?:[ntrbf]|u000[9a-dA-D])))(?:(?:person|contact|member)[ _-]?(?:id|number|no\.?)|membership[ _-]?number|(?:person|contact)[ _-]?record[ _-]?id|mitglieds[ _-]?(?:nummer|nr\.?)|personen[ _-]?id|kontakt[ _-]?id|(?:personen|kontakt)[ _-]?datensatz[ _-]?id)[ \t\u{00A0}\u{202F}]*(?:\\*["'])?[ \t\u{00A0}\u{202F}]*(?:[:=][ \t\u{00A0}\u{202F}]*|[ \t\u{00A0}\u{202F}]+(?:(?:is|ist|lautet)[ \t\u{00A0}\u{202F}]+)?)(?:(?:\\*["'])([\s\S])|([\p{L}\p{N}@_\-"'\\\s\u{200b}(\[{«༺༼᚛‘‚‛“„‟‹⁅⁽₍⌈⌊〈❨❪❬❮❰❲❴⟅⟦⟨⟪⟬⟮⦃⦅⦇⦉⦋⦍⦏⦑⦓⦕⦗⧘⧚⧼⸂⸄⸉⸌⸜⸠⸢⸤⸦⸨⹂〈《「『【〔〖〘〚〝﴿︗︵︷︹︻︽︿﹁﹃﹇﹙﹛﹝（［｛｟｢`<⹕⹗⹙⹛`§🔐⏣]))'''
 capture_groups = [1, 2]
 complete_labelled_value = true
 labelled_value_mode = "field_owned"
 
 [recognizers.context]
-# An unquoted prose word is a schema placeholder, not identifier evidence.
-# Quoted field scalars may be opaque alphabetic application keys.
+# The scanner requires a digit in both quoted and unquoted ID values.
+# Container seeds only establish JSON ownership; they are never scalar IDs.
 reject_unquoted_capture_regex = '''^[\p{L}\p{M}]+(?:[ _\t\u{00A0}\u{202F}]+[\p{L}\p{M}]+)*$'''
 
 [recognizers.scoring]

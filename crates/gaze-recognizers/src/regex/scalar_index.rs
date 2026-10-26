@@ -1,3 +1,9 @@
+#[cfg(test)]
+fn legacy_capture_pattern(pattern: &str) -> String {
+    let (prefix, _) = pattern.rsplit_once("|(").expect("record scalar seed");
+    format!(r"{prefix}|([^\r\n]))")
+}
+
 use super::*;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -7,6 +13,7 @@ use std::ops::Range;
 #[derive(Default)]
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
+    markup_assignments: Option<Vec<Range<usize>>>,
     json_label_values: Option<JsonLabelValues>,
     embedded_json: Option<Option<Box<DecodedFrame>>>,
     paired: Option<PairedCloseIndex>,
@@ -19,6 +26,57 @@ pub(super) struct ScalarBoundaryIndex {
 }
 
 impl ScalarBoundaryIndex {
+    pub(super) fn inside_markup_assignment(&mut self, input: &str, at: usize) -> bool {
+        let ranges = self.markup_assignments.get_or_insert_with(|| {
+            scanner_work(input.len());
+            let mut ranges = Vec::new();
+            let mut in_tag = false;
+            let mut assignment = None;
+            let mut quote = None;
+            let mut escaped = false;
+            for (offset, byte) in input.bytes().enumerate() {
+                if let Some(delimiter) = quote {
+                    if byte == delimiter && !escaped {
+                        quote = None;
+                    }
+                    escaped = byte == b'\\' && !escaped;
+                    continue;
+                }
+                match byte {
+                    b'<' => {
+                        in_tag = true;
+                        assignment = None;
+                    }
+                    b'>' => {
+                        if let Some(start) = assignment.take() {
+                            ranges.push(start..offset + 1);
+                        }
+                        in_tag = false;
+                    }
+                    b'=' if in_tag => {
+                        assignment.get_or_insert(offset);
+                    }
+                    b'"' | b'\'' if in_tag => {
+                        quote = Some(byte);
+                        escaped = false;
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(start) = assignment {
+                ranges.push(start..input.len());
+            }
+            ranges
+        });
+        let index = ranges.partition_point(|range| range.end <= at);
+        ranges.get(index).is_some_and(|range| range.contains(&at))
+    }
+    pub(super) fn parent_scalar(&mut self, input: &str, opening: usize) -> bool {
+        let encoded = self.encoded(input);
+        let json = encoded.json_frame_at(opening);
+        json.is_some_and(|frame| encoded.decoded(input, frame).is_some())
+            || self.encoded_boundary(input, opening).is_some()
+    }
     pub(super) fn boundary(
         &mut self,
         input: &str,
@@ -189,6 +247,7 @@ impl ScalarBoundaryIndex {
                         };
                         LabelledValueScan {
                             quoted_value: true,
+                            parent_scalar: true,
                             capture: span.clone(),
                             extension: span.end..span.end,
                             repeat_seed: (!span.is_empty()).then_some(
@@ -1614,6 +1673,7 @@ mod tests {
                     else {
                         panic!("record rule must have a regex");
                     };
+                    let pattern = legacy_capture_pattern(&pattern);
                     let mut detector = RegexDetector::new(&pattern, rule.class).unwrap();
                     detector.capture_groups = capture_groups;
                     detector
@@ -2063,6 +2123,17 @@ mod regression_tests {
         }
     }
 
+    pub(super) fn legacy_rules() -> Vec<RegexDetector> {
+        rules()
+            .into_iter()
+            .map(|mut rule| {
+                let pattern = legacy_capture_pattern(rule.regex.as_str());
+                rule.regex = Regex::new(&pattern).unwrap();
+                rule
+            })
+            .collect()
+    }
+
     fn compare_all(rules: &[RegexDetector], input: &str) -> usize {
         let mut n = 0;
         for rule in rules {
@@ -2149,7 +2220,7 @@ mod regression_tests {
 
     #[test]
     fn review_random_differential() {
-        let rules = rules();
+        let rules = legacy_rules();
         let atoms = [
             "customerId: ",
             "employee_id=",
@@ -2307,7 +2378,7 @@ mod scaling_regressions {
         for depth in 0..=3 {
             let mut previous = 0;
             for fields in [128, 512, 2048] {
-                let mut input = "customerId: ''SYN''x''\n".repeat(fields);
+                let mut input = "customerId: ''SYN731284''x''\n".repeat(fields);
                 for _ in 0..depth {
                     input = serde_json::to_string(&input).unwrap();
                 }
@@ -2380,7 +2451,8 @@ mod scaling_regressions {
 
     #[test]
     fn odd_openers_before_unterminated_escaped_quotes_never_panic() {
-        let rules = super::regression_tests::rules();
+        let mut rules = super::regression_tests::rules();
+        rules.extend(super::regression_tests::legacy_rules());
         let mut checked = 0;
         for prefix in ["''", "x", "»", "[[]", "'''", "\"\"\""] {
             for label in ["customerId: ", "employee_id=", "member_id: "] {

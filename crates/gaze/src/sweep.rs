@@ -324,12 +324,15 @@ struct SweepWork {
     pattern_bytes: usize,
     max_pattern_bytes: usize,
     matcher_bytes: usize,
+    url_scan_bytes: usize,
+    url_queries: usize,
 }
 
 #[cfg(test)]
 thread_local! {
     static SWEEP_WORK: std::cell::Cell<SweepWork> = const { std::cell::Cell::new(SweepWork {
         source_bytes: 0, pattern_bytes: 0, max_pattern_bytes: 0, matcher_bytes: 0,
+        url_scan_bytes: 0, url_queries: 0,
     }) };
 }
 
@@ -498,7 +501,7 @@ impl SweepMatcher {
         } else {
             span
         };
-        if !json.allows(&span) || inside_url(text, &span) {
+        if !json.allows(&span) || json.urls.contains(text, &span) {
             return;
         }
         let link = match link {
@@ -631,6 +634,8 @@ impl EscapedView {
 /// Valid JSON permits a repeat only inside a string value. Index decoded
 /// string layers too, so serialized tool schemas retain their keys and syntax.
 struct JsonSweepIndex {
+    urls: UrlRuns,
+    lexical_atoms: Vec<Range<usize>>,
     forbidden: Vec<Range<usize>>,
     escape_interiors: Vec<Range<usize>>,
 }
@@ -639,8 +644,10 @@ impl JsonSweepIndex {
     fn new(text: &str) -> Self {
         let mut forbidden = Vec::new();
         let mut escape_interiors = Vec::new();
+        let mut lexical_atoms = Vec::new();
         let mut view = EscapedView::identity(text);
         for _ in 0..=MAX_ESCAPED_REPEAT_DEPTH {
+            collect_lexical_sweep_blocks(&view.text, &view.source, &mut lexical_atoms);
             Self::collect(
                 &view.text,
                 &view.source,
@@ -653,6 +660,8 @@ impl JsonSweepIndex {
             view = decoded;
         }
         Self {
+            urls: UrlRuns::new(text),
+            lexical_atoms: merge_json_ranges(lexical_atoms),
             forbidden: merge_json_ranges(forbidden),
             escape_interiors: merge_json_ranges(escape_interiors),
         }
@@ -715,6 +724,16 @@ impl JsonSweepIndex {
     }
 
     fn allows(&self, span: &Range<usize>) -> bool {
+        let at = self
+            .lexical_atoms
+            .partition_point(|atom| atom.end <= span.start);
+        if self
+            .lexical_atoms
+            .get(at)
+            .is_some_and(|atom| atom.start <= span.start && span.end <= atom.end)
+        {
+            return false;
+        }
         let splits_escape = [span.start, span.end].iter().any(|at| {
             let index = self
                 .escape_interiors
@@ -732,6 +751,92 @@ impl JsonSweepIndex {
         self.forbidden
             .get(at)
             .is_none_or(|blocked| blocked.start >= span.end)
+    }
+}
+
+// Lexical protection is independent of whether the surrounding container parses.
+// Quotes and comments delimit content; braces remain active through truncation.
+fn collect_lexical_sweep_blocks(
+    text: &str,
+    source: &[Range<usize>],
+    forbidden: &mut Vec<Range<usize>>,
+) {
+    let bytes = text.as_bytes();
+    let mut at = 0;
+    let mut depth = 0usize;
+    let mut block = |start: usize, end: usize| {
+        forbidden.push(source[start].start..source[end - 1].end);
+    };
+    while at < bytes.len() {
+        match bytes[at] {
+            b'"' | b'\'' => {
+                let start = at;
+                let quote = bytes[at];
+                at += 1;
+                while at < bytes.len() {
+                    if bytes[at] == b'\\' {
+                        at = (at + 2).min(bytes.len());
+                    } else if bytes[at] == quote {
+                        at += 1;
+                        break;
+                    } else {
+                        at += 1;
+                    }
+                }
+                let end = at;
+                while let Some(ch) = text[at..].chars().next().filter(|ch| ch.is_whitespace()) {
+                    at += ch.len_utf8();
+                }
+                if bytes.get(at) == Some(&b':') {
+                    block(start, end);
+                } else if depth == 0 {
+                    // A stray prose quote cannot hide a later JSON-like container.
+                    at = start + 1;
+                }
+            }
+            b'/' if bytes.get(at + 1) == Some(&b'/') => {
+                at += 2;
+                while at < bytes.len() && bytes[at] != b'\n' {
+                    at += 1;
+                }
+            }
+            b'/' if bytes.get(at + 1) == Some(&b'*') => {
+                at += 2;
+                while at + 1 < bytes.len() && &bytes[at..at + 2] != b"*/" {
+                    at += 1;
+                }
+                at = (at + 2).min(bytes.len());
+            }
+            b'{' | b'[' => {
+                depth += 1;
+                at += 1;
+            }
+            b'}' | b']' => {
+                depth = depth.saturating_sub(1);
+                at += 1;
+            }
+            byte if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'+' | b'_') => {
+                let start = at;
+                at += 1;
+                while at < bytes.len()
+                    && (bytes[at].is_ascii_alphanumeric() || b"_.+-".contains(&bytes[at]))
+                {
+                    at += 1;
+                }
+                let word = &text[start..at];
+                let number = depth > 0
+                    && word.bytes().any(|b| b.is_ascii_digit())
+                    && word
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || b".eE+-".contains(&b));
+                if number || matches!(word, "null" | "true" | "false") {
+                    block(start, at);
+                }
+            }
+            _ => {
+                at += 1;
+            }
+        }
     }
 }
 
@@ -1067,17 +1172,49 @@ fn title_case(word: &str) -> String {
 /// A hit inside a whitespace-delimited run that looks like a URL is skipped:
 /// cutting a link apart breaks the agent's tool calls, and URLs have their
 /// own recognizer.
-fn inside_url(text: &str, span: &Range<usize>) -> bool {
-    let start = text[..span.start]
-        .rfind(char::is_whitespace)
-        .map_or(0, |at| {
-            at + text[at..].chars().next().map_or(1, char::len_utf8)
+struct UrlRuns {
+    urls: Vec<Range<usize>>,
+}
+
+impl UrlRuns {
+    fn new(text: &str) -> Self {
+        #[cfg(test)]
+        SWEEP_WORK.with(|work| {
+            let mut count = work.get();
+            count.url_scan_bytes += text.len();
+            work.set(count);
         });
-    let end = text[span.end..]
-        .find(char::is_whitespace)
-        .map_or(text.len(), |at| span.end + at);
-    let run = &text[start..end];
-    run.contains("://") || run.to_ascii_lowercase().starts_with("www.")
+        let mut urls = Vec::new();
+        let mut start = 0;
+        for (at, ch) in text
+            .char_indices()
+            .chain(std::iter::once((text.len(), ' ')))
+        {
+            if ch.is_whitespace() {
+                let run = &text[start..at];
+                if run.contains("://")
+                    || run
+                        .get(..4)
+                        .is_some_and(|head| head.eq_ignore_ascii_case("www."))
+                {
+                    urls.push(start..at);
+                }
+                start = at + ch.len_utf8();
+            }
+        }
+        Self { urls }
+    }
+
+    fn contains(&self, _text: &str, span: &Range<usize>) -> bool {
+        #[cfg(test)]
+        SWEEP_WORK.with(|work| {
+            let mut count = work.get();
+            count.url_queries += 1;
+            work.set(count);
+        });
+        let at = self.urls.partition_point(|run| run.end <= span.start);
+        self.urls.get(at).is_some_and(|run| run.start < span.end)
+    }
 }
 
 /// Case- and whitespace-folded text with a map from every folded byte back to
@@ -1133,6 +1270,8 @@ fn fold(input: &str) -> Folded {
 
 #[cfg(test)]
 mod tests {
+    include!("sweep/carrier_tests.rs");
+
     #[cfg(feature = "bundled-recognizers")]
     fn labelled_pipeline() -> crate::Pipeline {
         use crate::rule::DefaultRule;
@@ -1141,40 +1280,40 @@ mod tests {
             gaze_recognizers::embedded("core").unwrap(),
         ))
         .unwrap();
-        let rule = core
-            .recognizers
-            .into_iter()
-            .find(|rule| rule.id == "customer_id.labelled")
-            .unwrap();
-        let crate::RawMatch::Regex {
-            pattern: Some(pattern),
-            capture_groups,
-            ..
-        } = rule.matcher
-        else {
-            panic!("regex rule")
-        };
-        let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
-            &pattern,
-            rule.class,
-            &rule.id,
-            vec![crate::LocaleTag::Global],
-            0.9,
-            0,
-            "counter",
-            capture_groups,
-            vec![],
-            None,
-            None,
-        )
-        .unwrap()
-        .with_complete_labelled_value(true)
-        .with_labelled_value_mode(gaze_types::LabelledValueMode::FieldOwned);
-        Pipeline::builder()
-            .recognizer(detector)
-            .rule(DefaultRule::new(Action::Tokenize))
-            .build()
+        let mut builder = Pipeline::builder().rule(DefaultRule::new(Action::Tokenize));
+        for rule in core.recognizers.into_iter().filter(|rule| {
+            matches!(
+                rule.id.as_str(),
+                "customer_id.labelled" | "employee_id.labelled" | "record_id.labelled"
+            )
+        }) {
+            let crate::RawMatch::Regex {
+                pattern: Some(pattern),
+                capture_groups,
+                ..
+            } = rule.matcher
+            else {
+                panic!("regex rule")
+            };
+            let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+                &pattern,
+                rule.class,
+                &rule.id,
+                vec![crate::LocaleTag::Global],
+                0.9,
+                0,
+                "counter",
+                capture_groups,
+                vec![],
+                None,
+                None,
+            )
             .unwrap()
+            .with_complete_labelled_value(true)
+            .with_labelled_value_mode(gaze_types::LabelledValueMode::FieldOwned);
+            builder = builder.recognizer(detector);
+        }
+        builder.build().unwrap()
     }
 
     #[cfg(feature = "bundled-recognizers")]
@@ -1557,6 +1696,27 @@ mod tests {
     #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn labelled_repeat_preserves_json_keys_literals_and_schema() {
+        assert!(SweepMatcher::build([SweepSource {
+            family: "test".into(),
+            class: PiiClass::custom("customer_id").unwrap(),
+            raw: "opaquevalue".into(),
+            repeat_seed: Some(RepeatSeed {
+                raw: "opaquevalue".into(),
+                kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+            }),
+        }])
+        .unwrap()
+        .is_none());
+        // A whole deterministic value crossing JSON syntax still needs the strict gate.
+        let matcher = SweepMatcher::build([SweepSource {
+            family: "test".into(),
+            class: PiiClass::custom("test").unwrap(),
+            raw: r#"731284","n":731284"#.into(),
+            repeat_seed: None,
+        }])
+        .unwrap()
+        .unwrap();
+        assert!(matcher.find(r#"{"copy":"731284","n":731284}"#).is_empty());
         use crate::{CleanDocument, RawDocument, Scope, Session};
         let pipeline = labelled_pipeline();
         let mut checked = 0;

@@ -417,6 +417,7 @@ impl RegexDetector {
                     } else {
                         LabelledValueScan {
                             quoted_value: false,
+                            parent_scalar: false,
                             capture: span.clone(),
                             extension: span.clone(),
                             span,
@@ -494,6 +495,7 @@ impl RegexDetector {
                             .into_iter()
                             .map(|part| LabelledValueScan {
                                 quoted_value: false,
+                                parent_scalar: false,
                                 capture: part.clone(),
                                 extension: part.clone(),
                                 span: part,
@@ -509,7 +511,16 @@ impl RegexDetector {
         })
         .flatten();
         if !self.card_runs {
-            return matches.collect();
+            let mut scans: Vec<_> = matches.collect();
+            if self.labelled_value_mode == LabelledValueMode::FieldOwned {
+                for scan in &mut scans {
+                    let markup = scan.quoted_value
+                        && !scan.parent_scalar
+                        && scalar_index.inside_markup_assignment(input, scan.span.start);
+                    constrain_owned_identifier(input, scan, markup);
+                }
+            }
+            return scans;
         }
         matches
             .flat_map(|run| {
@@ -521,6 +532,7 @@ impl RegexDetector {
                     .into_iter()
                     .map(|span| LabelledValueScan {
                         quoted_value: false,
+                        parent_scalar: false,
                         repeat_seed: None,
                         capture: span.clone(),
                         extension: span.clone(),
@@ -875,6 +887,7 @@ fn has_sku_identifier_prefix(input: &str, start: usize) -> bool {
 #[cfg_attr(test, derive(Debug, PartialEq))]
 struct LabelledValueScan {
     quoted_value: bool,
+    parent_scalar: bool,
     capture: std::ops::Range<usize>,
     extension: std::ops::Range<usize>,
     span: std::ops::Range<usize>,
@@ -883,10 +896,86 @@ struct LabelledValueScan {
     rejected: bool,
 }
 
+fn owned_id_start(value: &str) -> bool {
+    let value = value.strip_prefix(['-', '@', '_']).unwrap_or(value);
+    value.chars().next().is_some_and(char::is_alphanumeric)
+}
+
+fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_markup_tag: bool) {
+    // Ownership establishes the field, never permission to consume its carrier syntax.
+    let raw = &input[scan.span.clone()];
+    let mut keep = raw.len();
+    if !scan.quoted_value {
+        let mut groups = 1;
+        let grouping = input[..scan.span.start].trim_end().ends_with([':', '='])
+            || raw
+                .split_whitespace()
+                .next()
+                .is_some_and(|group| group.chars().any(char::is_numeric));
+        for (at, ch) in raw.char_indices() {
+            if "<>&|!${}[]()?=;".contains(ch) {
+                keep = at;
+                break;
+            }
+            if ch.is_whitespace() {
+                let next = &raw[at + ch.len_utf8()..];
+                if !grouping
+                    || matches!(ch, '\r' | '\n')
+                    || groups == 4
+                    || at >= 40
+                    || !next.chars().next().is_some_and(char::is_alphanumeric)
+                {
+                    keep = at;
+                    break;
+                }
+                groups += 1;
+            }
+        }
+    }
+    scan.span.end = scan.span.start + keep;
+    scan.capture.end = scan.capture.end.min(scan.span.end);
+    scan.extension = scan.capture.end..scan.span.end;
+    if let Some(seed) = &mut scan.repeat_seed {
+        seed.span.end = seed.span.end.min(scan.span.end);
+    }
+    let mut body = input[scan.span.clone()].to_owned();
+    for _ in 0..32 {
+        let Some((decoded, _)) = gaze_types::json_regions::unescape_json_fragments(&body) else {
+            break;
+        };
+        body = decoded;
+    }
+    let body = body.trim_matches(|ch: char| ch.is_whitespace() || ch == '\u{200b}');
+    let shape = if scan.quoted_value {
+        body.trim_start_matches(['"', '\'', '`', '“', '«'])
+    } else {
+        body
+    };
+    static MEMBER_PATH: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let member_path = MEMBER_PATH.get_or_init(|| {
+        Regex::new(r"\A[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)+\z").expect("member path")
+    });
+    let opener = input[..scan.span.start].chars().next_back();
+    let paired = scan.quoted_value
+        && opener.is_some_and(|ch| field_wrapper_opens(ch) && !matches!(ch, '"' | '\''));
+    let wrapper_rejected = paired
+        && !scan.parent_scalar
+        && (!body.chars().next().is_some_and(char::is_alphanumeric)
+            || !body.chars().any(char::is_alphabetic)
+            || in_markup_tag
+            || !opener.is_some_and(record_id_wrapper));
+    scan.rejected |= !owned_id_start(shape)
+        || !body.chars().any(char::is_numeric)
+        || body.contains("{{")
+        || body.contains("${")
+        || wrapper_rejected
+        || member_path.is_match(body);
+}
+
 fn field_value_char(ch: char) -> bool {
     ch.is_alphanumeric()
         || unicode_normalization::char::is_combining_mark(ch)
-        || matches!(ch, '+' | '/' | '_' | '=' | '-' | '.' | ':' | '\\')
+        || matches!(ch, '@' | '+' | '/' | '_' | '=' | '-' | '.' | ':' | '\\')
 }
 
 const LABELLED_CUE_HORIZONTAL: &str = r"[ \t\u{00A0}\u{202F}]";
@@ -1017,6 +1106,10 @@ fn public_metadata_assignment_starts(rest: &str) -> bool {
 fn field_wrapper_opens(ch: char) -> bool {
     // These separate unquoted fields; an empty field before one has no value.
     !field_value_char(ch) && !ch.is_whitespace() && !matches!(ch, ';' | ',' | '|')
+}
+
+fn record_id_wrapper(ch: char) -> bool {
+    field_wrapper_closing_chars(ch).0 != ch || matches!(ch, '`' | '§' | '🔐' | '⏣')
 }
 
 fn field_wrapper_closing_chars(open: char) -> (char, Option<char>) {
@@ -1250,6 +1343,7 @@ fn scan_field_owned_value_indexed(
         });
     LabelledValueScan {
         quoted_value: false,
+        parent_scalar: false,
         repeat_seed,
         capture: capture.start..capture.end.min(end),
         extension: capture.end.min(end)..end,
@@ -1595,6 +1689,7 @@ fn uncertain_wrapper_scan(
     if index.is_json_scalar_close(input, opening) {
         return LabelledValueScan {
             quoted_value: true,
+            parent_scalar: false,
             capture: opening..opening,
             extension: opening..opening,
             span: opening..opening,
@@ -1606,6 +1701,7 @@ fn uncertain_wrapper_scan(
     let span = opening..capture.end.max(capture.start);
     LabelledValueScan {
         quoted_value: true,
+        parent_scalar: false,
         capture: span.clone(),
         extension: span.end..span.end,
         repeat_seed: Some(gaze_types::LabelledValueRepeatSeed {
@@ -1710,6 +1806,8 @@ fn scan_quoted_field_value(
     });
     LabelledValueScan {
         quoted_value: true,
+        parent_scalar: enclosing.record_lines_are_content
+            || index.parent_scalar(input, capture.start.saturating_sub(1)),
         repeat_seed,
         capture: start..capture_end,
         extension: capture_end..end,
@@ -1746,6 +1844,7 @@ fn scan_paired_field_value(
     let capture_end = capture.end.min(end);
     LabelledValueScan {
         quoted_value: true,
+        parent_scalar: enclosing.record_lines_are_content || index.parent_scalar(input, opening),
         capture: capture.start..capture_end,
         extension: capture_end..end,
         span: span.clone(),
@@ -1911,6 +2010,7 @@ fn scan_labelled_value(
     });
     LabelledValueScan {
         quoted_value: false,
+        parent_scalar: false,
         repeat_seed,
         reason: labelled_value_over_limit(&input[span.clone()])
             .then_some(LabelledValueScanReason::LimitExceeded)

@@ -102,6 +102,7 @@ pub(super) fn scan_field_owned_value(
         });
     LabelledValueScan {
         quoted_value: false,
+        parent_scalar: false,
         repeat_seed,
         capture: capture.start..capture.end.min(end),
         extension: capture.end.min(end)..end,
@@ -677,6 +678,8 @@ fn scan_quoted_field_value(input: &str, capture: std::ops::Range<usize>) -> Labe
     });
     LabelledValueScan {
         quoted_value: true,
+        parent_scalar: enclosing.record_lines_are_content
+            || ScalarBoundaryIndex::default().parent_scalar(input, capture.start.saturating_sub(1)),
         repeat_seed,
         capture: start..capture_end,
         extension: capture_end..end,
@@ -737,6 +740,8 @@ fn scan_paired_field_value(
     let capture_end = capture.end.min(end);
     LabelledValueScan {
         quoted_value: true,
+        parent_scalar: enclosing.record_lines_are_content
+            || ScalarBoundaryIndex::default().parent_scalar(input, opening),
         capture: capture.start..capture_end,
         extension: capture_end..end,
         span: span.clone(),
