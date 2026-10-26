@@ -107,8 +107,14 @@ Isolation tests cover stdio, stdio+HTTP, and no-default-feature graphs.
 
 An embedder passes `HostContextSelection::Absent` or `Present` directly into
 dispatch. The envelope parses the preserved JSON with `gaze::Context::from_json_str`
-and assembles a request-local response pipeline against the resident policy.
-NER and safety-net handles remain resident. No default implementation discards
+and assembles a response pipeline against the resident policy. Clones of one
+`HostRecordContext` share one cached assembly profile. Reuse the selection handle
+across calls to avoid rebuilding regexes. A different session, resident recognizer
+registry, policy, rulepack set or locale chain replaces the single cache slot.
+Concurrent calls for the same profile construct it once; failed assembly remains
+fail-closed. Per-call argument admission, parsing and guess exclusions still run
+on every dispatch, and dictionary values remain request-local. Dropping the last
+selection handle releases its cache. NER and safety-net handles remain resident. No default implementation discards
 `Present`; unsupported hosts reject it before invoking a tool.
 
 The resident pipeline protects model-authored arguments. Private context applies

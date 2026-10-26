@@ -1,5 +1,6 @@
-//! Host-only, request-local detection inputs. These types have no wire representation.
+//! Host-only detection inputs. These types have no wire representation.
 use std::fmt;
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// Explicit host selection for one dispatch. Never populate this from model content.
 #[derive(Clone, Default)]
@@ -12,17 +13,36 @@ pub enum HostContextSelection {
 }
 
 /// Opaque original JSON. Debug never exposes its contents.
+/// Clones share a bounded, single-profile pipeline cache. Reuse this handle across
+/// calls to reuse assembly; changing session or assembly inputs replaces the slot.
 #[derive(Clone)]
-pub struct HostRecordContext(std::sync::Arc<SecretJson>);
+pub struct HostRecordContext(Arc<SecretJson>);
 
-struct SecretJson(zeroize::Zeroizing<String>);
+struct SecretJson {
+    raw: zeroize::Zeroizing<String>,
+    profile: Mutex<Option<Arc<PrivatePipelineProfile>>>,
+    #[cfg(test)]
+    constructions: std::sync::atomic::AtomicUsize,
+}
+
+struct PrivatePipelineProfile {
+    session_id: String,
+    policy: gaze::Policy,
+    rulepacks: Vec<gaze::Rulepack>,
+    locales: Vec<gaze::LocaleTag>,
+    resident: gaze::Pipeline,
+    pipeline: OnceLock<Result<gaze::Pipeline, HostContextError>>,
+}
 
 impl HostContextSelection {
     /// Preserve original bytes, including duplicate keys, for validation at dispatch.
     pub fn present(raw: String) -> Self {
-        Self::Present(HostRecordContext(std::sync::Arc::new(SecretJson(
-            zeroize::Zeroizing::new(raw),
-        ))))
+        Self::Present(HostRecordContext(Arc::new(SecretJson {
+            raw: zeroize::Zeroizing::new(raw),
+            profile: Mutex::new(None),
+            #[cfg(test)]
+            constructions: std::sync::atomic::AtomicUsize::new(0),
+        })))
     }
 }
 
@@ -81,13 +101,86 @@ pub enum HostContextError {
 }
 
 pub(crate) fn parse(
-    selection: HostContextSelection,
+    selection: &HostContextSelection,
 ) -> Result<Option<gaze::Context>, HostContextError> {
     match selection {
         HostContextSelection::Absent => Ok(None),
-        HostContextSelection::Present(raw) => gaze::Context::from_json_str(&raw.0 .0)
+        HostContextSelection::Present(raw) => gaze::Context::from_json_str(&raw.0.raw)
             .map(Some)
             .map_err(|_| HostContextError::Invalid),
+    }
+}
+
+// The original JSON belongs to this handle and never changes. This is called
+// before per-call guess exclusions, so the full record is validated on a miss
+// and an excluded record can never become the cached detection profile.
+pub(crate) fn response_pipeline(
+    selection: &HostContextSelection,
+    session: &gaze::Session,
+    resident: &gaze::Pipeline,
+    policy: &gaze::Policy,
+    context: &gaze::Context,
+    rulepacks: &[gaze::Rulepack],
+    locales: &[gaze::LocaleTag],
+) -> Result<gaze::Pipeline, HostContextError> {
+    let HostContextSelection::Present(source) = selection else {
+        return Err(HostContextError::Unsupported);
+    };
+    let profile = {
+        let mut slot = source
+            .0
+            .profile
+            .lock()
+            .map_err(|_| HostContextError::Policy)?;
+        let matches = slot.as_ref().is_some_and(|profile| {
+            profile.session_id == session.audit_session_id()
+                && std::ptr::eq(profile.resident.registry(), resident.registry())
+                && profile.policy == *policy
+                && profile.rulepacks == rulepacks
+                && profile.locales == locales
+        });
+        if !matches {
+            *slot = Some(Arc::new(PrivatePipelineProfile {
+                session_id: session.audit_session_id().to_owned(),
+                policy: policy.clone(),
+                rulepacks: rulepacks.to_vec(),
+                locales: locales.to_vec(),
+                resident: resident.clone(),
+                pipeline: OnceLock::new(),
+            }));
+        }
+        slot.as_ref().ok_or(HostContextError::Policy)?.clone()
+    };
+    let detection = profile.pipeline.get_or_init(|| {
+        #[cfg(test)]
+        source
+            .0
+            .constructions
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        gaze_assembly::pipeline_with_private_context(
+            resident,
+            policy,
+            context,
+            rulepacks,
+            &gaze::LocaleChain::from(locales),
+        )
+        .map_err(|_| HostContextError::Policy)
+    });
+    // Keep this call's models, safety nets and loggers even on a cache hit.
+    detection
+        .as_ref()
+        .map(|detection| resident.clone().with_detection_policy_from(detection))
+        .map_err(|error| *error)
+}
+
+#[cfg(test)]
+pub(crate) fn construction_count(selection: &HostContextSelection) -> usize {
+    match selection {
+        HostContextSelection::Absent => 0,
+        HostContextSelection::Present(source) => source
+            .0
+            .constructions
+            .load(std::sync::atomic::Ordering::Relaxed),
     }
 }
 
@@ -184,7 +277,9 @@ pub(crate) fn opaque_context(
         }
     }
     let original_rules = policy.rules.clone();
-    for (original, hidden) in &classes {
+    let mut ordered_classes = classes.iter().collect::<Vec<_>>();
+    ordered_classes.sort_by_key(|(original, _)| original.to_canonical_str());
+    for (original, hidden) in ordered_classes {
         if let Some(kinds) = context
             .record_match_kinds
             .remove(&original.to_canonical_str())
@@ -237,6 +332,152 @@ mod tests {
     use super::*;
 
     #[test]
+    fn host_context_profile_invalidates_on_session_registry_policy_rulepacks_and_locales() {
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let selection =
+            HostContextSelection::present(r#"{"record":{"name":"Synthetic Qorvex"}}"#.into());
+        let first = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let second = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let alternate = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let mut policy = core.policy().clone();
+        policy.address_blocks = !policy.address_blocks;
+        let mut rulepacks = core.rulepacks().to_vec();
+        rulepacks[0].rulepack_id.push_str("-alternate-profile");
+        let other_locales = [gaze::LocaleTag::parse("en").unwrap()];
+        assert!(other_locales != core.locale_chain().as_slice());
+        let cases = [
+            (
+                &first,
+                core.pipeline(),
+                core.policy(),
+                core.rulepacks(),
+                core.locale_chain().as_slice(),
+            ),
+            (
+                &second,
+                core.pipeline(),
+                core.policy(),
+                core.rulepacks(),
+                core.locale_chain().as_slice(),
+            ),
+            (
+                &second,
+                alternate.pipeline(),
+                core.policy(),
+                core.rulepacks(),
+                core.locale_chain().as_slice(),
+            ),
+            (
+                &second,
+                alternate.pipeline(),
+                &policy,
+                core.rulepacks(),
+                core.locale_chain().as_slice(),
+            ),
+            (
+                &second,
+                alternate.pipeline(),
+                &policy,
+                rulepacks.as_slice(),
+                core.locale_chain().as_slice(),
+            ),
+            (
+                &second,
+                alternate.pipeline(),
+                &policy,
+                rulepacks.as_slice(),
+                other_locales.as_slice(),
+            ),
+        ];
+        for (index, (session, resident, policy, rulepacks, locales)) in
+            cases.into_iter().enumerate()
+        {
+            for _ in 0..3 {
+                let mut context = parse(&selection).unwrap().unwrap();
+                let policy = opaque_context(session, &mut context, policy).unwrap();
+                assert!(response_pipeline(
+                    &selection, session, resident, &policy, &context, rulepacks, locales
+                )
+                .is_ok());
+            }
+            assert_eq!(construction_count(&selection), index + 1);
+        }
+    }
+
+    #[test]
+    fn host_context_profile_constructs_once_for_concurrent_calls() {
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let selection =
+            HostContextSelection::present(r#"{"record":{"name":"Synthetic Qorvex"}}"#.into());
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let barrier = std::sync::Barrier::new(6);
+        std::thread::scope(|threads| {
+            for _ in 0..6 {
+                threads.spawn(|| {
+                    let mut context = parse(&selection).unwrap().unwrap();
+                    let policy = opaque_context(&session, &mut context, core.policy()).unwrap();
+                    barrier.wait();
+                    assert!(response_pipeline(
+                        &selection,
+                        &session,
+                        core.pipeline(),
+                        &policy,
+                        &context,
+                        core.rulepacks(),
+                        core.locale_chain().as_slice(),
+                    )
+                    .is_ok());
+                });
+            }
+        });
+        assert_eq!(construction_count(&selection), 1);
+    }
+
+    #[test]
+    fn host_context_profile_caches_failure_and_rejects_poisoned_slot() {
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let selection = HostContextSelection::present("{}".into());
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let mut policy = core.policy().clone();
+        policy.detectors.push(gaze::DetectorSpec::default());
+        let context = parse(&selection).unwrap().unwrap();
+        for _ in 0..3 {
+            assert!(matches!(
+                response_pipeline(
+                    &selection,
+                    &session,
+                    core.pipeline(),
+                    &policy,
+                    &context,
+                    core.rulepacks(),
+                    core.locale_chain().as_slice()
+                ),
+                Err(HostContextError::Policy)
+            ));
+        }
+        assert_eq!(construction_count(&selection), 1);
+        let HostContextSelection::Present(source) = &selection else {
+            unreachable!()
+        };
+        let _panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = source.0.profile.lock().unwrap();
+            panic!("poison profile lock");
+        }));
+        assert!(matches!(
+            response_pipeline(
+                &selection,
+                &session,
+                core.pipeline(),
+                core.policy(),
+                &context,
+                core.rulepacks(),
+                core.locale_chain().as_slice()
+            ),
+            Err(HostContextError::Policy)
+        ));
+    }
+
+    #[test]
     fn host_context_parser_enforces_shared_record_depth_and_field_limits() {
         for (levels, accepted) in [(3, true), (4, false)] {
             let mut record = serde_json::json!({"name":"Synthetic Qorvex"});
@@ -248,7 +489,7 @@ mod tests {
             }
             let raw = serde_json::json!({"record":record,"field_map":{path:"Name"}}).to_string();
             assert_eq!(gaze::Context::from_json_str(&raw).is_ok(), accepted);
-            assert_eq!(parse(HostContextSelection::present(raw)).is_ok(), accepted);
+            assert_eq!(parse(&HostContextSelection::present(raw)).is_ok(), accepted);
         }
         for (fields, accepted) in [(32, true), (33, false)] {
             let mut record = serde_json::Map::new();
@@ -260,7 +501,7 @@ mod tests {
             }
             let raw = serde_json::json!({"record":record,"field_map":field_map}).to_string();
             assert_eq!(gaze::Context::from_json_str(&raw).is_ok(), accepted);
-            assert_eq!(parse(HostContextSelection::present(raw)).is_ok(), accepted);
+            assert_eq!(parse(&HostContextSelection::present(raw)).is_ok(), accepted);
         }
     }
 
@@ -286,7 +527,7 @@ mod tests {
         ];
         for raw in cases {
             let shared_accepts = gaze::Context::from_json_str(&raw).is_ok();
-            let result = parse(HostContextSelection::present(raw));
+            let result = parse(&HostContextSelection::present(raw));
             assert_eq!(result.is_ok(), shared_accepts);
             if let Err(error) = result {
                 assert_eq!(error, HostContextError::Invalid);

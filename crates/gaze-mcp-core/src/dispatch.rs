@@ -273,7 +273,8 @@ impl<'a> PiiEnvelope<'a> {
         // Static policy aliases let matched private custom classes remain protected
         // on later calls without retaining a record or context class map.
         crate::host_context::validate_session(self.session)?;
-        let mut host_context = crate::host_context::parse(host_context)?;
+        let host_context_selection = host_context;
+        let mut host_context = crate::host_context::parse(&host_context_selection)?;
         if host_context.is_some() && descriptor.response_redaction() != ResponseRedaction::Apply {
             return Err(crate::HostContextError::Unsupported.into());
         }
@@ -304,14 +305,15 @@ impl<'a> PiiEnvelope<'a> {
             }
             // Validate the complete record before argument-dependent exclusions, so
             // a guessed term cannot change whether the policy admits the call.
-            let pipeline = gaze_assembly::pipeline_with_private_context(
+            let pipeline = crate::host_context::response_pipeline(
+                &host_context_selection,
+                self.session,
                 resident_pipeline,
                 &policy,
                 context,
                 rulepacks,
-                &gaze::LocaleChain::from(self.locale_chain),
-            )
-            .map_err(|_| crate::HostContextError::Policy)?;
+                self.locale_chain,
+            )?;
             exclude_argument_guesses(context, &argument_text)?;
             let dictionaries = gaze::DictionaryBundle::merge(
                 self.dictionaries.clone(),
@@ -901,6 +903,107 @@ mod tests {
     use super::*;
     use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, RawDocument};
     use serde_json::json;
+
+    struct CacheAuth;
+    #[async_trait::async_trait]
+    impl AuthHook for CacheAuth {
+        async fn authorize_agent(&self, _: &Principal, _: &str) -> Result<(), AuthError> {
+            Ok(())
+        }
+        async fn authorize_operator(&self, _: &Principal, _: &str) -> Result<(), AuthError> {
+            Err(AuthError::Denied("agent only".into()))
+        }
+    }
+
+    struct CacheStore;
+    #[async_trait::async_trait]
+    impl ManifestStore for CacheStore {
+        async fn begin_call(
+            &self,
+            context: BeginCallContext<'_>,
+        ) -> Result<CallHandle, ManifestError> {
+            Ok(CallHandle::new(context.call_id))
+        }
+        async fn finish_call(&self, _: CallHandle, _: SnapshotRef) -> Result<(), ManifestError> {
+            Ok(())
+        }
+        async fn fail_call(&self, _: CallHandle, _: FailureReason) -> Result<(), ManifestError> {
+            Ok(())
+        }
+    }
+
+    struct CacheTool(crate::ToolDescriptor);
+    #[async_trait::async_trait]
+    impl crate::Tool for CacheTool {
+        fn descriptor(&self) -> &crate::ToolDescriptor {
+            &self.0
+        }
+        async fn invoke(&self, context: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
+            Ok(ToolResponse::json(json!({
+                "guess": context.redacted_args()["guess"],
+                "found": "Synthetic Qorvex",
+            })))
+        }
+    }
+
+    #[tokio::test]
+    async fn host_context_reuses_one_construction_across_calls_with_fresh_exclusions() {
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let mut registry = ToolRegistry::new();
+        registry
+            .register(CacheTool(
+                crate::ToolDescriptor::agent("cache-test", json!({"type":"object"})).with_carriers(
+                    crate::CarrierDeclaration::text_fields(&["guess"]),
+                    crate::CarrierDeclaration::text_fields(&["guess", "found"]),
+                ),
+            ))
+            .unwrap();
+        let selection = crate::HostContextSelection::present(
+            r#"{"record":{"name":"Synthetic Qorvex","other":"Synthetic Zunvel"},"field_map":{"/other":"Name"}}"#.into(),
+        );
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let session_policy = SessionIdPolicy::default_strict();
+        for call in 0..6 {
+            let guess = if call == 0 {
+                "Synthetic Qorvex"
+            } else {
+                "Synthetic Zunvel"
+            };
+            // Hosts commonly reconstruct the borrowed envelope for every call.
+            let response = PiiEnvelope::new(
+                &registry,
+                &CacheAuth,
+                &CacheStore,
+                core.pipeline(),
+                &session,
+                core.locale_chain().as_slice(),
+                &session_policy,
+            )
+            .with_context_policy(core.policy(), core.rulepacks())
+            .with_dictionaries(core.dictionaries())
+            .dispatch(
+                &Principal::new("agent"),
+                "cache-test",
+                json!({"guess":guess}),
+                None,
+                selection.clone(),
+            )
+            .await
+            .unwrap();
+            assert!(response.payload["guess"] == guess);
+            if call == 0 {
+                assert!(response.payload["found"] == "Synthetic Qorvex");
+                assert!(session.tokens().is_empty());
+            } else {
+                assert!(response.payload["found"] != "Synthetic Qorvex");
+                let restored = session
+                    .restore_strict_text(response.payload["found"].as_str().unwrap())
+                    .unwrap();
+                assert!(restored == "Synthetic Qorvex");
+            }
+        }
+        assert_eq!(crate::host_context::construction_count(&selection), 1);
+    }
 
     #[test]
     fn host_argument_identical_views_scan_pairs_once() {

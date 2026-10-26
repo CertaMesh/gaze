@@ -1226,7 +1226,11 @@ async fn host_context_argument_budget_counts_bytes_scalars_and_decoded_views() {
                 },
             )
             .await;
-            assert_eq!(result.is_ok(), admitted, "argument-budget admission mismatch");
+            assert_eq!(
+                result.is_ok(),
+                admitted,
+                "argument-budget admission mismatch"
+            );
             if !admitted {
                 assert!(matches!(
                     result,

@@ -79,6 +79,10 @@ def ignore_http(source):
 
 
 PROBES = [
+    ("rebuild-context-pipeline", PRIVATE,
+     lambda source: replace(source, "        if !matches {", "        if true { let _ = matches;"),
+     ["cargo", "test", "-p", "gaze-mcp-core", "--lib", "dispatch::tests::host_context_reuses_one_construction_across_calls_with_fresh_exclusions", "--", "--exact"],
+     "dispatch::tests::host_context_reuses_one_construction_across_calls_with_fresh_exclusions"),
     ("duplicate-views", CORE,
      lambda source: replace(source,
                             "if material.scalars.first() != Some(&scalars) {",
@@ -146,7 +150,7 @@ PROBES = [
      CONTRACT + ["host_context_collapsed_whitespace_guess_has_no_membership_oracle"],
      "host_context::host_context_collapsed_whitespace_guess_has_no_membership_oracle"),
     ("drop-present", CORE,
-     lambda source: replace(source, "let mut host_context = crate::host_context::parse(host_context)?;",
+     lambda source: replace(source, "let mut host_context = crate::host_context::parse(&host_context_selection)?;",
                             "let mut host_context = { drop(host_context); None::<gaze::Context> };"),
      CONTRACT + ["host_context_response_persists_only_matched_rule_sources_and_restores_exactly"],
      "host_context::host_context_response_persists_only_matched_rule_sources_and_restores_exactly"),
