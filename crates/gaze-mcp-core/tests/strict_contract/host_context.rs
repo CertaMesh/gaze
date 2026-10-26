@@ -1054,7 +1054,8 @@ fn de_bruijn_digits(n: usize) -> String {
     }
     db(1, 1, n, k, &mut a, &mut seq);
     let mut s: String = seq.iter().map(|d| char::from(b'0' + *d as u8)).collect();
-    s.push_str(&s[..n - 1].to_owned());
+    let prefix = s[..n - 1].to_owned();
+    s.push_str(&prefix);
     s
 }
 
