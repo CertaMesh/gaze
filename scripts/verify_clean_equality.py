@@ -138,6 +138,7 @@ def main():
     differences, exits, detections = [], [dict(), dict()], [0, 0]
     modes = {}
     mutants = {}
+    comparisons = 0
     with tempfile.TemporaryDirectory(prefix="gaze-clean-equality-") as cwd:
         policies = [Path(cwd) / f"policy-{side}.toml" for side in range(2)]
         env = dict(os.environ, GAZE_DISABLE_OS_KEYSTORE="1")
@@ -149,9 +150,12 @@ def main():
                 raise RuntimeError("setup policy generation failed")
         for mode in ("no-policy", "setup-policy"):
             before = len(differences)
+            mode_count = 0
             for case_id, text in cases:
                 observations = [clean(binary, text, cwd, policies[side] if mode == "setup-policy" else None)
                                     for side, binary in enumerate(binaries)]
+                comparisons += 1
+                mode_count += 1
                 for side, (code, body) in enumerate(observations):
                     exits[side][str(code)] = exits[side].get(str(code), 0) + 1
                     detections[side] += body.get("stats", {}).get("detections", 0)
@@ -159,22 +163,25 @@ def main():
                     differences.append({"mode": mode, "id": case_id, "exit_codes": [o[0] for o in observations],
                                         "fields": [field for field in set(observations[0][1]) | set(observations[1][1])
                                                    if observations[0][1].get(field) != observations[1][1].get(field)]})
+                    break
                 elif mode not in mutants and observations[1][0] == 0:
                     proof = one_byte_mutant(observations[0], observations[1])
                     if proof:
                         mutants[mode] = {"case_id": case_id, **proof}
-            modes[mode] = {"cases": len(cases), "differences": len(differences) - before}
+            modes[mode] = {"cases": mode_count, "differences": len(differences) - before}
+            if differences:
+                break
         policy_hashes = [sha256(policy.read_bytes()) for policy in policies]
-    if set(mutants) != {"no-policy", "setup-policy"}:
+    if not differences and set(mutants) != {"no-policy", "setup-policy"}:
         raise RuntimeError("did not prove one-byte output mutation in both policy modes")
-    if not all(detections):
+    if not differences and not all(detections):
         raise RuntimeError("comparison did not exercise any detections")
     report = {"schema": "gaze-clean-equality-v2", "base_sha": args.base_sha,
               "candidate_sha": args.candidate_sha,
               "binary_sha256": [sha256(binary.read_bytes()) for binary in binaries],
               "manifest_sha256": sha256(MANIFEST.read_bytes()),
               "script_sha256": sha256(Path(__file__).read_bytes()),
-              "cases": len(cases) * 2, "modes": modes, "policy_sha256": policy_hashes, "exit_codes": exits, "detections": detections,
+              "cases": comparisons, "planned_cases": len(cases) * 2, "completed": not differences, "modes": modes, "policy_sha256": policy_hashes, "exit_codes": exits, "detections": detections,
               "difference_count": len(differences), "differences": differences, "one_byte_mutants": mutants}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
