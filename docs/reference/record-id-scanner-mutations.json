@@ -1,7 +1,7 @@
 [
   {
     "mutation": "drop-json-label-ownership",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -22,7 +22,7 @@
   },
   {
     "mutation": "rebuild-quote-events-per-query",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -43,7 +43,7 @@
   },
   {
     "mutation": "require-whole-json-document",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -64,7 +64,7 @@
   },
   {
     "mutation": "ignore-enclosing-label-key",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -85,7 +85,7 @@
   },
   {
     "mutation": "drop-container-value-ownership",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -106,7 +106,7 @@
   },
   {
     "mutation": "allow-header-label-as-value",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -127,7 +127,7 @@
   },
   {
     "mutation": "remove-labelled-sweep-bound",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -142,13 +142,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691",
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
     "log": "remove-labelled-sweep-bound.log",
-    "restored_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691"
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
   },
   {
     "mutation": "discard-oversized-session-provenance",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -169,7 +169,7 @@
   },
   {
     "mutation": "repeat-alphabetic-labelled-values",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -184,13 +184,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691",
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
     "log": "repeat-alphabetic-labelled-values.log",
-    "restored_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691"
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
   },
   {
     "mutation": "sweep-json-keys-and-atoms",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -205,13 +205,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691",
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
     "log": "sweep-json-keys-and-atoms.log",
-    "restored_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691"
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
   },
   {
     "mutation": "own-first-benign-container-scalar",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -232,7 +232,7 @@
   },
   {
     "mutation": "ignore-plain-key-value-ownership",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -253,7 +253,7 @@
   },
   {
     "mutation": "retain-broken-prefix-quote-state",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -274,7 +274,7 @@
   },
   {
     "mutation": "ignore-unicode-label-whitespace",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -295,7 +295,7 @@
   },
   {
     "mutation": "drop-padded-labelled-sources",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -310,13 +310,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691",
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
     "log": "drop-padded-labelled-sources.log",
-    "restored_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691"
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
   },
   {
-    "mutation": "skip-repeated-escaped-padding",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "mutation": "keep-trailing-padding-in-patterns",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -331,13 +331,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691",
-    "log": "skip-repeated-escaped-padding.log",
-    "restored_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691"
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "log": "keep-trailing-padding-in-patterns.log",
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
   },
   {
     "mutation": "tokenize-labels-inside-json-keys",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -358,7 +358,7 @@
   },
   {
     "mutation": "split-json-escape-on-repeat",
-    "head": "60af203168dee5e967b32ccef96c5ce0d8c51f7a",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
     "command": [
       "cargo",
       "test",
@@ -373,8 +373,134 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691",
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
     "log": "split-json-escape-on-repeat.log",
-    "restored_sha256": "84b78f2ece1aef9518a0d13af91f3ff72add7a8f0442bb3c1bf3979dd72ce691"
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+  },
+  {
+    "mutation": "discard-derived-exact-patterns",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "pipeline_deep_escaped_repeat_patterns_remain_bounded",
+      "--",
+      "--nocapture"
+    ],
+    "test": "pipeline_deep_escaped_repeat_patterns_remain_bounded",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "log": "discard-derived-exact-patterns.log",
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+  },
+  {
+    "mutation": "cap-legacy-uncertain-prefixes",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "legacy_uncertain_prefixes_keep_their_floor_and_long_values",
+      "--",
+      "--nocapture"
+    ],
+    "test": "legacy_uncertain_prefixes_keep_their_floor_and_long_values",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "log": "cap-legacy-uncertain-prefixes.log",
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+  },
+  {
+    "mutation": "apply-field-digit-floor-to-legacy-prefixes",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "legacy_uncertain_prefixes_keep_their_floor_and_long_values",
+      "--",
+      "--nocapture"
+    ],
+    "test": "legacy_uncertain_prefixes_keep_their_floor_and_long_values",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "log": "apply-field-digit-floor-to-legacy-prefixes.log",
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+  },
+  {
+    "mutation": "bound-decoded-padding-before-trimming",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "deeply_escaped_padding_keeps_trimmed_repeats_across_turns",
+      "--",
+      "--nocapture"
+    ],
+    "test": "deeply_escaped_padding_keeps_trimmed_repeats_across_turns",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "log": "bound-decoded-padding-before-trimming.log",
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+  },
+  {
+    "mutation": "allow-unbounded-decoding-cascade",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "cascading_unicode_escapes_cannot_create_unbounded_repeat_work",
+      "--",
+      "--nocapture"
+    ],
+    "test": "cascading_unicode_escapes_cannot_create_unbounded_repeat_work",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "log": "allow-unbounded-decoding-cascade.log",
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
+  },
+  {
+    "mutation": "fold-exact-family-scalar-seeds",
+    "head": "503495383462b5c85051c1fa3983d995a2171da4",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "field_owned_families_keep_byte_exact_matching",
+      "--",
+      "--nocapture"
+    ],
+    "test": "field_owned_families_keep_byte_exact_matching",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc",
+    "log": "fold-exact-family-scalar-seeds.log",
+    "restored_sha256": "25832718fcc3187b795764e6b2d9389a7407dbfd9bdda9856892736cddc695fc"
   }
 ]
