@@ -1575,6 +1575,7 @@ dependencies = [
  "serde_json",
  "sha3",
  "thiserror 1.0.69",
+ "unicode-normalization",
 ]
 
 [[package]]

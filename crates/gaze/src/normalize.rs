@@ -1,1 +1,1 @@
-pub(crate) use gaze_recognizers::normalize::{normalize, raw_range, NormalizedText};
+pub(crate) use gaze_types::normalize::{normalize, raw_range, NormalizedText};
