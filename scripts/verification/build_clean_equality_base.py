@@ -24,7 +24,7 @@ def main():
         raise RuntimeError("base commit differs from review pin")
     subprocess.run(["anvil", "run", str(base), "--", "env", "CARGO_BUILD_JOBS=2",
                     "GAZE_DISABLE_OS_KEYSTORE=1", "nice", "-n", "10", "cargo", "build",
-                    "--release", "-p", "gaze-cli"], check=True)
+                    "--release", "-p", "gaze-cli", "--features", "mcp"], check=True)
     print(json.dumps({"base_sha": data["worktree"]["head"], "built": True}))
 
 

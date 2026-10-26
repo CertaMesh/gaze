@@ -134,6 +134,6 @@ checks:
     inputs: *rust-inputs
     toolchain: *rust-tools
     commands:
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --release -p gaze-cli
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --release -p gaze-cli --features mcp
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --release -p gaze-mcp-rmcp --example host_context_measure
       - python3 scripts/verification/build_clean_equality_base.py
