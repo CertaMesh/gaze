@@ -307,7 +307,26 @@ def inventory(root, deadline):
 def no_configs(root):
     for directory in (root, *root.parents):
         for name in ('config', 'config.toml'):
-            require(not (directory/'.cargo'/name).exists(), 'invalid_state')
+            path = directory/'.cargo'/name
+            # The source inventory hashes this one audited runtime-only setting.
+            # No ancestor config, alternate filename or build setting is admitted.
+            if directory == root and name == 'config.toml' and path.exists():
+                fd = open_regular(path, time.monotonic()+30)
+                try:
+                    raw = os.read(fd, 4097)
+                finally:
+                    os.close(fd)
+                require(len(raw) <= 4096, 'invalid_state')
+                try:
+                    value = tomllib.loads(raw.decode('utf-8'))
+                except (UnicodeError, tomllib.TOMLDecodeError):
+                    raise ProducerFailure('invalid_state') from None
+                expected = {'env': {'GAZE_DISABLE_OS_KEYSTORE': {'value': '1', 'force': True}}}
+                require(value == expected
+                        and value['env']['GAZE_DISABLE_OS_KEYSTORE']['force'] is True,
+                        'invalid_state')
+            else:
+                require(not (directory/'.cargo'/name).exists(), 'invalid_state')
 
 
 def verify_native_archive(path, host, deadline):
@@ -503,7 +522,8 @@ def prepare_inputs(root, *, registry, native, toolchain, deadline):
             dest.chmod(0o444)
             require(file_digest(dest, cache_end)[1:] == (size, digest), 'io')
             cache_size += size
-    env = {'HOME': str(home), 'CARGO_HOME': str(cargo_home), 'TMPDIR': str(tmp),
+    env = {'GAZE_DISABLE_OS_KEYSTORE': '1', 'HOME': str(home),
+           'CARGO_HOME': str(cargo_home), 'TMPDIR': str(tmp),
            'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'LC_ALL': 'C',
            'RUSTC': str(tools['rustc']), 'RUSTDOC': str(tools['rustdoc']),
            'CARGO_BUILD_JOBS': '2', 'CARGO_NET_OFFLINE': 'true',
