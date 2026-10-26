@@ -19,7 +19,10 @@ generator remains a separate check. Unicode label tails add 35 cases.
 
 Repeat patterns require a digit in the labelled value. A repeat cannot replace
 an object key, JSON syntax, or an unquoted scalar. These restrictions also apply
-inside serialized JSON strings and across session turns. The 40-byte pattern
+inside serialized JSON strings and across session turns. Repeat spans cannot
+split a JSON escape or replace a standalone JSON number. Fifteen additional
+cases check escaped tabs, newlines, and Unicode in object values and standalone
+JSON strings. The 40-byte pattern
 limit applies after trimming each derived pattern. Space, NBSP, and escaped-tab
 padding therefore preserve repeat protection without creating oversized matcher
 patterns. Pipeline tests cover 45 repeat/schema cases and 20 padded-value cases;

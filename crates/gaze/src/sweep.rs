@@ -468,32 +468,44 @@ impl SweepMatcher {
 /// string layers too, so serialized tool schemas retain their keys and syntax.
 struct JsonSweepIndex {
     forbidden: Vec<Range<usize>>,
+    escape_interiors: Vec<Range<usize>>,
 }
 
 impl JsonSweepIndex {
     fn new(text: &str) -> Self {
         let mut forbidden = Vec::new();
-        Self::collect(text, None, &mut forbidden);
-        forbidden.sort_unstable_by_key(|span| span.start);
-        let mut merged: Vec<Range<usize>> = Vec::new();
-        for span in forbidden {
-            if let Some(last) = merged.last_mut().filter(|last| last.end >= span.start) {
-                last.end = last.end.max(span.end);
-            } else {
-                merged.push(span);
-            }
+        let mut escape_interiors = Vec::new();
+        Self::collect(text, None, &mut forbidden, &mut escape_interiors);
+        Self {
+            forbidden: merge_json_ranges(forbidden),
+            escape_interiors: merge_json_ranges(escape_interiors),
         }
-        Self { forbidden: merged }
     }
 
-    fn collect(text: &str, source: Option<&[Range<usize>]>, forbidden: &mut Vec<Range<usize>>) {
+    fn collect(
+        text: &str,
+        source: Option<&[Range<usize>]>,
+        forbidden: &mut Vec<Range<usize>>,
+        escape_interiors: &mut Vec<Range<usize>>,
+    ) {
         let project = |start: usize, end: usize| {
             source.map_or(start..end, |source| {
                 source[start].start..source[end - 1].end
             })
         };
         let regions = gaze_types::json_regions::json_regions(text);
-        let strings = gaze_types::json_regions::json_strings(text, &regions);
+        let mut strings = gaze_types::json_regions::json_strings(text, &regions);
+        let trimmed = text.trim();
+        let start = text.len() - text.trim_start().len();
+        match serde_json::from_str::<serde_json::Value>(trimmed) {
+            Ok(serde_json::Value::String(_)) => {
+                strings.push((start + 1..start + trimmed.len() - 1, false))
+            }
+            Ok(
+                serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_),
+            ) => forbidden.push(project(start, start + trimmed.len())),
+            _ => {}
+        }
         for region in &regions {
             let mut start = region.start;
             let first = strings.partition_point(|(span, _)| span.end <= region.start);
@@ -512,15 +524,28 @@ impl JsonSweepIndex {
                 forbidden.push(project(start, region.end));
             }
         }
+        for (span, key) in &strings {
+            if *key {
+                continue;
+            }
+            let mut at = span.start;
+            while at < span.end {
+                if text.as_bytes()[at] == b'\\' {
+                    let end = json_escape_end(text, at);
+                    let mapped = project(at, end);
+                    escape_interiors.push(mapped.start + 1..mapped.end);
+                    at = end;
+                } else {
+                    at += text[at..].chars().next().expect("character").len_utf8();
+                }
+            }
+        }
         // A serialized document can also be the whole input JSON string.
-        let mut interiors: Vec<_> = strings
+        let interiors: Vec<_> = strings
             .into_iter()
             .filter(|(_, key)| !key)
             .map(|(span, _)| span)
             .collect();
-        if text.starts_with('"') && serde_json::from_str::<String>(text).is_ok() {
-            interiors.push(1..text.len() - 1);
-        }
         for span in interiors {
             let Ok(decoded) = serde_json::from_str::<String>(&text[span.start - 1..span.end + 1])
             else {
@@ -534,19 +559,7 @@ impl JsonSweepIndex {
             while at < span.end {
                 let start = at;
                 let len = if text.as_bytes()[at] == b'\\' {
-                    let mut end = at
-                        + if text.as_bytes().get(at + 1) == Some(&b'u') {
-                            6
-                        } else {
-                            2
-                        };
-                    if text.get(end..end + 2) == Some("\\u") {
-                        let first = u16::from_str_radix(&text[at + 2..end], 16).unwrap_or(0);
-                        if (0xd800..=0xdbff).contains(&first) {
-                            end += 6;
-                        }
-                    }
-                    at = end;
+                    at = json_escape_end(text, at);
                     serde_json::from_str::<String>(&format!("\"{}\"", &text[start..at]))
                         .map_or(0, |s| s.len())
                 } else {
@@ -557,18 +570,55 @@ impl JsonSweepIndex {
                 projection.extend(std::iter::repeat_n(project(start, at), len));
             }
             if projection.len() == decoded.len() {
-                Self::collect(&decoded, Some(&projection), forbidden);
+                Self::collect(&decoded, Some(&projection), forbidden, escape_interiors);
             }
         }
     }
 
     fn allows(&self, span: &Range<usize>) -> bool {
+        let splits_escape = [span.start, span.end].iter().any(|at| {
+            let index = self
+                .escape_interiors
+                .partition_point(|escape| escape.end <= *at);
+            self.escape_interiors
+                .get(index)
+                .is_some_and(|escape| escape.contains(at))
+        });
+        if splits_escape {
+            return false;
+        }
         let at = self
             .forbidden
             .partition_point(|blocked| blocked.end <= span.start);
         self.forbidden
             .get(at)
             .is_none_or(|blocked| blocked.start >= span.end)
+    }
+}
+
+fn merge_json_ranges(mut ranges: Vec<Range<usize>>) -> Vec<Range<usize>> {
+    ranges.sort_unstable_by_key(|span| span.start);
+    let mut merged: Vec<Range<usize>> = Vec::new();
+    for span in ranges {
+        if let Some(last) = merged.last_mut().filter(|last| last.end > span.start) {
+            last.end = last.end.max(span.end);
+        } else {
+            merged.push(span);
+        }
+    }
+    merged
+}
+
+fn json_escape_end(text: &str, at: usize) -> usize {
+    if text.as_bytes()[at + 1] != b'u' {
+        return at + 2;
+    }
+    let end = at + 6;
+    let first = u16::from_str_radix(&text[at + 2..end], 16).expect("validated JSON escape");
+    if (0xd800..=0xdbff).contains(&first) {
+        end + 6
+    } else {
+        end
     }
 }
 
@@ -1083,6 +1133,16 @@ mod tests {
                 if !value.chars().any(|ch| ch.is_ascii_digit()) {
                     assert_eq!(parsed["copy"], value);
                 }
+                let CleanDocument::Text(number) = pipeline
+                    .redact(&session, RawDocument::Text("731284".into()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                assert_eq!(
+                    number, "731284",
+                    "a repeat cannot replace a standalone JSON number"
+                );
                 let CleanDocument::Text(next) = pipeline
                     .redact(
                         &session,
@@ -1100,6 +1160,55 @@ mod tests {
             }
         }
         assert_eq!(checked, 45);
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn labelled_repeats_cannot_split_json_escapes() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
+        let mut checked = 0;
+        for (value, escaped) in [
+            ("u0031", r#"\u0031"#),
+            ("t731284", r#"\t731284"#),
+            ("n731284", r#"\n731284"#),
+        ] {
+            let mut input = format!(r#"{{"customerId":"{value}","copy":"{escaped}"}}"#);
+            for depth in 0..=4 {
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = pipeline
+                    .redact(&session, RawDocument::Text(input.clone()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                assert_eq!(
+                    pipeline.restore_strict_text(&session, &clean).unwrap(),
+                    input
+                );
+                let mut decoded = clean;
+                for _ in 0..depth {
+                    decoded = serde_json::from_str::<String>(&decoded).expect("serialized JSON");
+                }
+                let parsed: serde_json::Value = serde_json::from_str(&decoded)
+                    .unwrap_or_else(|error| panic!("{decoded}: {error}"));
+                assert_eq!(
+                    parsed["copy"],
+                    serde_json::from_str::<String>(&format!("\"{escaped}\"")).unwrap()
+                );
+                let literal = format!("\"{escaped}\"");
+                let CleanDocument::Text(literal_clean) = pipeline
+                    .redact(&session, RawDocument::Text(literal.clone()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                assert_eq!(literal_clean, literal, "standalone JSON escape split");
+                checked += 1;
+                input = serde_json::to_string(&input).unwrap();
+            }
+        }
+        assert_eq!(checked, 15);
     }
 
     #[cfg(feature = "bundled-recognizers")]
