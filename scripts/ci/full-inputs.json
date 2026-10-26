@@ -843,6 +843,7 @@
     "docs/reference/cli.md",
     "docs/reference/crates.md",
     "docs/reference/daemon-text-blocks-v1.md",
+    "docs/reference/daemon-v2-clean-equality.json",
     "docs/reference/dashboard/accessibility-and-visual-verification.md",
     "docs/reference/dashboard/browser-security.md",
     "docs/reference/metrics.md",
