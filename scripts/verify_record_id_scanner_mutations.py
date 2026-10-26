@@ -77,8 +77,8 @@ def main():
         (
             'remove-labelled-sweep-bound',
             'crates/gaze/src/sweep.rs',
-            'source.repeat_seed.is_none() || text.len() <= MAX_LABELLED_REPEAT_BYTES',
-            'source.repeat_seed.is_none() || text.len() <= usize::MAX',
+            '!source.field_owned_scalar() || text.len() <= MAX_LABELLED_REPEAT_BYTES',
+            '!source.field_owned_scalar() || text.len() <= usize::MAX',
             'pipeline_labelled_sweep_work_and_size_are_bounded',
             'gaze-pii',
         ),
@@ -90,7 +90,7 @@ def main():
             'pipeline_labelled_sweep_work_and_size_are_bounded',
             'gaze-pii',
         ),
-        ('repeat-alphabetic-labelled-values', 'crates/gaze/src/sweep.rs', 'if source.repeat_seed.is_some() && !labelled_repeat_has_digit(value)', 'if false && source.repeat_seed.is_some() && !labelled_repeat_has_digit(value)', 'labelled_repeat_preserves_json_keys_literals_and_schema', 'gaze-pii'),
+        ('repeat-alphabetic-labelled-values', 'crates/gaze/src/sweep.rs', 'if source.field_owned_scalar() && !labelled_repeat_has_digit(value)', 'if false && source.field_owned_scalar() && !labelled_repeat_has_digit(value)', 'labelled_repeat_preserves_json_keys_literals_and_schema', 'gaze-pii'),
         ('sweep-json-keys-and-atoms', 'crates/gaze/src/sweep.rs', 'if source.repeat_seed.is_some() && !json.allows(&span)', 'if false && source.repeat_seed.is_some() && !json.allows(&span)', 'labelled_repeat_preserves_json_keys_literals_and_schema', 'gaze-pii'),
         ('own-first-benign-container-scalar', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if eligible && first.is_none()', 'if first.is_none()', 'json_record_structure_and_covered_values_are_preserved', 'gaze-recognizers'),
         ('ignore-plain-key-value-ownership', 'crates/gaze-recognizers/src/regex/scalar_index.rs', '                if key {\n                    values.keys.insert(close);\n                    if matches!', '                if false && key {\n                    values.keys.insert(close);\n                    if matches!', 'json_record_structure_and_covered_values_are_preserved', 'gaze-recognizers'),
@@ -100,6 +100,11 @@ def main():
         ('skip-repeated-escaped-padding', 'crates/gaze/src/sweep.rs', 'if before == value.len()', 'if true || before == value.len()', 'padded_labelled_values_repeat_in_document_and_session', 'gaze-pii'),
         ('tokenize-labels-inside-json-keys', 'crates/gaze-recognizers/src/regex/scalar_index.rs', '.or_else(|| enclosing_key.map(|_| capture.start..capture.start))', '.or_else(|| None::<std::ops::Range<usize>>.or_else(|| { let _ = enclosing_key; None }))', 'json_object_keys_are_never_private_value_spans', 'gaze-recognizers'),
         ('split-json-escape-on-repeat', 'crates/gaze/src/sweep.rs', 'if splits_escape {', 'if false && splits_escape {', 'labelled_repeats_cannot_split_json_escapes', 'gaze-pii'),
+        ('discard-escaped-source-spelling', 'crates/gaze/src/sweep.rs', '        if patterns.is_empty() {', '        if true || patterns.is_empty() {', 'pipeline_deep_escaped_repeat_patterns_remain_bounded', 'gaze-pii'),
+        ('cap-legacy-uncertain-prefixes', 'crates/gaze/src/sweep.rs', '!source.field_owned_scalar() || text.len() <= MAX_LABELLED_REPEAT_BYTES', 'source.repeat_seed.is_none() || text.len() <= MAX_LABELLED_REPEAT_BYTES', 'legacy_uncertain_prefixes_keep_their_floor_and_long_values', 'gaze-pii'),
+        ('apply-field-digit-floor-to-legacy-prefixes', 'crates/gaze/src/sweep.rs', 'source.field_owned_scalar() && !labelled_repeat_has_digit(value)', 'source.repeat_seed.is_some() && !labelled_repeat_has_digit(value)', 'legacy_uncertain_prefixes_keep_their_floor_and_long_values', 'gaze-pii'),
+        ('bound-decoded-padding-before-trimming', 'crates/gaze/src/sweep.rs', 'view.text.trim_end().len()', 'view.text.len()', 'deeply_escaped_padding_keeps_trimmed_repeats_across_turns', 'gaze-pii'),
+        ('allow-unbounded-decoding-cascade', 'crates/gaze/src/sweep.rs', 'if depth >= MAX_ESCAPED_REPEAT_DEPTH {', 'if false && depth >= MAX_ESCAPED_REPEAT_DEPTH {', 'cascading_unicode_escapes_cannot_create_unbounded_repeat_work', 'gaze-pii'),
     ]
     receipts = []
     for name, relative, old, new, test, package in probes:

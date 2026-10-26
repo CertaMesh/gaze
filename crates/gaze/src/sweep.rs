@@ -33,10 +33,10 @@
 //! - Every edge must pass [`gaze_types::is_inside_word`], and a hit inside a
 //!   URL-shaped run is skipped so a link is never cut apart.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
-use aho_corasick::{AhoCorasick, MatchKind};
+use aho_corasick::{AhoCorasick, AhoCorasickKind, MatchKind};
 use gaze_types::{
     extend_over_name_joiners, is_inside_word, Candidate, ConflictTier, EvidenceKind, PiiClass,
 };
@@ -199,9 +199,18 @@ pub(crate) struct RepeatSeed {
     pub(crate) kind: gaze_types::LabelledValueRepeatSeedKind,
 }
 
+impl SweepSource {
+    fn field_owned_scalar(&self) -> bool {
+        self.repeat_seed
+            .as_ref()
+            .is_some_and(|seed| seed.kind == gaze_types::LabelledValueRepeatSeedKind::ExactScalar)
+    }
+}
+
 // Same byte ceiling as the field-owned scanner. Ownership remains unbounded;
 // only the derived repeat matcher is limited.
 pub(crate) const MAX_LABELLED_REPEAT_BYTES: usize = 40;
+const MAX_ESCAPED_REPEAT_DEPTH: usize = 32;
 
 /// How a swept copy relates to the value it was found from. Audit rows carry
 /// this instead of the source token: the audit contract never holds tokens.
@@ -284,6 +293,7 @@ struct Pattern {
 /// document's own rule-found values.
 pub(crate) struct SweepMatcher {
     sources: Vec<SweepSource>,
+    encoded: Option<EncodedMatcher>,
     folded: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
     exact: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
 }
@@ -352,10 +362,16 @@ impl SweepMatcher {
                 return Err(ManifestSweepError::CapacityExceeded);
             }
         }
-        if patterns.iter().map(|p| p.text.len()).sum::<usize>() > MAX_PATTERN_BYTES {
+        let pattern_bytes = patterns.iter().map(|p| p.text.len()).sum::<usize>();
+        if pattern_bytes > MAX_PATTERN_BYTES {
             return Err(ManifestSweepError::CapacityExceeded);
         }
-        if patterns.is_empty() {
+        let encoded = EncodedMatcher::build(
+            &sources,
+            MAX_PATTERNS - patterns.len(),
+            MAX_PATTERN_BYTES - pattern_bytes,
+        )?;
+        if patterns.is_empty() && encoded.is_none() {
             return Ok(None);
         }
         #[cfg(test)]
@@ -376,7 +392,11 @@ impl SweepMatcher {
             if texts.is_empty() {
                 return Ok(None);
             }
+            let long_pattern = texts
+                .iter()
+                .any(|text| text.len() > MAX_LABELLED_REPEAT_BYTES);
             AhoCorasick::builder()
+                .kind(long_pattern.then_some(AhoCorasickKind::ContiguousNFA))
                 .match_kind(MatchKind::Standard)
                 .build(texts)
                 .map(|matcher| {
@@ -391,6 +411,7 @@ impl SweepMatcher {
                 .map_err(|_| ManifestSweepError::MatcherBuild)
         };
         Ok(Some(Self {
+            encoded,
             folded: build(|kind| matches!(kind, PatternKind::Folded))?,
             exact: build(|kind| matches!(kind, PatternKind::Exact))?,
             sources,
@@ -418,6 +439,30 @@ impl SweepMatcher {
             for found in matcher.find_overlapping_iter(text) {
                 let (source, link) = meta[found.pattern().as_usize()];
                 self.push_hit(text, found.range(), source, link, &json, &mut hits);
+            }
+        }
+        if let Some(encoded) = &self.encoded {
+            let mut view = EscapedView::identity(text);
+            for _ in 0..=MAX_ESCAPED_REPEAT_DEPTH {
+                for found in encoded.matcher.find_overlapping_iter(&view.text) {
+                    let span = view.source[found.start()].start..view.source[found.end() - 1].end;
+                    if let Some(sources) = encoded.sources.get(&text[span.clone()]) {
+                        for source in sources {
+                            self.push_hit(
+                                text,
+                                span.clone(),
+                                *source,
+                                SweepLink::Exact,
+                                &json,
+                                &mut hits,
+                            );
+                        }
+                    }
+                }
+                let Some(decoded) = view.decode() else {
+                    break;
+                };
+                view = decoded;
             }
         }
         hits
@@ -461,6 +506,159 @@ impl SweepMatcher {
             class: source.class.clone(),
             link,
         });
+    }
+}
+
+/// Deep source spelling may be long even though its decoded identifier is short.
+/// Match a bounded decoded pattern, then require byte-exact source spelling.
+struct EncodedMatcher {
+    matcher: AhoCorasick,
+    sources: HashMap<String, Vec<usize>>,
+}
+
+impl EncodedMatcher {
+    fn build(
+        sources: &[SweepSource],
+        remaining_patterns: usize,
+        remaining_bytes: usize,
+    ) -> Result<Option<Self>, ManifestSweepError> {
+        let mut patterns = HashSet::new();
+        let mut raw_sources: HashMap<String, HashMap<(String, PiiClass), usize>> = HashMap::new();
+        for (index, source) in sources
+            .iter()
+            .enumerate()
+            .filter(|(_, source)| source.field_owned_scalar())
+        {
+            let raw = normalize(&source.raw).text;
+            if !raw.contains('\\') {
+                continue;
+            }
+            let mut view = EscapedView::identity(&raw);
+            let mut depth = 0;
+            while let Some(decoded) = view.decode() {
+                if depth >= MAX_ESCAPED_REPEAT_DEPTH {
+                    return Err(ManifestSweepError::CapacityExceeded);
+                }
+                depth += 1;
+                view = decoded;
+            }
+            let start = view.text.len() - view.text.trim_start().len();
+            let end = view.text.trim_end().len();
+            for span in [0..view.text.len(), start..end] {
+                if span.is_empty() {
+                    continue;
+                }
+                let body = &view.text[span.clone()];
+                if body.len() <= MAX_LABELLED_REPEAT_BYTES
+                    && labelled_repeat_has_digit(body)
+                    && source.class.clears_repeat_floor(body.trim())
+                {
+                    patterns.insert(body.to_owned());
+                    let raw_body =
+                        &raw[view.source[span.start].start..view.source[span.end - 1].end];
+                    raw_sources
+                        .entry(raw_body.to_owned())
+                        .or_default()
+                        .entry((source.family.clone(), source.class.clone()))
+                        .or_insert(index);
+                }
+            }
+        }
+        if patterns.is_empty() {
+            return Ok(None);
+        }
+        if patterns.len() > remaining_patterns
+            || patterns.iter().map(String::len).sum::<usize>() > remaining_bytes
+        {
+            return Err(ManifestSweepError::CapacityExceeded);
+        }
+        let mut patterns = patterns.into_iter().collect::<Vec<_>>();
+        patterns.sort_unstable();
+        let matcher = AhoCorasick::builder()
+            .match_kind(MatchKind::Standard)
+            .build(&patterns)
+            .map_err(|_| ManifestSweepError::MatcherBuild)?;
+        #[cfg(test)]
+        SWEEP_WORK.with(|work| {
+            let mut count = work.get();
+            count.pattern_bytes += patterns.iter().map(String::len).sum::<usize>();
+            count.max_pattern_bytes = count
+                .max_pattern_bytes
+                .max(patterns.iter().map(String::len).max().unwrap_or(0));
+            count.matcher_bytes += matcher.memory_usage();
+            work.set(count);
+        });
+        Ok(Some(Self {
+            matcher,
+            sources: raw_sources
+                .into_iter()
+                .map(|(raw, owners)| {
+                    let mut indexes = owners.into_values().collect::<Vec<_>>();
+                    indexes.sort_unstable();
+                    (raw, indexes)
+                })
+                .collect(),
+        }))
+    }
+}
+
+struct EscapedView {
+    text: String,
+    source: Vec<Range<usize>>,
+}
+
+impl EscapedView {
+    fn identity(text: &str) -> Self {
+        Self {
+            text: text.to_owned(),
+            source: (0..text.len()).map(|at| at..at + 1).collect(),
+        }
+    }
+
+    fn decode(&self) -> Option<Self> {
+        let mut text = String::with_capacity(self.text.len());
+        let mut source = Vec::with_capacity(self.text.len());
+        let mut at = 0;
+        let mut changed = false;
+        while at < self.text.len() {
+            let start = at;
+            let escape = (self.text.as_bytes()[at] == b'\\')
+                .then(|| {
+                    let len = if self.text.as_bytes().get(at + 1) == Some(&b'u') {
+                        let code = self
+                            .text
+                            .get(at + 2..at + 6)
+                            .and_then(|hex| u16::from_str_radix(hex, 16).ok());
+                        if code.is_some_and(|code| (0xd800..=0xdbff).contains(&code)) {
+                            12
+                        } else {
+                            6
+                        }
+                    } else {
+                        2
+                    };
+                    let raw = self.text.get(at..at + len)?;
+                    serde_json::from_str::<String>(&format!("\"{raw}\""))
+                        .ok()
+                        .map(|decoded| (len, decoded))
+                })
+                .flatten();
+            let decoded = if let Some((len, decoded)) = escape {
+                at += len;
+                changed = true;
+                decoded
+            } else {
+                let ch = self.text[at..].chars().next().expect("character");
+                at += ch.len_utf8();
+                ch.to_string()
+            };
+            text.push_str(&decoded);
+            source.extend(std::iter::repeat_n(
+                self.source[start].start..self.source[at - 1].end,
+                decoded.len(),
+            ));
+        }
+        changed.then_some(Self { text, source })
     }
 }
 
@@ -740,17 +938,17 @@ impl ValueShape {
 
 fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Pattern>) {
     let normalized = normalize(&source.raw).text;
-    let value = if source.repeat_seed.is_some() {
+    let value = if source.field_owned_scalar() {
         trim_labelled_repeat(&normalized)
     } else {
         normalized.trim()
     };
-    if source.repeat_seed.is_some() && !labelled_repeat_has_digit(value) {
+    if source.field_owned_scalar() && !labelled_repeat_has_digit(value) {
         return;
     }
     let shape = ValueShape::of(&source.class, value);
     let mut push = |kind, text: String, link| {
-        if source.repeat_seed.is_none() || text.len() <= MAX_LABELLED_REPEAT_BYTES {
+        if !source.field_owned_scalar() || text.len() <= MAX_LABELLED_REPEAT_BYTES {
             patterns.push(Pattern {
                 kind,
                 text,
@@ -775,7 +973,7 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
     if let Some(seed) = &source.repeat_seed {
         let raw = normalize(&seed.raw).text;
         let body = trim_labelled_repeat(&raw);
-        if labelled_repeat_has_digit(body) && source.class.clears_repeat_floor(body) {
+        if source.class.clears_repeat_floor(body) {
             let uncertain = matches!(
                 seed.kind,
                 gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix
@@ -1081,6 +1279,139 @@ mod tests {
                     assert!(work.matcher_bytes <= input.len() * 128 + 65536, "{work:?}");
                 }
             }
+        }
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn pipeline_deep_escaped_repeat_patterns_remain_bounded() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
+        let mut raw = "SYN731\"284\n".to_owned();
+        let mut checked = 0;
+        for _depth in 1..=9 {
+            let encoded = serde_json::to_string(&raw).unwrap();
+            raw = encoded[1..encoded.len() - 1].to_owned();
+            let input = format!("Lookup {raw} again.\n{{\"customerId\":\"{raw}\"}}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            SWEEP_WORK.with(|work| work.set(SweepWork::default()));
+            let CleanDocument::Text(clean) = pipeline
+                .redact(&session, RawDocument::Text(input.clone()))
+                .unwrap()
+            else {
+                panic!("text")
+            };
+            let entries = session.snapshot_entries();
+            let entry = entries
+                .iter()
+                .find(|entry| entry.raw == raw)
+                .expect("complete source spelling");
+            assert_eq!(clean, input.replace(&raw, &entry.token));
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                input
+            );
+            let work = SWEEP_WORK.with(|work| work.get());
+            assert!(
+                work.max_pattern_bytes <= MAX_LABELLED_REPEAT_BYTES,
+                "{work:?}"
+            );
+            assert!(work.matcher_bytes <= input.len() * 128 + 65536, "{work:?}");
+            checked += 1;
+        }
+        assert_eq!(checked, 9);
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn deeply_escaped_padding_keeps_trimmed_repeats_across_turns() {
+        use crate::{CleanDocument, RawDocument, Scope, Session};
+        let pipeline = labelled_pipeline();
+        let mut checked = 0;
+        for padding in ["\t", "\n", "\u{00a0}", " "] {
+            for count in [1, 64] {
+                let mut raw = format!("SYN731284{}", padding.repeat(count));
+                for _depth in 1..=5 {
+                    let encoded = serde_json::to_string(&raw).unwrap();
+                    raw = encoded[1..encoded.len() - 1].to_owned();
+                    let input = format!("Lookup SYN731284 again.\n{{\"customerId\":\"{raw}\"}}");
+                    let session =
+                        Session::new(Scope::Conversation("synthetic-decoded-padding".into()))
+                            .unwrap();
+                    SWEEP_WORK.with(|work| work.set(SweepWork::default()));
+                    let CleanDocument::Text(clean) = pipeline
+                        .redact(&session, RawDocument::Text(input.clone()))
+                        .unwrap()
+                    else {
+                        panic!("text")
+                    };
+                    assert!(!clean.contains("SYN731284"), "{input:?} -> {clean}");
+                    assert_eq!(
+                        pipeline.restore_strict_text(&session, &clean).unwrap(),
+                        input
+                    );
+                    let imported = Session::import(session.export().unwrap()).unwrap();
+                    let CleanDocument::Text(next) = pipeline
+                        .redact(&imported, RawDocument::Text("Follow-up SYN731284".into()))
+                        .unwrap()
+                    else {
+                        panic!("text")
+                    };
+                    assert!(!next.contains("SYN731284"), "{next}");
+                    let work = SWEEP_WORK.with(|work| work.get());
+                    assert!(
+                        work.max_pattern_bytes <= MAX_LABELLED_REPEAT_BYTES,
+                        "{work:?}"
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 40);
+    }
+
+    #[test]
+    fn cascading_unicode_escapes_cannot_create_unbounded_repeat_work() {
+        let raw = format!("\\{}SYN731284", "u005c".repeat(256));
+        let source = SweepSource {
+            family: "synthetic.counter".into(),
+            class: PiiClass::custom("customer_id").unwrap(),
+            raw: raw.clone(),
+            repeat_seed: Some(RepeatSeed {
+                raw,
+                kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+            }),
+        };
+        assert!(matches!(
+            SweepMatcher::build([source]),
+            Err(ManifestSweepError::CapacityExceeded)
+        ));
+    }
+
+    #[test]
+    fn legacy_uncertain_prefixes_keep_their_floor_and_long_values() {
+        for body in ["ABCD", "Q9176243 AB2345 CD6789 EF1234 GH5678 IJ9012 KL3456"] {
+            let source = SweepSource {
+                family: "synthetic.counter".into(),
+                class: PiiClass::custom("synthetic_identifier").unwrap(),
+                raw: format!("{body} PRIVATE NOTE"),
+                repeat_seed: Some(RepeatSeed {
+                    raw: body.into(),
+                    kind: gaze_types::LabelledValueRepeatSeedKind::UncertainPrefix,
+                }),
+            };
+            let matcher = SweepMatcher::build([source])
+                .unwrap()
+                .expect("legacy prefix");
+            let text = format!("Lookup {body} again.");
+            assert!(
+                matcher
+                    .find(&text)
+                    .iter()
+                    .any(|hit| hit.span == (7..7 + body.len())
+                        && hit.link == SweepLink::UncertainPrefix),
+                "{text}"
+            );
         }
     }
 

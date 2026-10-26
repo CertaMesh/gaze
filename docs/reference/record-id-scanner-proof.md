@@ -26,7 +26,19 @@ JSON strings. The 40-byte pattern
 limit applies after trimming each derived pattern. Literal and JSON-escaped whitespace
 padding therefore preserve repeat protection without creating oversized matcher
 patterns. Pipeline tests cover 45 repeat/schema cases and 28 padded-value cases;
-a daemon test checks three padded values on a second turn. Restore remains exact.
+a daemon test checks three padded values on a second turn. Nine more cases
+check deeply escaped repeat spelling through nine serialization levels. Short
+decoded and trimmed patterns map back to byte-exact source spans. This protects
+escaped values without placing their expanded spelling into the DFA. Forty
+additional cases verify deeply escaped padding and imported second-turn state.
+An escape cascade beyond 32 decode passes fails closed before matcher creation;
+ordinary serialized inputs shrink at each layer and the corpus reaches depth 9.
+
+The field-scalar cap does not change legacy `UncertainPrefix` eligibility or its
+precision floor. Long legacy patterns use a contiguous NFA to keep construction
+linear. The recognizer's separate 40-byte diagnostic preserves primary ownership;
+it does not discard values or repeat patterns. Session storage retains provenance.
+Restore remains exact.
 
 Direct numeric JSON IDs retain the existing plain-text token format, which may
 make cleaned JSON invalid before restore. Quoted numeric emission and labels
