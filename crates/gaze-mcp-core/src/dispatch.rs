@@ -959,15 +959,15 @@ mod tests {
             ))
             .unwrap();
         let selection = crate::HostContextSelection::present(
-            r#"{"record":{"name":"Synthetic Qorvex","other":"Synthetic Zunvel"},"field_map":{"/other":"Name"}}"#.into(),
+            r#"{"record":{"name":"Qorvex Zunvela","other":"Nalvex Trivula"},"field_map":{"/other":"Name"}}"#.into(),
         );
         let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
         let session_policy = SessionIdPolicy::default_strict();
         for call in 0..6 {
             let guess = if call == 0 {
-                "Synthetic Qorvex"
+                "Qorvex Zunvela"
             } else {
-                "Synthetic Zunvel"
+                "Nalvex Trivula"
             };
             // Hosts commonly reconstruct the borrowed envelope for every call.
             let response = PiiEnvelope::new(
@@ -990,16 +990,19 @@ mod tests {
             )
             .await
             .unwrap();
-            assert!(response.payload["guess"] == guess);
+            assert!(
+                response.payload["guess"] == guess,
+                "guess changed on call {call}"
+            );
             if call == 0 {
-                assert!(response.payload["found"] == "Synthetic Qorvex");
+                assert!(response.payload["found"] == "Qorvex Zunvela");
                 assert!(session.tokens().is_empty());
             } else {
-                assert!(response.payload["found"] != "Synthetic Qorvex");
+                assert!(response.payload["found"] != "Qorvex Zunvela");
                 let restored = session
                     .restore_strict_text(response.payload["found"].as_str().unwrap())
                     .unwrap();
-                assert!(restored == "Synthetic Qorvex");
+                assert!(restored == "Qorvex Zunvela");
             }
         }
         assert_eq!(crate::host_context::construction_count(&selection), 1);
