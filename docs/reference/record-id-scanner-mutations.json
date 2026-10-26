@@ -1,7 +1,7 @@
 [
   {
     "mutation": "drop-json-label-ownership",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -22,7 +22,7 @@
   },
   {
     "mutation": "rebuild-quote-events-per-query",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -37,13 +37,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
     "log": "rebuild-quote-events-per-query.log",
-    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
   },
   {
     "mutation": "require-whole-json-document",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -58,13 +58,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
     "log": "require-whole-json-document.log",
-    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
   },
   {
     "mutation": "ignore-enclosing-label-key",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -79,13 +79,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
     "log": "ignore-enclosing-label-key.log",
-    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
   },
   {
     "mutation": "drop-container-value-ownership",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -100,13 +100,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
     "log": "drop-container-value-ownership.log",
-    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
   },
   {
     "mutation": "allow-header-label-as-value",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -121,13 +121,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
     "log": "allow-header-label-as-value.log",
-    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
   },
   {
     "mutation": "remove-labelled-sweep-bound",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -142,13 +142,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "8cb902460e2278e2a714b86926fd06dd57c8b6a898ccd48bc1e91250bb03916d",
+    "original_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a",
     "log": "remove-labelled-sweep-bound.log",
-    "restored_sha256": "8cb902460e2278e2a714b86926fd06dd57c8b6a898ccd48bc1e91250bb03916d"
+    "restored_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a"
   },
   {
     "mutation": "discard-oversized-session-provenance",
-    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
     "command": [
       "cargo",
       "test",
@@ -163,8 +163,218 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "c556864ff0d9bb1d206708630d3aaebedcc57c8d0e46028d32e6f0152ff14096",
+    "original_sha256": "15ea815241f9d0a4835c46767de7e428c813f479ae51601ea86130594ffb49b6",
     "log": "discard-oversized-session-provenance.log",
-    "restored_sha256": "c556864ff0d9bb1d206708630d3aaebedcc57c8d0e46028d32e6f0152ff14096"
+    "restored_sha256": "15ea815241f9d0a4835c46767de7e428c813f479ae51601ea86130594ffb49b6"
+  },
+  {
+    "mutation": "repeat-alphabetic-labelled-values",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "labelled_repeat_preserves_json_keys_literals_and_schema",
+      "--",
+      "--nocapture"
+    ],
+    "test": "labelled_repeat_preserves_json_keys_literals_and_schema",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a",
+    "log": "repeat-alphabetic-labelled-values.log",
+    "restored_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a"
+  },
+  {
+    "mutation": "sweep-json-keys-and-atoms",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "labelled_repeat_preserves_json_keys_literals_and_schema",
+      "--",
+      "--nocapture"
+    ],
+    "test": "labelled_repeat_preserves_json_keys_literals_and_schema",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a",
+    "log": "sweep-json-keys-and-atoms.log",
+    "restored_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a"
+  },
+  {
+    "mutation": "own-first-benign-container-scalar",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_record_structure_and_covered_values_are_preserved",
+      "--",
+      "--nocapture"
+    ],
+    "test": "json_record_structure_and_covered_values_are_preserved",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
+    "log": "own-first-benign-container-scalar.log",
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
+  },
+  {
+    "mutation": "ignore-plain-key-value-ownership",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_record_structure_and_covered_values_are_preserved",
+      "--",
+      "--nocapture"
+    ],
+    "test": "json_record_structure_and_covered_values_are_preserved",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
+    "log": "ignore-plain-key-value-ownership.log",
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
+  },
+  {
+    "mutation": "retain-broken-prefix-quote-state",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_record_structure_and_covered_values_are_preserved",
+      "--",
+      "--nocapture"
+    ],
+    "test": "json_record_structure_and_covered_values_are_preserved",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "a7a889055d0028f0e940dd80747f6fecf3185dc90a4a413f52cccb9f09053bd4",
+    "log": "retain-broken-prefix-quote-state.log",
+    "restored_sha256": "a7a889055d0028f0e940dd80747f6fecf3185dc90a4a413f52cccb9f09053bd4"
+  },
+  {
+    "mutation": "ignore-unicode-label-whitespace",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "unicode_label_whitespace_owns_the_value",
+      "--",
+      "--nocapture"
+    ],
+    "test": "unicode_label_whitespace_owns_the_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
+    "log": "ignore-unicode-label-whitespace.log",
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
+  },
+  {
+    "mutation": "drop-padded-labelled-sources",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "padded_labelled_values_repeat_in_document_and_session",
+      "--",
+      "--nocapture"
+    ],
+    "test": "padded_labelled_values_repeat_in_document_and_session",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a",
+    "log": "drop-padded-labelled-sources.log",
+    "restored_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a"
+  },
+  {
+    "mutation": "skip-repeated-escaped-padding",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "padded_labelled_values_repeat_in_document_and_session",
+      "--",
+      "--nocapture"
+    ],
+    "test": "padded_labelled_values_repeat_in_document_and_session",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a",
+    "log": "skip-repeated-escaped-padding.log",
+    "restored_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a"
+  },
+  {
+    "mutation": "tokenize-labels-inside-json-keys",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_object_keys_are_never_private_value_spans",
+      "--",
+      "--nocapture"
+    ],
+    "test": "json_object_keys_are_never_private_value_spans",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c",
+    "log": "tokenize-labels-inside-json-keys.log",
+    "restored_sha256": "18df10367a93fb900ce437a1fa373c6beb133732aade4b1f0839d5267b9c2e5c"
+  },
+  {
+    "mutation": "split-json-escape-on-repeat",
+    "head": "01b23b98266f58d84a7c47d01d70693524952c72",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "labelled_repeats_cannot_split_json_escapes",
+      "--",
+      "--nocapture"
+    ],
+    "test": "labelled_repeats_cannot_split_json_escapes",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a",
+    "log": "split-json-escape-on-repeat.log",
+    "restored_sha256": "9c095f59ce39de0cf15f9e16305a204dcfdb1c1700bc33141d1eec7d2b00e10a"
   }
 ]
