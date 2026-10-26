@@ -2495,6 +2495,7 @@ mod scaling_regressions {
 
 #[cfg(test)]
 mod json_label_cells {
+    use super::{scan_field_owned_value_indexed, ScalarBoundaryIndex};
     fn shape(value: &serde_json::Value) -> serde_json::Value {
         use serde_json::Value;
         match value {
