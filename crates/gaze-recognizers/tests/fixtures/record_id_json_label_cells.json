@@ -35,5 +35,119 @@
   {
     "text": "{\"Customer ID:\":\"SYN\\\\\\\"É731284\"}",
     "owned": "SYN\\\\\\\"É731284"
+  },
+  {
+    "text": "{\"n\":0}\n{\"Customer ID:\":\"SYN731284\"}",
+    "owned": "SYN731284",
+    "embedded": true
+  },
+  {
+    "text": "tool output: {\"Customer ID:\":\"SYN731284\"}",
+    "owned": "SYN731284",
+    "embedded": true
+  },
+  {
+    "text": "{\"Customer ID:\":\"SYN731284\"} trailing text",
+    "owned": "SYN731284",
+    "embedded": true
+  },
+  {
+    "text": "```json\n{\"Customer ID:\":\"SYN731284\"}\n```",
+    "owned": "SYN731284",
+    "embedded": true
+  },
+  {
+    "text": "{\"Customer ID:\\t\":\"SYN731284\"}",
+    "owned": "SYN731284",
+    "numeric": false
+  },
+  {
+    "text": "{\"Customer ID:\\t\":-731284}",
+    "owned": "-731284",
+    "numeric": true
+  },
+  {
+    "text": "{\"Customer ID:\\t\":73.1284}",
+    "owned": "73.1284",
+    "numeric": true
+  },
+  {
+    "text": "{\"Customer ID:\\t\":731284.0}",
+    "owned": "731284.0",
+    "numeric": true
+  },
+  {
+    "text": "{\"Customer ID:\\n\":\"SYN731284\"}",
+    "owned": "SYN731284",
+    "numeric": false
+  },
+  {
+    "text": "{\"Customer ID:\\n\":-731284}",
+    "owned": "-731284",
+    "numeric": true
+  },
+  {
+    "text": "{\"Customer ID:\\n\":73.1284}",
+    "owned": "73.1284",
+    "numeric": true
+  },
+  {
+    "text": "{\"Customer ID:\\n\":731284.0}",
+    "owned": "731284.0",
+    "numeric": true
+  },
+  {
+    "text": "{\"Employee_ID=\\t\":\"SYN731284\"}",
+    "owned": "SYN731284",
+    "numeric": false
+  },
+  {
+    "text": "{\"Employee_ID=\\t\":-731284}",
+    "owned": "-731284",
+    "numeric": true
+  },
+  {
+    "text": "{\"Employee_ID=\\t\":73.1284}",
+    "owned": "73.1284",
+    "numeric": true
+  },
+  {
+    "text": "{\"Employee_ID=\\t\":731284.0}",
+    "owned": "731284.0",
+    "numeric": true
+  },
+  {
+    "text": "{\"Customer ID:\":[\"SYN731284\"]}",
+    "owned": "SYN731284"
+  },
+  {
+    "text": "{\"Customer ID:\":{\"v\":\"SYN731284\"}}",
+    "owned": "SYN731284"
+  },
+  {
+    "text": "{\"Customer ID:\":[{\"v\":[\"SYN731284\"]}]}",
+    "owned": "SYN731284"
+  },
+  {
+    "text": "[[\"Customer ID:\",\"Order ID:\"],[\"PUBLIC-COL-1\",\"O-1\"]]",
+    "unchanged": true
+  },
+  {
+    "text": "[\"Customer ID:\",\"SYN731284:\"]",
+    "owned": "SYN731284:"
+  },
+  {
+    "text": "{ \"n\":0 }\r\n{\r\n\"Customer ID:\\t\":\"SYN731284\"\r\n}",
+    "owned": "SYN731284",
+    "embedded": true
+  },
+  {
+    "text": "{\"Customer ID:\":7.31284e5}",
+    "owned": "7.31284e5",
+    "numeric": true
+  },
+  {
+    "text": "{\"Customer ID:\":\"SYNÉ731284\"}",
+    "owned": "SYNÉ731284"
   }
 ]

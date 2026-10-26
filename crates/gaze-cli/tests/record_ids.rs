@@ -101,8 +101,9 @@ fn json_label_cells_clean_with_defaults_and_restore_exactly() {
     .unwrap();
     for fixture in fixtures.as_array().unwrap() {
         let mut input = fixture["text"].as_str().unwrap().to_owned();
-        let mut expected = fixture["owned"].as_str().unwrap().to_owned();
-        for depth in 0..=2 {
+        let unchanged = fixture["unchanged"] == true;
+        let mut expected = fixture["owned"].as_str().unwrap_or("").to_owned();
+        for depth in 0..=4 {
             let out = Command::cargo_bin("gaze")
                 .unwrap()
                 .arg("clean")
@@ -116,11 +117,16 @@ fn json_label_cells_clean_with_defaults_and_restore_exactly() {
             );
             let reply: Value = serde_json::from_slice(&out.stdout).unwrap();
             let clean = reply["clean_text"].as_str().unwrap();
-            assert!(!clean.contains(&expected), "depth {depth}: {clean}");
-            assert!(reply["stats"]["detections"].as_u64().unwrap() > 0);
+            if unchanged {
+                assert_eq!(clean, input, "header label cells remain public");
+                assert_eq!(reply["stats"]["detections"], 0);
+            } else {
+                assert!(!clean.contains(&expected), "depth {depth}: {clean}");
+                assert!(reply["stats"]["detections"].as_u64().unwrap() > 0);
+            }
             // Plain-text clean emits the same bare token for numeric IDs as
             // ordinary JSON number fields. String delimiters remain intact.
-            if fixture["numeric"] != true || depth > 0 {
+            if depth > 0 || (fixture["numeric"] != true && fixture["embedded"] != true) {
                 let _: Value =
                     serde_json::from_str(clean).expect("clean JSON strings remain valid");
             }

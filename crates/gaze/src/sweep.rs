@@ -199,6 +199,10 @@ pub(crate) struct RepeatSeed {
     pub(crate) kind: gaze_types::LabelledValueRepeatSeedKind,
 }
 
+// Same byte ceiling as the field-owned scanner. Ownership remains unbounded;
+// only the derived repeat matcher is limited.
+pub(crate) const MAX_LABELLED_REPEAT_BYTES: usize = 40;
+
 /// How a swept copy relates to the value it was found from. Audit rows carry
 /// this instead of the source token: the audit contract never holds tokens.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -303,6 +307,22 @@ pub enum ManifestSweepError {
     MatcherBuild,
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Default, Debug)]
+struct SweepWork {
+    source_bytes: usize,
+    pattern_bytes: usize,
+    max_pattern_bytes: usize,
+    matcher_bytes: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SWEEP_WORK: std::cell::Cell<SweepWork> = const { std::cell::Cell::new(SweepWork {
+        source_bytes: 0, pattern_bytes: 0, max_pattern_bytes: 0, matcher_bytes: 0,
+    }) };
+}
+
 impl SweepMatcher {
     /// Returns `None` when no source yields a pattern.
     pub(crate) fn build(
@@ -311,6 +331,27 @@ impl SweepMatcher {
         let mut seen = HashSet::new();
         let sources = sources
             .into_iter()
+            .inspect(|_source| {
+                #[cfg(test)]
+                SWEEP_WORK.with(|work| {
+                    let mut count = work.get();
+                    count.source_bytes += _source.raw.len()
+                        + _source
+                            .repeat_seed
+                            .as_ref()
+                            .map_or(0, |seed| seed.raw.len());
+                    work.set(count);
+                });
+            })
+            // Oversized field ownership still tokenizes and restores in full.
+            // It must not become an unbounded repeat pattern, in this turn or
+            // after the source is persisted into the session.
+            .filter(|source| {
+                source.repeat_seed.as_ref().is_none_or(|seed| {
+                    source.raw.len() <= MAX_LABELLED_REPEAT_BYTES
+                        && seed.raw.len() <= MAX_LABELLED_REPEAT_BYTES
+                })
+            })
             .filter(|source| seen.insert(source.clone()))
             .collect::<Vec<_>>();
         let mut patterns = Vec::new();
@@ -326,6 +367,15 @@ impl SweepMatcher {
         if patterns.is_empty() {
             return Ok(None);
         }
+        #[cfg(test)]
+        SWEEP_WORK.with(|work| {
+            let mut count = work.get();
+            count.pattern_bytes += patterns.iter().map(|p| p.text.len()).sum::<usize>();
+            count.max_pattern_bytes = count
+                .max_pattern_bytes
+                .max(patterns.iter().map(|p| p.text.len()).max().unwrap_or(0));
+            work.set(count);
+        });
         let build = |kind: fn(&PatternKind) -> bool| {
             let (texts, meta): (Vec<_>, Vec<_>) = patterns
                 .iter()
@@ -338,7 +388,15 @@ impl SweepMatcher {
             AhoCorasick::builder()
                 .match_kind(MatchKind::Standard)
                 .build(texts)
-                .map(|matcher| Some((matcher, meta)))
+                .map(|matcher| {
+                    #[cfg(test)]
+                    SWEEP_WORK.with(|work| {
+                        let mut count = work.get();
+                        count.matcher_bytes += matcher.memory_usage();
+                        work.set(count);
+                    });
+                    Some((matcher, meta))
+                })
                 .map_err(|_| ManifestSweepError::MatcherBuild)
         };
         Ok(Some(Self {
@@ -743,6 +801,92 @@ fn fold(input: &str) -> Folded {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn pipeline_labelled_sweep_work_and_size_are_bounded() {
+        use crate::rule::DefaultRule;
+        use crate::{Action, CleanDocument, Pipeline, RawDocument, Scope, Session};
+        let core = crate::Rulepack::load(crate::RulepackSource::Embedded(
+            gaze_recognizers::embedded("core").unwrap(),
+        ))
+        .unwrap();
+        let rule = core
+            .recognizers
+            .into_iter()
+            .find(|rule| rule.id == "customer_id.labelled")
+            .unwrap();
+        let crate::RawMatch::Regex {
+            pattern: Some(pattern),
+            capture_groups,
+            ..
+        } = rule.matcher
+        else {
+            panic!("regex rule")
+        };
+        let detector = gaze_recognizers::RegexDetector::with_rulepack_fields(
+            &pattern,
+            rule.class,
+            &rule.id,
+            vec![crate::LocaleTag::Global],
+            0.9,
+            0,
+            "counter",
+            capture_groups,
+            vec![],
+            None,
+            None,
+        )
+        .unwrap()
+        .with_complete_labelled_value(true)
+        .with_labelled_value_mode(gaze_types::LabelledValueMode::FieldOwned);
+        let pipeline = Pipeline::builder()
+            .recognizer(detector)
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        for body in [
+            "customerId: \"SYN731284 ",
+            "customerId: ''SYN''x''\n",
+            "customerId: \"\"\"SYN'''x\n",
+        ] {
+            for depth in 0..=2 {
+                for fields in [8, 32, 128, 512, 2048] {
+                    let mut input = body.repeat(fields);
+                    for _ in 0..depth {
+                        input = serde_json::to_string(&input).unwrap();
+                    }
+                    let session = Session::new(Scope::Ephemeral).unwrap();
+                    SWEEP_WORK.with(|work| work.set(SweepWork::default()));
+                    let CleanDocument::Text(clean) = pipeline
+                        .redact(&session, RawDocument::Text(input.clone()))
+                        .unwrap()
+                    else {
+                        panic!("text")
+                    };
+                    assert!(
+                        !clean.contains("SYN731284"),
+                        "owned value must stay protected"
+                    );
+                    assert_eq!(
+                        pipeline.restore_strict_text(&session, &clean).unwrap(),
+                        input
+                    );
+                    pipeline
+                        .redact(&session, RawDocument::Text("public control".to_owned()))
+                        .unwrap();
+                    let work = SWEEP_WORK.with(|work| work.get());
+                    assert!(
+                        work.max_pattern_bytes <= 40,
+                        "{fields} fields, depth {depth}: {work:?}"
+                    );
+                    assert!(work.source_bytes <= input.len() * 8, "{work:?}");
+                    assert!(work.pattern_bytes <= input.len() * 8, "{work:?}");
+                    assert!(work.matcher_bytes <= input.len() * 128 + 65536, "{work:?}");
+                }
+            }
+        }
+    }
+
     use super::*;
 
     /// A value kept although its checksum failed is never swept, whatever evidence it carries and
