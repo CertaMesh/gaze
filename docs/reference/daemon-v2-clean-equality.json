@@ -1,10 +1,10 @@
 {
   "base_sha": "8e2ed551187e06d83e2556a04579e2d788da839e",
   "binary_sha256": [
-    "303680007e1c50e8775cb3236e0afbd281d2e43a41751948ee87eb6cdff7f57e",
+    "ad63b41c9060f04adede28c028acc19d9984889dad6a26b18031b3af9ef4edfc",
     "40c01cc915b461d50d9de195980095a0d633c1a8b422b0f285356ce6fc39b524"
   ],
-  "candidate_sha": "5ef46ab712f8495f97c3d8c099a25ebcabbd0903",
+  "candidate_sha": "b349adbbc2d6396d3fb59dd3cd14dc24948a2123",
   "cases": 1072,
   "detections": [
     103,
@@ -22,5 +22,5 @@
   ],
   "manifest_sha256": "52e491458f33111d60c4b07e4ef472df0f88084f23a37dcb767a70fb2f42c0f1",
   "schema": "gaze-clean-equality-v1",
-  "script_sha256": "d13a3072b671c23c9584086600cfceb07470d655850416367238335e0e753567"
+  "script_sha256": "decd018114ab7cb273fc9d3592e4005c4c8e428e4b89582da8b6dc85f7d79fbd"
 }
