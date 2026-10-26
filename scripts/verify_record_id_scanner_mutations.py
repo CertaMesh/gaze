@@ -18,6 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "target/scanner-mutations")
     parser.add_argument("--only", action="append", help="Run a named probe; repeat to select several")
+    parser.add_argument("--keep-going", action="store_true", help="Collect all compiled mutation results before failing")
     args = parser.parse_args()
     if git("status", "--porcelain"):
         raise SystemExit("Commit all changes before mutation probes; a clean checkout is required.")
@@ -165,10 +166,13 @@ def main():
         receipts.append(receipt)
         (out / "receipts.json").write_text(json.dumps(receipts, indent=2) + "\n")
         print(json.dumps(receipt), flush=True)
-        if not killed:
+        if not killed and not args.keep_going:
             raise SystemExit(f"Mutant survived or did not compile: {name}")
     if git("status", "--porcelain") or git("rev-parse", "HEAD") != head:
         raise SystemExit("Checkout changed during probes.")
+    failures = [receipt["mutation"] for receipt in receipts if not receipt["killed"]]
+    if failures:
+        raise SystemExit(f"Mutants survived or did not compile: {failures}")
     print("All mutants compiled, failed their named test, and were restored.")
 
 

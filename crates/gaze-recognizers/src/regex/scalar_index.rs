@@ -2916,6 +2916,15 @@ mod json_label_cells {
         let rules = super::regression_tests::rules();
         let mut input = r#"[["Customer ID:","Order ID:"],["PUBLIC-COL-1","O-1"]]"#.to_owned();
         for _depth in 0..=4 {
+            // Header ownership is rejected before the independent value-shape floor.
+            for rule in &rules {
+                let mut index = ScalarBoundaryIndex::default();
+                for captures in rule.regex.captures_iter(&input) {
+                    let capture = rule.span_from_captures(&captures).unwrap();
+                    let decision = scan_field_owned_value_indexed(&input, capture, &mut index);
+                    assert!(decision.rejected, "header owned: {input}: {decision:?}");
+                }
+            }
             let scans: Vec<_> = rules
                 .iter()
                 .flat_map(|rule| rule.scanned_spans(&input, None))
