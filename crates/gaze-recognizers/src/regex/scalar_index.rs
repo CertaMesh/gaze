@@ -152,7 +152,7 @@ impl ScalarBoundaryIndex {
             .json_label_values
             .as_ref()
             .expect("initialized JSON labels");
-        if let Some(span) = enclosing_close
+        if let Some(mut span) = enclosing_close
             .and_then(|close| values.labels.get(&close))
             .or_else(|| values.labels.get(&capture.start))
             .or_else(|| {
@@ -173,6 +173,7 @@ impl ScalarBoundaryIndex {
                 enclosing_key.map(|_| std::iter::once(capture.start..capture.start).collect())
             })
         {
+            span.retain(|span| !span.is_empty());
             let span = if span.is_empty() {
                 std::iter::once(capture.start..capture.start).collect()
             } else {
@@ -2634,6 +2635,8 @@ mod json_label_cells {
                 r#"{"version":2,"id":"SYN731284","value":"SYN731285"}"#,
                 vec!["SYN731284", "SYN731285"],
             ),
+            (r#"["","SYN731284"]"#, vec!["SYN731284"]),
+            (r#"[{"id":""},{"id":"SYN731284"}]"#, vec!["SYN731284"]),
             (r#"{"version":2,"other":"SYN731284"}"#, vec![]),
             (
                 r#"{"type":"string","id":"SYN731284","maxLength":36}"#,
@@ -2657,7 +2660,7 @@ mod json_label_cells {
                 input = serde_json::to_string(&input).unwrap();
             }
         }
-        assert_eq!(checked, 30);
+        assert_eq!(checked, 40);
     }
 
     #[test]
