@@ -530,6 +530,8 @@ fn seeded_html_repeats_preserve_unquoted_attribute_syntax() {
         ("<input data-id=\"C-731284\">", true),
         ("<input data-id='C-731284'>", true),
         (r#"{"note":"<input data-id=C-731284>"}"#, true),
+        (r#""<input title=\"x\" data-id=C-731284>""#, true),
+        (r#"payload={\"note\":\"<input data-id=C-731284>\"}"#, true),
         (r#"FRAME,"<input data-id=C-731284>",FRAME"#, true),
         ("\nSELECT '<input data-id=C-731284>';", true),
     ] {
@@ -568,5 +570,5 @@ fn seeded_html_repeats_preserve_unquoted_attribute_syntax() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 14);
+    assert_eq!(checked, 18);
 }

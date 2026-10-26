@@ -101,6 +101,32 @@ fn data_scalars(text: &str) -> Vec<Range<usize>> {
         .into_iter()
         .filter_map(|(span, key)| (!key).then_some(span))
         .collect();
+    let trimmed = text.trim();
+    if serde_json::from_str::<String>(trimmed).is_ok() {
+        let start = text.len() - text.trim_start().len();
+        data.push(start + 1..start + trimmed.len() - 1);
+    }
+    if text.contains('\\') {
+        let mut view = text.to_owned();
+        let mut source: Vec<_> = (0..text.len()).map(|at| at..at + 1).collect();
+        for _ in 0..32 {
+            let Some((decoded, projection)) = crate::json_regions::unescape_json_fragments(&view)
+            else {
+                break;
+            };
+            source = projection
+                .into_iter()
+                .map(|range| source[range.start].start..source[range.end - 1].end)
+                .collect();
+            view = decoded;
+            let regions = crate::json_regions::json_regions(&view);
+            for (range, key) in crate::json_regions::json_strings(&view, &regions) {
+                if !key && !range.is_empty() {
+                    data.push(source[range.start].start..source[range.end - 1].end);
+                }
+            }
+        }
+    }
     let bytes = text.as_bytes();
     // Closed CSV cells. A quoted cell must start and end at a record delimiter.
     let mut at = 0;
