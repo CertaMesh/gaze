@@ -941,7 +941,7 @@ mod tests {
         async fn invoke(&self, context: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
             Ok(ToolResponse::json(json!({
                 "guess": context.redacted_args()["guess"],
-                "found": "Synthetic Qorvex",
+                "found": "Qorvex Zunvela",
             })))
         }
     }
