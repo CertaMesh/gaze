@@ -117,16 +117,21 @@ only to responses, with any value guessed in the original arguments excluded.
 Calls with `Present` context have a per-call guess budget, independent of the
 record. `HostContextPolicy::default()` allows at most 4,096 argument bytes and
 32 scalar values in each original and recursively decoded JSON view. Keys count
-toward bytes. Both raw and normalized bytes must fit. Dispatch rejects oversized
-arguments with a value-free error before parsing the record or changing session
+toward bytes. Both raw and normalized bytes must fit. Every visited key, scalar
+value and container also counts against an entry cap equal to
+`max_argument_bytes` (4,096 entries by default), including empty keys and
+containers. Dispatch rejects oversized arguments with a value-free error before parsing the record or changing session
 or audit state. Set `PiiEnvelope::with_host_context_policy(HostContextPolicy {
 max_argument_bytes, max_argument_scalars })` to configure these host-owned limits.
 Raising either limit increases the guess budget. `Absent` calls use the ordinary
-MCP operation limits.
+MCP operation limits. Batch lookups above 32 IDs or tool bodies above 4 KB of
+argument text are rejected at the defaults when context is attached.
 
-Exclusion uses the detection pipeline's normalization, Unicode case folding,
-whitespace collapse, and the response matcher's token-boundary rule. Folded matches
-map back to the same normalized, pre-casefold text for boundary checks. A superstring
+Exclusion uses the detection pipeline's normalization and the response matcher's
+token-boundary rule. It follows each recognizer's compilation mode and allowed
+match kinds: Unicode case folding applies to Name records, while exact-only
+fields retain their case and whitespace requirements. Flexible whitespace is
+considered only when that match kind is allowed. Folded matches map back to the same normalized, pre-casefold text for boundary checks. A superstring
 such as `Joanna Lim` does not exclude `Anna Li`. Coverage includes single fields
 and all scalar fields joined in lexicographic key order with empty or space
 separators. Arrays retain index order. It also checks every scalar pair in both
@@ -138,11 +143,16 @@ three or more fields, and other separators can still evade exclusion.
 
 A record-returning lookup tool can still confirm a guess. A correct guess
 excludes the returned record value from private-context detection. A wrong guess
-leaves that value eligible for a token. The residual is bounded by the admitted
-argument bytes and scalar count per call, rather than a fixed number of candidate
-values. Enumeration that fits within that budget remains possible. Repeated calls
-are the host's rate-limit responsibility. Exclusion does not provide general
-resistance to guessing attacks. Ordinary recognizers and existing session mappings
+leaves that value eligible for a token. In addition to guesses contained in the
+admitted argument text and the two full scalar joins, pair joins add up to
+`max_argument_scalars × (max_argument_scalars − 1)` candidates per separator.
+At the defaults, that is 992 pairs per separator and 4,960 pair candidates across
+the five separators in each view. The original and decoded views can differ,
+adding up to 9,920 pair candidates per call. Short numeric fields such as PINs and
+house numbers can therefore be enumerated in a few calls. Lower `max_argument_scalars` for tools that look up
+short numeric records. Enumeration that fits within the budget remains possible.
+Repeated calls are the host's rate-limit responsibility. Exclusion does not
+provide general resistance to guessing attacks. Ordinary recognizers and existing session mappings
 continue to protect their known values.
 
 Only matched response values persist as Rule evidence. Later turns protect those
