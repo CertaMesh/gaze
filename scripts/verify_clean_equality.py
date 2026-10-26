@@ -97,8 +97,18 @@ def main():
     for commit in (args.base_sha, args.candidate_sha):
         if not re.fullmatch(r"[0-9a-f]{40}", commit):
             parser.error("supply full commit SHAs")
+        if subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], cwd=ROOT,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+            parser.error("a supplied commit does not exist in this repository")
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    if args.candidate_sha != head:
+        parser.error("candidate SHA must match this checkout's HEAD")
+    if subprocess.run(["git", "diff", "--quiet", "HEAD"], cwd=ROOT).returncode:
+        parser.error("candidate checkout has uncommitted changes")
     cases = inputs()
     binaries = (args.base_bin.resolve(strict=True), args.candidate_bin.resolve(strict=True))
+    if binaries[0] == binaries[1]:
+        parser.error("supply two independently built binaries")
     differences, exits, detections = [], [dict(), dict()], [0, 0]
     with tempfile.TemporaryDirectory(prefix="gaze-clean-equality-") as cwd:
         for case_id, text in cases:
