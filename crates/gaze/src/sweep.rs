@@ -294,6 +294,7 @@ struct Pattern {
 pub(crate) struct SweepMatcher {
     sources: Vec<SweepSource>,
     derived_exact: Option<DerivedExactMatcher>,
+    allocation_bytes: usize,
     folded: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
     exact: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
 }
@@ -334,9 +335,31 @@ thread_local! {
         source_bytes: 0, pattern_bytes: 0, max_pattern_bytes: 0, matcher_bytes: 0,
         url_scan_bytes: 0, url_queries: 0,
     }) };
+    pub(crate) static SWEEP_ALLOCATION_RECOMPUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 impl SweepMatcher {
+    pub(crate) fn allocation_bytes(&self) -> usize {
+        self.allocation_bytes
+    }
+
+    fn compute_allocation_bytes(&self) -> usize {
+        #[cfg(test)]
+        SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.set(count.get() + 1));
+        let sources = self.sources.capacity() * std::mem::size_of::<SweepSource>()
+            + self
+                .sources
+                .iter()
+                .map(|s| s.family.capacity() + s.raw.capacity() + s.class.class_name().len())
+                .sum::<usize>();
+        let matcher = |value: &Option<(AhoCorasick, Vec<(usize, SweepLink)>)>| {
+            value.as_ref().map_or(0, |(ac, meta)| {
+                ac.memory_usage() + meta.capacity() * std::mem::size_of::<(usize, SweepLink)>()
+            })
+        };
+        std::mem::size_of::<Self>() + sources + matcher(&self.folded) + matcher(&self.exact)
+    }
+
     /// Returns `None` when no source yields a pattern.
     pub(crate) fn build(
         sources: impl IntoIterator<Item = SweepSource>,
@@ -413,12 +436,15 @@ impl SweepMatcher {
                 })
                 .map_err(|_| ManifestSweepError::MatcherBuild)
         };
-        Ok(Some(Self {
+        let mut matcher = Self {
             derived_exact,
             folded: build(|kind| matches!(kind, PatternKind::Folded))?,
             exact: build(|kind| matches!(kind, PatternKind::Exact))?,
             sources,
-        }))
+            allocation_bytes: 0,
+        };
+        matcher.allocation_bytes = matcher.compute_allocation_bytes();
+        Ok(Some(matcher))
     }
 
     /// Every candidate copy in `text` (normalized input), word-bounded and
@@ -2405,6 +2431,40 @@ mod tests {
                 ))
             ),
             "no text may ship when the sweep cannot run: {result:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod record_allocation_tests {
+    use super::*;
+
+    #[test]
+    fn derived_matcher_and_repeat_payloads_are_charged() {
+        let escape = "\\".repeat(2048);
+        let raw = format!(
+            "C-{escape}u0037{escape}u0033{escape}u0031{escape}u0032{escape}u0038{escape}u0034"
+        );
+        let matcher = SweepMatcher::build([SweepSource {
+            family: "counter".into(),
+            class: PiiClass::custom("customer_id").unwrap(),
+            raw: raw.clone(),
+            repeat_seed: Some(RepeatSeed {
+                raw: raw.clone(),
+                kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+            }),
+        }])
+        .unwrap()
+        .unwrap();
+        assert!(matcher.exact.is_none() && matcher.folded.is_none());
+        let derived = matcher
+            .derived_exact
+            .as_ref()
+            .expect("decoded repeat matcher");
+        let minimum = derived.matcher.memory_usage() + raw.len() * 2;
+        assert!(
+            matcher.allocation_bytes() >= minimum,
+            "decoded matcher and both retained raw spellings must be charged"
         );
     }
 }

@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
-    mpsc, Arc,
+    mpsc, Arc, Mutex,
 };
 use std::time::{Duration, Instant};
 
@@ -37,6 +37,7 @@ use gaze::{
 use gaze_audit::SqliteLogger;
 
 mod input;
+mod v2;
 
 const DEFAULT_PROCESS_IDLE_TIMEOUT_SECS: u64 = 1_800;
 const DEFAULT_SESSION_IDLE_TIMEOUT_SECS: u64 = 3_600;
@@ -182,6 +183,7 @@ struct Daemon {
     safety_net_fallback: SafetyNetFallback,
     logger: Arc<DaemonLogger>,
     sessions: HashMap<String, SessionEntry>,
+    v2: v2::Registry,
     lru: VecDeque<String>,
     session_cap: usize,
     session_idle_timeout: Duration,
@@ -234,6 +236,7 @@ impl Daemon {
             safety_net_fallback: args.safety_net_limits.safety_net_fallback,
             logger,
             sessions: HashMap::new(),
+            v2: v2::Registry::new().map_err(|_| CliError::Pipeline)?,
             lru: VecDeque::new(),
             session_cap: args.session_cap,
             session_idle_timeout: Duration::from_secs(args.session_idle_timeout),
@@ -243,6 +246,9 @@ impl Daemon {
     }
 
     fn handle_line(&mut self, line: &str) -> DaemonResponse {
+        if v2::is_v2(line) {
+            return DaemonResponse::V2(self.handle_v2(line));
+        }
         #[cfg(feature = "perf-timers")]
         let _perf = crate::perf::Document::from_env();
         // Keep context opaque so only the shared parser applies its depth and size limits.
@@ -288,6 +294,13 @@ impl Daemon {
                 )
             }
         };
+        if self.v2.contains(&request.session_id) {
+            return DaemonResponse::error_versioned(
+                request.version,
+                "ProtocolInvalid",
+                "invalid daemon request",
+            );
+        }
         let session_id = request.session_id.clone();
         let version = request.version;
         let result = match (request.version, request.op.as_deref()) {
@@ -481,15 +494,7 @@ impl Daemon {
             self.lru.push_back(session_id.to_string());
             return Ok(());
         }
-        while self.sessions.len() >= self.session_cap {
-            if let Some(evicted) = self.lru.pop_front() {
-                if let Some(entry) = self.sessions.remove(&evicted) {
-                    self.log_eviction(&entry, "lru");
-                }
-            } else {
-                break;
-            }
-        }
+        self.make_session_room();
         let session = Session::from_policy(&self.policy).map_err(|_| DaemonError::Invariant)?;
         self.sessions.insert(
             session_id.to_string(),
@@ -503,6 +508,9 @@ impl Daemon {
     }
 
     fn evict_idle_sessions(&mut self) {
+        for session in self.v2.evict_idle(self.session_idle_timeout) {
+            self.log_eviction(&session, "idle_timeout");
+        }
         let now = Instant::now();
         let mut expired = self
             .sessions
@@ -516,15 +524,15 @@ impl Daemon {
         for evicted in expired {
             if let Some(entry) = self.sessions.remove(&evicted) {
                 self.lru.retain(|existing| existing != &evicted);
-                self.log_eviction(&entry, "idle_timeout");
+                self.log_eviction(&entry.session, "idle_timeout");
             }
         }
     }
 
-    fn log_eviction(&self, entry: &SessionEntry, reason: &str) {
-        let audit_session_id = entry.session.audit_session_id();
+    fn log_eviction(&self, session: &Session, reason: &str) {
+        let audit_session_id = session.audit_session_id();
         tracing::warn!(audit_session_id = %audit_session_id, reason = %reason, "gaze daemon evicted session");
-        if let Err(err) = self.logger.log_eviction(&entry.session, reason) {
+        if let Err(err) = self.logger.log_eviction(session, reason) {
             let audit_session_id = serde_json::to_string(audit_session_id)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             let reason = serde_json::to_string(reason)
@@ -625,17 +633,37 @@ struct SessionEntry {
 struct DaemonLogger {
     detections: AtomicU64,
     audit: Option<SqliteLogger>,
+    deferred: Mutex<Option<AuditBuffer>>,
 }
 
 impl DaemonLogger {
     fn new(audit_db: Option<&Path>) -> GazeResult<Self> {
         Ok(Self {
             detections: AtomicU64::new(0),
+            deferred: Mutex::new(None),
             audit: audit_db
                 .map(SqliteLogger::new)
                 .transpose()
                 .map_err(|err| gaze::Error::Sqlite(err.to_string()))?,
         })
+    }
+
+    // Requests execute serially through &mut Daemon. The loaded and context
+    // pipelines share this sink, so a scope covers every synchronous detector.
+    fn defer_redactions(&self, limit: usize) -> Result<DeferredRedactions<'_>, RedactionLogError> {
+        let mut buffer = self.deferred.lock().map_err(|_| audit_buffer_error())?;
+        if buffer.is_some() {
+            return Err(RedactionLogError::Backend(
+                "audit scope already active".into(),
+            ));
+        }
+        *buffer = Some(AuditBuffer {
+            entries: Vec::new(),
+            heap_bytes: 0,
+            limit,
+            exceeded: false,
+        });
+        Ok(DeferredRedactions(self))
     }
 
     fn log_safety_net_report(
@@ -685,8 +713,8 @@ impl DaemonLogger {
     }
 }
 
-impl RedactionLogger for DaemonLogger {
-    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+impl DaemonLogger {
+    fn log_committed(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         let mut entry = entry.clone();
         entry.provenance_stage = Some("daemon".to_string());
         if let Some(audit) = &self.audit {
@@ -701,6 +729,172 @@ impl RedactionLogger for DaemonLogger {
             self.detections.fetch_add(1, Ordering::Relaxed);
         }
         Ok(())
+    }
+}
+
+impl RedactionLogger for DaemonLogger {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        if let Some(buffer) = self
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .as_mut()
+        {
+            buffer.reserve_entry(entry)?;
+            buffer.entries.push(entry.clone());
+            return Ok(());
+        }
+        self.log_committed(entry)
+    }
+}
+
+fn audit_buffer_error() -> RedactionLogError {
+    RedactionLogError::Backend("audit scope unavailable".into())
+}
+
+struct AuditBuffer {
+    entries: Vec<RedactionEntry>,
+    heap_bytes: usize,
+    limit: usize,
+    exceeded: bool,
+}
+
+impl AuditBuffer {
+    fn bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            .saturating_add(
+                self.entries
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<RedactionEntry>()),
+            )
+            .saturating_add(self.heap_bytes)
+    }
+
+    fn reserve_entry(&mut self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        // The serialized metadata includes every nested field. Charge sixteen
+        // times its size for cloned heap members, container and allocator overhead,
+        // in addition to the allocated entry slots. Counting never retains JSON.
+        let mut size = AuditSize(0);
+        if serde_json::to_writer(&mut size, entry).is_err() {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        let heap = size.0.saturating_mul(16);
+        let capacity = if self.entries.len() == self.entries.capacity() {
+            self.entries.capacity().saturating_mul(2).max(4)
+        } else {
+            self.entries.capacity()
+        };
+        let requested = std::mem::size_of::<Self>()
+            .saturating_add(capacity.saturating_mul(std::mem::size_of::<RedactionEntry>()))
+            .saturating_add(self.heap_bytes)
+            .saturating_add(heap);
+        if requested > self.limit {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        if self
+            .entries
+            .try_reserve_exact(capacity - self.entries.len())
+            .is_err()
+        {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        self.heap_bytes = self.heap_bytes.saturating_add(heap);
+        Ok(())
+    }
+}
+
+struct AuditSize(usize);
+impl Write for AuditSize {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0 = self.0.saturating_add(bytes.len());
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn audit_capacity_error() -> RedactionLogError {
+    RedactionLogError::Backend("audit capacity".into())
+}
+
+struct DeferredRedactions<'a>(&'a DaemonLogger);
+
+impl DeferredRedactions<'_> {
+    fn bytes(&self) -> Result<usize, RedactionLogError> {
+        Ok(self
+            .0
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .as_ref()
+            .expect("active audit scope")
+            .bytes())
+    }
+
+    fn capacity_exceeded(&self) -> bool {
+        self.0.deferred.lock().map_or(true, |slot| {
+            slot.as_ref().is_some_and(|buffer| buffer.exceeded)
+        })
+    }
+
+    fn reset_pass(&self) -> Result<(), RedactionLogError> {
+        let mut slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        let buffer = slot.as_mut().expect("active audit scope");
+        buffer.entries.clear();
+        buffer.heap_bytes = 0;
+        buffer.exceeded = false;
+        Ok(())
+    }
+
+    fn flush(self, reports: &[LeakReport], session_id: String) -> Result<(), RedactionLogError> {
+        let mut entries = self
+            .0
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .take()
+            .expect("active audit scope")
+            .entries;
+        for entry in &mut entries {
+            entry.provenance_stage = Some("daemon".to_string());
+        }
+        if let Some(audit) = &self.0.audit {
+            audit
+                .log_batch(
+                    &entries,
+                    reports,
+                    DocumentKind::Text,
+                    chrono::Utc::now().timestamp_millis(),
+                    Some(session_id),
+                )
+                .map_err(|err| RedactionLogError::Sqlite(err.to_string()))?;
+        }
+        let detections = entries
+            .iter()
+            .filter(|entry| {
+                !entry.conflict_loser
+                    && entry.document_kind == DocumentKind::Text
+                    && entry.action != Action::Preserve
+            })
+            .count();
+        self.0
+            .detections
+            .fetch_add(detections as u64, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+impl Drop for DeferredRedactions<'_> {
+    fn drop(&mut self) {
+        self.0
+            .deferred
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
     }
 }
 
@@ -727,6 +921,7 @@ impl<'de> Deserialize<'de> for RequestContext {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum DaemonResponse {
+    V2(Box<serde_json::value::RawValue>),
     Clean {
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<u32>,

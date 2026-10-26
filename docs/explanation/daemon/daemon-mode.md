@@ -145,3 +145,8 @@ are opaque audit IDs, separate from token session hexes.
 
 - [Daemon adapter quickstart](../../how-to/daemon/run-daemon.md)
 - [`gaze daemon` flags](../../reference/cli.md#gaze-daemon)
+
+## Complete inventories
+
+For opt-in atomic conversation protection, see the
+[daemon v2 Text profile](../../reference/daemon-text-blocks-v1.md).
