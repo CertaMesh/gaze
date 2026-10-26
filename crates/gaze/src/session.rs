@@ -5314,21 +5314,22 @@ mod repeat_query_purity_tests {
             .unwrap();
         let class = PiiClass::Custom("synthetic_identifier".into());
         for index in 0..1024 {
-            let raw = format!("synthetic-record-{index}");
+            let raw = format!(r"synthetic-record-\u0030-{index}");
             let spelling = if index % 4 < 2 {
                 SourceSpelling::JsonEscaped
             } else {
                 SourceSpelling::Plain
             };
-            if index % 2 == 0 {
+            let token = if index % 2 == 0 {
                 transaction
                     .tokenize_spelled("synthetic", &class, &raw, spelling)
-                    .unwrap();
+                    .unwrap()
             } else {
                 transaction
                     .format_preserving_fake_spelled(&class, &raw, spelling)
-                    .unwrap();
-            }
+                    .unwrap()
+            };
+            assert_eq!(transaction.source_spelling(&token), Some(spelling));
             let recomputes = MANIFEST_FULL_RECOMPUTES.with(|count| count.get());
             assert_eq!(
                 transaction.manifest_allocation_bytes(),
@@ -5366,7 +5367,7 @@ mod repeat_query_purity_tests {
                 DEFAULT_COUNTER_FAMILY
             };
             transaction
-                .reserve_mapping(family, &class, &format!("synthetic-record-{index}"))
+                .reserve_mapping(family, &class, &format!(r"synthetic-record-\u0030-{index}"))
                 .unwrap();
         }
         assert_eq!(TOKEN_KEY_HASHES.with(|count| count.get()), 1024);
@@ -5380,7 +5381,7 @@ mod repeat_query_purity_tests {
             transaction.record_evidence(
                 Some(family),
                 &class,
-                &format!("synthetic-record-{index}"),
+                &format!(r"synthetic-record-\u0030-{index}"),
                 ManifestEvidence::Pattern,
             );
         }
@@ -5391,7 +5392,7 @@ mod repeat_query_purity_tests {
             } else {
                 DEFAULT_COUNTER_FAMILY
             };
-            let raw = format!("synthetic-record-{index}");
+            let raw = format!(r"synthetic-record-\u0030-{index}");
             transaction
                 .tokenize_with_family(family, &class, &raw)
                 .unwrap();
