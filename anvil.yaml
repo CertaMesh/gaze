@@ -123,4 +123,4 @@ checks:
     inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/gate/mcp-host-context-mutation-probe.py, anvil.yaml]
     toolchain: *rust-tools
     commands:
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/mcp-host-context-mutation-probe.py --run --probe normalization-drift --probe split-argument-echo --probe argument-budget --probe argument-scalars --probe guess-boundaries --probe folded-boundary-view --probe guess-whitespace
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/mcp-host-context-mutation-probe.py --run --probe normalization-drift --probe split-argument-echo --probe argument-budget --probe argument-scalars --probe argument-entries --probe guess-preparation --probe guess-case-mode --probe guess-allowed-kinds --probe guess-boundaries --probe folded-boundary-view --probe guess-whitespace

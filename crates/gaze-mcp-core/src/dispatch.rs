@@ -267,7 +267,7 @@ impl<'a> PiiEnvelope<'a> {
             };
             argument_guess_material(args, self.host_context_policy)?
         } else {
-            Vec::new()
+            ArgumentGuessMaterial::default()
         };
 
         // Static policy aliases let matched private custom classes remain protected
@@ -312,16 +312,7 @@ impl<'a> PiiEnvelope<'a> {
                 &gaze::LocaleChain::from(self.locale_chain),
             )
             .map_err(|_| crate::HostContextError::Policy)?;
-            for dictionary in context.dictionaries.values_mut() {
-                dictionary.terms.retain(|term| {
-                    !argument_text.iter().any(|text| {
-                        crate::host_context::contains_guess(text, std::slice::from_ref(term))
-                    })
-                });
-            }
-            context
-                .dictionaries
-                .retain(|_, dictionary| !dictionary.terms.is_empty());
+            exclude_argument_guesses(context, &argument_text)?;
             let dictionaries = gaze::DictionaryBundle::merge(
                 self.dictionaries.clone(),
                 gaze::dictionary_bundle_from_context(context),
@@ -529,73 +520,150 @@ impl<'a> PiiEnvelope<'a> {
     }
 }
 
+#[derive(Default)]
+struct ArgumentGuessMaterial {
+    texts: Vec<gaze_recognizers::RecordGuessText>,
+    scalars: Vec<Vec<usize>>,
+}
+
 fn argument_guess_material(
     args: &serde_json::Value,
     policy: crate::HostContextPolicy,
-) -> Result<Vec<String>, crate::HostContextError> {
-    let mut argument_text = Vec::new();
+) -> Result<ArgumentGuessMaterial, crate::HostContextError> {
+    let mut material = ArgumentGuessMaterial::default();
+    let mut interned = std::collections::HashMap::<String, usize>::new();
     for decode_json in [false, true] {
-        let mut argument_scalars = Vec::new();
+        let mut scalars = Vec::new();
         let mut raw_bytes = 0usize;
         let mut normalized_bytes = 0usize;
-        visit_argument_text(args, decode_json, &mut |text, is_scalar| {
+        let mut entries = 0usize;
+        visit_argument_text(args, decode_json, &mut |entry| {
+            entries = entries
+                .checked_add(1)
+                .filter(|size| *size <= policy.max_argument_bytes)
+                .ok_or(crate::HostContextError::ArgumentLimit)?;
+            let Some((text, is_scalar)) = entry else {
+                return Ok(());
+            };
             raw_bytes = raw_bytes
                 .checked_add(text.len())
                 .filter(|size| *size <= policy.max_argument_bytes)
                 .ok_or(crate::HostContextError::ArgumentLimit)?;
-            let normalized = gaze_recognizers::normalize_record_guess(text);
+            let index = *interned.entry(text.to_owned()).or_insert_with(|| {
+                let index = material.texts.len();
+                material
+                    .texts
+                    .push(gaze_recognizers::RecordGuessText::new(text));
+                index
+            });
             normalized_bytes = normalized_bytes
-                .checked_add(normalized.len())
+                .checked_add(material.texts[index].budget_bytes())
                 .filter(|size| *size <= policy.max_argument_bytes)
                 .ok_or(crate::HostContextError::ArgumentLimit)?;
             if is_scalar {
-                if argument_scalars.len() >= policy.max_argument_scalars {
+                if scalars.len() >= policy.max_argument_scalars {
                     return Err(crate::HostContextError::ArgumentLimit);
                 }
-                argument_scalars.push(text.to_owned());
+                scalars.push(index);
             }
-            argument_text.push(text.to_owned());
             Ok(())
         })?;
-        // Keys and JSON wrappers must not interrupt joined scalar values.
-        // Check both original strings and decoded JSON leaves.
-        argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);
-        // A bounded scalar set also covers schema order and interleaved fields.
-        for (left_index, left) in argument_scalars.iter().enumerate() {
-            for (right_index, right) in argument_scalars.iter().enumerate() {
+        material.scalars.push(scalars);
+    }
+    Ok(material)
+}
+
+fn exclude_argument_guesses(
+    context: &mut gaze::Context,
+    material: &ArgumentGuessMaterial,
+) -> Result<(), crate::HostContextError> {
+    use gaze_recognizers::{RecordGuessMatcher, RecordGuessMode, RecordGuessTerm, RecordGuessText};
+    let mut keys = Vec::new();
+    let mut terms = Vec::new();
+    for (name, dictionary) in &context.dictionaries {
+        for term in &dictionary.terms {
+            let mode = if name.starts_with(gaze::RECORD_DICTIONARY_PREFIX) {
+                let class = context
+                    .class_map
+                    .get(name)
+                    .ok_or(crate::HostContextError::Policy)?;
+                RecordGuessMode::Record {
+                    class: class.clone(),
+                    allowed_kinds: context.record_allowed_match_kinds(class, term),
+                }
+            } else {
+                RecordGuessMode::Dictionary {
+                    case_sensitive: dictionary.case_sensitive,
+                }
+            };
+            keys.push((name, term));
+            terms.push(RecordGuessTerm { value: term, mode });
+        }
+    }
+    let mut matcher =
+        RecordGuessMatcher::new(terms).map_err(|_| crate::HostContextError::Policy)?;
+    for text in &material.texts {
+        matcher.check(text);
+    }
+    let separators = ["", " ", "@", "-", "/"].map(RecordGuessText::new);
+    for scalars in &material.scalars {
+        let texts = scalars
+            .iter()
+            .map(|index| &material.texts[*index])
+            .collect::<Vec<_>>();
+        for separator in &separators[..2] {
+            matcher.check_join(&texts, separator);
+        }
+        for (left_index, left) in texts.iter().enumerate() {
+            for (right_index, right) in texts.iter().enumerate() {
                 if left_index != right_index {
-                    for separator in ["", " ", "@", "-", "/"] {
-                        argument_text.push(format!("{left}{separator}{right}"));
+                    for separator in &separators {
+                        matcher.check_pair(left, separator, right);
                     }
                 }
             }
         }
     }
-    Ok(argument_text)
+    let excluded = keys
+        .into_iter()
+        .zip(matcher.matches())
+        .filter(|(_, matched)| **matched)
+        .map(|((name, term), _)| ((name.clone(), term.clone()), ()))
+        .collect::<std::collections::HashMap<_, _>>();
+    drop(matcher);
+    for (name, dictionary) in &mut context.dictionaries {
+        dictionary
+            .terms
+            .retain(|term| !excluded.contains_key(&(name.clone(), term.clone())));
+    }
+    context
+        .dictionaries
+        .retain(|_, dictionary| !dictionary.terms.is_empty());
+    Ok(())
 }
 
 fn visit_argument_text(
     value: &serde_json::Value,
     decode_json: bool,
-    visit: &mut impl FnMut(&str, bool) -> Result<(), crate::HostContextError>,
+    visit: &mut impl FnMut(Option<(&str, bool)>) -> Result<(), crate::HostContextError>,
 ) -> Result<(), crate::HostContextError> {
     fn text(
         value: &str,
         is_scalar: bool,
         remaining: &mut usize,
-        visit: &mut impl FnMut(&str, bool) -> Result<(), crate::HostContextError>,
+        visit: &mut impl FnMut(Option<(&str, bool)>) -> Result<(), crate::HostContextError>,
     ) -> Result<(), crate::HostContextError> {
         *remaining = remaining
             .checked_sub(value.len())
             .ok_or(crate::HostContextError::Invalid)?;
-        visit(value, is_scalar)
+        visit(Some((value, is_scalar)))
     }
     fn walk(
         value: &serde_json::Value,
         depth: usize,
         decode_json: bool,
         remaining: &mut usize,
-        visit: &mut impl FnMut(&str, bool) -> Result<(), crate::HostContextError>,
+        visit: &mut impl FnMut(Option<(&str, bool)>) -> Result<(), crate::HostContextError>,
     ) -> Result<(), crate::HostContextError> {
         if depth > 128 {
             return Err(crate::HostContextError::Invalid);
@@ -611,11 +679,13 @@ fn visit_argument_text(
                 }
             }
             serde_json::Value::Array(values) => {
+                visit(None)?;
                 for value in values {
                     walk(value, depth + 1, decode_json, remaining, visit)?;
                 }
             }
             serde_json::Value::Object(values) => {
+                visit(None)?;
                 for (key, value) in values {
                     text(key, false, remaining, visit)?;
                     walk(value, depth + 1, decode_json, remaining, visit)?;
@@ -824,6 +894,26 @@ mod tests {
     use super::*;
     use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, RawDocument};
     use serde_json::json;
+
+    #[test]
+    fn host_argument_entry_budget_counts_every_structural_entry_and_empty_key() {
+        let policy = crate::HostContextPolicy {
+            max_argument_bytes: 8,
+            max_argument_scalars: 2,
+        };
+        for (args, admitted) in [
+            (json!([[], [], [], [], [], [], []]), true),
+            (json!([[], [], [], [], [], [], [], []]), false),
+            (json!([{"":[]}, {"":[]}]), true),
+            (json!([{"":[]}, {"":[]}, {"":[]}]), false),
+        ] {
+            assert_eq!(
+                super::argument_guess_material(&args, policy).is_ok(),
+                admitted,
+                "{args}"
+            );
+        }
+    }
 
     #[derive(Clone)]
     struct FixedDetector;

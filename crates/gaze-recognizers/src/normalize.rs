@@ -12,6 +12,11 @@ pub struct NormalizedText {
 
 /// Fold Unicode spaces and fullwidth ASCII, remove joiners, and apply per-scalar NFC.
 pub fn normalize(input: &str) -> NormalizedText {
+    #[cfg(test)]
+    crate::record_guess::WORK.with(|count| {
+        let (normalize, fold) = count.get();
+        count.set((normalize + 1, fold));
+    });
     let mut text = String::new();
     let mut spans = Vec::new();
 

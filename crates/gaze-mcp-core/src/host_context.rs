@@ -42,10 +42,13 @@ impl fmt::Debug for HostContextSelection {
 
 /// Host-owned per-call guess budget. Never derive these limits from a record.
 /// Each original/decoded argument view must fit both raw and normalized byte
-/// limits, including keys, and the scalar limit. Defaults suit small lookup tools.
+/// limits, including keys, and the scalar limit. Every visited key, value or
+/// container also consumes one entry, capped by `max_argument_bytes` per view.
+/// Defaults suit small lookup tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HostContextPolicy {
     /// Maximum aggregate bytes per view, before and after normalization.
+    /// Also caps visited entries (keys, scalar values and containers) per view.
     pub max_argument_bytes: usize,
     /// Maximum scalar values per view, including decoded JSON leaves.
     pub max_argument_scalars: usize,
@@ -227,13 +230,6 @@ pub(crate) fn opaque_context(
     context.fields.clear();
     context.record_value_rejections.clear();
     Ok(policy)
-}
-
-/// Guess exclusion shares response normalization and token boundaries, without cues.
-pub(crate) fn contains_guess(text: &str, terms: &[String]) -> bool {
-    terms
-        .iter()
-        .any(|term| gaze_recognizers::contains_record_guess(text, term))
 }
 
 #[cfg(test)]

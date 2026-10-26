@@ -1287,7 +1287,11 @@ async fn host_context_collapsed_whitespace_guess_has_no_membership_oracle() {
         for name in [KNOWN, UNUSED] {
             let session = Session::new(Scope::Ephemeral).unwrap();
             let args = json!({"guess":format!("Synthetic{gap}Qorvex")});
-            let out = call(&session, args, Some(json!(KNOWN)), raw_context(name))
+            let selection = HostContextSelection::present(json!({
+                "record":{"name":name},
+                "record_match_kinds":{"name_multi":["exact", "whitespace_flexible", "whitespace_case_folded"]}
+            }).to_string());
+            let out = call(&session, args, Some(json!(KNOWN)), selection)
                 .await
                 .unwrap();
             assert_eq!(out.payload, json!(KNOWN));

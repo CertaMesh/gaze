@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = "crates/gaze-mcp-core/src/dispatch.rs"
 PRIVATE = "crates/gaze-mcp-core/src/host_context.rs"
 DICTIONARY = "crates/gaze-recognizers/src/dictionary.rs"
+GUESS = "crates/gaze-recognizers/src/record_guess.rs"
 FRONTEND = "crates/gaze-mcp-rmcp/src/frontend.rs"
 RAW = "crates/gaze/src/context.rs"
 SESSION = "crates/gaze/src/session.rs"
@@ -32,15 +33,13 @@ def replace(source, old, new):
 
 
 def without_exclusions(source):
-    start = source.index("            for dictionary in context.dictionaries.values_mut() {")
-    end = source.index("            let dictionaries = gaze::DictionaryBundle::merge(", start)
-    return source[:start] + source[end:]
+    return replace(source, "            exclude_argument_guesses(context, &argument_text)?;", "")
 
 
 def without_joined_guesses(source):
-    start = source.index('        argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);')
-    end = source.index('    Ok(argument_text)', start)
-    return source[:start] + '    }\n' + source[end:]
+    start = source.index("    for scalars in &material.scalars {")
+    end = source.index("    let excluded = ", start)
+    return source[:start] + source[end:]
 
 
 def replace_opaque_name(source, body):
@@ -80,10 +79,10 @@ def ignore_http(source):
 
 
 PROBES = [
-    ("normalization-drift", DICTIONARY,
+    ("normalization-drift", GUESS,
      lambda source: replace(source,
-                            "    let view = crate::normalize::normalize(input);",
-                            "    let view = crate::normalize::NormalizedText { text: input.to_owned(), spans: Vec::new() };"),
+                            "Self::from_normalized(crate::normalize::normalize(value).text)",
+                            "Self::from_normalized(value.to_owned())"),
      CONTRACT + ["host_context_normalized_echo_has_no_membership_oracle_or_promotion"],
      "host_context::host_context_normalized_echo_has_no_membership_oracle_or_promotion"),
     ("split-argument-echo", CORE, without_joined_guesses,
@@ -97,26 +96,47 @@ PROBES = [
      "host_context::host_context_enumeration_rejected_before_record_processing"),
     ("argument-scalars", CORE,
      lambda source: replace(source,
-                            "if argument_scalars.len() >= policy.max_argument_scalars {",
-                            "if argument_scalars.len() >= usize::MAX {"),
+                            "if scalars.len() >= policy.max_argument_scalars {",
+                            "if scalars.len() >= usize::MAX {"),
      CONTRACT + ["host_context_argument_budget_counts_bytes_scalars_and_decoded_views"],
      "host_context::host_context_argument_budget_counts_bytes_scalars_and_decoded_views"),
-    ("guess-boundaries", DICTIONARY,
+    ("argument-entries", CORE,
      lambda source: replace(source,
-                            "&& is_token_boundary_match(&view.text, raw_start, raw_end)",
-                            "&& true"),
+                            "entries = entries\n                .checked_add(1)\n                .filter(|size| *size <= policy.max_argument_bytes)",
+                            "entries = entries\n                .checked_add(1)\n                .filter(|size| *size <= usize::MAX)"),
+     CONTRACT + ["host_context_zero_byte_entries_rejected_before_record_processing"],
+     "host_context::host_context_zero_byte_entries_rejected_before_record_processing"),
+    ("guess-preparation", GUESS,
+     lambda source: replace(source,
+                            "        self.scan(&[left, separator, right], true);",
+                            "        let _ = RecordGuessText::new(&left.normalized);\n        self.scan(&[left, separator, right], true);"),
+     ["cargo", "test", "-p", "gaze-recognizers", "--lib", "record_guess::tests::record_guess_preparation_is_independent_of_terms_and_pairs", "--", "--exact"],
+     "record_guess::tests::record_guess_preparation_is_independent_of_terms_and_pairs"),
+    ("guess-case-mode", GUESS,
+     lambda source: replace(source,
+                            "compiled_match && allowed_kinds.contains(&kind)", "true"),
+     CONTRACT + ["host_context_exact_guess_does_not_disclose_case_or_whitespace"],
+     "host_context::host_context_exact_guess_does_not_disclose_case_or_whitespace"),
+    ("guess-allowed-kinds", GUESS,
+     lambda source: replace(source,
+                            "compiled_match && allowed_kinds.contains(&kind)", "compiled_match"),
+     ["cargo", "test", "-p", "gaze-recognizers", "--lib", "record_guess::tests::record_guess_allowed_kinds_and_compilation_modes_are_independent", "--", "--exact"],
+     "record_guess::tests::record_guess_allowed_kinds_and_compilation_modes_are_independent"),
+    ("guess-boundaries", GUESS,
+     lambda source: replace(source,
+                            "token_boundary(parts, start, end) && self.accepts(pattern, parts, start, end)",
+                            "true && self.accepts(pattern, parts, start, end)"),
      CONTRACT + ["host_context_substring_guess_keeps_unguessed_record_protected"],
      "host_context::host_context_substring_guess_keeps_unguessed_record_protected"),
-    ("folded-boundary-view", DICTIONARY,
+    ("folded-boundary-view", GUESS,
      lambda source: replace(source,
-                            "is_token_boundary_match(&view.text, raw_start, raw_end)",
-                            "is_token_boundary_match(&folded, start, start + term.len())"),
+                            "part.normalized.as_str()", "part.folded.as_str()"),
      CONTRACT + ["host_context_substring_guess_keeps_unguessed_record_protected"],
      "host_context::host_context_substring_guess_keeps_unguessed_record_protected"),
-    ("guess-whitespace", DICTIONARY,
+    ("guess-whitespace", GUESS,
      lambda source: replace(source,
-                            "    let (folded, starts, ends) = fold_with_original_offsets(&view.text, true, Some(usize::MAX));",
-                            "    let (folded, starts, ends) = fold_with_original_offsets(&view.text, true, Some(MAX_RECORD_MATCH_WHITESPACE_RUN));"),
+                            "if whitespace_count == 1 {",
+                            "if whitespace_count == 1 || whitespace_count == 33 {"),
      CONTRACT + ["host_context_collapsed_whitespace_guess_has_no_membership_oracle"],
      "host_context::host_context_collapsed_whitespace_guess_has_no_membership_oracle"),
     ("drop-present", CORE,
