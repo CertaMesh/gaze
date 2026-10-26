@@ -1426,7 +1426,13 @@ mod tests {
             "customer_id: 731284",
             r#"{"customerId":"731284"}"#,
         ] {
-            for prefix in ["", "TV 55\" screen ", "path C:\\\" ", "msg \"oops "] {
+            for prefix in [
+                "",
+                "payload=",
+                "TV 55\" screen ",
+                "path C:\\\" ",
+                "msg \"oops ",
+            ] {
                 for body in [
                     r#"{"731284":true,"n":731284,"a":[731284,null,false],"copy":"731284"}"#,
                     r#"{"Customer ID:":"C-731284"}"#,
@@ -1502,7 +1508,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(checked, 480);
+        assert_eq!(checked, 600);
     }
 
     #[cfg(feature = "bundled-recognizers")]

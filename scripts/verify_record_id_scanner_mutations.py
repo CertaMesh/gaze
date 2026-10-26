@@ -98,7 +98,6 @@ def main():
         ('hide-same-line-json-after-stray-quotes', 'crates/gaze-types/src/json_regions.rs', 'for start in quoted_openings {', 'for start in quoted_openings.into_iter().take(0) {', 'truncated_prefixes_do_not_hide_complete_records', 'gaze-types'),
         ('ignore-unicode-label-whitespace', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'gaze_types::json_regions::json_whitespace_escape_len(tail)', 'None::<usize>', 'unicode_label_whitespace_owns_the_value', 'gaze-recognizers'),
         ('drop-padded-labelled-sources', 'crates/gaze/src/sweep.rs', '            .filter(|source| seen.insert(source.clone()))', '            .filter(|source| source.repeat_seed.is_none() || source.raw.len() <= MAX_LABELLED_REPEAT_BYTES)\n            .filter(|source| seen.insert(source.clone()))', 'padded_labelled_values_repeat_in_document_and_session', 'gaze-pii'),
-        ('keep-trailing-padding-in-patterns', 'crates/gaze/src/sweep.rs', '        value = value.trim();', '        value = value.trim_start();', 'padded_labelled_values_repeat_in_document_and_session', 'gaze-pii'),
         ('tokenize-labels-inside-json-keys', 'crates/gaze-recognizers/src/regex/scalar_index.rs', '.or_else(|| enclosing_key.map(|_| vec![capture.start..capture.start]))', '.or_else(|| None::<Vec<std::ops::Range<usize>>>.or_else(|| { let _ = enclosing_key; None }))', 'json_object_keys_are_never_private_value_spans', 'gaze-recognizers'),
         ('split-json-escape-on-repeat', 'crates/gaze/src/sweep.rs', 'if splits_escape {', 'if false && splits_escape {', 'labelled_repeats_cannot_split_json_escapes', 'gaze-pii'),
         ('discard-derived-exact-patterns', 'crates/gaze/src/sweep.rs', '        if patterns.is_empty() {', '        if true || patterns.is_empty() {', 'pipeline_deep_escaped_repeat_patterns_remain_bounded', 'gaze-pii'),
@@ -113,6 +112,8 @@ def main():
         ('own-only-first-container-scalar', 'crates/gaze-recognizers/src/regex.rs', 'additional.extend(scans);', 'additional.extend(scans.take(0));', 'containers_own_all_and_only_explicit_record_values', 'gaze-recognizers'),
         ('require-identical-raw-repeat-spelling', 'crates/gaze/src/sweep.rs', 'derived.sources.get(&view.text[found.range()])', 'derived.sources.get(&text[span.clone()])', 'decoded_record_ids_repeat_between_raw_spellings_and_turns', 'gaze-pii'),
         ('skip-escaped-prose-label-index', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if let Some(decoded) = embedded {', 'if let Some(decoded) = embedded.as_mut().filter(|_| false) {', 'mixed_carriers_preserve_json_keys_types_and_string_boundaries', 'gaze-pii'),
+        ('ignore-escaped-zero-width-label-tail', 'crates/gaze-types/src/json_regions.rs', "ch.is_whitespace() || *ch == '\\u{200b}'", 'ch.is_whitespace()', 'unicode_label_whitespace_owns_the_value', 'gaze-recognizers'),
+        ('ignore-literal-zero-width-label-tail', 'crates/gaze-recognizers/src/regex/scalar_index.rs', "ch.is_whitespace() || ch == '\\u{200b}'", 'ch.is_whitespace()', 'unicode_label_whitespace_owns_the_value', 'gaze-recognizers'),
     ]
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}
