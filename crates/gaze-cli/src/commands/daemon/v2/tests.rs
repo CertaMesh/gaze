@@ -1502,3 +1502,62 @@ fn deferred_logger_refuses_before_collecting_out_of_budget_entries() {
     assert_eq!(audit_rows(&path, "redaction_log"), 0);
     assert_eq!(d.logger.detections.load(Ordering::Relaxed), 0);
 }
+
+#[test]
+fn transaction_manifest_budget_reserves_other_sessions_and_live_state() {
+    let limits = Limits {
+        session_manifest_bytes: 32_000,
+        global_manifest_bytes: 128_000,
+        ..Limits::default()
+    };
+    assert_eq!(transaction_manifest_limit(limits, 120_000, 2_000), 6_000);
+    assert_eq!(transaction_manifest_limit(limits, 20_000, 2_000), 32_000);
+    assert_eq!(transaction_manifest_limit(limits, 127_000, 2_000), 0);
+    assert_eq!(transaction_manifest_limit(limits, usize::MAX, 2_000), 0);
+    assert_eq!(transaction_manifest_limit(limits, 1, usize::MAX), 0);
+}
+
+struct AttemptLogger(Arc<AtomicU64>);
+impl RedactionLogger for AttemptLogger {
+    fn log(&self, entry: &RedactionEntry) -> std::result::Result<(), RedactionLogError> {
+        if !entry.conflict_loser && entry.action == Action::Tokenize {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn global_manifest_budget_refuses_inside_a_block_before_mapping_allocation() {
+    let mut d = daemon();
+    open(&mut d, "other");
+    d.v2.sessions["other"]
+        .session
+        .tokenize(&PiiClass::Name, "Synthetic Exampleton")
+        .unwrap();
+    let opened = open(&mut d, "blocks");
+    let other = d.v2.bytes_except("blocks").1;
+    let live = d.v2.sessions["blocks"].session.manifest_allocation_bytes();
+    let attempts = Arc::new(AtomicU64::new(0));
+    d.pipeline = d
+        .pipeline
+        .clone()
+        .with_redaction_logger(AttemptLogger(Arc::clone(&attempts)));
+    d.v2.limits.global_manifest_bytes = other + live * 2 + 1024;
+    let request = clean_request(
+        &opened,
+        vec![block("leaf-a", "alice@example.invalid bob@example.invalid")],
+    );
+    assert_error(&send(&mut d, request.clone()), "CacheCapacity");
+    assert_eq!(
+        attempts.load(Ordering::Relaxed),
+        1,
+        "the first mapping reservation must refuse before processing the second mapping in this block"
+    );
+    let current = &d.v2.sessions["blocks"];
+    assert_eq!(current.next_seq, 1);
+    assert!(current.blocks.is_empty());
+    assert!(current.session.snapshot_entries().is_empty());
+    d.v2.limits.global_manifest_bytes = Limits::default().global_manifest_bytes;
+    assert_eq!(send(&mut d, request)["op"], "clean_blocks");
+}

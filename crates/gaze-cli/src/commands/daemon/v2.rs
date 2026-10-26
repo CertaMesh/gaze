@@ -783,7 +783,11 @@ impl Daemon {
         )?;
         let mut transaction = live.session.begin_transaction();
         transaction
-            .set_manifest_byte_limit(limits.session_manifest_bytes)
+            .set_manifest_byte_limit(transaction_manifest_limit(
+                limits,
+                other_manifests,
+                live.session.manifest_allocation_bytes(),
+            ))
             .map_err(|_| Failure::CacheCapacity)?;
         transaction.enable_deterministic_sweep();
         let initial = transaction.semantic_revision();
@@ -1283,6 +1287,19 @@ fn result_bytes(results: &[BlockResult]) -> usize {
                 })
                 .sum::<usize>(),
         )
+}
+
+fn transaction_manifest_limit(
+    limits: Limits,
+    other_manifests: usize,
+    live_manifest: usize,
+) -> usize {
+    limits.session_manifest_bytes.min(
+        limits
+            .global_manifest_bytes
+            .saturating_sub(other_manifests)
+            .saturating_sub(live_manifest),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
