@@ -26,6 +26,9 @@ fn record_value_shape_preserves_carrier_syntax() {
         "{L}:&#160;{V}",
         "{L}:&quot;{V}&quot;",
         "<field name=\"{L}\" value=\"{V}\"/>",
+        "\"{L}\" value=\"{V}\"",
+        "\"{L}\" value=",
+        "{L} = value=\"{V}\"",
         "<input name=\"{L}\" value=\"{V}\">",
         "<input {L}={V}>",
         "<input\n {L}={V}>",
@@ -83,7 +86,7 @@ fn record_value_shape_preserves_carrier_syntax() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 304);
+    assert_eq!(checked, 328);
     let mut placeholders = 0;
     for label in labels {
         for value in [

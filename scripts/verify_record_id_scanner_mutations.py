@@ -124,10 +124,12 @@ def main():
         ('drop-grouped-ids', 'crates/gaze-recognizers/src/regex.rs', '        let grouping = input', '        let grouping = false && input', 'owned_identifier_relaxations_preserve_covered_shapes', 'gaze-pii'),
         ('let-unterminated-quotes-cross-lines', 'crates/gaze-recognizers/src/regex.rs', 'uncertain_scalar_end(input, start, enclosing.end)', 'enclosing.end', 'unterminated_id_quotes_never_own_next_line_syntax', 'gaze-pii'),
         ('block-whole-id-on-key-looking-content', 'crates/gaze/src/sweep.rs', 'atom.start <= span.start && span.end <= atom.end', 'atom.start < span.end', 'lexical_sweep_keeps_whole_private_values_with_key_looking_content', 'gaze-pii'),
-        ('drop-digit-free-base64-ids', 'crates/gaze-recognizers/src/regex.rs', '    let base64 = (!in_markup_tag || scan.quoted_value)\n        && padded_base64_identifier(body, &input[scan.span.end..]);', '    let base64 = false;', 'base64_record_ids_keep_padding_without_owning_operators', 'gaze-pii'),
+        ('drop-digit-free-base64-ids', 'crates/gaze-recognizers/src/regex.rs', '    let base64 = base64_context', '    let base64 = false && base64_context', 'base64_record_ids_keep_padding_without_owning_operators', 'gaze-pii'),
         ('allow-unquoted-html-value-emission', 'crates/gaze-recognizers/src/regex.rs', '        || (in_markup_tag && !scan.quoted_value)', '        || false', 'record_value_shape_preserves_carrier_syntax', 'gaze-pii'),
         ('allow-unquoted-html-repeat-emission', 'crates/gaze/src/sweep.rs', '        if self.markup.blocks_repeat(span) {', '        if false && self.markup.blocks_repeat(span) {', 'seeded_html_repeats_preserve_unquoted_attribute_syntax', 'gaze-pii'),
         ('drop-decoded-markup-data-context', 'crates/gaze-types/src/markup_regions.rs', '        for _ in 0..32 {', '        for _ in 0..0 {', 'seeded_html_repeats_preserve_unquoted_attribute_syntax', 'gaze-pii'),
+        ('allow-digit-free-space-only-base64', 'crates/gaze-recognizers/src/regex.rs', '    let base64_context = scan.quoted_value', '    let base64_context = true || scan.quoted_value', 'record_value_shape_preserves_carrier_syntax', 'gaze-pii'),
+        ('allow-opening-quote-after-bare-base64', 'crates/gaze-recognizers/src/regex.rs', "quote_end_allowed && matches!(ch, '\"' | '\\'')", "true && matches!(ch, '\"' | '\\'')", 'record_value_shape_preserves_carrier_syntax', 'gaze-pii'),
     ]
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}
