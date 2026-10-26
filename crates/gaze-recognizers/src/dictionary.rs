@@ -223,7 +223,8 @@ impl Recognizer for DictionaryRecognizer {
             let (folded, starts, ends) = fold_with_original_offsets(
                 input,
                 self.unicode_case_insensitive,
-                self.record_matching,
+                self.record_matching
+                    .then_some(MAX_RECORD_MATCH_WHITESPACE_RUN),
             );
             let hits = self
                 .automaton_for(entry)
@@ -349,15 +350,9 @@ fn record_name_is_common(name: &str) -> bool {
 
 /// Shared normalized, case-folded view for record-guess exclusion and its budget.
 pub fn normalize_record_guess(value: &str) -> String {
-    let mut normalized = String::with_capacity(value.len());
     let view = crate::normalize::normalize(value);
-    for part in view.text.split_whitespace() {
-        if !normalized.is_empty() {
-            normalized.push(' ');
-        }
-        normalized.extend(part.case_fold());
-    }
-    normalized
+    let (folded, _, _) = fold_with_original_offsets(&view.text, true, Some(usize::MAX));
+    folded.trim().to_owned()
 }
 
 /// Whether untrusted input contains a possible record guess at the same token
@@ -366,7 +361,7 @@ pub fn normalize_record_guess(value: &str) -> String {
 pub fn contains_record_guess(input: &str, term: &str) -> bool {
     let term = normalize_record_guess(term);
     let view = crate::normalize::normalize(input);
-    let (folded, starts, ends) = fold_with_original_offsets(&view.text, true, true);
+    let (folded, starts, ends) = fold_with_original_offsets(&view.text, true, Some(usize::MAX));
     !term.is_empty()
         && folded.char_indices().any(|(start, _)| {
             let Some((&raw_start, &raw_end)) =
@@ -384,16 +379,16 @@ pub fn contains_record_guess(input: &str, term: &str) -> bool {
 fn fold_with_original_offsets(
     input: &str,
     case_fold: bool,
-    collapse_whitespace: bool,
+    whitespace_run_limit: Option<usize>,
 ) -> (String, HashMap<usize, usize>, HashMap<usize, usize>) {
     let mut folded = String::with_capacity(input.len());
     let mut starts = HashMap::new();
     let mut ends = HashMap::new();
     let mut whitespace_count = 0;
     for (start, ch) in input.char_indices() {
-        if collapse_whitespace && ch.is_whitespace() {
+        if whitespace_run_limit.is_some() && ch.is_whitespace() {
             whitespace_count += 1;
-            if whitespace_count == 1 || whitespace_count == MAX_RECORD_MATCH_WHITESPACE_RUN + 1 {
+            if whitespace_count == 1 || whitespace_run_limit == Some(whitespace_count - 1) {
                 starts.insert(folded.len(), start);
                 folded.push(' ');
             }
@@ -664,12 +659,48 @@ mod tests {
 
     #[test]
     fn full_fold_does_not_create_partial_original_character_spans() {
-        let (folded, starts, ends) = fold_with_original_offsets("AßB", true, false);
+        let (folded, starts, ends) = fold_with_original_offsets("AßB", true, None);
         assert_eq!(folded, "assb");
         assert_eq!(starts.get(&1), Some(&1));
         assert!(!starts.contains_key(&2));
         assert!(!ends.contains_key(&2));
         assert_eq!(ends.get(&3), Some(&3));
+    }
+
+    #[test]
+    fn record_guess_whitespace_keeps_response_matcher_run_limit() {
+        let term = "Synthetic Qorvex";
+        let context = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec![term.into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&context);
+        let ctx = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-name",
+            PiiClass::Name,
+            "record-name",
+            true,
+            "counter",
+        )
+        .with_record_matching();
+        for run in [1, 32, 33, 64] {
+            let input = format!("Synthetic{}Qorvex", " ".repeat(run));
+            assert_eq!(
+                recognizer.detect(&input, &ctx).unwrap().len(),
+                usize::from(run <= 32)
+            );
+            assert!(contains_record_guess(&input, term));
+        }
     }
 
     #[test]

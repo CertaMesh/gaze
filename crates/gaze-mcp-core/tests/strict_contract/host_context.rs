@@ -1297,3 +1297,23 @@ async fn host_context_pair_punctuation_echo_has_no_membership_oracle() {
         assert_eq!(hit.1, 0);
     }
 }
+
+#[tokio::test]
+async fn host_context_collapsed_whitespace_guess_has_no_membership_oracle() {
+    for gap in [
+        " ".repeat(32),
+        " ".repeat(33),
+        " ".repeat(64),
+        "\t".repeat(64),
+    ] {
+        for name in [KNOWN, UNUSED] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let args = json!({"guess":format!("Synthetic{gap}Qorvex")});
+            let out = call(&session, args, Some(json!(KNOWN)), raw_context(name))
+                .await
+                .unwrap();
+            assert_eq!(out.payload, json!(KNOWN));
+            assert!(session.tokens().is_empty());
+        }
+    }
+}

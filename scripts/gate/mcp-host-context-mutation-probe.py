@@ -113,6 +113,12 @@ PROBES = [
                             "is_token_boundary_match(&folded, start, start + term.len())"),
      CONTRACT + ["host_context_substring_guess_keeps_unguessed_record_protected"],
      "host_context::host_context_substring_guess_keeps_unguessed_record_protected"),
+    ("guess-whitespace", DICTIONARY,
+     lambda source: replace(source,
+                            "    let (folded, starts, ends) = fold_with_original_offsets(&view.text, true, Some(usize::MAX));",
+                            "    let (folded, starts, ends) = fold_with_original_offsets(&view.text, true, Some(MAX_RECORD_MATCH_WHITESPACE_RUN));"),
+     CONTRACT + ["host_context_collapsed_whitespace_guess_has_no_membership_oracle"],
+     "host_context::host_context_collapsed_whitespace_guess_has_no_membership_oracle"),
     ("drop-present", CORE,
      lambda source: replace(source, "let mut host_context = crate::host_context::parse(host_context)?;",
                             "let mut host_context = { drop(host_context); None::<gaze::Context> };"),
@@ -182,7 +188,7 @@ def resources():
     match = re.search(r"System-wide memory free percentage:\s*(\d+)%", pressure)
     if not match:
         raise RuntimeError("could not read free-memory percentage")
-    return os.getloadavg()[0] <= 25 and int(match[1]) >= 50
+    return os.getloadavg()[0] <= 25 and int(match[1]) >= 30
 
 
 def run(command, log):
