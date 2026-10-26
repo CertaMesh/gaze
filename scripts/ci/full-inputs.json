@@ -844,6 +844,7 @@
     "docs/reference/crates.md",
     "docs/reference/dashboard/accessibility-and-visual-verification.md",
     "docs/reference/dashboard/browser-security.md",
+    "docs/reference/mcp-host-context-mutations.md",
     "docs/reference/metrics.md",
     "docs/reference/policy.example.toml",
     "docs/reference/policy.md",
