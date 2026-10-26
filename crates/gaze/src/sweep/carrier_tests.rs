@@ -626,6 +626,23 @@ fn non_tags_never_hide_record_values_or_repeats() {
         }
     }
     assert_eq!(checked, 60);
+    for prefix in [format!("<a title='{}' ", "x".repeat(2048)), "<a data=x; ".into()] {
+        for separate_turn in [false, true] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let input = if separate_turn {
+                pipeline.redact(&session, RawDocument::Text("customerId: C-731284".into())).unwrap();
+                format!("{prefix}data-id=C-731284>")
+            } else {
+                format!("{prefix}customerId=C-731284>")
+            };
+            let CleanDocument::Text(clean) = pipeline.redact(&session, RawDocument::Text(input.clone())).unwrap()
+            else { panic!("text") };
+            let entries = session.snapshot_entries();
+            let entry = entries.iter().find(|entry| entry.raw == "C-731284").unwrap_or_else(|| panic!("{input:?} -> {clean:?}"));
+            assert_eq!(clean, input.replace("C-731284", &entry.token));
+            assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
+        }
+    }
 }
 
 #[cfg(feature = "bundled-recognizers")]
@@ -691,8 +708,11 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         "member_id(42)",
         "customerId: a==b",
         "customerId: x=+y",
+        "customerId: x=+y1",
+        "customerId: a==b2",
         "customerId: =>",
         "customerId: #abcdef",
+        "customerId: #AB-12345",
         "customerId: (731284\n)",
         "CREATE TABLE records (customer_id (731284));",
         "let customer_id: (731284);",

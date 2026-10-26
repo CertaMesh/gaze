@@ -900,7 +900,10 @@ struct LabelledValueScan {
 }
 
 fn owned_id_start(value: &str) -> bool {
-    let value = value.strip_prefix(['-', '@', '_', '#']).unwrap_or(value);
+    if let Some(body) = value.strip_prefix('#') {
+        return body.chars().all(char::is_alphanumeric) && body.chars().any(char::is_numeric);
+    }
+    let value = value.strip_prefix(['-', '@', '_']).unwrap_or(value);
     value.chars().next().is_some_and(char::is_alphanumeric)
 }
 
@@ -979,7 +982,9 @@ fn constrain_owned_identifier(
         let prefix = &raw[..keep];
         if !prefix.chars().any(char::is_numeric)
             && raw[..run_end].chars().any(char::is_numeric)
-            && raw[..run_end].chars().all(field_value_char)
+            && raw[..run_end]
+                .chars()
+                .all(|ch| ch.is_alphanumeric() || "_-.@/=".contains(ch))
             && !raw[..run_end].contains("==")
         {
             keep = run_end;
