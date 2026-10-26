@@ -145,6 +145,7 @@ fn matrix_build_environment_survives_nested_cargo() {
         ])
         .env("CARGO_HOME", cargo_home.path())
         .env("GAZE_MATRIX_ENV_PROBE", "1")
+        .env("CARGO_BUILD_JOBS", "2")
         .env("CARGO_INCREMENTAL", "1")
         .env("CARGO_PROFILE_DEV_DEBUG", "2")
         .env("CARGO_PROFILE_TEST_DEBUG", "2")
@@ -178,6 +179,8 @@ fn matrix_environment_child() {
     fs::write(
         fixture.path().join("build.rs"),
         r#"fn main() {
+    assert_eq!(std::env::var("CARGO_BUILD_JOBS").unwrap(), "2");
+    assert_eq!(std::env::var("GAZE_DISABLE_OS_KEYSTORE").unwrap(), "1");
     assert_eq!(std::env::var("DEBUG").unwrap(), "false");
     assert_eq!(std::env::var("OPT_LEVEL").unwrap(), "0");
     for key in ["CARGO_INCREMENTAL", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG"] {
@@ -189,6 +192,8 @@ fn matrix_environment_child() {
     fs::write(
         fixture.path().join("src/main.rs"),
         r#"fn main() {
+    assert_eq!(std::env::var("CARGO_BUILD_JOBS").unwrap(), "2");
+    assert_eq!(std::env::var("GAZE_DISABLE_OS_KEYSTORE").unwrap(), "1");
     for key in ["CARGO_INCREMENTAL", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG"] {
         assert_eq!(std::env::var(key).unwrap(), "0", "{key}");
     }
