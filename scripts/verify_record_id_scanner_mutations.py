@@ -126,6 +126,7 @@ def main():
         ('block-whole-id-on-key-looking-content', 'crates/gaze/src/sweep.rs', 'atom.start <= span.start && span.end <= atom.end', 'atom.start < span.end', 'lexical_sweep_keeps_whole_private_values_with_key_looking_content', 'gaze-pii'),
         ('drop-digit-free-base64-ids', 'crates/gaze-recognizers/src/regex.rs', '    let base64 = (!in_markup_tag || scan.quoted_value)\n        && padded_base64_identifier(body, &input[scan.span.end..]);', '    let base64 = false;', 'base64_record_ids_keep_padding_without_owning_operators', 'gaze-pii'),
         ('allow-unquoted-html-value-emission', 'crates/gaze-recognizers/src/regex.rs', '        || (in_markup_tag && !scan.quoted_value)', '        || false', 'record_value_shape_preserves_carrier_syntax', 'gaze-pii'),
+        ('allow-unquoted-html-repeat-emission', 'crates/gaze/src/sweep.rs', '        if self.markup.blocks_repeat(span) {', '        if false && self.markup.blocks_repeat(span) {', 'seeded_html_repeats_preserve_unquoted_attribute_syntax', 'gaze-pii'),
     ]
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}

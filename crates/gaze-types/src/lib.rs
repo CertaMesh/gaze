@@ -3,6 +3,8 @@
 pub mod inspection;
 #[doc(hidden)]
 pub mod json_regions;
+#[doc(hidden)]
+pub mod markup_regions;
 pub mod nym;
 pub mod payment_card;
 pub mod perf;

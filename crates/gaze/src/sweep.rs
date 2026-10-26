@@ -635,6 +635,7 @@ impl EscapedView {
 /// string layers too, so serialized tool schemas retain their keys and syntax.
 struct JsonSweepIndex {
     urls: UrlRuns,
+    markup: gaze_types::markup_regions::MarkupRegions,
     lexical_atoms: Vec<Range<usize>>,
     forbidden: Vec<Range<usize>>,
     escape_interiors: Vec<Range<usize>>,
@@ -661,6 +662,7 @@ impl JsonSweepIndex {
         }
         Self {
             urls: UrlRuns::new(text),
+            markup: gaze_types::markup_regions::MarkupRegions::new(text),
             lexical_atoms: merge_json_ranges(lexical_atoms),
             forbidden: merge_json_ranges(forbidden),
             escape_interiors: merge_json_ranges(escape_interiors),
@@ -724,6 +726,9 @@ impl JsonSweepIndex {
     }
 
     fn allows(&self, span: &Range<usize>) -> bool {
+        if self.markup.blocks_repeat(span) {
+            return false;
+        }
         let at = self
             .lexical_atoms
             .partition_point(|atom| atom.end <= span.start);

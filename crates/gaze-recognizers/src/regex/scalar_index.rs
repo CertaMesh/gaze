@@ -13,7 +13,7 @@ use std::ops::Range;
 #[derive(Default)]
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
-    markup_assignments: Option<Vec<Range<usize>>>,
+    markup_assignments: Option<gaze_types::markup_regions::MarkupRegions>,
     json_label_values: Option<JsonLabelValues>,
     embedded_json: Option<Option<Box<DecodedFrame>>>,
     paired: Option<PairedCloseIndex>,
@@ -27,58 +27,12 @@ pub(super) struct ScalarBoundaryIndex {
 
 impl ScalarBoundaryIndex {
     pub(super) fn inside_markup_assignment(&mut self, input: &str, at: usize) -> bool {
-        let ranges = self.markup_assignments.get_or_insert_with(|| {
-            scanner_work(input.len());
-            let mut ranges = Vec::new();
-            let mut in_tag = false;
-            let mut tag_start = 0;
-            let mut assignment = false;
-            let mut quote = None;
-            let mut escaped = false;
-            for (offset, byte) in input.bytes().enumerate() {
-                if let Some(delimiter) = quote {
-                    if byte == delimiter && !escaped {
-                        quote = None;
-                    }
-                    escaped = byte == b'\\' && !escaped;
-                    continue;
-                }
-                match byte {
-                    b'<' => {
-                        let tail = input[offset + 1..]
-                            .strip_prefix('/')
-                            .unwrap_or(&input[offset + 1..]);
-                        in_tag = tail
-                            .chars()
-                            .next()
-                            .is_some_and(|ch| ch.is_alphabetic() || matches!(ch, '_' | ':'));
-                        tag_start = offset;
-                        assignment = false;
-                    }
-                    b'>' => {
-                        if assignment {
-                            ranges.push(tag_start..offset + 1);
-                        }
-                        in_tag = false;
-                        assignment = false;
-                    }
-                    b'=' if in_tag => {
-                        assignment = true;
-                    }
-                    b'"' | b'\'' if in_tag => {
-                        quote = Some(byte);
-                        escaped = false;
-                    }
-                    _ => {}
-                }
-            }
-            if assignment {
-                ranges.push(tag_start..input.len());
-            }
-            ranges
-        });
-        let index = ranges.partition_point(|range| range.end <= at);
-        ranges.get(index).is_some_and(|range| range.contains(&at))
+        self.markup_assignments
+            .get_or_insert_with(|| {
+                scanner_work(input.len());
+                gaze_types::markup_regions::MarkupRegions::new(input)
+            })
+            .contains_assignment(at)
     }
     pub(super) fn parent_scalar(&mut self, input: &str, opening: usize) -> bool {
         let encoded = self.encoded(input);

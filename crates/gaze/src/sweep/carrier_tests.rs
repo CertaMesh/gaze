@@ -477,6 +477,9 @@ fn quoted_html_attributes_and_json_data_remain_owned() {
             format!("<input {label}=\"C-731284\">"),
             format!("<input {label}='C-731284'>"),
             format!("<div data='{{\"{label}\":\"C-731284\"}}'>"),
+            format!(r#"{{"note":"<input {label}=C-731284>"}}"#),
+            format!("SELECT '<input {label}=C-731284>';"),
+            format!(r#"FRAME,"<input {label}=C-731284>",FRAME"#),
         ] {
             let session = Session::new(Scope::Ephemeral).unwrap();
             let CleanDocument::Text(clean) = pipeline
@@ -496,7 +499,7 @@ fn quoted_html_attributes_and_json_data_remain_owned() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 9);
+    assert_eq!(checked, 18);
     for prefix in ["x < 2; ", "x < 2\n", "x <= y; "] {
         let input = format!("{prefix}customerId=C-731284");
         let session = Session::new(Scope::Ephemeral).unwrap();
@@ -513,4 +516,57 @@ fn quoted_html_attributes_and_json_data_remain_owned() {
             input
         );
     }
+}
+
+#[cfg(feature = "bundled-recognizers")]
+#[test]
+fn seeded_html_repeats_preserve_unquoted_attribute_syntax() {
+    use crate::{CleanDocument, RawDocument, Scope, Session};
+    let pipeline = labelled_pipeline();
+    let mut checked = 0;
+    for (carrier, protected) in [
+        ("<input data-id=C-731284>", false),
+        ("<input\n data-id=C-731284>", false),
+        ("<input data-id=\"C-731284\">", true),
+        ("<input data-id='C-731284'>", true),
+        (r#"{"note":"<input data-id=C-731284>"}"#, true),
+        (r#"FRAME,"<input data-id=C-731284>",FRAME"#, true),
+        ("\nSELECT '<input data-id=C-731284>';", true),
+    ] {
+        for separate_turn in [false, true] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let input = if separate_turn {
+                pipeline
+                    .redact(&session, RawDocument::Text("customerId: C-731284".into()))
+                    .unwrap();
+                format!("CARRIER {carrier}")
+            } else {
+                format!("customerId: C-731284\nCARRIER {carrier}")
+            };
+            let CleanDocument::Text(clean) = pipeline
+                .redact(&session, RawDocument::Text(input.clone()))
+                .unwrap()
+            else {
+                panic!("text")
+            };
+            let output = clean.split_once("CARRIER ").unwrap().1;
+            let entries = session.snapshot_entries();
+            let entry = entries
+                .iter()
+                .find(|entry| entry.raw == "C-731284")
+                .unwrap();
+            let expected = if protected {
+                carrier.replace("C-731284", &entry.token)
+            } else {
+                carrier.to_owned()
+            };
+            assert_eq!(output, expected, "{input:?} -> {clean:?}");
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                input
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 14);
 }
