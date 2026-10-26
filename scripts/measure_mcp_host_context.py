@@ -85,6 +85,8 @@ class Client:
 
 
 def run(command, mode, calls, warmup, cwd):
+    driver_start = time.process_time()
+    load_at_start = os.getloadavg()
     client = Client(command, cwd)
     try:
         start = time.perf_counter_ns()
@@ -123,7 +125,9 @@ def run(command, mode, calls, warmup, cwd):
         resource = client.close()
         return {"p50_ms": percentile(latencies, .5), "p95_ms": percentile(latencies, .95),
                 "latencies_ms": latencies, "startup_ms": startup_ms,
-                "validated_calls": calls + warmup, "errors": 0, **resource}
+                "validated_calls": calls + warmup, "errors": 0,
+                "load_average_at_start": load_at_start,
+                "driver_cpu_seconds": time.process_time() - driver_start, **resource}
     finally:
         if client.child.returncode is None:
             client.child.kill()

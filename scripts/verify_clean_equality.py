@@ -103,7 +103,7 @@ def one_byte_mutant(base, candidate):
 def clean(binary, text, cwd, policy=None):
     env = os.environ.copy()
     env["GAZE_DISABLE_OS_KEYSTORE"] = "1"
-    command = [str(binary)] + (["--policy", str(policy)] if policy else []) + ["clean"]
+    command = [str(binary), "clean"] + (["--policy", str(policy)] if policy else [])
     result = subprocess.run(command, input=text.encode(),
                             capture_output=True, cwd=cwd, env=env, timeout=60)
     if result.returncode:
