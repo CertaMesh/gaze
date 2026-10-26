@@ -85,6 +85,10 @@ required-features = ["safety-net-openai"]
 name = "nym_safety_net"
 required-features = ["safety-net-nym", "test-support"]
 
+[[example]]
+name = "verify_nym_reuse"
+required-features = ["safety-net-nym", "test-support"]
+
 [[test]]
 name = "locale_aware_registry"
 
