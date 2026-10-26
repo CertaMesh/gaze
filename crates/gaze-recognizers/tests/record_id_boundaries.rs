@@ -2297,8 +2297,7 @@ fn record_ids_keep_label_suffixes_and_quotes_inside_wrappers() {
     ] {
         let input = format!("{label} {value}\npublic_version=FRAME");
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let clean = pipeline.clean_text(&session, &input, &[LocaleTag::Global]).unwrap();
-        let CleanDocument::Text(clean) = clean else { panic!("text") };
+        let clean = public_clean(&pipeline, &session, &input);
         assert!(!session.snapshot_entries().is_empty(), "{input:?}");
         assert!(clean.ends_with("\npublic_version=FRAME"), "{clean:?}");
         assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
