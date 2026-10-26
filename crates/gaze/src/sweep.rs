@@ -530,7 +530,8 @@ impl DerivedExactMatcher {
         remaining_bytes: usize,
     ) -> Result<Option<Self>, ManifestSweepError> {
         let mut patterns = HashSet::new();
-        let mut raw_sources: HashMap<String, HashMap<(String, PiiClass), usize>> = HashMap::new();
+        let mut decoded_sources: HashMap<String, HashMap<(String, PiiClass), usize>> =
+            HashMap::new();
         for (index, source) in sources
             .iter()
             .enumerate()
@@ -558,7 +559,7 @@ impl DerivedExactMatcher {
                     && source.class.clears_repeat_floor(body.trim())
                 {
                     patterns.insert(body.to_owned());
-                    raw_sources
+                    decoded_sources
                         .entry(body.to_owned())
                         .or_default()
                         .entry((source.family.clone(), source.class.clone()))
@@ -592,7 +593,7 @@ impl DerivedExactMatcher {
         });
         Ok(Some(Self {
             matcher,
-            sources: raw_sources
+            sources: decoded_sources
                 .into_iter()
                 .map(|(raw, owners)| {
                     let mut indexes = owners.into_values().collect::<Vec<_>>();
@@ -642,7 +643,7 @@ impl JsonSweepIndex {
         for _ in 0..=MAX_ESCAPED_REPEAT_DEPTH {
             Self::collect(
                 &view.text,
-                Some(&view.source),
+                &view.source,
                 &mut forbidden,
                 &mut escape_interiors,
             );
@@ -659,15 +660,11 @@ impl JsonSweepIndex {
 
     fn collect(
         text: &str,
-        source: Option<&[Range<usize>]>,
+        source: &[Range<usize>],
         forbidden: &mut Vec<Range<usize>>,
         escape_interiors: &mut Vec<Range<usize>>,
     ) {
-        let project = |start: usize, end: usize| {
-            source.map_or(start..end, |source| {
-                source[start].start..source[end - 1].end
-            })
-        };
+        let project = |start: usize, end: usize| source[start].start..source[end - 1].end;
         let regions = gaze_types::json_regions::json_regions(text);
         let mut strings = gaze_types::json_regions::json_strings(text, &regions);
         let trimmed = text.trim();

@@ -169,10 +169,12 @@ impl ScalarBoundaryIndex {
                     .and_then(|at| values.direct.get(&at))
             })
             .cloned()
-            .or_else(|| enclosing_key.map(|_| vec![capture.start..capture.start]))
+            .or_else(|| {
+                enclosing_key.map(|_| std::iter::once(capture.start..capture.start).collect())
+            })
         {
             let span = if span.is_empty() {
-                vec![capture.start..capture.start]
+                std::iter::once(capture.start..capture.start).collect()
             } else {
                 span
             };
@@ -963,7 +965,7 @@ fn json_label_values(input: &str, _frames: &[JsonFrame]) -> JsonLabelValues {
                                 .iter()
                                 .any(|span| json_scalar_is_label(input, &values.frames, span))
                     })
-                    .unwrap_or_else(|| vec![close..close]);
+                    .unwrap_or_else(|| std::iter::once(close..close).collect());
                 values.labels.insert(close, span.clone());
                 if key {
                     values.keys.insert(close);
@@ -1096,7 +1098,7 @@ fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Vec<R
                 eligible = containers
                     .last()
                     .is_some_and(|container| container.kind == b'[' || container.id_key);
-                Some(vec![start + 1..at - 1])
+                Some(std::iter::once(start + 1..at - 1).collect())
             }
         } else {
             match input.as_bytes()[at] {
@@ -1137,7 +1139,7 @@ fn json_first_scalars(input: &str, frames: &[JsonFrame]) -> HashMap<usize, Vec<R
                     eligible = containers
                         .last()
                         .is_some_and(|container| container.kind == b'{' && container.id_key);
-                    Some(vec![start..at])
+                    Some(std::iter::once(start..at).collect())
                 }
                 _ => {
                     at += 1;
