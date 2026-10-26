@@ -677,7 +677,7 @@
   },
   {
     "mutation": "own-only-first-container-scalar",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-recognizers-containers_own_all_and_only_explicit_record_values.baseline.log",
     "command": [
       "cargo",
@@ -693,13 +693,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "own-only-first-container-scalar.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "18489bfab307f4a5dce6a64ff174eee052e1a0fd741eeeef912fec50d80466d1",
+    "log_sha256": "77d6f4a2802519b2c5a16765488fede7d6caac51368f9ff4af95892bb327cf29",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "c681884714119d5f11c339fcb60f21d8d638a704af5ad5f4b99289ead5f686e8",
-    "baseline_passed": true,
-    "log_sha256": "fa89ec04f3d0a31341634585e06340ed6319228f81f653c61615ae1e058a512b"
+    "baseline_passed": true
   },
   {
     "mutation": "require-identical-raw-repeat-spelling",
@@ -833,7 +833,7 @@
   },
   {
     "mutation": "allow-non-id-owned-values",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-record_value_shape_preserves_carrier_syntax.baseline.log",
     "command": [
       "cargo",
@@ -849,13 +849,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "allow-non-id-owned-values.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "6077d37c9fb50b86f78d847f8846982c8256b0a3c55678ce60f46b58280173e4",
+    "log_sha256": "0b11fb3568c2d08ea745dc4b008fc0b03e4e012727d080a82088687600ac8d43",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "a262b3cde09c6e5a8b18f4b012e209cc1a989dfbefff54a211c80aca39aab61d",
-    "baseline_passed": true,
-    "log_sha256": "ca7ceb2fe4a84c42e95e2ded696f8ec74de3fc82f809507b8957b3654fb943e5"
+    "baseline_passed": true
   },
   {
     "mutation": "skip-lexical-json-like-gate",
@@ -911,7 +911,7 @@
   },
   {
     "mutation": "drop-leading-symbol-ids",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-owned_identifier_relaxations_preserve_covered_shapes.baseline.log",
     "command": [
       "cargo",
@@ -927,17 +927,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "drop-leading-symbol-ids.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "8979dbe10dbf1a5ea61b323664430003851b2ee2129e0004dc7dcf618ed268d8",
+    "log_sha256": "fe4f97957f2cf8c3656a14afc4acc63d5267163cc6c065788f9b5ffc7df8cfea",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "1c177acc5fea7208a01f083abc1bec67d707a2522b7b29b31b4378bf5d882372",
-    "baseline_passed": true,
-    "log_sha256": "8904c2bcbb6621cbb7153e7efcb6ff040f5bb977b96366269000c0e5d5d31208"
+    "baseline_passed": true
   },
   {
     "mutation": "drop-negative-ids",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-owned_identifier_relaxations_preserve_covered_shapes.baseline.log",
     "command": [
       "cargo",
@@ -953,17 +953,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "drop-negative-ids.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "8979dbe10dbf1a5ea61b323664430003851b2ee2129e0004dc7dcf618ed268d8",
+    "log_sha256": "04e7d5e64e20ca588f69cdadb91091704db3403c0e0679dd336ee968a12c7aef",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "1c177acc5fea7208a01f083abc1bec67d707a2522b7b29b31b4378bf5d882372",
-    "baseline_passed": true,
-    "log_sha256": "0273e2003ddbc3ab601e631deff2881cdb67ca00958ed5215ab3e1c891db7148"
+    "baseline_passed": true
   },
   {
     "mutation": "drop-grouped-ids",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-owned_identifier_relaxations_preserve_covered_shapes.baseline.log",
     "command": [
       "cargo",
@@ -979,17 +979,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "drop-grouped-ids.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "8979dbe10dbf1a5ea61b323664430003851b2ee2129e0004dc7dcf618ed268d8",
+    "log_sha256": "9942d3a4cacd993ddc1912702e4e96f190697553b1c41c1c326ee308d81afb9c",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "1c177acc5fea7208a01f083abc1bec67d707a2522b7b29b31b4378bf5d882372",
-    "baseline_passed": true,
-    "log_sha256": "a9fdae8d5a77820c1a2f38cbcd33a194237fc81fba60fc23a338b496ad0de1d0"
+    "baseline_passed": true
   },
   {
     "mutation": "let-unterminated-quotes-cross-lines",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-unterminated_id_quotes_never_own_next_line_syntax.baseline.log",
     "command": [
       "cargo",
@@ -1005,13 +1005,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "let-unterminated-quotes-cross-lines.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "4271d4298b34dc64f31aadd1c65dd34f1db875e5fb8141a2054f4943c22a713f",
+    "log_sha256": "1892d991d9045c0a32943c21afd19da2a22b280fd21be7ccf586a217c0f47bd2",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "5b23bee871a1fa7dad4fa3024a741e4c413cf42fa1cee525942558b46ea2be40",
-    "baseline_passed": true,
-    "log_sha256": "2a4ab12b5ca75304057bc34f58cd5cd431e49815aba903b7ccd4feaa944e0140"
+    "baseline_passed": true
   },
   {
     "mutation": "block-whole-id-on-key-looking-content",
@@ -1041,7 +1041,7 @@
   },
   {
     "mutation": "drop-digit-free-base64-ids",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-base64_record_ids_keep_padding_without_owning_operators.baseline.log",
     "command": [
       "cargo",
@@ -1057,17 +1057,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "drop-digit-free-base64-ids.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "51ecab6878dc9ef0f7c2c4454c64d31b951baa8d2912e122dd2ea173ec96e7ad",
+    "log_sha256": "06cf8c510c78f11d77cf6a60b3e32a0b0b692f16596793c7a3e94becc4e05e1d",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "93337ffb6404dac51f09fb899d64c9452a3a0b421dc493ade58fc1f03bd76273",
-    "baseline_passed": true,
-    "log_sha256": "55a3742bcf4f2bf139d9d5112301e533a9dc7ee004af031aa831dd893190cf43"
+    "baseline_passed": true
   },
   {
     "mutation": "allow-unquoted-html-value-emission",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-record_value_shape_preserves_carrier_syntax.baseline.log",
     "command": [
       "cargo",
@@ -1083,13 +1083,13 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "allow-unquoted-html-value-emission.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "6077d37c9fb50b86f78d847f8846982c8256b0a3c55678ce60f46b58280173e4",
+    "log_sha256": "ad742bad701bb9924fc68d48fc6820031b2747d5c9ec7ccb5d050db2601b9ff6",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "a262b3cde09c6e5a8b18f4b012e209cc1a989dfbefff54a211c80aca39aab61d",
-    "baseline_passed": true,
-    "log_sha256": "8e1e86d3b6e8672a53ed434c3daaed92e7b70ed5b9dd8bd4953b0548d0de1840"
+    "baseline_passed": true
   },
   {
     "mutation": "allow-unquoted-html-repeat-emission",
@@ -1145,7 +1145,7 @@
   },
   {
     "mutation": "allow-digit-free-space-only-base64",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-record_value_shape_preserves_carrier_syntax.baseline.log",
     "command": [
       "cargo",
@@ -1161,17 +1161,17 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "allow-digit-free-space-only-base64.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "6077d37c9fb50b86f78d847f8846982c8256b0a3c55678ce60f46b58280173e4",
+    "log_sha256": "4bd29374d6c69cd9c70d59aeb815d6eb3b207eb0d8a171a4a07e2d3c31b07dbb",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "a262b3cde09c6e5a8b18f4b012e209cc1a989dfbefff54a211c80aca39aab61d",
-    "baseline_passed": true,
-    "log_sha256": "a4967b10ee42c91081d3cea9931d1a8d75f8a9b236e2f7264c6c9041183f70ec"
+    "baseline_passed": true
   },
   {
     "mutation": "allow-opening-quote-after-bare-base64",
-    "head": "af222708efe135812bad323bd9f8fd7d4721e676",
+    "head": "536cc051e9fc22851ed6b65b3aeedc77555b44ab",
     "baseline": "gaze-pii-record_value_shape_preserves_carrier_syntax.baseline.log",
     "command": [
       "cargo",
@@ -1187,12 +1187,120 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
     "log": "allow-opening-quote-after-bare-base64.log",
-    "restored_sha256": "641e0752bf4f01d098dd5ee8bac31baea4b0c868388b691c917099f852fc5248",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "6077d37c9fb50b86f78d847f8846982c8256b0a3c55678ce60f46b58280173e4",
+    "log_sha256": "184c13f4e4ef8ce2f803d3535211f812f96b7d9846034c87ea17818f2836a040",
     "source_file": "crates/gaze-recognizers/src/regex.rs",
-    "baseline_sha256": "a262b3cde09c6e5a8b18f4b012e209cc1a989dfbefff54a211c80aca39aab61d",
-    "baseline_passed": true,
-    "log_sha256": "207ad10b01b40dff19bcc7d9ab354fbf98213bf939250cd287b1a993ecd6f23a"
+    "baseline_passed": true
+  },
+  {
+    "mutation": "reject-quotes-inside-record-wrappers",
+    "head": "5fbf92a74a488717c28b55e9818553d597e8a0d9",
+    "baseline": "gaze-recognizers-record_ids_keep_label_suffixes_and_quotes_inside_wrappers.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--test",
+      "record_id_boundaries",
+      "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+      "--",
+      "--nocapture"
+    ],
+    "test": "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "log": "reject-quotes-inside-record-wrappers.log",
+    "restored_sha256": "33d39ca7357fe15c18384b1ac9cd332543b5338ae9af17aa13af082d4a78f99a",
+    "baseline_sha256": "1661d6e1df71d6d61c4c42e2a326ae74280c242329ca44354d5a06af4ef88b0b",
+    "log_sha256": "b6dce03604771fcb8f5a82030ac4cf3bb0c320cee52a90d671a71ade794a5978",
+    "source_file": "crates/gaze-recognizers/src/regex.rs",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "drop-customer-id-number-suffix",
+    "head": "5fbf92a74a488717c28b55e9818553d597e8a0d9",
+    "baseline": "gaze-recognizers-record_ids_keep_label_suffixes_and_quotes_inside_wrappers.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--test",
+      "record_id_boundaries",
+      "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+      "--",
+      "--nocapture"
+    ],
+    "test": "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "6db4f3eaa987ed5178ffbfea97a24c565136e2536055b51b1857d5bb89065ae5",
+    "log": "drop-customer-id-number-suffix.log",
+    "restored_sha256": "6db4f3eaa987ed5178ffbfea97a24c565136e2536055b51b1857d5bb89065ae5",
+    "baseline_sha256": "1661d6e1df71d6d61c4c42e2a326ae74280c242329ca44354d5a06af4ef88b0b",
+    "log_sha256": "efcd6118f5772138b0a2070a8d29c95c29e4dfa8bab79118c54c2b0d72b22801",
+    "source_file": "crates/gaze-recognizers/embedded/core.toml",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "drop-employee-id-number-suffix",
+    "head": "5fbf92a74a488717c28b55e9818553d597e8a0d9",
+    "baseline": "gaze-recognizers-record_ids_keep_label_suffixes_and_quotes_inside_wrappers.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--test",
+      "record_id_boundaries",
+      "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+      "--",
+      "--nocapture"
+    ],
+    "test": "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "6db4f3eaa987ed5178ffbfea97a24c565136e2536055b51b1857d5bb89065ae5",
+    "log": "drop-employee-id-number-suffix.log",
+    "restored_sha256": "6db4f3eaa987ed5178ffbfea97a24c565136e2536055b51b1857d5bb89065ae5",
+    "baseline_sha256": "1661d6e1df71d6d61c4c42e2a326ae74280c242329ca44354d5a06af4ef88b0b",
+    "log_sha256": "abf43b6ff49f97d3bc94978323601e52f368f8f954bd8c1d69c973b36b6491d5",
+    "source_file": "crates/gaze-recognizers/embedded/core.toml",
+    "baseline_passed": true
+  },
+  {
+    "mutation": "drop-record-id-number-suffix",
+    "head": "5fbf92a74a488717c28b55e9818553d597e8a0d9",
+    "baseline": "gaze-recognizers-record_ids_keep_label_suffixes_and_quotes_inside_wrappers.baseline.log",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--test",
+      "record_id_boundaries",
+      "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+      "--",
+      "--nocapture"
+    ],
+    "test": "record_ids_keep_label_suffixes_and_quotes_inside_wrappers",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "6db4f3eaa987ed5178ffbfea97a24c565136e2536055b51b1857d5bb89065ae5",
+    "log": "drop-record-id-number-suffix.log",
+    "restored_sha256": "6db4f3eaa987ed5178ffbfea97a24c565136e2536055b51b1857d5bb89065ae5",
+    "baseline_sha256": "1661d6e1df71d6d61c4c42e2a326ae74280c242329ca44354d5a06af4ef88b0b",
+    "log_sha256": "b7fdca1b2faf342877ca0bfd2630846fabbb0f415659c7f5d03cbe307b38005f",
+    "source_file": "crates/gaze-recognizers/embedded/core.toml",
+    "baseline_passed": true
   }
 ]

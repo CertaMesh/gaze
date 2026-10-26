@@ -184,7 +184,7 @@ and nice 10. Workspace checks retain the shared build lock.
 The `record-id-mutations` check runs
 `scripts/verify_record_id_scanner_mutations.py` from a clean checkout with a
 signed HEAD. Each named baseline must execute exactly one passing test before
-mutation. All 46 mutants compile and fail their named regression test. The
+mutation. The catalog contains 50 compiled mutants that fail their named regression tests. The
 script restores each source byte-for-byte and writes logs and hash receipts
 under `target/scanner-mutations/`. It never creates commits or uses a stash.
 
@@ -204,10 +204,20 @@ the exact integrated candidate before merge.
 
 ## Current validation boundary
 
-The 51 focused sweep tests passed at implementation `af222708`. The 46-mutant
-receipt pins that implementation. The original reviewer replay at preceding
-implementation `fe4af649` retained all 35,214 JSON-case verdicts and all 176
-carrier structures, with exact carrier restore. Its existing deferred leaks and
-375 direct-numeric JSON validity failures remain. Replay of the final context
-fix, Anvil fast, and the single workspace/all-features run remain pending.
-No full-corpus benchmark certification or merge is claimed.
+The CI continuation fixes quote-containing wrapper values and the `ID number`
+label suffix while retaining the ID-shape and carrier gates. Its focused
+regression checks the exact private bytes and strict restore for customer,
+employee, and member labels. The mutation runner accepts both unit and integration
+test execution receipts.
+
+Fourteen probes for the changed scanner and rulepack files were rerun: ten
+existing probes and four new probes for wrapper quotes and each label suffix.
+Their one-test baselines passed, all compiled mutants failed the named test, and
+source hashes matched after restoration. The receipt pins each observation's
+implementation commit; the other 36 probes retain their preceding evidence.
+
+The original replay has 35,214 JSON cases and 176 carrier cases. Existing deferred
+leaks and 375 direct-numeric JSON validity failures remain explicit limits.
+Exact-head replay, Anvil gates, and CI evidence are reported in the pull request.
+These checks do not certify the full corpus. Benchmark certification and merge
+remain separate requirements.
