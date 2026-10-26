@@ -986,7 +986,9 @@ fn source_patterns(index: usize, source: &SweepSource, patterns: &mut Vec<Patter
             } else {
                 SweepLink::Exact
             };
-            push(PatternKind::Folded, fold(body).text, link);
+            if uncertain {
+                push(PatternKind::Folded, fold(body).text, link);
+            }
             // Exact raw scalar bytes retain leading/trailing whitespace. The
             // floor is still evaluated on the body, never on those fringes.
             if raw != value {
@@ -1408,6 +1410,23 @@ mod tests {
             SweepMatcher::build([source]),
             Err(ManifestSweepError::CapacityExceeded)
         ));
+    }
+
+    #[test]
+    fn field_owned_families_keep_byte_exact_matching() {
+        let source = SweepSource {
+            family: "synthetic.counter".into(),
+            class: PiiClass::family("synthetic_identifier"),
+            raw: "AB1234".into(),
+            repeat_seed: Some(RepeatSeed {
+                raw: "AB1234".into(),
+                kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
+            }),
+        };
+        let matcher = SweepMatcher::build([source]).unwrap().unwrap();
+        let hits = matcher.find("AB1234 ab1234");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].span, 0..6);
     }
 
     #[test]

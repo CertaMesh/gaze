@@ -105,6 +105,7 @@ def main():
         ('apply-field-digit-floor-to-legacy-prefixes', 'crates/gaze/src/sweep.rs', 'source.field_owned_scalar() && !labelled_repeat_has_digit(value)', 'source.repeat_seed.is_some() && !labelled_repeat_has_digit(value)', 'legacy_uncertain_prefixes_keep_their_floor_and_long_values', 'gaze-pii'),
         ('bound-decoded-padding-before-trimming', 'crates/gaze/src/sweep.rs', 'view.text.trim_end().len()', 'view.text.len()', 'deeply_escaped_padding_keeps_trimmed_repeats_across_turns', 'gaze-pii'),
         ('allow-unbounded-decoding-cascade', 'crates/gaze/src/sweep.rs', 'if depth >= MAX_ESCAPED_REPEAT_DEPTH {', 'if false && depth >= MAX_ESCAPED_REPEAT_DEPTH {', 'cascading_unicode_escapes_cannot_create_unbounded_repeat_work', 'gaze-pii'),
+        ('fold-exact-family-scalar-seeds', 'crates/gaze/src/sweep.rs', '            if uncertain {\n                push(PatternKind::Folded, fold(body).text, link);', '            if true || uncertain {\n                push(PatternKind::Folded, fold(body).text, link);', 'field_owned_families_keep_byte_exact_matching', 'gaze-pii'),
     ]
     receipts = []
     for name, relative, old, new, test, package in probes:

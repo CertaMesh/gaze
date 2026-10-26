@@ -37,7 +37,8 @@ ordinary serialized inputs shrink at each layer and the corpus reaches depth 9.
 The field-scalar cap does not change legacy `UncertainPrefix` eligibility or its
 precision floor. Long legacy patterns use a contiguous NFA to keep construction
 linear. The recognizer's separate 40-byte diagnostic preserves primary ownership;
-it does not discard values or repeat patterns. Session storage retains provenance.
+it does not discard values or repeat patterns. Collision-family scalar repeats
+retain byte-exact matching. Session storage retains provenance.
 Restore remains exact.
 
 Direct numeric JSON IDs retain the existing plain-text token format, which may
