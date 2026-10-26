@@ -307,6 +307,53 @@ impl SqliteLogger {
         created_at: i64,
         session_id: Option<String>,
     ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
+        Self::insert_report(&conn, report, document_kind, created_at, session_id)
+    }
+
+    /// Commit redactions and safety-net reports as one all-or-nothing audit batch.
+    pub fn log_batch(
+        &self,
+        entries: &[RedactionEntry],
+        reports: &[LeakReport],
+        document_kind: DocumentKind,
+        created_at: i64,
+        session_id: Option<String>,
+    ) -> Result<()> {
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
+        let transaction = conn
+            .transaction()
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        for entry in entries {
+            Self::insert_redaction(&transaction, entry)?;
+        }
+        for report in reports {
+            Self::insert_report(
+                &transaction,
+                report,
+                document_kind,
+                created_at,
+                session_id.clone(),
+            )?;
+        }
+        transaction
+            .commit()
+            .map_err(|err| AuditError::Sqlite(err.to_string()))
+    }
+
+    fn insert_report(
+        conn: &Connection,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        created_at: i64,
+        session_id: Option<String>,
+    ) -> Result<()> {
         for suspect in &report.suspects {
             let entry = LeakSuspectLogEntry::from_suspect(
                 suspect,
@@ -315,19 +362,27 @@ impl SqliteLogger {
                 session_id.clone(),
                 report.replay_hash.clone(),
             );
-            self.log_leak_suspect(&entry)?;
+            Self::insert_leak_suspect_row(conn, &entry)?;
         }
         for event in &report.telemetry {
             if let Some(entry) =
                 LeakSuspectLogEntry::from_model_refusal(event, created_at, session_id.clone())
             {
-                self.log_leak_suspect(&entry)?;
+                Self::insert_leak_suspect_row(conn, &entry)?;
             }
         }
         Ok(())
     }
 
     pub fn log(&self, entry: &RedactionEntry) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
+        Self::insert_redaction(&conn, entry)
+    }
+
+    fn insert_redaction(conn: &Connection, entry: &RedactionEntry) -> Result<()> {
         let validator_fail_reason = serialize_json_column(entry.validator_fail_reason.as_ref())?;
         let labelled_value_scan_reason =
             serialize_json_column(entry.labelled_value_scan_reason.as_ref())?;
@@ -339,10 +394,6 @@ impl SqliteLogger {
             .and_then(|value| value.parse::<f64>().ok());
         let backend_silently_dropped =
             serialize_json_column(entry.backend_silently_dropped.as_ref())?;
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
             "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count, labelled_value_scan_reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36)",
             params![
@@ -481,6 +532,10 @@ impl SqliteLogger {
             .conn
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
+        Self::insert_leak_suspect_row(&conn, entry)
+    }
+
+    fn insert_leak_suspect_row(conn: &Connection, entry: &LeakSuspectLogEntry) -> Result<()> {
         conn.execute(
             "INSERT INTO safety_net_log (safety_net_id, raw_label, mapped_class, leak_kind, span_len, document_kind, field_path, score, created_at, session_id, pipeline_class, safety_net_replay_hash, backend_id, backend_version, decoding_params_hash, telemetry_kind) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![

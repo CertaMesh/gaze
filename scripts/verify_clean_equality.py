@@ -35,6 +35,15 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def binary_hashes(parser, binaries):
+    if binaries[0] == binaries[1]:
+        parser.error("supply two independently built binaries")
+    hashes = [sha256(binary.read_bytes()) for binary in binaries]
+    if hashes[0] == hashes[1]:
+        parser.error("identical binary contents: supply two independently built binaries")
+    return hashes
+
+
 def inputs():
     manifest = json.loads(MANIFEST.read_text())
     cases = []
@@ -133,8 +142,7 @@ def main():
         parser.error("candidate checkout has uncommitted changes")
     cases = inputs()
     binaries = (args.base_bin.resolve(strict=True), args.candidate_bin.resolve(strict=True))
-    if binaries[0] == binaries[1]:
-        parser.error("supply two independently built binaries")
+    hashes = binary_hashes(parser, binaries)
     differences, exits, detections = [], [dict(), dict()], [0, 0]
     modes = {}
     mutants = {}
@@ -178,7 +186,7 @@ def main():
         raise RuntimeError("comparison did not exercise any detections")
     report = {"schema": "gaze-clean-equality-v2", "base_sha": args.base_sha,
               "candidate_sha": args.candidate_sha,
-              "binary_sha256": [sha256(binary.read_bytes()) for binary in binaries],
+              "binary_sha256": hashes,
               "manifest_sha256": sha256(MANIFEST.read_bytes()),
               "script_sha256": sha256(Path(__file__).read_bytes()),
               "cases": comparisons, "planned_cases": len(cases) * 2, "completed": not differences, "modes": modes, "policy_sha256": policy_hashes, "exit_codes": exits, "detections": detections,

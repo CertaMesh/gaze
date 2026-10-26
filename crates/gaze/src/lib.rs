@@ -93,9 +93,9 @@ pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,
 };
 pub use session::{
-    BoundedRestoreError, CommittedSessionSnapshot, RestoreAssessment, RestoreError, RestoreEvent,
-    RestoreEventKind, RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session,
-    SessionSnapshotEntry, SessionTransaction, SessionTransactionError,
+    BoundedRestoreError, CommittedSessionSnapshot, PreparedSessionCommit, RestoreAssessment,
+    RestoreError, RestoreEvent, RestoreEventKind, RestoredTextWithProvenance, Scope,
+    SensitiveSnapshot, Session, SessionSnapshotEntry, SessionTransaction, SessionTransactionError,
 };
 pub use spelling::SourceSpelling;
 pub use sweep::ManifestSweepError;
