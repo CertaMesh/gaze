@@ -51,6 +51,20 @@ pub fn json_regions(input: &str) -> Vec<Range<usize>> {
     regions
 }
 
+/// Length of one JSON escape whose decoded character is whitespace.
+pub fn json_whitespace_escape_len(text: &str) -> Option<usize> {
+    match text.as_bytes().get(..2)? {
+        b"\\t" | b"\\n" | b"\\r" | b"\\f" => Some(2),
+        b"\\u" => {
+            let code = u16::from_str_radix(text.get(2..6)?, 16).ok()?;
+            char::from_u32(u32::from(code))
+                .filter(|ch| ch.is_whitespace())
+                .map(|_| 6)
+        }
+        _ => None,
+    }
+}
+
 /// String interiors and their key/value role inside validated JSON regions.
 pub fn json_strings(input: &str, regions: &[Range<usize>]) -> Vec<(Range<usize>, bool)> {
     let bytes = input.as_bytes();

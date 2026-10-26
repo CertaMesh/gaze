@@ -631,23 +631,19 @@ fn labelled_repeat_has_digit(value: &str) -> bool {
 
 fn trim_labelled_repeat(mut value: &str) -> &str {
     loop {
-        let trimmed = value.trim();
-        value = trimmed;
+        value = value.trim();
         let before = value.len();
-        for space in [
-            "\\t", "\\n", "\\r", "\\u0009", "\\u000a", "\\u000d", "\\u0020",
-        ] {
+        if let Some(len) = gaze_types::json_regions::json_whitespace_escape_len(value) {
+            value = &value[len..];
+        }
+        for len in [2, 6] {
             if value
-                .get(..space.len())
-                .is_some_and(|s| s.eq_ignore_ascii_case(space))
+                .get(value.len().saturating_sub(len)..)
+                .is_some_and(|tail| {
+                    gaze_types::json_regions::json_whitespace_escape_len(tail) == Some(len)
+                })
             {
-                value = &value[space.len()..];
-            }
-            if value
-                .get(value.len().saturating_sub(space.len())..)
-                .is_some_and(|s| s.eq_ignore_ascii_case(space))
-            {
-                value = &value[..value.len() - space.len()];
+                value = &value[..value.len() - len];
             }
         }
         if before == value.len() {
@@ -1217,7 +1213,7 @@ mod tests {
         use crate::{CleanDocument, RawDocument, Scope, Session};
         let pipeline = labelled_pipeline();
         let mut checked = 0;
-        for padding in [" ", "\u{00a0}", "\\t", "\\u0009", " \\t "] {
+        for padding in [" ", "\u{00a0}", "\\t", "\\u0009", " \\t ", "\\f", "\\u00a0"] {
             for count in [1, 16, 32, 64] {
                 let input = format!(
                     r#"Ref SYN731284 noted.
@@ -1249,7 +1245,7 @@ mod tests {
                 checked += 1;
             }
         }
-        assert_eq!(checked, 20);
+        assert_eq!(checked, 28);
     }
 
     use super::*;

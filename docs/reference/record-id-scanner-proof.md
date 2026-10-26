@@ -15,7 +15,7 @@ container values, wrappers, broken prefixes, suffixes, and serialization depths
 0–4. Each case checks covered identifier bytes and parses the replacement with
 a quoted placeholder in number positions. Parsed results retain the same object
 keys, containers, array lengths, and JSON keywords. The existing 4,900-case leak
-generator remains a separate check. Unicode label tails add 35 cases.
+generator remains a separate check. Unicode label tails add 75 cases.
 
 Repeat patterns require a digit in the labelled value. A repeat cannot replace
 an object key, JSON syntax, or an unquoted scalar. These restrictions also apply
@@ -23,9 +23,9 @@ inside serialized JSON strings and across session turns. Repeat spans cannot
 split a JSON escape or replace a standalone JSON number. Fifteen additional
 cases check escaped tabs, newlines, and Unicode in object values and standalone
 JSON strings. The 40-byte pattern
-limit applies after trimming each derived pattern. Space, NBSP, and escaped-tab
+limit applies after trimming each derived pattern. Literal and JSON-escaped whitespace
 padding therefore preserve repeat protection without creating oversized matcher
-patterns. Pipeline tests cover 45 repeat/schema cases and 20 padded-value cases;
+patterns. Pipeline tests cover 45 repeat/schema cases and 28 padded-value cases;
 a daemon test checks three padded values on a second turn. Restore remains exact.
 
 Direct numeric JSON IDs retain the existing plain-text token format, which may
@@ -50,11 +50,11 @@ shared indexes and asserts every class count:
 | Recovered ambiguous values kept owned | 50 |
 | Real successor values among those 8,344 empty cases | 0 |
 | Previously valid rejections now owning the next value | 2,696 |
-| Previously valid spans corrected around JSON syntax | 380 |
-| Other valid frozen results, unchanged | 347,682 |
+| Previously valid spans corrected around JSON syntax | 395 |
+| Other valid frozen results, unchanged | 347,667 |
 
 The 8,344 cases are a subset of the panic and reversed-span repairs, not an
-additional class. The new JSON ownership changes affect 3,076 captures outside
+additional class. The new JSON ownership changes affect 3,091 captures outside
 that subset. The independent oracle uses Serde token parsing and container
 context, without the production frame index. Every relocation preserves all
 previously protected value bytes; removed bytes are wrappers or JSON syntax.

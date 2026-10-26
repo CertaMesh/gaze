@@ -937,18 +937,12 @@ fn json_skip_space(input: &str, mut at: usize) -> usize {
 }
 
 fn json_label_tail_is_whitespace(mut tail: &str) -> bool {
-    while !tail.is_empty() {
+    while let Some(ch) = tail.chars().next() {
         scanner_work(1);
-        if tail.as_bytes()[0].is_ascii_whitespace() {
-            tail = &tail[1..];
-        } else if tail.starts_with("\\t") || tail.starts_with("\\n") || tail.starts_with("\\r") {
-            tail = &tail[2..];
-        } else if tail.get(..6).is_some_and(|escape| {
-            ["\\u0009", "\\u000a", "\\u000d", "\\u0020"]
-                .iter()
-                .any(|space| escape.eq_ignore_ascii_case(space))
-        }) {
-            tail = &tail[6..];
+        if ch.is_whitespace() {
+            tail = &tail[ch.len_utf8()..];
+        } else if let Some(len) = gaze_types::json_regions::json_whitespace_escape_len(tail) {
+            tail = &tail[len..];
         } else {
             return false;
         }
@@ -1996,11 +1990,16 @@ mod regression_tests {
                             } else {
                                 // Relocation may drop an empty wrapper or structural
                                 // delimiters, but never previously protected value bytes.
+                                let whitespace: std::collections::HashSet<_> = input
+                                    .char_indices()
+                                    .filter(|(_, ch)| ch.is_whitespace())
+                                    .flat_map(|(at, ch)| at..at + ch.len_utf8())
+                                    .collect();
                                 let mut outside_value =
                                     a.span.clone().filter(|at| !expected.contains(at));
                                 assert!(outside_value.all(|at| {
                                     let byte = input.as_bytes()[at];
-                                    byte.is_ascii_whitespace() || b"\\\"',:[]{}()<>`".contains(&byte)
+                                    whitespace.contains(&at) || b"\\\"',:[]{}()<>`".contains(&byte)
                                         || (b"nrt".contains(&byte) && at > 0 && input.as_bytes()[at - 1] == b'\\')
                                 }),
                                     "old private bytes must stay owned: {input:?}, {capture:?}: {a:?} -> {b:?}");
@@ -2150,7 +2149,7 @@ mod regression_tests {
         assert_eq!(RECOVERED_OWNED.with(|p| p.get()), 50);
         assert_eq!(RECOVERED_NEXT.with(|p| p.get()), 0);
         assert_eq!(VALID_NEXT.with(|p| p.get()), 2_696);
-        assert_eq!(WRAPPER_NEXT.with(|p| p.get()), 380);
+        assert_eq!(WRAPPER_NEXT.with(|p| p.get()), 395);
     }
 }
 
@@ -2516,6 +2515,14 @@ mod json_label_cells {
             "\\u000D",
             "\\u0020",
             " \\u0009 \\t ",
+            "\\u000b",
+            "\\u000B",
+            "\\u000c",
+            "\\u000C",
+            "\\u00a0",
+            "\\u2003",
+            "\\u202F",
+            "\\f",
         ] {
             let mut input = format!(r#"{{"Customer ID:{escape}":"SYN731284"}}"#);
             for _ in 0..=4 {
@@ -2531,7 +2538,7 @@ mod json_label_cells {
                 input = serde_json::to_string(&input).unwrap();
             }
         }
-        assert_eq!(checked, 35);
+        assert_eq!(checked, 75);
     }
 
     #[test]
