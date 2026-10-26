@@ -90,14 +90,25 @@ host-context tests and three focused recognizer tests pass for this implementati
 The latter include a check that the response matcher's 32-character whitespace
 limit stays unchanged while guess exclusion accepts longer runs.
 
-The named Anvil check runs seven baseline/mutant pairs:
+The current implementation prepares each argument once and compiles every private
+term into one shared Aho–Corasick automaton. Scalar pairs stream a bounded window
+around their junction. Entry admission includes empty keys and containers, before
+record processing. Exclusion follows the recognizer's compilation mode and allowed
+match kinds. The preparation regression counts normalization and fold calls without
+a clock assertion. Streamed pair matches are checked against materialized joins.
+
+The named Anvil check now runs eleven baseline/mutant pairs:
 
 | Probe | Regression contract |
 | --- | --- |
 | `normalization-drift` | Fullwidth and normalized echoes cannot reveal record membership. |
 | `split-argument-echo` | Scalar joins, including decoded JSON leaves, cannot reveal membership. |
-| `argument-budget` | A de Bruijn enumeration is rejected before any record-dependent step. |
+| `argument-budget` | A boundary-separated enumeration is rejected before any record-dependent step. |
 | `argument-scalars` | The scalar count bounds original and decoded argument views. |
+| `argument-entries` | Empty keys and structural entries consume the record-independent entry budget. |
+| `guess-preparation` | Normalization and folding do not repeat for terms or pair joins. |
+| `guess-case-mode` | A case or whitespace variant cannot disable exact-only record protection. |
+| `guess-allowed-kinds` | Case and whitespace variants require their own allowed match kinds. |
 | `guess-boundaries` | A superstring does not exclude an unguessed record term. |
 | `folded-boundary-view` | Boundary checks use the response matcher's normalized text view. |
 | `guess-whitespace` | Tool-collapsed whitespace cannot reopen echo membership detection. |
@@ -105,7 +116,7 @@ The named Anvil check runs seven baseline/mutant pairs:
 Run from a clean signed checkout, after acquiring the shared build slot:
 
 ```sh
-anvil check mcp-host-echo --allow-expensive --lock-wait 30m --json
+anvil check mcp-host-echo --allow-expensive --lock-wait 90m --json
 ```
 
 Each baseline must execute and pass its named test. Each mutant must compile,
