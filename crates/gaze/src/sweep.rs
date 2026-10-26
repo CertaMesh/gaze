@@ -350,14 +350,26 @@ impl SweepMatcher {
             + self
                 .sources
                 .iter()
-                .map(|s| s.family.capacity() + s.raw.capacity() + s.class.class_name().len())
+                .map(|s| {
+                    s.family.capacity()
+                        + s.raw.capacity()
+                        + s.class.class_name().len()
+                        + s.repeat_seed.as_ref().map_or(0, |seed| seed.raw.capacity())
+                })
                 .sum::<usize>();
         let matcher = |value: &Option<(AhoCorasick, Vec<(usize, SweepLink)>)>| {
             value.as_ref().map_or(0, |(ac, meta)| {
                 ac.memory_usage() + meta.capacity() * std::mem::size_of::<(usize, SweepLink)>()
             })
         };
-        std::mem::size_of::<Self>() + sources + matcher(&self.folded) + matcher(&self.exact)
+        std::mem::size_of::<Self>()
+            + sources
+            + matcher(&self.folded)
+            + matcher(&self.exact)
+            + self
+                .derived_exact
+                .as_ref()
+                .map_or(0, DerivedExactMatcher::allocation_bytes)
     }
 
     /// Returns `None` when no source yields a pattern.
@@ -553,6 +565,19 @@ struct DerivedExactMatcher {
 }
 
 impl DerivedExactMatcher {
+    fn allocation_bytes(&self) -> usize {
+        let buckets = self.sources.capacity() * std::mem::size_of::<(String, Vec<usize>)>() * 2;
+        self.matcher.memory_usage()
+            + buckets
+            + self
+                .sources
+                .iter()
+                .map(|(raw, owners)| {
+                    raw.capacity() + owners.capacity() * std::mem::size_of::<usize>()
+                })
+                .sum::<usize>()
+    }
+
     fn build(
         sources: &[SweepSource],
         remaining_patterns: usize,

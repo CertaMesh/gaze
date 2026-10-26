@@ -387,7 +387,7 @@ pub struct SessionTransaction<'session> {
     captured_generation: u64,
     staged: SessionState,
     manifest_limit: Option<usize>,
-    manifest_charge: Option<(usize, [usize; 5])>,
+    manifest_charge: Option<(usize, [usize; 6])>,
     capacity_exceeded: bool,
 }
 
@@ -1360,7 +1360,36 @@ impl<'session> SessionTransaction<'session> {
         raw: &str,
         seed: RepeatSeed,
     ) {
+        let family_name = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
+        let payload = if self.manifest_limit.is_some() {
+            let key = TokenKey {
+                family: family_name.to_owned(),
+                class: class.clone(),
+                raw: raw.to_owned(),
+            };
+            if !self.staged.token_by_value.contains_key(&key) {
+                return;
+            }
+            if self.staged.repeat_seeds_by_value.contains_key(&key) {
+                0
+            } else {
+                let payload = raw
+                    .len()
+                    .saturating_add(family_name.len())
+                    .saturating_add(class.class_name().len());
+                if self
+                    .ensure_manifest_room(payload.saturating_mul(2).saturating_add(8192))
+                    .is_err()
+                {
+                    return;
+                }
+                payload
+            }
+        } else {
+            0
+        };
         record_repeat_seed_in_state(&mut self.staged, family, class, raw, seed);
+        self.charge_manifest_growth(payload);
     }
 
     pub(crate) fn sweep_matcher_view(&self) -> Result<Option<Arc<SweepMatcher>>> {
@@ -1981,13 +2010,14 @@ fn build_sweep_matcher(state: &SessionState) -> Result<Option<Arc<SweepMatcher>>
     Ok(SweepMatcher::build(sources)?.map(Arc::new))
 }
 
-fn manifest_capacities(state: &SessionState) -> [usize; 5] {
+fn manifest_capacities(state: &SessionState) -> [usize; 6] {
     [
         state.token_by_value.capacity(),
         state.value_by_token.capacity(),
         state.evidence_by_value.capacity(),
         state.next_by_class.capacity(),
         state.json_spelled.capacity(),
+        state.repeat_seeds_by_value.capacity(),
     ]
 }
 
@@ -2006,7 +2036,8 @@ fn manifest_storage_bytes(state: &SessionState) -> usize {
         .saturating_add(state.value_by_token.capacity().saturating_mul(128))
         .saturating_add(state.evidence_by_value.capacity().saturating_mul(256))
         .saturating_add(state.next_by_class.capacity().saturating_mul(128))
-        .saturating_add(state.json_spelled.capacity().saturating_mul(64));
+        .saturating_add(state.json_spelled.capacity().saturating_mul(64))
+        .saturating_add(state.repeat_seeds_by_value.capacity().saturating_mul(256));
     let keys = state
         .token_by_value
         .iter()
@@ -2018,6 +2049,12 @@ fn manifest_storage_bytes(state: &SessionState) -> usize {
                 .saturating_add(token.capacity())
         })
         .chain(state.evidence_by_value.keys().map(|key| {
+            key.raw
+                .capacity()
+                .saturating_add(key.family.capacity())
+                .saturating_add(key.class.class_name().len())
+        }))
+        .chain(state.repeat_seeds_by_value.keys().map(|key| {
             key.raw
                 .capacity()
                 .saturating_add(key.family.capacity())
@@ -5785,13 +5822,20 @@ mod record_allocation_tests {
             let raw = format!("C-{index:06}");
             transaction.tokenize(&class, &raw).unwrap();
             let before = transaction.manifest_allocation_bytes();
+            let old_capacity = transaction.staged.repeat_seeds_by_value.capacity();
             let seed = RepeatSeed {
                 raw: raw.clone(),
                 kind: gaze_types::LabelledValueRepeatSeedKind::ExactScalar,
             };
             transaction.record_repeat_seed(None, &class, &raw, seed.clone());
             let after = transaction.manifest_allocation_bytes();
-            assert!(after > before, "retained repeat provenance must be charged");
+            let bucket_growth = (transaction.staged.repeat_seeds_by_value.capacity()
+                - old_capacity)
+                * std::mem::size_of::<(TokenKey, StoredRepeatSeed)>();
+            assert!(
+                after - before >= bucket_growth + raw.len(),
+                "retained repeat provenance must be charged"
+            );
             assert_eq!(after, manifest_allocation_bytes(&transaction.staged));
             transaction.record_repeat_seed(None, &class, &raw, seed);
             assert_eq!(transaction.manifest_allocation_bytes(), after);
