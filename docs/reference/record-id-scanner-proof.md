@@ -56,11 +56,92 @@ labels, plural ID keys, pair-key records, and header-column mapping remain
 follow-ups. The strict mixed-carrier invariant covers numeric counterweights;
 it does not claim that direct numeric ID emission preserves JSON validity.
 
+## Lexical value and carrier checks
+
+Field ownership also requires an ID-shaped value. The decoded body contains a
+digit and starts with an alphanumeric character, optionally preceded by one
+`-`, `@`, or `_`. A separate base64 check retains existing digit-free values
+such as `+YQ==` and `opaque+YQ==`. It validates the run, terminal padding, and
+following delimiter. Digit-free base64 needs an explicit label separator or a
+quoted scalar; a closing quote is accepted only for a quoted value or proven
+parent scalar. Opening attribute quotes cannot terminate a preceding word.
+Quoted alphabetic placeholders remain public.
+
+Unquoted groups stop at carrier operators and record boundaries. Grouping
+retains up to four single-space-separated groups within the existing diagnostic
+limit. A space-only label needs a digit in its first group before grouping.
+Overlong single runs retain full ownership and limit diagnostics. Dotted member
+paths and template placeholders are rejected.
+
+The existing closed wrapper vocabulary remains supported. Outside proven data
+scalars, a paired wrapper contains alphanumeric-led content with both letters
+and digits, without operator syntax. Numeric-only wrapped arguments stay public.
+Validated JSON, CSV, and SQL scalar contents retain their established wrapper
+and multiline behavior. Unterminated prose values stop at unescaped record-line
+boundaries. A shared markup index distinguishes attribute syntax from data
+in both primary recognition and repeat matching. Proven scalar ranges retain
+original-byte mappings across JSON decoding.
+
+Before the lexical fixes, the carrier generator failed by owning `/td` after
+an HTML label. The JSON-like generator independently failed by replacing an
+object key in JSONC. Both tests now assert the resulting observable structure.
+
+The committed carrier matrix checks 328 label/carrier combinations and 192
+placeholder cases against manifest raw values and exact carrier structure.
+Another 32 cases preserve JSON-like keys and bare numbers across same-document
+and later-session repeats, including JSONC, trailing commas, NaN, Python repr,
+JavaScript objects, leading-zero numbers, and streamed containers. Forty-eight
+stray-quote checks and one Unicode-space key check exercise the lexical gate
+without Serde container acceptance. Thirty-six unterminated quote cases retain
+next-line code, SQL, and HTML syntax. Separate checks retain whole private values
+containing key-looking text, leading symbols, grouped IDs, wrapper dialects,
+and padded base64 values with operator counterweights.
+Eighteen positive cases retain quoted HTML attributes and embedded JSON, CSV,
+and SQL data. Eighteen same-document and later-turn repeat cases protect bare
+attribute syntax while retaining quoted data, including escaped JSON fragments.
+Comparison operators before a label do not create markup context.
+Direct unquoted attributes remain raw pending safe token emission.
+
+The strict JSON gate continues to reject any replacement crossing real JSON
+syntax or escape interiors. The additional lexical gate rejects hits contained
+in quoted keys, bare number lexemes in container text, and JSON literals.
+Containment allows a whole private value to include key-looking data in prose.
+Both gates index decoded spellings and project checks to original source bytes.
+
+## Minified record lookup work
+
+URL-shaped whitespace runs are indexed once per input. Each hit queries sorted
+ranges instead of rescanning the surrounding run. The work-counter test executes
+all lookups on 500, 1,000, 2,000, and 4,000 minified records and requires exactly
+one input-length scan. It also retains URL exclusion behavior. No timing assert
+is used.
+
+`scripts/verify_record_id_minified_scaling.py target/debug/gaze` reports diagnostic
+debug CLI timings. It checks every record's keys, numeric fields, tokenized ID,
+repeat copies, entry count, and exact restore. These timings do not certify the
+full detection benchmark.
+
+Diagnostic unoptimized CLI observations at `fe4af649`, one sample per case,
+with concurrent replay work on the shared machine. Each clean invocation
+includes process startup. Restore runs outside the timed interval and is exact.
+
+| Records | No copy, seconds | One copy, seconds |
+| --- | ---: | ---: |
+| 500 | 0.256 | 0.303 |
+| 1,000 | 0.313 | 0.363 |
+| 2,000 | 0.412 | 0.506 |
+| 4,000 | 0.635 | 0.774 |
+
+Every row checks the expected entry count, keys, number types, and all ID copies.
+These single observations do not establish a base/candidate speedup. The work
+counter independently proves that the URL-run index is built once per input.
+
 ## Differential counts
 
 The frozen scanner comparison checks 29,390 captures across generated
 serializations, existing fixtures, mixed prefixes, and sibling/scaling inputs.
-All retain identical results.
+The comparison freezes the original capture grammar and checks scanner boundaries
+before ID-shape acceptance. All retain identical boundary results.
 
 The seeded random comparison checks 359,152 captures. It compares fresh and
 shared indexes and asserts every class count:
@@ -103,7 +184,7 @@ and nice 10. Workspace checks retain the shared build lock.
 The `record-id-mutations` check runs
 `scripts/verify_record_id_scanner_mutations.py` from a clean checkout with a
 signed HEAD. Each named baseline must execute exactly one passing test before
-mutation. All 32 mutants compile and fail their named regression test. The
+mutation. All 46 mutants compile and fail their named regression test. The
 script restores each source byte-for-byte and writes logs and hash receipts
 under `target/scanner-mutations/`. It never creates commits or uses a stash.
 
@@ -113,8 +194,20 @@ matching source hashes before and after restoration, plus baseline and mutant
 log hashes. The probes cover quote
 cache reuse, JSON region recovery, object-key and container ownership, escaped
 whitespace, repeat eligibility, JSON sweep boundaries, derived pattern bounds,
-padded values, and session provenance.
+padded values, session provenance, lexical carrier gates, ID-shape exceptions,
+HTML attribute syntax, and URL-index work. Independent ownership assertions
+exercise header and escaped-prose defenses before the value-shape floor.
 
 These tests do not replace full-corpus benchmark certification. Detection
 changes still require both scored-label contracts and mechanism evidence for
 the exact integrated candidate before merge.
+
+## Current validation boundary
+
+The 51 focused sweep tests passed at implementation `af222708`. The 46-mutant
+receipt pins that implementation. The original reviewer replay at preceding
+implementation `fe4af649` retained all 35,214 JSON-case verdicts and all 176
+carrier structures, with exact carrier restore. Its existing deferred leaks and
+375 direct-numeric JSON validity failures remain. Replay of the final context
+fix, Anvil fast, and the single workspace/all-features run remain pending.
+No full-corpus benchmark certification or merge is claimed.
