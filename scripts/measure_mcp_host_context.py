@@ -5,7 +5,8 @@ CLI Absent uses gaze_read_text and its filesystem manifest store. The embedded
 rmcp host uses a synthetic lookup and a no-I/O manifest store with the same core
 pipeline and envelope. Its 32 record fields and 32 argument scalars are fixed;
 context is host-owned process configuration, never a model request field.
-Five fresh-process runs per path alternate embedded Absent/Present order. Each
+Five fresh-process runs per path alternate embedded Absent/Present order. An
+optional reference host adds interleaved before/after Present measurements. Each
 run initializes MCP, checks the tool catalog, warms up, then measures sequential
 validated tools/call round trips. Peak RSS includes startup and warmup and is
 read from wait4 for exactly that server process. No raw responses are retained.
@@ -139,21 +140,39 @@ def main():
     parser.add_argument("--cli-bin", type=Path, required=True)
     parser.add_argument("--host-bin", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--reference-host-bin", type=Path)
+    parser.add_argument("--reference-source-sha")
     parser.add_argument("--calls", type=int, default=50)
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--runs", type=int, default=5)
     args = parser.parse_args()
     if args.calls < 20 or args.runs < 5 or args.warmup < 1:
         parser.error("require at least 20 calls, five runs and one warmup")
+    if bool(args.reference_host_bin) != bool(args.reference_source_sha):
+        parser.error("reference host binary and source SHA must be supplied together")
+    if args.reference_source_sha:
+        import re
+        if not re.fullmatch(r"[0-9a-f]{40}", args.reference_source_sha):
+            parser.error("reference source must be a full commit SHA")
+        subprocess.run(["git", "cat-file", "-e", f"{args.reference_source_sha}^{{commit}}"], cwd=ROOT, check=True)
     cli, host = args.cli_bin.resolve(strict=True), args.host_bin.resolve(strict=True)
+    reference = args.reference_host_bin.resolve(strict=True) if args.reference_host_bin else None
+    if reference == host:
+        parser.error("reference and candidate hosts must be independent binaries")
     observations = {mode: [] for mode in ("cli-absent", "embedded-absent", "embedded-present")}
+    if reference:
+        observations["reference-present"] = []
     with tempfile.TemporaryDirectory(prefix="gaze-mcp-measure-") as cwd:
         for repetition in range(args.runs):
-            modes = ["cli-absent"] + (["embedded-absent", "embedded-present"] if repetition % 2 == 0
-                                       else ["embedded-present", "embedded-absent"])
+            embedded = ["embedded-absent"] + (["reference-present"] if reference else []) + ["embedded-present"]
+            modes = ["cli-absent"] + (embedded if repetition % 2 == 0 else embedded[::-1])
             for mode in modes:
-                command = ([str(cli), "mcp", "serve", "--manifest-dir", str(Path(cwd) / f"manifest-{repetition}")]
-                           if mode == "cli-absent" else [str(host), mode.removeprefix("embedded-")])
+                if mode == "cli-absent":
+                    command = [str(cli), "mcp", "serve", "--manifest-dir", str(Path(cwd) / f"manifest-{repetition}")]
+                elif mode == "reference-present":
+                    command = [str(reference), "present"]
+                else:
+                    command = [str(host), mode.removeprefix("embedded-")]
                 observations[mode].append(run(command, mode, args.calls, args.warmup, cwd))
     summary = {}
     for mode, rows in observations.items():
@@ -174,6 +193,10 @@ def main():
         "concurrency": 1, "record_fields": 32, "argument_scalars_embedded": 32,
         "argument_utf8_bytes_embedded": sum(len(f"field{i:02}") + len(f"Public synthetic value {i:02}") for i in range(32)),
         "summary": summary, "runs": observations}
+    if reference:
+        report["reference"] = {"source_sha": args.reference_source_sha,
+                               "host_binary_sha256": digest(reference),
+                               "mode": "reference-present"}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(summary, indent=2))

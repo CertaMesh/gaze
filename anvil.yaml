@@ -159,4 +159,4 @@ checks:
     inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/measure_mcp_host_context.py, anvil.yaml]
     toolchain: *rust-tools
     commands:
-      - env GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/measure_mcp_host_context.py --cli-bin target/release/gaze --host-bin target/release/examples/host_context_measure --output target/gate/mcp-host-latency-rss.json
+      - env GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/measure_mcp_host_context.py --cli-bin target/release/gaze --host-bin target/release/examples/host_context_measure --output target/gate/mcp-host-latency-rss.json --reference-host-bin target/gate/mcp-host-before-cache/host_context_measure --reference-source-sha f9f79848e6e6f4837821862801a4a795714e1547

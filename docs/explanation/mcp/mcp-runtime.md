@@ -113,8 +113,9 @@ across calls to avoid rebuilding regexes. A different session, resident recogniz
 registry, policy, rulepack set or locale chain replaces the single cache slot.
 Concurrent calls for the same profile construct it once; failed assembly remains
 fail-closed. Per-call argument admission, parsing and guess exclusions still run
-on every dispatch, and dictionary values remain request-local. Dropping the last
-selection handle releases its cache. NER and safety-net handles remain resident. No default implementation discards
+on every dispatch. Each call rebuilds its dictionary bundle after exclusions;
+compiled dictionary automata stay in the private profile. Replacing the profile
+or dropping the last selection handle releases those cached inputs. NER and safety-net handles remain resident. No default implementation discards
 `Present`; unsupported hosts reject it before invoking a tool.
 
 The resident pipeline protects model-authored arguments. Private context applies
