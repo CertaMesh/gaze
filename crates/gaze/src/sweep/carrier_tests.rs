@@ -403,3 +403,62 @@ fn closed_wrapper_set_needs_letters_and_digits_outside_data() {
     }
     assert_eq!(checked, 15);
 }
+
+#[cfg(feature = "bundled-recognizers")]
+#[test]
+fn base64_record_ids_keep_padding_without_owning_operators() {
+    use crate::{CleanDocument, RawDocument, Scope, Session};
+    let pipeline = labelled_pipeline();
+    let mut checked = 0;
+    for value in ["+YQ==", "opaque+YQ==", "/YQ=", "YWJjZA==", "abc/def"] {
+        for quoted in [false, true] {
+            for suffix in ["", "; status=public", "\npublic_version=FRAME"] {
+                let input = if quoted {
+                    format!("customerId: \"{value}\"{suffix}")
+                } else {
+                    format!("customerId={value}{suffix}")
+                };
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = pipeline
+                    .redact(&session, RawDocument::Text(input.clone()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
+                assert_eq!(
+                    session.snapshot_entries()[0].raw,
+                    value,
+                    "{input} -> {clean}"
+                );
+                assert!(!clean.contains(value));
+                assert_eq!(
+                    pipeline.restore_strict_text(&session, &clean).unwrap(),
+                    input
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 30);
+    for value in [
+        "a == b",
+        "x=+y",
+        "!=",
+        "=>",
+        "+y",
+        "N/A",
+        "foo=bar",
+        "+YQ===",
+        "abc/def(x)",
+    ] {
+        let input = format!("customerId = {value}");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .redact(&session, RawDocument::Text(input.clone()))
+            .unwrap()
+        else {
+            panic!("text")
+        };
+        assert_eq!(clean, input);
+    }
+}

@@ -31,7 +31,8 @@ impl ScalarBoundaryIndex {
             scanner_work(input.len());
             let mut ranges = Vec::new();
             let mut in_tag = false;
-            let mut assignment = None;
+            let mut tag_start = 0;
+            let mut assignment = false;
             let mut quote = None;
             let mut escaped = false;
             for (offset, byte) in input.bytes().enumerate() {
@@ -45,16 +46,18 @@ impl ScalarBoundaryIndex {
                 match byte {
                     b'<' => {
                         in_tag = true;
-                        assignment = None;
+                        tag_start = offset;
+                        assignment = false;
                     }
                     b'>' => {
-                        if let Some(start) = assignment.take() {
-                            ranges.push(start..offset + 1);
+                        if assignment {
+                            ranges.push(tag_start..offset + 1);
                         }
                         in_tag = false;
+                        assignment = false;
                     }
                     b'=' if in_tag => {
-                        assignment.get_or_insert(offset);
+                        assignment = true;
                     }
                     b'"' | b'\'' if in_tag => {
                         quote = Some(byte);
@@ -63,8 +66,8 @@ impl ScalarBoundaryIndex {
                     _ => {}
                 }
             }
-            if let Some(start) = assignment {
-                ranges.push(start..input.len());
+            if assignment {
+                ranges.push(tag_start..input.len());
             }
             ranges
         });
@@ -1648,6 +1651,21 @@ impl QuoteCloseIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markup_attribute_names_and_values_share_carrier_context() {
+        let input = "<Customer ID value=\"C-731284\"/>";
+        let mut index = ScalarBoundaryIndex::default();
+        for needle in ["value", "C-731284"] {
+            assert!(
+                index.inside_markup_assignment(input, input.find(needle).unwrap()),
+                "{needle}"
+            );
+        }
+        let wrapper = "Customer ID=<C-731284>";
+        assert!(!ScalarBoundaryIndex::default()
+            .inside_markup_assignment(wrapper, wrapper.find("C-731284").unwrap()));
+    }
 
     fn compare(input: &str) -> usize {
         static RULES: std::sync::OnceLock<Vec<RegexDetector>> = std::sync::OnceLock::new();

@@ -123,6 +123,7 @@ def main():
         ('drop-grouped-ids', 'crates/gaze-recognizers/src/regex.rs', '        let grouping = input', '        let grouping = false && input', 'owned_identifier_relaxations_preserve_covered_shapes', 'gaze-pii'),
         ('let-unterminated-quotes-cross-lines', 'crates/gaze-recognizers/src/regex.rs', 'uncertain_scalar_end(input, start, enclosing.end)', 'enclosing.end', 'unterminated_id_quotes_never_own_next_line_syntax', 'gaze-pii'),
         ('block-whole-id-on-key-looking-content', 'crates/gaze/src/sweep.rs', 'atom.start <= span.start && span.end <= atom.end', 'atom.start < span.end', 'lexical_sweep_keeps_whole_private_values_with_key_looking_content', 'gaze-pii'),
+        ('drop-digit-free-base64-ids', 'crates/gaze-recognizers/src/regex.rs', '    let base64 = (!in_markup_tag || scan.quoted_value)\n        && padded_base64_identifier(body, &input[scan.span.end..]);', '    let base64 = false;', 'base64_record_ids_keep_padding_without_owning_operators', 'gaze-pii'),
     ]
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}

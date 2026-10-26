@@ -514,8 +514,7 @@ impl RegexDetector {
             let mut scans: Vec<_> = matches.collect();
             if self.labelled_value_mode == LabelledValueMode::FieldOwned {
                 for scan in &mut scans {
-                    let markup = scan.quoted_value
-                        && !scan.parent_scalar
+                    let markup = !scan.parent_scalar
                         && scalar_index.inside_markup_assignment(input, scan.span.start);
                     constrain_owned_identifier(input, scan, markup);
                 }
@@ -901,11 +900,36 @@ fn owned_id_start(value: &str) -> bool {
     value.chars().next().is_some_and(char::is_alphanumeric)
 }
 
+fn padded_base64_identifier(value: &str, suffix: &str) -> bool {
+    let body = value.trim_end_matches('=');
+    let padding = value.len() - body.len();
+    value.len() >= 4
+        && padding <= 2
+        && !body.is_empty()
+        && body
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"+/".contains(&byte))
+        && body.bytes().any(|byte| byte.is_ascii_alphanumeric())
+        && (padding > 0 || body.contains(['+', '/']))
+        && (suffix.is_empty()
+            || suffix
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_whitespace() || matches!(ch, '"' | '\'' | ',' | ';'))
+            || suffix.trim_start_matches('\\').starts_with(['"', '\'']))
+}
+
 fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_markup_tag: bool) {
     // Ownership establishes the field, never permission to consume its carrier syntax.
     let raw = &input[scan.span.clone()];
     let mut keep = raw.len();
-    if !scan.quoted_value {
+    let run_end = raw.find(char::is_whitespace).unwrap_or(raw.len());
+    if !scan.quoted_value
+        && !in_markup_tag
+        && padded_base64_identifier(&raw[..run_end], &input[scan.span.start + run_end..])
+    {
+        keep = run_end;
+    } else if !scan.quoted_value {
         let mut groups = 1;
         let grouping = input[..scan.span.start].trim_end().ends_with([':', '='])
             || raw
@@ -962,10 +986,13 @@ fn constrain_owned_identifier(input: &str, scan: &mut LabelledValueScan, in_mark
         && !scan.parent_scalar
         && (!body.chars().next().is_some_and(char::is_alphanumeric)
             || !body.chars().any(char::is_alphabetic)
+            || body.chars().any(|ch| "<>&|!${}[]()?=;\"'".contains(ch))
             || in_markup_tag
             || !opener.is_some_and(record_id_wrapper));
-    scan.rejected |= !owned_id_start(shape)
-        || !body.chars().any(char::is_numeric)
+    let base64 = (!in_markup_tag || scan.quoted_value)
+        && padded_base64_identifier(body, &input[scan.span.end..]);
+    scan.rejected |= (!owned_id_start(shape) && !base64)
+        || (!body.chars().any(char::is_numeric) && !base64)
         || body.contains("{{")
         || body.contains("${")
         || wrapper_rejected

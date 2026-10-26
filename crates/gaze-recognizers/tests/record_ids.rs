@@ -359,6 +359,12 @@ fn labelled_person_ids_capture_only_whole_values_and_restore() {
             "customer_id",
         ),
         ("customer_id=C+000123", "C+000123", "customer_id"),
+        ("customer_id=+YQ==", "+YQ==", "customer_id"),
+        (
+            r#"{"employee_id":"opaque+YQ=="}"#,
+            "opaque+YQ==",
+            "employee_id",
+        ),
         (
             "employee_id=_opaque/REF-01",
             "_opaque/REF-01",
@@ -513,8 +519,6 @@ fn alphabetic_and_symbol_only_application_keys_are_public_placeholders() {
         r#"{"contact_record_id":"opaquevalue"}"#,
         r#"{\"employee_id\":\"opaquevalue\"}"#,
         r#"{"customer_id":"indigo crystal"}"#,
-        "customer_id=+YQ==",
-        r#"{"employee_id":"opaque+YQ=="}"#,
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = core.pseudonymize_text(&session, input).unwrap() else {
