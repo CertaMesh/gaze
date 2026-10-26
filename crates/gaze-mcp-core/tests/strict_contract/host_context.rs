@@ -1033,32 +1033,6 @@ async fn host_context_record_returning_lookup_retains_documented_confirmation_or
     }
 }
 
-fn de_bruijn_digits(n: usize) -> String {
-    // B(10, n): every n-digit string appears as a substring.
-    let k = 10usize;
-    let mut a = vec![0usize; k * n];
-    let mut seq = Vec::new();
-    fn db(t: usize, p: usize, n: usize, k: usize, a: &mut [usize], seq: &mut Vec<usize>) {
-        if t > n {
-            if n.is_multiple_of(p) {
-                seq.extend_from_slice(&a[1..=p]);
-            }
-        } else {
-            a[t] = a[t - p];
-            db(t + 1, p, n, k, a, seq);
-            for j in a[t - p] + 1..k {
-                a[t] = j;
-                db(t + 1, t, n, k, a, seq);
-            }
-        }
-    }
-    db(1, 1, n, k, &mut a, &mut seq);
-    let mut s: String = seq.iter().map(|d| char::from(b'0' + *d as u8)).collect();
-    let prefix = s[..n - 1].to_owned();
-    s.push_str(&prefix);
-    s
-}
-
 #[tokio::test]
 async fn host_context_enumeration_rejected_before_record_processing() {
     let control_session = Session::new(Scope::Ephemeral).unwrap();
@@ -1078,9 +1052,12 @@ async fn host_context_enumeration_rejected_before_record_processing() {
             .unwrap(),
         "found 48213"
     );
-    let enumeration = de_bruijn_digits(5);
-    assert_eq!(enumeration.len(), 100_004);
-    assert!(enumeration.contains("48213"));
+    let enumeration = (0..100_000)
+        .map(|value| format!("{value:05}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(enumeration.len(), 599_999);
+    assert!(enumeration.contains(" 48213 "));
     for selection in [
         split_context("48213"),
         raw_context(KNOWN),
@@ -1316,5 +1293,104 @@ async fn host_context_collapsed_whitespace_guess_has_no_membership_oracle() {
             assert_eq!(out.payload, json!(KNOWN));
             assert!(session.tokens().is_empty());
         }
+    }
+}
+
+#[tokio::test]
+async fn host_context_exact_guess_does_not_disclose_case_or_whitespace() {
+    for record in ["Qx7Lm2Rt", "Qx7 Lm2Rt"] {
+        for guess in [
+            record.to_lowercase(),
+            record.replace(' ', "  "),
+            record.to_owned(),
+        ] {
+            let should_exclude = guess == record;
+            let returned = format!("found {record}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let out = call(
+                &session,
+                json!({"guess":guess}),
+                Some(json!(returned)),
+                split_context(record),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                out.payload == json!(returned),
+                should_exclude,
+                "record={record} guess={guess}"
+            );
+            assert_eq!(session.tokens().len(), usize::from(!should_exclude));
+            assert_eq!(
+                session
+                    .restore_strict_text(out.payload.as_str().unwrap())
+                    .unwrap(),
+                returned
+            );
+        }
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let guess = record.to_lowercase();
+        let out = call(
+            &session,
+            json!({"guess":guess}),
+            Some(json!(guess)),
+            split_context(record),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out.payload, json!(guess));
+        assert!(session.tokens().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn host_context_zero_byte_entries_rejected_before_record_processing() {
+    for entry in [json!({"": []}), json!([]), json!({})] {
+        for selection in [
+            split_context("Qx7Lm2Rt"),
+            raw_context(UNUSED),
+            HostContextSelection::present("invalid private_canary".into()),
+        ] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let args = json!({"nested":vec![entry.clone(); 4097]});
+            let error = call(&session, args, Some(json!("found Qx7Lm2Rt")), selection)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(
+                    error,
+                    DispatchError::HostContext(HostContextError::ArgumentLimit)
+                ),
+                "{error}"
+            );
+            assert!(session.tokens().is_empty());
+            assert!(!session.has_opaque_identifier_key());
+        }
+    }
+}
+
+#[tokio::test]
+async fn host_context_pair_guesses_cover_documented_numeric_bound() {
+    let args = json!({"nested":(0..32).map(|i| format!("{i:02}")).collect::<Vec<_>>()});
+    for record in ["1407", "3100", "0531", "2929"] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let returned = format!("found {record}");
+        let out = call(
+            &session,
+            args.clone(),
+            Some(json!(returned)),
+            split_context(record),
+        )
+        .await
+        .unwrap();
+        let excluded = record != "2929";
+        assert_eq!(out.payload == json!(returned), excluded);
+        assert_eq!(session.tokens().len(), usize::from(!excluded));
+        assert_eq!(
+            session
+                .restore_strict_text(out.payload.as_str().unwrap())
+                .unwrap(),
+            returned
+        );
     }
 }
