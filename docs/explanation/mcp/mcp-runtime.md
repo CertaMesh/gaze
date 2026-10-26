@@ -113,18 +113,36 @@ NER and safety-net handles remain resident. No default implementation discards
 
 The resident pipeline protects model-authored arguments. Private context applies
 only to responses, with any value guessed in the original arguments excluded.
-Exclusion shares the detection pipeline's normalization, then applies Unicode case
-folding and whitespace collapse without requiring cues. It covers only verbatim
-normalized echoes from single fields or scalar fields joined in traversal order
-with empty or space separators, including echoes with tool-added cues.
-Ordinary recognizers and existing session mappings continue to protect those values.
 
-A record-returning lookup tool still provides a confirmation oracle. A correct
-guess excludes the returned record value from private-context detection. A wrong
-guess leaves that value eligible for a token. The difference can reveal whether
-the guess was correct, even though the model supplied the guessed bytes itself.
-Arbitrary tool transformations and field reorderings can also evade echo exclusion.
-The exclusion therefore does not provide general resistance to guessing attacks.
+Calls with `Present` context have a per-call guess budget, independent of the
+record. `HostContextPolicy::default()` allows at most 4,096 argument bytes and
+32 scalar values in each original and recursively decoded JSON view. Keys count
+toward bytes. Both raw and normalized bytes must fit. Dispatch rejects oversized
+arguments with a value-free error before parsing the record or changing session
+or audit state. Set `PiiEnvelope::with_host_context_policy(HostContextPolicy {
+max_argument_bytes, max_argument_scalars })` to configure these host-owned limits.
+Raising either limit increases the guess budget. `Absent` calls use the ordinary
+MCP operation limits.
+
+Exclusion uses the detection pipeline's normalization, Unicode case folding,
+whitespace collapse, and the response matcher's token-boundary rule. A superstring
+such as `Joanna Lim` does not exclude `Anna Li`. Coverage includes single fields
+and all scalar fields joined in lexicographic key order with empty or space
+separators. Arrays retain index order. It also checks every scalar pair in both
+orders with empty, space, `@`, `-`, and `/` separators. This covers given/family
+fields whose key order differs from schema order, an unrelated interleaved field,
+and common two-field email or identifier templates. Original strings and decoded
+JSON leaves are checked separately. Arbitrary transformations, reordered joins of
+three or more fields, and other separators can still evade exclusion.
+
+A record-returning lookup tool can still confirm a guess. A correct guess
+excludes the returned record value from private-context detection. A wrong guess
+leaves that value eligible for a token. The residual is bounded by the admitted
+argument bytes and scalar count per call, rather than a fixed number of candidate
+values. Enumeration that fits within that budget remains possible. Repeated calls
+are the host's rate-limit responsibility. Exclusion does not provide general
+resistance to guessing attacks. Ordinary recognizers and existing session mappings
+continue to protect their known values.
 
 Only matched response values persist as Rule evidence. Later turns protect those
 values without retaining the record. Unused values and raw context do not enter the

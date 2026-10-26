@@ -333,18 +333,39 @@ configure the envelope with `with_context_policy(policy, rulepacks)`, using the
 exact resident assembly inputs. `CorePipeline::policy` and `rulepacks` expose
 those inputs for the bundled configuration. Unsupported hosts reject `Present`.
 
-The shared Context parser preserves CLI and daemon limits. Context affects only
-tool responses. Private terms present in model-authored arguments are excluded
-for the call. Exclusion uses the detection pipeline's normalization, then Unicode
-case folding and whitespace collapse. It covers only verbatim normalized echoes
-from single fields or scalar fields joined in traversal order with empty or space
-separators. Ordinary detection still protects arguments and responses.
+The shared Context parser preserves CLI and daemon record limits. Context affects
+only tool responses. Private terms present in model-authored arguments are excluded
+for the call. Ordinary detection still protects arguments and responses.
 
-This is not general resistance to guessing attacks. A record-returning lookup
-tool can still confirm a guess: a correct guess excludes the returned value from
-private-context detection, while a wrong guess leaves that value eligible for a
-token. Arbitrary tool transformations and field reorderings can also evade echo
-exclusion. Treat these as known residual membership oracles when exposing tools.
+Calls with `Present` context have a per-call guess budget, independent of the
+record. `HostContextPolicy::default()` allows at most 4,096 argument bytes and
+32 scalar values in each original and recursively decoded JSON view. Keys count
+toward bytes. Both raw and normalized bytes must fit. Dispatch rejects oversized
+arguments with a value-free error before parsing the record or changing session
+or audit state. Set `PiiEnvelope::with_host_context_policy(HostContextPolicy {
+max_argument_bytes, max_argument_scalars })` to configure these host-owned limits.
+Raising either limit increases the guess budget. `Absent` calls use the ordinary
+MCP operation limits.
+
+Exclusion uses the detection pipeline's normalization, Unicode case folding,
+whitespace collapse, and the response matcher's token-boundary rule. A superstring
+such as `Joanna Lim` does not exclude `Anna Li`. Coverage includes single fields
+and all scalar fields joined in lexicographic key order with empty or space
+separators. Arrays retain index order. It also checks every scalar pair in both
+orders with empty, space, `@`, `-`, and `/` separators. This covers given/family
+fields whose key order differs from schema order, an unrelated interleaved field,
+and common two-field email or identifier templates. Original strings and decoded
+JSON leaves are checked separately. Arbitrary transformations, reordered joins of
+three or more fields, and other separators can still evade exclusion.
+
+A record-returning lookup tool can still confirm a guess. A correct guess
+excludes the returned record value from private-context detection. A wrong guess
+leaves that value eligible for a token. The residual is bounded by the admitted
+argument bytes and scalar count per call, rather than a fixed number of candidate
+values. Enumeration that fits within that budget remains possible. Repeated calls
+are the host's rate-limit responsibility. Exclusion does not provide general
+resistance to guessing attacks. Ordinary recognizers and existing session mappings
+continue to protect their known values.
 
 Only actual response matches enter the session as Rule evidence. Unused record
 values do not persist; matched values restore exactly and remain protected on

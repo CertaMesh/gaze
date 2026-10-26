@@ -1058,6 +1058,23 @@ fn de_bruijn_digits(n: usize) -> String {
 
 #[tokio::test]
 async fn host_context_enumeration_rejected_before_record_processing() {
+    let control_session = Session::new(Scope::Ephemeral).unwrap();
+    let control = call(
+        &control_session,
+        json!({"guess":"none"}),
+        Some(json!("found 48213")),
+        split_context("48213"),
+    )
+    .await
+    .unwrap();
+    assert!(!control.payload.as_str().unwrap().contains("48213"));
+    assert_eq!(control_session.tokens().len(), 1);
+    assert_eq!(
+        control_session
+            .restore_strict_text(control.payload.as_str().unwrap())
+            .unwrap(),
+        "found 48213"
+    );
     let enumeration = de_bruijn_digits(5);
     assert_eq!(enumeration.len(), 100_004);
     assert!(enumeration.contains("48213"));
