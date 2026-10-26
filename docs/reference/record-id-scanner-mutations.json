@@ -1,7 +1,7 @@
 [
   {
     "mutation": "drop-json-label-ownership",
-    "head": "f01798b7398c508bd6d3d52ce38863a3681be46a",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
     "command": [
       "cargo",
       "test",
@@ -22,7 +22,7 @@
   },
   {
     "mutation": "rebuild-quote-events-per-query",
-    "head": "f01798b7398c508bd6d3d52ce38863a3681be46a",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
     "command": [
       "cargo",
       "test",
@@ -37,8 +37,134 @@
     "compiled": true,
     "exit": 101,
     "killed": true,
-    "original_sha256": "98afcfff5bcff11851d840735fe6bff2110ec5ab43fb2dbe7ed8f96c79ff3702",
+    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
     "log": "rebuild-quote-events-per-query.log",
-    "restored_sha256": "98afcfff5bcff11851d840735fe6bff2110ec5ab43fb2dbe7ed8f96c79ff3702"
+    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+  },
+  {
+    "mutation": "require-whole-json-document",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_label_close_owns_following_value",
+      "--",
+      "--nocapture"
+    ],
+    "test": "json_label_close_owns_following_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "log": "require-whole-json-document.log",
+    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+  },
+  {
+    "mutation": "ignore-enclosing-label-key",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_label_close_owns_following_value",
+      "--",
+      "--nocapture"
+    ],
+    "test": "json_label_close_owns_following_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "log": "ignore-enclosing-label-key.log",
+    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+  },
+  {
+    "mutation": "drop-container-value-ownership",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "json_label_close_owns_following_value",
+      "--",
+      "--nocapture"
+    ],
+    "test": "json_label_close_owns_following_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "log": "drop-container-value-ownership.log",
+    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+  },
+  {
+    "mutation": "allow-header-label-as-value",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-recognizers",
+      "--lib",
+      "array_header_label_is_not_a_private_value",
+      "--",
+      "--nocapture"
+    ],
+    "test": "array_header_label_is_not_a_private_value",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f",
+    "log": "allow-header-label-as-value.log",
+    "restored_sha256": "b1cd290ad55ede6463bd5bcf31a3e7ac27b2c3d1278fd7fcddef26820d6a835f"
+  },
+  {
+    "mutation": "remove-labelled-sweep-bound",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "pipeline_labelled_sweep_work_and_size_are_bounded",
+      "--",
+      "--nocapture"
+    ],
+    "test": "pipeline_labelled_sweep_work_and_size_are_bounded",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "8cb902460e2278e2a714b86926fd06dd57c8b6a898ccd48bc1e91250bb03916d",
+    "log": "remove-labelled-sweep-bound.log",
+    "restored_sha256": "8cb902460e2278e2a714b86926fd06dd57c8b6a898ccd48bc1e91250bb03916d"
+  },
+  {
+    "mutation": "discard-oversized-session-provenance",
+    "head": "5d34d3ddae4fb775e1cdab974aa7e0adb6cc1d21",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "gaze-pii",
+      "--lib",
+      "pipeline_labelled_sweep_work_and_size_are_bounded",
+      "--",
+      "--nocapture"
+    ],
+    "test": "pipeline_labelled_sweep_work_and_size_are_bounded",
+    "compiled": true,
+    "exit": 101,
+    "killed": true,
+    "original_sha256": "c556864ff0d9bb1d206708630d3aaebedcc57c8d0e46028d32e6f0152ff14096",
+    "log": "discard-oversized-session-provenance.log",
+    "restored_sha256": "c556864ff0d9bb1d206708630d3aaebedcc57c8d0e46028d32e6f0152ff14096"
   }
 ]
