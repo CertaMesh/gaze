@@ -29,6 +29,11 @@ use gaze_types::{
 pub mod artifacts;
 pub(crate) mod decode;
 mod ort;
+mod reuse;
+
+#[doc(hidden)]
+pub use reuse::InferenceRequest;
+use reuse::View;
 
 pub use artifacts::{
     verify_nym_bundle, NYM_SMALL_CHECKSUM_FILE, NYM_SMALL_HF_COMMIT, NYM_SMALL_HF_REPO,
@@ -120,27 +125,7 @@ impl SafetyNet for NymSafetyNet {
         clean_text: &str,
         context: SafetyNetContext<'_>,
     ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
-        let backend = self.backend()?;
-        let spans = backend.infer(clean_text)?;
-        let mut suspects = Vec::with_capacity(spans.len());
-        let mut telemetry = Vec::new();
-        for span in spans {
-            let range = span.start..span.end;
-            match span_to_disposition(span, clean_text, backend.operating_point(), context)? {
-                SpanDisposition::Suspect(suspect) => suspects.push(suspect),
-                SpanDisposition::Refused(reason) => {
-                    telemetry.push(LeakReportTelemetry::ModelSpanRefused {
-                        safety_net_id: NYM_SAFETY_NET_ID.to_string(),
-                        reason,
-                        span: range,
-                        document_kind: context.document_kind,
-                        field_path: context.field_path.map(str::to_string),
-                    });
-                }
-                SpanDisposition::Covered => {}
-            }
-        }
-        Ok((suspects, telemetry))
+        self.check_view(clean_text, context, View::Stable)
     }
 
     fn check_with_neutral(
@@ -159,6 +144,7 @@ impl SafetyNet for NymSafetyNet {
         neutral_text: Option<&str>,
         context: SafetyNetContext<'_>,
     ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+        let _request = InferenceRequest::if_absent();
         let Some(neutral_text) = neutral_text else {
             let _perf = gaze_types::perf_span!("nym_stable_ns");
             let (stable, telemetry) = self.check_with_telemetry(stable_text, context)?;
@@ -183,7 +169,7 @@ impl SafetyNet for NymSafetyNet {
         };
         let (neutral, neutral_telemetry) = {
             let _perf = gaze_types::perf_span!("nym_neutral_ns");
-            self.check_with_telemetry(neutral_text, context)?
+            self.check_view(neutral_text, context, View::Neutral)?
         };
         for event in neutral_telemetry {
             if !telemetry.contains(&event) {
@@ -194,6 +180,37 @@ impl SafetyNet for NymSafetyNet {
             union_view_suspects(stable_text, context.manifest, stable, neutral),
             telemetry,
         ))
+    }
+}
+
+impl NymSafetyNet {
+    fn check_view(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+        view: View,
+    ) -> Result<(Vec<LeakSuspect>, Vec<LeakReportTelemetry>), SafetyNetError> {
+        let backend = self.backend()?;
+        let spans = backend.infer_view(clean_text, view)?;
+        let mut suspects = Vec::with_capacity(spans.len());
+        let mut telemetry = Vec::new();
+        for span in spans {
+            let range = span.start..span.end;
+            match span_to_disposition(span, clean_text, backend.operating_point(), context)? {
+                SpanDisposition::Suspect(suspect) => suspects.push(suspect),
+                SpanDisposition::Refused(reason) => {
+                    telemetry.push(LeakReportTelemetry::ModelSpanRefused {
+                        safety_net_id: NYM_SAFETY_NET_ID.to_string(),
+                        reason,
+                        span: range,
+                        document_kind: context.document_kind,
+                        field_path: context.field_path.map(str::to_string),
+                    });
+                }
+                SpanDisposition::Covered => {}
+            }
+        }
+        Ok((suspects, telemetry))
     }
 }
 
@@ -352,6 +369,23 @@ pub mod test_support {
     /// Tokenizes and scores `text` with the real model: `(char offsets, piece scores)`.
     pub fn capture(net: &NymSafetyNet, text: &str) -> Result<ScoredPieces, SafetyNetError> {
         net.backend()?.score_pieces(text)
+    }
+
+    /// Re-runs every reused window and compares all probability bits before decoding.
+    /// Both views remain distinct. The second scan also verifies cross-scan reuse.
+    pub fn verify_window_reuse(net: &NymSafetyNet, text: &str) -> Result<usize, SafetyNetError> {
+        let _scope = InferenceRequest::verifying();
+        let backend = net.backend()?;
+        for view in [View::Stable, View::Neutral] {
+            let first = backend.infer_view(text, view)?;
+            let second = backend.infer_view(text, view)?;
+            if first != second {
+                return Err(SafetyNetError::InvalidOutput {
+                    message: "Nym raw findings changed on repeated inference".into(),
+                });
+            }
+        }
+        Ok(reuse::verified_windows())
     }
 
     /// Replays captured model pieces through the production decoder and manifest correlation.

@@ -282,6 +282,8 @@ impl Pipeline {
         context: ProtectionContext<'_>,
         max_expanded_bytes: usize,
     ) -> std::result::Result<String, BoundaryRefusal> {
+        #[cfg(feature = "bundled-recognizers")]
+        let _inference_request = gaze_recognizers::inference_request();
         if self.safety_nets_len() == 0 {
             return Ok(input.to_owned());
         }
@@ -473,6 +475,8 @@ impl Pipeline {
         input: &str,
         context: ProtectionContext<'_>,
     ) -> std::result::Result<String, ProtectionError> {
+        #[cfg(feature = "bundled-recognizers")]
+        let _inference_request = gaze_recognizers::inference_request();
         self.validate_protection_context(context)?;
         let owned = transaction.snapshot_entries();
         let ranges = transaction

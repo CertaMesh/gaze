@@ -925,6 +925,8 @@ impl Pipeline {
         decision: SafetyNetDecision,
         report: &mut LeakReport,
     ) -> Result<CleanText> {
+        #[cfg(feature = "bundled-recognizers")]
+        let _inference_request = gaze_recognizers::inference_request();
         let mut clean = self.redact_text_with_manifest(
             target,
             text,
@@ -1000,6 +1002,8 @@ impl Pipeline {
         Vec<GazeLocalProtectionTraceItem>,
         Vec<CandidateEvent>,
     )> {
+        #[cfg(feature = "bundled-recognizers")]
+        let _inference_request = gaze_recognizers::inference_request();
         let decision = policy.decision();
         let mut target = ProtectionTarget::Live(session);
         let mut protection_trace = ProtectionTraceCollector::new(text);
