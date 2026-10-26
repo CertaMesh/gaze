@@ -779,3 +779,237 @@ async fn host_context_legacy_opaque_snapshot_restores_but_dispatch_fails_closed(
         DispatchError::HostContext(HostContextError::Policy)
     ));
 }
+
+#[tokio::test]
+async fn host_context_normalized_echo_has_no_membership_oracle_or_promotion() {
+    for guess in [
+        "Ｓynthetic Qorvex",
+        "Synthetic Ｑorvex",
+        "ＳＹＮＴＨＥＴＩＣ　ＱＯＲＶＥＸ",
+        "Synt\u{200C}hetic Qorvex",
+        "Synthetic Qor\u{200D}vex",
+    ] {
+        let mut outcomes = Vec::new();
+        for name in [KNOWN, UNUSED] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let args = json!({"guess":guess});
+            let out = call(&session, args.clone(), None, raw_context(name))
+                .await
+                .unwrap();
+            assert_eq!(out.payload, args, "guess {guess}");
+            assert!(session.tokens().is_empty(), "guess {guess}");
+            outcomes.push(out.payload);
+        }
+        assert_eq!(outcomes[0], outcomes[1]);
+    }
+}
+
+struct ConcatTool {
+    descriptor: ToolDescriptor,
+    separator: &'static str,
+}
+
+#[async_trait]
+impl Tool for ConcatTool {
+    fn descriptor(&self) -> &ToolDescriptor {
+        &self.descriptor
+    }
+
+    async fn invoke(&self, ctx: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
+        let args = ctx.redacted_args();
+        let decoded = args["nested"]
+            .as_str()
+            .and_then(|text| serde_json::from_str::<Value>(text).ok());
+        let nested = decoded.as_ref().unwrap_or(&args["nested"]);
+        let parts = if let Some(parts) = nested.as_array() {
+            parts
+                .iter()
+                .map(|part| {
+                    part.as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| part.to_string())
+                })
+                .collect::<Vec<_>>()
+        } else {
+            ["first", "last"]
+                .iter()
+                .map(|key| args[key].as_str().unwrap_or_default().to_owned())
+                .collect()
+        };
+        Ok(ToolResponse::json(json!(format!(
+            "no match for {}",
+            parts.join(self.separator)
+        ))))
+    }
+}
+
+fn split_context(term: &str) -> HostContextSelection {
+    let class = if term.starts_with("DE89") {
+        "custom:iban"
+    } else {
+        "custom:private_value"
+    };
+    HostContextSelection::present(
+        json!({
+            "record":{"value":term}, "field_map":{"/value":class},
+            "record_match_kinds":{class:["exact"]}
+        })
+        .to_string(),
+    )
+}
+
+async fn concat_call(term: &str, args: Value, separator: &'static str) -> (Value, usize) {
+    let mut registry = ToolRegistry::new();
+    registry
+        .register(ConcatTool {
+            descriptor: ToolDescriptor::agent("test", json!({})).with_carriers(
+                CarrierDeclaration::new(
+                    vec![
+                        vec![CarrierSegment::Member("first".into())],
+                        vec![CarrierSegment::Member("last".into())],
+                        vec![CarrierSegment::Member("nested".into())],
+                    ],
+                    vec![vec![
+                        CarrierSegment::Member("nested".into()),
+                        CarrierSegment::AnyIndex,
+                    ]],
+                ),
+                CarrierDeclaration::text_fields(&[]),
+            ),
+            separator,
+        })
+        .unwrap();
+    let store = Store::default();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut policy = host_policy();
+    policy.detectors[0].pattern = Some("unmatched-sentinel@example\\.invalid".into());
+    policy.rules = vec![gaze::RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let locales = gaze::LocaleChain::from(&[gaze::LocaleTag::Global][..]);
+    let context = gaze::Context::from_json_str("{}").unwrap();
+    let pipeline = gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
+    let selection = split_context(term);
+    let out = PiiEnvelope::new(
+        &registry,
+        &Auth,
+        &store,
+        &pipeline,
+        &session,
+        locales.as_slice(),
+        &SessionIdPolicy::default_strict(),
+    )
+    .with_context_policy(&policy, &[])
+    .dispatch(&Principal::new("agent"), "test", args, None, selection)
+    .await
+    .unwrap();
+    (out.payload, session.tokens().len())
+}
+
+#[tokio::test]
+async fn host_context_joined_echo_has_no_membership_oracle_or_promotion() {
+    let cases = [
+        (
+            KNOWN,
+            json!({"first":"Synthetic", "last":"Qorvex"}),
+            " ",
+            KNOWN,
+        ),
+        (
+            KNOWN,
+            json!({"first":"Ｓynthetic", "last":"Ｑorvex"}),
+            " ",
+            "Ｓynthetic Ｑorvex",
+        ),
+        (
+            KNOWN,
+            json!({"nested":json!(["Synthetic", "Qorvex"]).to_string()}),
+            " ",
+            KNOWN,
+        ),
+        (
+            "Synthetic-123",
+            json!({"nested":["Ｓynthetic", "－", "１２３"]}),
+            "",
+            "Ｓynthetic－１２３",
+        ),
+        (
+            "true false null 1234",
+            json!({"nested":[true, false, null, 1234]}),
+            " ",
+            "true false null 1234",
+        ),
+        (
+            "synthetic@example.invalid",
+            json!({"nested":["synthetic", "@", "example.invalid"]}),
+            "",
+            "synthetic@example.invalid",
+        ),
+        (
+            "DE89 3704 0044 0532 0130 00",
+            json!({"nested":["DE89", "3704", "0044", "0532", "0130", "00"]}),
+            " ",
+            "DE89 3704 0044 0532 0130 00",
+        ),
+        (
+            "+49 171 3920000",
+            json!({"nested":["+49", 171, 3920000]}),
+            " ",
+            "+49 171 3920000",
+        ),
+    ];
+    for (term, args, separator, echoed) in cases {
+        let hit = concat_call(term, args.clone(), separator).await;
+        let miss = concat_call("Synthetic Nonmatching", args.clone(), separator).await;
+        assert_eq!(
+            hit,
+            (json!(format!("no match for {echoed}")), 0),
+            "args {args}"
+        );
+        assert_eq!(
+            hit, miss,
+            "split-argument echo distinguishes membership: {args}"
+        );
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let selection = split_context(term);
+        let found = call(&session, json!({}), Some(json!(term)), selection)
+            .await
+            .unwrap();
+        assert_ne!(
+            found.payload,
+            json!(term),
+            "context must detect the unguessed control"
+        );
+        assert_eq!(session.tokens().len(), 1);
+        assert_eq!(
+            session
+                .restore_strict_text(found.payload.as_str().unwrap())
+                .unwrap(),
+            term
+        );
+    }
+}
+
+#[tokio::test]
+async fn host_context_record_returning_lookup_retains_documented_confirmation_oracle() {
+    for (guess, excluded) in [(KNOWN, true), ("Synthetic Wrongname", false)] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let returned = format!("found {KNOWN}");
+        let out = call(
+            &session,
+            json!({"guess":guess}),
+            Some(json!(returned)),
+            raw_context(KNOWN),
+        )
+        .await
+        .unwrap();
+        assert_eq!(out.payload == json!(returned), excluded);
+        assert_eq!(session.tokens().len(), usize::from(!excluded));
+        assert_eq!(
+            session
+                .restore_strict_text(out.payload.as_str().unwrap())
+                .unwrap(),
+            returned
+        );
+    }
+}

@@ -114,3 +114,13 @@ checks:
     commands:
       - cargo fmt --all -- --check
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --focused
+
+  mcp-host-echo:
+    description: Normalized and joined host-context echo regression mutations
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/gate/mcp-host-context-mutation-probe.py, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/mcp-host-context-mutation-probe.py --run --probe normalization-drift --probe split-argument-echo

@@ -355,7 +355,8 @@ fn record_name_is_common(name: &str) -> bool {
 pub fn contains_record_guess(input: &str, term: &str) -> bool {
     fn normalize(value: &str) -> String {
         let mut normalized = String::with_capacity(value.len());
-        for part in value.split_whitespace() {
+        let view = crate::normalize::normalize(value);
+        for part in view.text.split_whitespace() {
             if !normalized.is_empty() {
                 normalized.push(' ');
             }
@@ -520,6 +521,50 @@ fn is_base_identifier_char(ch: char) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn record_guess_covers_detection_normalization_alphabet() {
+        for ascii in '!'..='~' {
+            let wide = char::from_u32(ascii as u32 + 0xFEE0).unwrap();
+            let term = format!("Q{ascii}9");
+            let guess = format!("Ｑ{wide}９");
+            assert!(
+                super::contains_record_guess(&guess, &term),
+                "U+{:04X}",
+                wide as u32
+            );
+            assert!(super::contains_record_guess(&term, &guess));
+        }
+        for space in [
+            '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+            '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{202F}',
+            '\u{205F}', '\u{3000}',
+        ] {
+            assert!(super::contains_record_guess(
+                &format!("Synthetic{space}Qorvex"),
+                "Synthetic Qorvex"
+            ));
+        }
+        for joiner in ['\u{200C}', '\u{200D}'] {
+            assert!(super::contains_record_guess(
+                &format!("Synt{joiner}hetic Qorvex"),
+                "Synthetic Qorvex"
+            ));
+        }
+        assert!(super::contains_record_guess(
+            "Q\u{0344}9",
+            "Q\u{0308}\u{0301}9"
+        ));
+        assert!(super::contains_record_guess(
+            "STRASSE  QORVEX",
+            "Straße Qorvex"
+        ));
+        assert!(!super::contains_record_guess(
+            "Synthetic Wrongname",
+            "Synthetic Qorvex"
+        ));
+        assert!(!super::contains_record_guess("anything", ""));
+    }
     use std::collections::HashMap;
 
     use gaze::{

@@ -296,10 +296,19 @@ impl<'a> PiiEnvelope<'a> {
             )
             .map_err(|_| crate::HostContextError::Policy)?;
             let mut argument_text = Vec::new();
-            visit_argument_text(args, &mut |text| {
-                argument_text.push(text.to_owned());
-                Ok(())
-            })?;
+            for decode_json in [false, true] {
+                let mut argument_scalars = Vec::new();
+                visit_argument_text(args, decode_json, &mut |text, is_scalar| {
+                    argument_text.push(text.to_owned());
+                    if is_scalar {
+                        argument_scalars.push(text.to_owned());
+                    }
+                    Ok(())
+                })?;
+                // Keys and JSON wrappers must not interrupt joined scalar values.
+                // Check both original strings and decoded JSON leaves.
+                argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);
+            }
             for dictionary in context.dictionaries.values_mut() {
                 dictionary.terms.retain(|term| {
                     !argument_text.iter().any(|text| {
@@ -519,55 +528,64 @@ impl<'a> PiiEnvelope<'a> {
 
 fn visit_argument_text(
     value: &serde_json::Value,
-    visit: &mut impl FnMut(&str) -> Result<(), crate::HostContextError>,
+    decode_json: bool,
+    visit: &mut impl FnMut(&str, bool) -> Result<(), crate::HostContextError>,
 ) -> Result<(), crate::HostContextError> {
     fn text(
         value: &str,
+        is_scalar: bool,
         remaining: &mut usize,
-        visit: &mut impl FnMut(&str) -> Result<(), crate::HostContextError>,
+        visit: &mut impl FnMut(&str, bool) -> Result<(), crate::HostContextError>,
     ) -> Result<(), crate::HostContextError> {
         *remaining = remaining
             .checked_sub(value.len())
             .ok_or(crate::HostContextError::Invalid)?;
-        visit(value)
+        visit(value, is_scalar)
     }
     fn walk(
         value: &serde_json::Value,
         depth: usize,
+        decode_json: bool,
         remaining: &mut usize,
-        visit: &mut impl FnMut(&str) -> Result<(), crate::HostContextError>,
+        visit: &mut impl FnMut(&str, bool) -> Result<(), crate::HostContextError>,
     ) -> Result<(), crate::HostContextError> {
         if depth > 128 {
             return Err(crate::HostContextError::Invalid);
         }
         match value {
             serde_json::Value::String(value) => {
-                text(value, remaining, visit)?;
-                if let Ok(nested) = serde_json::from_str::<serde_json::Value>(value) {
-                    walk(&nested, depth + 1, remaining, visit)?;
+                let nested = decode_json
+                    .then(|| serde_json::from_str::<serde_json::Value>(value).ok())
+                    .flatten();
+                text(value, nested.is_none(), remaining, visit)?;
+                if let Some(nested) = nested {
+                    walk(&nested, depth + 1, decode_json, remaining, visit)?;
                 }
             }
             serde_json::Value::Array(values) => {
                 for value in values {
-                    walk(value, depth + 1, remaining, visit)?;
+                    walk(value, depth + 1, decode_json, remaining, visit)?;
                 }
             }
             serde_json::Value::Object(values) => {
                 for (key, value) in values {
-                    text(key, remaining, visit)?;
-                    walk(value, depth + 1, remaining, visit)?;
+                    text(key, false, remaining, visit)?;
+                    walk(value, depth + 1, decode_json, remaining, visit)?;
                 }
             }
-            serde_json::Value::Number(value) => text(&value.to_string(), remaining, visit)?,
-            serde_json::Value::Bool(value) => {
-                text(if *value { "true" } else { "false" }, remaining, visit)?
-            }
-            serde_json::Value::Null => text("null", remaining, visit)?,
+            serde_json::Value::Number(value) => text(&value.to_string(), true, remaining, visit)?,
+            serde_json::Value::Bool(value) => text(
+                if *value { "true" } else { "false" },
+                true,
+                remaining,
+                visit,
+            )?,
+            serde_json::Value::Null => text("null", true, remaining, visit)?,
         }
         Ok(())
     }
     let mut remaining = rule_coverage::MAX_OPERATION_EXPANDED_BYTES;
-    walk(value, 0, &mut remaining, visit)
+    walk(value, 0, decode_json, &mut remaining, visit)
 }
 
 pub(crate) fn default_dictionaries() -> &'static gaze::DictionaryBundle {

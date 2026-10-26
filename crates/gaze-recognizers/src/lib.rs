@@ -35,6 +35,7 @@ mod dob_judge;
 mod error;
 mod locale_aware;
 mod ner;
+pub mod normalize;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;

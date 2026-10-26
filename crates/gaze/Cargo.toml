@@ -46,7 +46,6 @@ sha2 = "0.10"
 thiserror = "1"
 toml = "0.8"
 tracing = "0.1"
-unicode-normalization = "0.1"
 zeroize = "1"
 
 [dev-dependencies]

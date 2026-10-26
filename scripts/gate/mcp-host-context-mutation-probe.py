@@ -18,6 +18,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 CORE = "crates/gaze-mcp-core/src/dispatch.rs"
 PRIVATE = "crates/gaze-mcp-core/src/host_context.rs"
+DICTIONARY = "crates/gaze-recognizers/src/dictionary.rs"
 FRONTEND = "crates/gaze-mcp-rmcp/src/frontend.rs"
 RAW = "crates/gaze/src/context.rs"
 SESSION = "crates/gaze/src/session.rs"
@@ -73,6 +74,18 @@ def ignore_http(source):
 
 
 PROBES = [
+    ("normalization-drift", DICTIONARY,
+     lambda source: replace(source,
+                            "        let view = crate::normalize::normalize(value);\n        for part in view.text.split_whitespace() {",
+                            "        for part in value.split_whitespace() {"),
+     CONTRACT + ["host_context_normalized_echo_has_no_membership_oracle_or_promotion"],
+     "host_context::host_context_normalized_echo_has_no_membership_oracle_or_promotion"),
+    ("split-argument-echo", CORE,
+     lambda source: replace(source,
+                            '                argument_text.extend([argument_scalars.join(""), argument_scalars.join(" ")]);',
+                            '                drop(argument_scalars);'),
+     CONTRACT + ["host_context_joined_echo_has_no_membership_oracle_or_promotion"],
+     "host_context::host_context_joined_echo_has_no_membership_oracle_or_promotion"),
     ("drop-present", CORE,
      lambda source: replace(source, "let mut host_context = crate::host_context::parse(host_context)?;",
                             "let mut host_context = { drop(host_context); None::<gaze::Context> };"),
@@ -178,9 +191,9 @@ def run(command, log):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
-    parser.add_argument("--probe", choices=[item[0] for item in PROBES])
+    parser.add_argument("--probe", action="append", choices=[item[0] for item in PROBES])
     args = parser.parse_args()
-    probes = [item for item in PROBES if not args.probe or item[0] == args.probe]
+    probes = [item for item in PROBES if not args.probe or item[0] in args.probe]
     if not args.run:
         print(json.dumps([{"probe": name, "source": path, "command": command, "test": test}
                           for name, path, _, command, test in probes], indent=2))
