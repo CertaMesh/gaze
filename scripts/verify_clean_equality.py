@@ -15,6 +15,7 @@ blobs are excluded. Canonical JSON bytes of clean_text, entries, stats,
 leak_report and exit codes must agree. Reports contain no input/output values.
 """
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -26,7 +27,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "scripts/verification/clean-equality-inputs-v1.json"
 FIELDS = ("clean_text", "entries", "stats", "leak_report")
-TOKEN_PREFIX = re.compile(r"^<([0-9a-f]{8}):")
+TOKEN = re.compile(r"<([0-9a-f]{8}):([^<>\s]+)>")
+ENTRY_TOKEN = re.compile(r"\A<([0-9a-f]{8}):([^<>\s]+)>\Z")
 
 
 def sha256(data):
@@ -58,14 +60,13 @@ def inputs():
 
 
 def normalize(response):
-    prefixes = {match[1] for entry in response["entries"]
-                if (match := TOKEN_PREFIX.match(entry["token"]))}
+    tokens = {entry["token"] for entry in response["entries"]
+              if ENTRY_TOKEN.fullmatch(entry["token"])}
 
     def visit(value):
         if isinstance(value, str):
-            for prefix in prefixes:
-                value = value.replace(f"<{prefix}:", "<SESSION:")
-            return value
+            return TOKEN.sub(lambda match: "<SESSION:" + match[2] + ">"
+                             if match[0] in tokens else match[0], value)
         if isinstance(value, list):
             return [visit(item) for item in value]
         if isinstance(value, dict):
@@ -73,6 +74,30 @@ def normalize(response):
         return value
 
     return {field: visit(response[field]) for field in FIELDS}
+
+
+def canonical(observation):
+    return json.dumps(observation, sort_keys=True, ensure_ascii=False).encode("utf-8")
+
+
+def differs(base, candidate):
+    return canonical(base) != canonical(candidate)
+
+
+def one_byte_mutant(base, candidate):
+    mutant = copy.deepcopy(candidate)
+    text = mutant[1].get("clean_text", "")
+    for index, char in enumerate(text):
+        if char.isascii() and char.isalnum():
+            replacement = "B" if char == "A" else "A"
+            mutant[1]["clean_text"] = text[:index] + replacement + text[index + 1:]
+            original, changed = canonical(candidate), canonical(mutant)
+            if len(original) != len(changed) or sum(a != b for a, b in zip(original, changed)) != 1:
+                raise RuntimeError("mutant must change exactly one output byte")
+            if differs(base, candidate) or not differs(base, mutant):
+                raise RuntimeError("one-byte output mutant survived equality comparison")
+            return {"changed_output_bytes": 1, "detected": True}
+    return None
 
 
 def clean(binary, text, cwd, policy=None):
@@ -112,6 +137,7 @@ def main():
         parser.error("supply two independently built binaries")
     differences, exits, detections = [], [dict(), dict()], [0, 0]
     modes = {}
+    mutants = {}
     with tempfile.TemporaryDirectory(prefix="gaze-clean-equality-") as cwd:
         policies = [Path(cwd) / f"policy-{side}.toml" for side in range(2)]
         env = dict(os.environ, GAZE_DISABLE_OS_KEYSTORE="1")
@@ -129,21 +155,27 @@ def main():
                 for side, (code, body) in enumerate(observations):
                     exits[side][str(code)] = exits[side].get(str(code), 0) + 1
                     detections[side] += body.get("stats", {}).get("detections", 0)
-                if json.dumps(observations[0], sort_keys=True).encode() != json.dumps(observations[1], sort_keys=True).encode():
+                if differs(observations[0], observations[1]):
                     differences.append({"mode": mode, "id": case_id, "exit_codes": [o[0] for o in observations],
                                         "fields": [field for field in set(observations[0][1]) | set(observations[1][1])
                                                    if observations[0][1].get(field) != observations[1][1].get(field)]})
+                elif mode not in mutants and observations[1][0] == 0:
+                    proof = one_byte_mutant(observations[0], observations[1])
+                    if proof:
+                        mutants[mode] = {"case_id": case_id, **proof}
             modes[mode] = {"cases": len(cases), "differences": len(differences) - before}
         policy_hashes = [sha256(policy.read_bytes()) for policy in policies]
+    if set(mutants) != {"no-policy", "setup-policy"}:
+        raise RuntimeError("did not prove one-byte output mutation in both policy modes")
     if not all(detections):
         raise RuntimeError("comparison did not exercise any detections")
-    report = {"schema": "gaze-clean-equality-v1", "base_sha": args.base_sha,
+    report = {"schema": "gaze-clean-equality-v2", "base_sha": args.base_sha,
               "candidate_sha": args.candidate_sha,
               "binary_sha256": [sha256(binary.read_bytes()) for binary in binaries],
               "manifest_sha256": sha256(MANIFEST.read_bytes()),
               "script_sha256": sha256(Path(__file__).read_bytes()),
               "cases": len(cases) * 2, "modes": modes, "policy_sha256": policy_hashes, "exit_codes": exits, "detections": detections,
-              "difference_count": len(differences), "differences": differences}
+              "difference_count": len(differences), "differences": differences, "one_byte_mutants": mutants}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps({key: report[key] for key in ("cases", "difference_count", "exit_codes", "detections")}))
