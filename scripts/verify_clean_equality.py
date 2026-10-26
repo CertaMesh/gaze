@@ -2,7 +2,7 @@
 """Compare default release `gaze clean` behavior using hash-pinned repo inputs.
 
 Build each binary in its own prepared Anvil worktree at the recorded SHA:
-  anvil run -- env CARGO_BUILD_JOBS=2 nice -n 10 cargo build --release -p gaze-cli
+  anvil run -- env CARGO_BUILD_JOBS=2 nice -n 10 cargo build --locked --release -p gaze-cli --features mcp
 Then run this script from the candidate checkout, supplying both release binaries,
 commit SHAs, and --output target/clean-equality.json. It runs no benchmarks.
 
