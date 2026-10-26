@@ -2400,14 +2400,16 @@ mod json_label_cells {
                                     );
                                 }
                                 let regions = if depth == 0 {
-                                    let mut regions =
-                                        vec![prefix.len()..prefix.len() + container.len()];
+                                    let mut regions = std::iter::once(
+                                        prefix.len()..prefix.len() + container.len(),
+                                    )
+                                    .collect::<Vec<_>>();
                                     if prefix == "{\"n\":0}\n" {
                                         regions.insert(0, 0..7);
                                     }
                                     regions
                                 } else {
-                                    vec![0..input.len()]
+                                    std::iter::once(0..input.len()).collect::<Vec<_>>()
                                 };
                                 for region in regions {
                                     let original: serde_json::Value =
