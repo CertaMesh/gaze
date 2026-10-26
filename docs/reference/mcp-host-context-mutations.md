@@ -74,3 +74,43 @@ Complete logs and the result record are under
 `target/gate/mcp-host-context-mutations/`. This summary records mutation
 coverage. Full workspace gates, detection benchmark certification, and resident
 model latency and memory proof are separate requirements.
+
+## Bounded argument exclusion regressions
+
+Source commit `de3a4bbeaf5090587c43827667849e507bafa08d` adds record-independent
+argument admission and shares the response matcher's normalization, fold offsets,
+and boundary function. The original response matcher retains its whitespace-run
+limit. Exclusion collapses longer runs within the admitted argument byte budget.
+
+The enumeration, substring, pair-order, expanding-case-fold, and long-whitespace
+regressions failed before their fixes and pass afterward. U+0345 echo coverage also
+passes. The expanding-case-fold failure uses U+0130, whose fold inserts a combining
+mark and previously made a substring appear to start at a word boundary. All 23
+host-context tests and three focused recognizer tests pass for this implementation.
+The latter include a check that the response matcher's 32-character whitespace
+limit stays unchanged while guess exclusion accepts longer runs.
+
+The named Anvil check runs seven baseline/mutant pairs:
+
+| Probe | Regression contract |
+| --- | --- |
+| `normalization-drift` | Fullwidth and normalized echoes cannot reveal record membership. |
+| `split-argument-echo` | Scalar joins, including decoded JSON leaves, cannot reveal membership. |
+| `argument-budget` | A de Bruijn enumeration is rejected before any record-dependent step. |
+| `argument-scalars` | The scalar count bounds original and decoded argument views. |
+| `guess-boundaries` | A superstring does not exclude an unguessed record term. |
+| `folded-boundary-view` | Boundary checks use the response matcher's normalized text view. |
+| `guess-whitespace` | Tool-collapsed whitespace cannot reopen echo membership detection. |
+
+Run from a clean signed checkout, after acquiring the shared build slot:
+
+```sh
+anvil check mcp-host-echo --allow-expensive --lock-wait 30m --json
+```
+
+Each baseline must execute and pass its named test. Each mutant must compile,
+execute that test, and fail it. The runner restores source bytes in `finally`.
+The Anvil result records the tested commit and input provenance. Per-probe logs and
+`results.json` are written to `target/gate/mcp-host-context-mutations/`. The PR body
+records the completed run's candidate and result. Benchmark certification remains
+a separate requirement before this draft can merge.
