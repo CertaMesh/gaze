@@ -293,7 +293,7 @@ struct Pattern {
 /// document's own rule-found values.
 pub(crate) struct SweepMatcher {
     sources: Vec<SweepSource>,
-    encoded: Option<EncodedMatcher>,
+    derived_exact: Option<DerivedExactMatcher>,
     folded: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
     exact: Option<(AhoCorasick, Vec<(usize, SweepLink)>)>,
 }
@@ -366,12 +366,12 @@ impl SweepMatcher {
         if pattern_bytes > MAX_PATTERN_BYTES {
             return Err(ManifestSweepError::CapacityExceeded);
         }
-        let encoded = EncodedMatcher::build(
+        let derived_exact = DerivedExactMatcher::build(
             &sources,
             MAX_PATTERNS - patterns.len(),
             MAX_PATTERN_BYTES - pattern_bytes,
         )?;
-        if patterns.is_empty() && encoded.is_none() {
+        if patterns.is_empty() && derived_exact.is_none() {
             return Ok(None);
         }
         #[cfg(test)]
@@ -411,7 +411,7 @@ impl SweepMatcher {
                 .map_err(|_| ManifestSweepError::MatcherBuild)
         };
         Ok(Some(Self {
-            encoded,
+            derived_exact,
             folded: build(|kind| matches!(kind, PatternKind::Folded))?,
             exact: build(|kind| matches!(kind, PatternKind::Exact))?,
             sources,
@@ -441,12 +441,12 @@ impl SweepMatcher {
                 self.push_hit(text, found.range(), source, link, &json, &mut hits);
             }
         }
-        if let Some(encoded) = &self.encoded {
+        if let Some(derived) = &self.derived_exact {
             let mut view = EscapedView::identity(text);
             for _ in 0..=MAX_ESCAPED_REPEAT_DEPTH {
-                for found in encoded.matcher.find_overlapping_iter(&view.text) {
+                for found in derived.matcher.find_overlapping_iter(&view.text) {
                     let span = view.source[found.start()].start..view.source[found.end() - 1].end;
-                    if let Some(sources) = encoded.sources.get(&text[span.clone()]) {
+                    if let Some(sources) = derived.sources.get(&text[span.clone()]) {
                         for source in sources {
                             self.push_hit(
                                 text,
@@ -511,12 +511,12 @@ impl SweepMatcher {
 
 /// Deep source spelling may be long even though its decoded identifier is short.
 /// Match a bounded decoded pattern, then require byte-exact source spelling.
-struct EncodedMatcher {
+struct DerivedExactMatcher {
     matcher: AhoCorasick,
     sources: HashMap<String, Vec<usize>>,
 }
 
-impl EncodedMatcher {
+impl DerivedExactMatcher {
     fn build(
         sources: &[SweepSource],
         remaining_patterns: usize,
@@ -530,7 +530,10 @@ impl EncodedMatcher {
             .filter(|(_, source)| source.field_owned_scalar())
         {
             let raw = normalize(&source.raw).text;
-            if !raw.contains('\\') {
+            let body = trim_labelled_repeat(&raw);
+            let expanded_fold = body.len() <= MAX_LABELLED_REPEAT_BYTES
+                && fold(body).text.len() > MAX_LABELLED_REPEAT_BYTES;
+            if !raw.contains('\\') && !expanded_fold {
                 continue;
             }
             let mut view = EscapedView::identity(&raw);
@@ -1288,7 +1291,26 @@ mod tests {
         use crate::{CleanDocument, RawDocument, Scope, Session};
         let pipeline = labelled_pipeline();
         let mut raw = "SYN731\"284\n".to_owned();
-        let mut checked = 0;
+        let value = format!("{}731284", "İ".repeat(16));
+        assert!(value.len() <= MAX_LABELLED_REPEAT_BYTES);
+        assert!(fold(&value).text.len() > MAX_LABELLED_REPEAT_BYTES);
+        let input = format!("Lookup {value} again.\n{{\"customerId\":\"{value}\"}}");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .redact(&session, RawDocument::Text(input.clone()))
+            .unwrap()
+        else {
+            panic!("text")
+        };
+        assert!(
+            !clean.contains(&value),
+            "short exact spelling must survive fold expansion"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
+        let mut checked = 1;
         for _depth in 1..=9 {
             let encoded = serde_json::to_string(&raw).unwrap();
             raw = encoded[1..encoded.len() - 1].to_owned();
@@ -1319,7 +1341,7 @@ mod tests {
             assert!(work.matcher_bytes <= input.len() * 128 + 65536, "{work:?}");
             checked += 1;
         }
-        assert_eq!(checked, 9);
+        assert_eq!(checked, 10);
     }
 
     #[cfg(feature = "bundled-recognizers")]

@@ -26,8 +26,8 @@ JSON strings. The 40-byte pattern
 limit applies after trimming each derived pattern. Literal and JSON-escaped whitespace
 padding therefore preserve repeat protection without creating oversized matcher
 patterns. Pipeline tests cover 45 repeat/schema cases and 28 padded-value cases;
-a daemon test checks three padded values on a second turn. Nine more cases
-check deeply escaped repeat spelling through nine serialization levels. Short
+a daemon test checks three padded values on a second turn. Nine serialization-depth cases and one Unicode fold-expansion case check
+short effective patterns despite longer transformed spellings. Short
 decoded and trimmed patterns map back to byte-exact source spans. This protects
 escaped values without placing their expanded spelling into the DFA. Forty
 additional cases verify deeply escaped padding and imported second-turn state.
