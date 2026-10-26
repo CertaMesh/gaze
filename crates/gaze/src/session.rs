@@ -223,7 +223,24 @@ struct SnapshotPayload {
 /// and committed proxy snapshots. A new mapping replaces the entire cache.
 #[derive(Default)]
 struct RestoreMatcherCache {
-    matcher: OnceLock<std::result::Result<Option<aho_corasick::AhoCorasick>, ()>>,
+    matcher: OnceLock<std::result::Result<Option<RestoreMatcher>, ()>>,
+}
+
+struct RestoreMatcher {
+    matcher: aho_corasick::AhoCorasick,
+    allocation_bytes: usize,
+}
+
+impl RestoreMatcher {
+    fn compute_allocation_bytes(&self) -> usize {
+        #[cfg(test)]
+        RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.set(count.get() + 1));
+        self.matcher.memory_usage()
+    }
+
+    fn allocation_bytes(&self) -> usize {
+        self.allocation_bytes
+    }
 }
 
 #[derive(Clone)]
@@ -1731,10 +1748,11 @@ fn known_restore_matches<'a>(
 
 #[cfg(test)]
 thread_local! {
+    static RESTORE_ALLOCATION_RECOMPUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static RESTORE_MATCHER_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-fn build_restore_matcher(state: &SessionState) -> Result<Option<aho_corasick::AhoCorasick>> {
+fn build_restore_matcher(state: &SessionState) -> Result<Option<RestoreMatcher>> {
     if state.value_by_token.is_empty() {
         return Ok(None);
     }
@@ -1742,9 +1760,12 @@ fn build_restore_matcher(state: &SessionState) -> Result<Option<aho_corasick::Ah
     RESTORE_MATCHER_BUILDS.with(|builds| builds.set(builds.get() + 1));
     let mut tokens = state.value_by_token.keys().collect::<Vec<_>>();
     tokens.sort_unstable();
-    aho_corasick::AhoCorasick::new(tokens)
-        .map(Some)
-        .map_err(|_| Error::RestoreMatcherBuild)
+    let mut matcher = RestoreMatcher {
+        matcher: aho_corasick::AhoCorasick::new(tokens).map_err(|_| Error::RestoreMatcherBuild)?,
+        allocation_bytes: 0,
+    };
+    matcher.allocation_bytes = matcher.compute_allocation_bytes();
+    Ok(Some(matcher))
 }
 
 /// Locate complete manifest-owned runs. A join may replace a word boundary only when
@@ -1761,6 +1782,7 @@ fn locate_restore_tokens(state: &SessionState, text: &str) -> Result<Vec<StrictR
         return Ok(Vec::new());
     };
     let mut spans = matcher
+        .matcher
         .find_overlapping_iter(text)
         .map(|matched| matched.start()..matched.end())
         .collect::<Vec<_>>();
@@ -1938,7 +1960,7 @@ fn manifest_matcher_bytes(state: &SessionState) -> usize {
         .get()
         .and_then(|matcher| matcher.as_ref().ok())
         .and_then(Option::as_ref)
-        .map_or(0, aho_corasick::AhoCorasick::memory_usage);
+        .map_or(0, RestoreMatcher::allocation_bytes);
     let sweep = state
         .sweep_matcher_cache
         .as_ref()
@@ -4730,7 +4752,7 @@ mod tests {
             .expect("valid matcher")
             .as_ref()
             .expect("non-empty matcher");
-        assert!(matcher.is_match(&token));
+        assert!(matcher.matcher.is_match(&token));
         let state = session.state_snapshot();
         assert_eq!(state.token_by_value.len(), state.value_by_token.len());
         for (key, mapped_token) in &state.token_by_value {
@@ -5243,6 +5265,46 @@ mod repeat_query_purity_tests {
     }
 
     #[test]
+    fn cached_matcher_charges_do_not_revisit_allocations_on_queries_or_mints() {
+        use crate::sweep::SWEEP_ALLOCATION_RECOMPUTES;
+
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        transaction
+            .set_manifest_byte_limit(32 * 1024 * 1024)
+            .unwrap();
+        let class = PiiClass::Custom("synthetic_identifier".into());
+        for index in 0..1024 {
+            let raw = format!("synthetic-record-{index}");
+            transaction.tokenize(&class, &raw).unwrap();
+            transaction.record_evidence(None, &class, &raw, ManifestEvidence::Pattern);
+        }
+        SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.set(0));
+        RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.set(0));
+        transaction.sweep_matcher().unwrap().unwrap();
+        let entry = transaction.snapshot_entries().remove(0);
+        locate_restore_tokens(&transaction.staged, &entry.token).unwrap();
+        assert_eq!(SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        assert_eq!(RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        let charge = transaction.manifest_allocation_bytes();
+        for _ in 0..128 {
+            assert_eq!(transaction.manifest_allocation_bytes(), charge);
+            locate_restore_tokens(&transaction.staged, &entry.token).unwrap();
+        }
+        for index in 1024..1152 {
+            transaction
+                .tokenize(&class, &format!("synthetic-record-{index}"))
+                .unwrap();
+        }
+        assert_eq!(SWEEP_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        assert_eq!(RESTORE_ALLOCATION_RECOMPUTES.with(|count| count.get()), 1);
+        assert_eq!(
+            transaction.manifest_allocation_bytes(),
+            manifest_allocation_bytes(&transaction.staged)
+        );
+    }
+
+    #[test]
     fn bounded_manifest_charges_grow_incrementally_and_repeats_use_hash_lookups() {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let mut transaction = session.begin_transaction();
@@ -5253,13 +5315,27 @@ mod repeat_query_purity_tests {
         let class = PiiClass::Custom("synthetic_identifier".into());
         for index in 0..1024 {
             let raw = format!("synthetic-record-{index}");
+            let spelling = if index % 4 < 2 {
+                SourceSpelling::JsonEscaped
+            } else {
+                SourceSpelling::Plain
+            };
             if index % 2 == 0 {
                 transaction
-                    .tokenize_with_family("synthetic", &class, &raw)
+                    .tokenize_spelled("synthetic", &class, &raw, spelling)
                     .unwrap();
             } else {
-                transaction.format_preserving_fake(&class, &raw).unwrap();
+                transaction
+                    .format_preserving_fake_spelled(&class, &raw, spelling)
+                    .unwrap();
             }
+            let recomputes = MANIFEST_FULL_RECOMPUTES.with(|count| count.get());
+            assert_eq!(
+                transaction.manifest_allocation_bytes(),
+                manifest_allocation_bytes(&transaction.staged),
+                "mapping {index}"
+            );
+            MANIFEST_FULL_RECOMPUTES.with(|count| count.set(recomputes));
             transaction.record_evidence(
                 Some(if index % 2 == 0 {
                     "synthetic"

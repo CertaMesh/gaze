@@ -822,22 +822,39 @@ impl Daemon {
                 let gaze::CleanDocument::Text(clean_text) = clean else {
                     return Err(Failure::Pipeline);
                 };
-                let tokens =
-                    wire_ordered_entries(transaction.snapshot_entries(), &clean_text, &manifest)
-                        .into_iter()
-                        .filter(|entry| clean_text.contains(&entry.token))
-                        .map(TokenJson::from)
-                        .collect();
                 reports.push(report);
                 pass.push(BlockResult {
                     id: block.id.clone(),
                     sha256: block.sha256.clone(),
                     clean_text,
                     manifest,
-                    tokens,
+                    tokens: Vec::new(),
                     cache_hit: false,
                     validated_generation: 0,
                 });
+                check_stage(
+                    limits,
+                    live,
+                    &inventory,
+                    &pass,
+                    transaction.manifest_allocation_bytes(),
+                    other_bytes.saturating_add(buffered_audit_bytes(&audit, &reports)?),
+                    other_manifests,
+                    0,
+                )?;
+            }
+            let snapshot = transaction.snapshot_entries();
+            for index in 0..pass.len() {
+                let result = &mut pass[index];
+                let entries = snapshot
+                    .iter()
+                    .filter(|entry| result.clean_text.contains(&entry.token))
+                    .cloned()
+                    .collect();
+                result.tokens = wire_ordered_entries(entries, &result.clean_text, &result.manifest)
+                    .into_iter()
+                    .map(TokenJson::from)
+                    .collect();
                 check_stage(
                     limits,
                     live,

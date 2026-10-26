@@ -92,6 +92,29 @@ fn assert_error(value: &Value, variant: &str) {
 }
 
 #[test]
+fn six_hundred_one_value_blocks_fit_default_limits() {
+    let mut d = daemon();
+    let opened = open(&mut d, "long-conversation");
+    let blocks = (0..600)
+        .map(|index| {
+            block(
+                &format!("message-{index}"),
+                &format!("Please contact person{index}@example.invalid soon."),
+            )
+        })
+        .collect();
+    let result = clean(&mut d, &opened, blocks);
+    assert_eq!(result["blocks"].as_array().unwrap().len(), 600);
+    for block in result["blocks"].as_array().unwrap() {
+        assert_eq!(block["tokens"].as_array().unwrap().len(), 1);
+        assert!(!block["clean_text"]
+            .as_str()
+            .unwrap()
+            .contains("@example.invalid"));
+    }
+}
+
+#[test]
 fn opening_receipt_sequences_and_exact_frame_retries() {
     let mut d = daemon();
     let opened = open(&mut d, "conversation-a");

@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import shutil
 from datetime import datetime
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,13 @@ PREFIX = "commands::daemon::v2::tests::"
 
 # Each substitution removes one admission, invalidation, or recovery guard.
 PROBES = [
+    ("block-token-capacity", CLI,
+     'let entries = snapshot\n                    .iter()\n                    .filter(|entry| result.clean_text.contains(&entry.token))\n                    .cloned()\n                    .collect();\n                result.tokens = wire_ordered_entries(entries, &result.clean_text, &result.manifest)\n                    .into_iter()',
+     'let entries = snapshot.clone();\n                result.tokens = wire_ordered_entries(entries, &result.clean_text, &result.manifest)\n                    .into_iter()\n                    .filter(|entry| result.clean_text.contains(&entry.token))',
+     "six_hundred_one_value_blocks_fit_default_limits"),
+    ("sweep-allocation-cache", "crates/gaze/src/sweep.rs", '        self.allocation_bytes\n', '        self.compute_allocation_bytes()\n', "session::repeat_query_purity_tests::cached_matcher_charges_do_not_revisit_allocations_on_queries_or_mints"),
+    ("restore-allocation-cache", CORE, '        self.allocation_bytes\n', '        self.compute_allocation_bytes()\n', "session::repeat_query_purity_tests::cached_matcher_charges_do_not_revisit_allocations_on_queries_or_mints"),
+    ("json-spelling-charge", CORE, 'if self.staged.json_spelled.contains(token) {\n                        token.len()', 'if self.staged.json_spelled.contains(token) {\n                        0', "session::repeat_query_purity_tests::bounded_manifest_charges_grow_incrementally_and_repeats_use_hash_lookups"),
     ("manifest-hash-lookup", CORE, 'if self.staged.token_by_value.contains_key(&key) {\n            return Ok(());', 'if self.staged.token_by_value.keys().any(|stored| stored.family == key.family && stored.class == key.class && stored.raw == key.raw) {\n            return Ok(());', "session::repeat_query_purity_tests::bounded_manifest_charges_grow_incrementally_and_repeats_use_hash_lookups"),
     ("evidence-hash-lookup", CORE, 'self.staged.evidence_by_value.contains_key(&key)', 'self.staged.evidence_by_value.keys().any(|stored| stored.family == key.family && stored.class == key.class && stored.raw == key.raw)', "session::repeat_query_purity_tests::bounded_manifest_charges_grow_incrementally_and_repeats_use_hash_lookups"),
     ("manifest-running-charge", CORE, 'let current = self.manifest_allocation_bytes();', 'let current = manifest_allocation_bytes(&self.staged);', "session::repeat_query_purity_tests::bounded_manifest_charges_grow_incrementally_and_repeats_use_hash_lookups"),
@@ -86,13 +94,15 @@ PROBES = [
 def command(args, logfile):
     pressure = subprocess.run(["memory_pressure"], capture_output=True, text=True, check=True).stdout
     free = re.search(r"System-wide memory free percentage:\s*(\d+)%", pressure)
-    if not free or int(free[1]) < 50:
-        raise RuntimeError("memory headroom below the required 50 percent")
+    if not free or int(free[1]) < 30:
+        raise RuntimeError("memory headroom below the required 30 percent")
     if os.getloadavg()[0] > 25:
         raise RuntimeError("load1 exceeds the required ceiling of 25")
+    if shutil.disk_usage(ROOT).free < 103 * 1024 ** 3:
+        raise RuntimeError("disk headroom below the required 103 GiB")
     now = datetime.now().time()
-    if datetime.strptime("15:25", "%H:%M").time() <= now < datetime.strptime("15:45", "%H:%M").time():
-        raise RuntimeError("Cargo is paused during the 15:25-15:45 quiet window")
+    if datetime.strptime("19:50", "%H:%M").time() <= now < datetime.strptime("22:00", "%H:%M").time():
+        raise RuntimeError("Cargo is paused during the 19:50-22:00 quiet window")
     env = os.environ.copy()
     env["CARGO_BUILD_JOBS"] = "2"
     with logfile.open("w") as log:
@@ -127,9 +137,10 @@ def main():
             original = path.read_text()
             if original.count(before) != 1:
                 raise RuntimeError(f"{name}: expected one mutation anchor")
-            package = "gaze-pii" if file == CORE else "gaze-cli"
-            full_test = test if file == CORE else PREFIX + test
-            args = ["test", "-p", package, "--lib" if file == CORE else "--bin", *([] if file == CORE else ["gaze"]), full_test, "--", "--exact", "--test-threads=1"]
+            core = file in (CORE, "crates/gaze/src/sweep.rs")
+            package = "gaze-pii" if core else "gaze-cli"
+            full_test = test if core else PREFIX + test
+            args = ["test", "-p", package, "--lib" if core else "--bin", *([] if core else ["gaze"]), full_test, "--", "--exact", "--test-threads=1"]
             baseline_log = evidence / f"{name}-baseline.log"
             if command(args, baseline_log):
                 raise RuntimeError(f"{name}: baseline failed, see {baseline_log}")
