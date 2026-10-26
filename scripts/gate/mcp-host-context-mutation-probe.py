@@ -151,7 +151,7 @@ PROBES = [
      "host_context::host_context_collapsed_whitespace_guess_has_no_membership_oracle"),
     ("drop-present", CORE,
      lambda source: replace(source, "let mut host_context = crate::host_context::parse(&host_context_selection)?;",
-                            "let mut host_context = { drop(host_context); None::<gaze::Context> };"),
+                            "let mut host_context = { drop(host_context_selection); None::<gaze::Context> };"),
      CONTRACT + ["host_context_response_persists_only_matched_rule_sources_and_restores_exactly"],
      "host_context::host_context_response_persists_only_matched_rule_sources_and_restores_exactly"),
     ("echo-oracle", CORE, without_exclusions,
