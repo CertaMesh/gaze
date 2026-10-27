@@ -57,7 +57,7 @@ checks:
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --test legacy_source_boundaries
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --test validators hard_boundary_
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_mutation_probe.py --probe hard_boundary_containment --probe adopter_edge_literal --probe luhn_enclosing_union --probe luhn_union_preference --probe recorded_card_layout
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_mutation_probe.py --probe hard_boundary_containment --probe adopter_edge_literal --probe luhn_enclosing_union --probe luhn_union_preference --probe recorded_card_layout --probe card_window_source_gaps
   invisible-separators:
     description: Unicode separator round trips, mapping mutations and affected-crate tests
     expensive: true
