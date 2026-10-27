@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../tests/support/field_observer.rs"]
+mod field_observer;
+
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::net::{IpAddr, SocketAddr};
@@ -1356,14 +1360,18 @@ impl<'pipeline, 'context, 'transaction, 'session>
         &mut self,
         input: &str,
         _prefix_cache_write_mode: PrefixCacheWriteMode,
+        field: Option<&gaze_types::FieldProvenance>,
     ) -> Result<String, CodecErrorCode> {
         // `gaze clean --safety-net-fallback strict`'s Resolve step; admission
         // follows on the leaf.
-        let result = self.pipeline.resolve_boundary_text_transaction(
+        let mut context = gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries);
+        if let Some(field) = field {
+            context = context.with_field(field);
+        }
+        let result = self.pipeline.resolve_boundary_text_transaction_in_context(
             self.transaction,
             input,
-            self.locale_chain,
-            self.dictionaries,
+            context,
         );
         self.refused(result)
     }
@@ -1407,19 +1415,20 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         self.protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
     }
 
+    fn protect_field(
+        &mut self,
+        input: &str,
+        field: &gaze_types::FieldProvenance,
+    ) -> Result<String, CodecErrorCode> {
+        self.protect_leaf(input, PrefixCacheWriteMode::Allow, Some(field))
+    }
+
     fn protect_with_prefix_cache_write_mode(
         &mut self,
         input: &str,
         prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
-        let output = self.protect_preserving_tokens(input, prefix_cache_write_mode)?;
-        let resolved = self.pipeline.resolve_staged_owned_text(
-            self.transaction,
-            &output,
-            gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries),
-            DEFAULT_MAX_REQUEST_BYTES,
-        );
-        self.refused(resolved)
+        self.protect_leaf(input, prefix_cache_write_mode, None)
     }
 
     fn verify_rule_coverage(&mut self, protected: &str) -> Result<(), CodecErrorCode> {
@@ -1436,6 +1445,22 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
 }
 
 impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    fn protect_leaf(
+        &mut self,
+        input: &str,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+        field: Option<&gaze_types::FieldProvenance>,
+    ) -> Result<String, CodecErrorCode> {
+        let output = self.protect_preserving_tokens(input, prefix_cache_write_mode, field)?;
+        let resolved = self.pipeline.resolve_staged_owned_text(
+            self.transaction,
+            &output,
+            gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries),
+            DEFAULT_MAX_REQUEST_BYTES,
+        );
+        self.refused(resolved)
+    }
+
     /// Intermediate primary tokens have not been sent to the caller or provider.
     /// Merge compatible ones with Rule coverage before they become immutable output.
     /// Every token supplied in the original leaf remains an uncrossable boundary.
@@ -1577,6 +1602,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         &mut self,
         input: &str,
         prefix_cache_write_mode: PrefixCacheWriteMode,
+        field: Option<&gaze_types::FieldProvenance>,
     ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
         let original = self
@@ -1592,19 +1618,21 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         let mut caller_owned = HashSet::new();
         let mut cursor = 0;
         for range in owned_token_ranges(input, &tokens) {
-            prepared.push_str(
-                &self.protect_unstaged_segment(
-                    &input[cursor..range.start],
-                    prefix_cache_write_mode,
-                )?,
-            );
+            prepared.push_str(&self.protect_unstaged_segment(
+                &input[cursor..range.start],
+                prefix_cache_write_mode,
+                field,
+            )?);
             let start = prepared.len();
             prepared.push_str(&input[range.clone()]);
             caller_owned.insert((start, prepared.len()));
             cursor = range.end;
         }
-        prepared
-            .push_str(&self.protect_unstaged_segment(&input[cursor..], prefix_cache_write_mode)?);
+        prepared.push_str(&self.protect_unstaged_segment(
+            &input[cursor..],
+            prefix_cache_write_mode,
+            field,
+        )?);
         let prepared = self.coalesce_unpublished_rule_tokens(&prepared, &caller_owned)?;
         if self
             .transaction
@@ -3196,10 +3224,14 @@ const CARRIER_SUBTREE_KEYS: &[&str] = &[
 fn redact_surfaces<'session>(
     pipeline: &Pipeline,
     session: &'session Session,
-    surfaces: Vec<crate::adapter::PiiSurface<'_>>,
+    surfaces: crate::adapter::RequestSurfaces<'_>,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
 ) -> Result<RedactedSurfaces<'session>, ProxyError> {
+    let crate::adapter::RequestSurfaces {
+        strings: surfaces,
+        numbers,
+    } = surfaces;
     let mut transaction = session.begin_transaction();
     let mut texts = Vec::with_capacity(surfaces.len());
     let mut pseudonymizer =
@@ -3216,7 +3248,11 @@ fn redact_surfaces<'session>(
             })?;
     }
     for surface in &surfaces {
-        texts.push(pseudonymizer.protect(surface.text).map_err(|_| {
+        let protected = match &surface.field {
+            Some(field) => pseudonymizer.protect_field(surface.text, field),
+            None => pseudonymizer.protect(surface.text),
+        };
+        texts.push(protected.map_err(|_| {
             ProxyError::Refused {
                 refusal: pseudonymizer
                     .refusal
@@ -3242,10 +3278,13 @@ fn redact_surfaces<'session>(
     Ok(RedactedSurfaces {
         field_paths,
         transaction,
+        _number_fields: numbers,
     })
 }
 
 struct RedactedSurfaces<'session> {
+    /// Structural inventory only; the existing residual scan still decides numeric admission.
+    _number_fields: Vec<gaze_types::FieldProvenance>,
     /// Every redacted surface's field path, which the residual re-scan skips.
     field_paths: HashSet<String>,
     /// Published only after the whole request's residual proof succeeds.
@@ -3892,6 +3931,160 @@ mod residual_tests;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn field_provenance_legacy_adapters_reaches_detect_context() {
+        use crate::adapters::{AnthropicAdapter, GeminiAdapter, OpenAiAdapter};
+        let url = Url::parse("http://127.0.0.1:1").unwrap();
+        let cases: Vec<(
+            Box<dyn ProviderAdapter>,
+            Value,
+            Vec<(&str, Vec<&str>)>,
+            Vec<Vec<&str>>,
+        )> = vec![
+            (
+                Box::new(OpenAiAdapter::new(url.clone())),
+                serde_json::json!({
+                    "metadata": {"customer_id": "probe-meta", "a.b[0]/~": [{"": "probe-nested"}], "count": 731284},
+                    "tools": [{"function": {"description": "probe-tool", "parameters": {"limit": 19}}}],
+                    "input": [{"type": "function_call", "name": "probe-non-args", "arguments": "{}"}]
+                }),
+                vec![
+                    ("probe-meta", vec!["metadata", "customer_id"]),
+                    ("probe-nested", vec!["metadata", "a.b[0]/~", "0", ""]),
+                    ("probe-tool", vec!["tools", "0", "function", "description"]),
+                ],
+                vec![
+                    vec!["metadata", "count"],
+                    vec!["tools", "0", "function", "parameters", "limit"],
+                ],
+            ),
+            (
+                Box::new(GeminiAdapter::new(url.clone())),
+                serde_json::json!({
+                    "contents": [{"parts": [{"function_call": {"args": {"customer_id": "probe-gemini", "rows": [17, "probe-index"]}}}]}]
+                }),
+                vec![
+                    (
+                        "probe-gemini",
+                        vec![
+                            "contents",
+                            "0",
+                            "parts",
+                            "0",
+                            "function_call",
+                            "args",
+                            "customer_id",
+                        ],
+                    ),
+                    (
+                        "probe-index",
+                        vec![
+                            "contents",
+                            "0",
+                            "parts",
+                            "0",
+                            "function_call",
+                            "args",
+                            "rows",
+                            "1",
+                        ],
+                    ),
+                ],
+                vec![vec![
+                    "contents",
+                    "0",
+                    "parts",
+                    "0",
+                    "function_call",
+                    "args",
+                    "rows",
+                    "0",
+                ]],
+            ),
+            (
+                Box::new(AnthropicAdapter::new(url)),
+                serde_json::json!({
+                    "messages": [{"content": [{"type": "tool_use", "input": {"customer_id": "probe-legacy", "count": 17}}]}]
+                }),
+                vec![(
+                    "probe-legacy",
+                    vec!["messages", "0", "content", "0", "input", "customer_id"],
+                )],
+                vec![vec!["messages", "0", "content", "0", "input", "count"]],
+            ),
+        ];
+        for (adapter, mut body, fields, numbers) in cases {
+            let original = body.clone();
+            let observer = super::field_observer::FieldObserver::default();
+            let pipeline = observer.pipeline();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let surfaces = adapter.request_pii_surfaces(&mut body);
+            assert_eq!(surfaces.numbers.len(), numbers.len());
+            for expected in numbers {
+                assert!(surfaces.numbers.iter().any(|field| field
+                    .path
+                    .segments()
+                    .iter()
+                    .map(String::as_str)
+                    .eq(expected.iter().copied())
+                    && field.json_type == gaze_types::JsonScalarType::Number
+                    && field.evidence == gaze_types::FieldEvidence::ValidatedParse));
+            }
+            let staged = redact_surfaces(
+                &pipeline,
+                &session,
+                surfaces,
+                &[LocaleTag::EnUs, LocaleTag::Global],
+                &DictionaryBundle::default(),
+            )
+            .unwrap();
+            assert!(!staged._number_fields.is_empty());
+            assert_eq!(body, original);
+            for (input, path) in fields {
+                observer.assert_field(input, &path);
+            }
+            assert!(session.tokens().is_empty());
+        }
+    }
+
+    #[test]
+    fn field_provenance_anthropic_codec_reaches_detect_context() {
+        let observer = super::field_observer::FieldObserver::default();
+        let pipeline = observer.pipeline();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let dictionaries = DictionaryBundle::default();
+        let locales = [LocaleTag::EnUs, LocaleTag::Global];
+        let mut pseudonymizer =
+            PipelineRequestPseudonymizer::new(&pipeline, &locales, &dictionaries, &mut transaction);
+        let mut ctx = RequestTransformContext::new(
+            &mut pseudonymizer,
+            WireFormat::Json,
+            CodecLimits::default(),
+        );
+        let body = serde_json::json!({"model":"claude-test","max_tokens":16,"metadata":{"customer_id":"probe-codec-meta"}, "messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_test","name":"lookup","input":{"customer_id":"probe-codec","a.b[0]/~":[{"":"probe-codec-index"}]}}]}]});
+        let bytes = serde_json::to_vec(&body).unwrap();
+        let protected = crate::AnthropicMessagesCodec
+            .protect_request(&bytes, &mut ctx)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(protected.bytes()).unwrap(),
+            body
+        );
+        observer.assert_field(
+            "probe-codec",
+            &["messages", "0", "content", "0", "input", "customer_id"],
+        );
+        observer.assert_field(
+            "probe-codec-index",
+            &[
+                "messages", "0", "content", "0", "input", "a.b[0]/~", "0", "",
+            ],
+        );
+        observer.assert_field("probe-codec-meta", &["metadata", "customer_id"]);
+        assert!(session.tokens().is_empty());
+    }
+
     use super::*;
     use std::process::Command;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -4059,18 +4252,23 @@ mod tests {
         assert!(redact_surfaces(
             &pipeline,
             &session,
-            vec![
-                crate::adapter::PiiSurface {
-                    field_path: "$.first".into(),
-                    text: &mut first,
-                    syntax: SurfaceSyntax::Text,
-                },
-                crate::adapter::PiiSurface {
-                    field_path: "$.second".into(),
-                    text: &mut second,
-                    syntax: SurfaceSyntax::Text,
-                },
-            ],
+            crate::RequestSurfaces {
+                strings: vec![
+                    crate::adapter::PiiSurface {
+                        field_path: "$.first".into(),
+                        field: None,
+                        text: &mut first,
+                        syntax: SurfaceSyntax::Text,
+                    },
+                    crate::adapter::PiiSurface {
+                        field_path: "$.second".into(),
+                        field: None,
+                        text: &mut second,
+                        syntax: SurfaceSyntax::Text,
+                    },
+                ],
+                numbers: Vec::new()
+            },
             &[LocaleTag::Global],
             &DictionaryBundle::default()
         )
@@ -4736,7 +4934,7 @@ mod tests {
         fn upstream_base(&self) -> &Url {
             self.anthropic.upstream_base()
         }
-        fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<crate::PiiSurface<'a>> {
+        fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> crate::RequestSurfaces<'a> {
             self.anthropic.request_pii_surfaces(body)
         }
         fn response_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<crate::PiiSurface<'a>> {

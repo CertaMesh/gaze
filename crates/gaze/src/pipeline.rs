@@ -881,6 +881,7 @@ impl Pipeline {
                     dictionaries,
                     decision,
                     &mut report,
+                    None,
                 )?;
                 Ok((
                     CleanDocument::Text(clean.text),
@@ -896,6 +897,7 @@ impl Pipeline {
     ///
     /// `report` is written before the decision runs, so it still names the suspects when the
     /// decision refuses. [`Self::resolve_boundary_text_target`] reads it for that reason.
+    #[allow(clippy::too_many_arguments)]
     fn clean_text_target(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
@@ -904,16 +906,19 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         decision: SafetyNetDecision,
         report: &mut LeakReport,
+        field: Option<&gaze_types::FieldProvenance>,
     ) -> Result<CleanText> {
         #[cfg(feature = "bundled-recognizers")]
         let _inference_request = gaze_recognizers::inference_request();
-        let mut clean = self.redact_text_with_manifest(
+        let mut clean = self.redact_text_with_manifest_uncached(
             target,
             text,
             None,
             DocumentKind::Text,
             locale_chain,
             dictionaries,
+            None,
+            field,
         )?;
         *report = self.run_safety_nets(
             target,
@@ -995,6 +1000,7 @@ impl Pipeline {
             locale_chain,
             dictionaries,
             Some(&mut protection_trace),
+            None,
         )?;
         let mut report = self.run_safety_nets(
             &mut target,
@@ -1208,6 +1214,7 @@ impl Pipeline {
             locale_chain,
             dictionaries,
             None,
+            None,
         )
     }
 
@@ -1221,13 +1228,17 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+        field: Option<&gaze_types::FieldProvenance>,
     ) -> Result<CleanText> {
         gaze_types::perf_count!("input_bytes", text.len());
         let normalized = normalize(text);
         // Where each captured value sits decides the spelling its token records.
         let json_literals = JsonStringLiterals::scan(text);
         let spans = &normalized.spans;
-        let ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
+        let mut ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
+        if let Some(field) = field {
+            ctx = ctx.with_fields(gaze_types::FieldContext::WholeInput(field));
+        }
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;

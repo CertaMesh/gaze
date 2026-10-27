@@ -4,7 +4,7 @@ env:
   PATH: "${HOME}/.cargo/bin:${PATH}"
   RUSTC: "${HOME}/.cargo/bin/rustc"
   RUSTDOC: "${HOME}/.cargo/bin/rustdoc"
-  CARGO_BUILD_JOBS: "4"
+  CARGO_BUILD_JOBS: "2"
   PYTHONDONTWRITEBYTECODE: "1"
 # Keep Cargo's cwd-relative target/. Nested mutation gates rely on that layout.
 

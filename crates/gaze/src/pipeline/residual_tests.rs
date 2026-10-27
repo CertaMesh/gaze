@@ -82,6 +82,7 @@ fn clean(p: &Pipeline, session: &Session, raw: &str) -> Result<CleanText> {
         &[crate::LocaleTag::Global],
         &DictionaryBundle::default(),
         None,
+        None,
     )
 }
 #[test]
@@ -817,7 +818,8 @@ fn audit_failures_preserve_original_order_and_residual_allocate_before_log() {
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
                 None
-            )
+            None,
+)
             .is_err());
         drop(tx);
         assert!(staged_session.tokens().is_empty());

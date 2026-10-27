@@ -8,8 +8,8 @@ use serde_json::Value;
 use url::{Host, Url};
 
 use crate::adapter::{
-    push_string, push_text_blocks, walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter,
-    SessionPolicy, SessionRegistryConfig, SseEvent, SurfaceSyntax,
+    push_string, push_text_blocks, walk_all_scalars, AdapterContract, PiiSurface, ProviderAdapter,
+    RequestSurfaces, SessionPolicy, SessionRegistryConfig, SseEvent, SurfacePath, SurfaceSyntax,
 };
 use crate::codec::CodecLimits;
 use crate::codecs::anthropic::AnthropicMessagesCodec;
@@ -368,13 +368,18 @@ impl ProviderAdapter for AnthropicAdapter {
         &self.upstream
     }
 
-    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>> {
-        let mut surfaces = Vec::new();
+    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> RequestSurfaces<'a> {
+        let mut surfaces = RequestSurfaces::default();
         if let Value::Object(root) = body {
             for (key, value) in root {
                 match key.as_str() {
                     "system" => {
-                        push_text_blocks(&mut surfaces, "system", value, SurfaceSyntax::Text);
+                        push_text_blocks(
+                            &mut surfaces,
+                            &SurfacePath::root("system"),
+                            value,
+                            SurfaceSyntax::Text,
+                        );
                     }
                     "messages" => {
                         if let Value::Array(messages) = value {
@@ -384,7 +389,9 @@ impl ProviderAdapter for AnthropicAdapter {
                                         if message_key == "content" {
                                             collect_content_blocks(
                                                 &mut surfaces,
-                                                &format!("messages[{index}].content"),
+                                                &SurfacePath::root("messages")
+                                                    .index(index)
+                                                    .member("content"),
                                                 message_value,
                                             );
                                         }
@@ -401,13 +408,13 @@ impl ProviderAdapter for AnthropicAdapter {
     }
 
     fn response_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>> {
-        let mut surfaces = Vec::new();
+        let mut surfaces = RequestSurfaces::default();
         if let Value::Object(root) = body {
             if let Some(content) = root.get_mut("content") {
-                collect_content_blocks(&mut surfaces, "content", content);
+                collect_content_blocks(&mut surfaces, &SurfacePath::root("content"), content);
             }
         }
-        surfaces
+        surfaces.strings
     }
 
     fn sse_event_pii_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<PiiSurface<'a>> {
@@ -421,11 +428,13 @@ impl ProviderAdapter for AnthropicAdapter {
                             match key.as_str() {
                                 "text" => surfaces.push(PiiSurface {
                                     field_path: "delta.text".to_string(),
+                                    field: None,
                                     text,
                                     syntax: SurfaceSyntax::ModelOutput,
                                 }),
                                 "partial_json" => surfaces.push(PiiSurface {
                                     field_path: "delta.partial_json".to_string(),
+                                    field: None,
                                     text,
                                     syntax: SurfaceSyntax::Json,
                                 }),
@@ -441,12 +450,17 @@ impl ProviderAdapter for AnthropicAdapter {
 }
 
 fn collect_content_blocks<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: &str,
+    surfaces: &mut RequestSurfaces<'a>,
+    prefix: &SurfacePath,
     content: &'a mut Value,
 ) {
     match content {
-        Value::String(_) => push_string(surfaces, prefix, content, SurfaceSyntax::ModelOutput),
+        Value::String(_) => push_string(
+            surfaces,
+            prefix.clone(),
+            content,
+            SurfaceSyntax::ModelOutput,
+        ),
         Value::Array(blocks) => {
             for (index, block) in blocks.iter_mut().enumerate() {
                 let Value::Object(block) = block else {
@@ -455,23 +469,24 @@ fn collect_content_blocks<'a>(
                 match block.get("type").and_then(Value::as_str) {
                     Some("text") => {
                         if let Some(Value::String(text)) = block.get_mut("text") {
-                            surfaces.push(PiiSurface {
-                                field_path: format!("{prefix}[{index}].text"),
-                                text,
-                                syntax: SurfaceSyntax::ModelOutput,
-                            });
+                            surfaces.push(
+                                prefix
+                                    .index(index)
+                                    .member("text")
+                                    .surface(text, SurfaceSyntax::ModelOutput),
+                            );
                         }
                     }
                     Some("tool_use") => {
                         if let Some(input) = block.get_mut("input") {
-                            walk_all_strings(surfaces, format!("{prefix}[{index}].input"), input);
+                            walk_all_scalars(surfaces, prefix.index(index).member("input"), input);
                         }
                     }
                     Some("tool_result") => {
                         if let Some(result) = block.get_mut("content") {
                             collect_content_blocks(
                                 surfaces,
-                                &format!("{prefix}[{index}].content"),
+                                &prefix.index(index).member("content"),
                                 result,
                             );
                         }

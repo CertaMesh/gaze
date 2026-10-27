@@ -3,8 +3,8 @@ use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{
-    push_string, push_text_blocks, walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter,
-    SseEvent, SseStreamKey, SseStreamSurface, SurfaceSyntax,
+    push_string, push_text_blocks, walk_all_scalars, AdapterContract, PiiSurface, ProviderAdapter,
+    RequestSurfaces, SseEvent, SseStreamKey, SseStreamSurface, SurfacePath, SurfaceSyntax,
 };
 
 #[derive(Clone, Debug)]
@@ -52,49 +52,82 @@ impl ProviderAdapter for OpenAiAdapter {
     /// request rather than protect it. PII in those positions is caught by the outbound residual
     /// re-scan and fails closed, which tells the adopter their identifier carries PII instead of
     /// handing them a broken request that looks fine.
-    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>> {
-        let mut surfaces = Vec::new();
+    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> RequestSurfaces<'a> {
+        let mut surfaces = RequestSurfaces::default();
         if let Value::Object(root) = body {
             for (key, value) in root {
                 match key.as_str() {
-                    "system" => push_string(&mut surfaces, "system", value, SurfaceSyntax::Text),
+                    "system" => push_string(
+                        &mut surfaces,
+                        SurfacePath::root("system"),
+                        value,
+                        SurfaceSyntax::Text,
+                    ),
                     "prompt" => {
-                        push_text_blocks(&mut surfaces, "prompt", value, SurfaceSyntax::Text);
+                        push_text_blocks(
+                            &mut surfaces,
+                            &SurfacePath::root("prompt"),
+                            value,
+                            SurfaceSyntax::Text,
+                        );
                     }
                     "instructions" => {
-                        push_string(&mut surfaces, "instructions", value, SurfaceSyntax::Text);
+                        push_string(
+                            &mut surfaces,
+                            SurfacePath::root("instructions"),
+                            value,
+                            SurfaceSyntax::Text,
+                        );
                     }
                     "messages" => {
                         if let Value::Array(messages) = value {
                             for (index, message) in messages.iter_mut().enumerate() {
                                 collect_message_surfaces(
                                     &mut surfaces,
-                                    format!("messages[{index}]"),
+                                    SurfacePath::root("messages").index(index),
                                     message,
                                 );
                             }
                         }
                     }
                     "input" => {
-                        push_text_blocks(&mut surfaces, "input", value, SurfaceSyntax::Text);
+                        push_text_blocks(
+                            &mut surfaces,
+                            &SurfacePath::root("input"),
+                            value,
+                            SurfaceSyntax::Text,
+                        );
                     }
                     // The documented end-user identifier. Free-form adopter text and a
                     // first-class PII carrier in practice; opaque to the provider beyond abuse
                     // monitoring, so pseudonymizing it is safe.
-                    "user" => push_string(&mut surfaces, "user", value, SurfaceSyntax::Text),
+                    "user" => push_string(
+                        &mut surfaces,
+                        SurfacePath::root("user"),
+                        value,
+                        SurfaceSyntax::Text,
+                    ),
                     // Adopter-attached key/value pairs, echoed back verbatim.
-                    "metadata" => walk_all_strings(&mut surfaces, "metadata".to_string(), value),
+                    "metadata" => {
+                        walk_all_scalars(&mut surfaces, SurfacePath::root("metadata"), value)
+                    }
                     // Stop sequences are matched against generated text, so they are model-visible.
-                    "stop" => walk_all_strings(&mut surfaces, "stop".to_string(), value),
+                    "stop" => walk_all_scalars(&mut surfaces, SurfacePath::root("stop"), value),
                     // Tool and schema declarations: names, descriptions, and enum members are all
-                    // read by the model. `walk_all_strings` covers the whole declaration subtree.
-                    "tools" => walk_all_strings(&mut surfaces, "tools".to_string(), value),
-                    "functions" => walk_all_strings(&mut surfaces, "functions".to_string(), value),
+                    // read by the model. `walk_all_scalars` covers the whole declaration subtree.
+                    "tools" => walk_all_scalars(&mut surfaces, SurfacePath::root("tools"), value),
+                    "functions" => {
+                        walk_all_scalars(&mut surfaces, SurfacePath::root("functions"), value)
+                    }
                     "response_format" => {
-                        walk_all_strings(&mut surfaces, "response_format".to_string(), value);
+                        walk_all_scalars(
+                            &mut surfaces,
+                            SurfacePath::root("response_format"),
+                            value,
+                        );
                     }
                     "prediction" => {
-                        walk_all_strings(&mut surfaces, "prediction".to_string(), value);
+                        walk_all_scalars(&mut surfaces, SurfacePath::root("prediction"), value);
                     }
                     _ => {}
                 }
@@ -104,7 +137,7 @@ impl ProviderAdapter for OpenAiAdapter {
     }
 
     fn response_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>> {
-        let mut surfaces = Vec::new();
+        let mut surfaces = RequestSurfaces::default();
         if let Value::Object(root) = body {
             for (key, value) in root {
                 match key.as_str() {
@@ -116,17 +149,23 @@ impl ProviderAdapter for OpenAiAdapter {
                                         match choice_key.as_str() {
                                             "message" => collect_message_surfaces(
                                                 &mut surfaces,
-                                                format!("choices[{index}].message"),
+                                                SurfacePath::root("choices")
+                                                    .index(index)
+                                                    .member("message"),
                                                 choice_value,
                                             ),
                                             "delta" => collect_message_surfaces(
                                                 &mut surfaces,
-                                                format!("choices[{index}].delta"),
+                                                SurfacePath::root("choices")
+                                                    .index(index)
+                                                    .member("delta"),
                                                 choice_value,
                                             ),
                                             "text" => push_string(
                                                 &mut surfaces,
-                                                format!("choices[{index}].text"),
+                                                SurfacePath::root("choices")
+                                                    .index(index)
+                                                    .member("text"),
                                                 choice_value,
                                                 SurfaceSyntax::ModelOutput,
                                             ),
@@ -142,7 +181,7 @@ impl ProviderAdapter for OpenAiAdapter {
                 }
             }
         }
-        surfaces
+        surfaces.strings
     }
 
     fn sse_event_pii_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<PiiSurface<'a>> {
@@ -176,7 +215,7 @@ impl ProviderAdapter for OpenAiAdapter {
             match key.as_str() {
                 "choices" => collect_choice_stream_surfaces(&mut surfaces, value),
                 "output" => {
-                    let mut complete = Vec::new();
+                    let mut complete = RequestSurfaces::default();
                     collect_output_surfaces(&mut complete, value);
                     surfaces.extend(complete.into_iter().map(SseStreamSurface::complete));
                 }
@@ -206,72 +245,72 @@ impl ProviderAdapter for OpenAiAdapter {
 /// Surfaces every string of the Responses API `output` items, typed by what carries it: the
 /// `arguments` of a `function_call` or `mcp_call` item is a serialized JSON document, and the
 /// `output_text` of a `message` item is model output.
-fn collect_output_surfaces<'a>(surfaces: &mut Vec<PiiSurface<'a>>, output: &'a mut Value) {
+fn collect_output_surfaces<'a>(surfaces: &mut RequestSurfaces<'a>, output: &'a mut Value) {
     let Value::Array(items) = output else {
-        walk_all_strings(surfaces, "output".to_string(), output);
+        walk_all_scalars(surfaces, SurfacePath::root("output"), output);
         return;
     };
     for (index, item) in items.iter_mut().enumerate() {
-        collect_output_item(surfaces, format!("output[{index}]"), item);
+        collect_output_item(surfaces, SurfacePath::root("output").index(index), item);
     }
 }
 
 /// Surfaces one Responses API output item.
 fn collect_output_item<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: String,
+    surfaces: &mut RequestSurfaces<'a>,
+    prefix: SurfacePath,
     item: &'a mut Value,
 ) {
     let kind = item.get("type").and_then(Value::as_str);
     let is_call = matches!(kind, Some("function_call" | "mcp_call"));
     let is_message = kind == Some("message");
     let Value::Object(fields) = item else {
-        walk_all_strings(surfaces, prefix, item);
+        walk_all_scalars(surfaces, prefix, item);
         return;
     };
     for (key, value) in fields {
-        let path = format!("{prefix}.{key}");
+        let path = prefix.member(key);
         match key.as_str() {
             "arguments" if is_call && value.is_string() => {
                 push_string(surfaces, path, value, SurfaceSyntax::Json);
             }
             "content" if is_message => collect_output_content(surfaces, path, value),
-            _ => walk_all_strings(surfaces, path, value),
+            _ => walk_all_scalars(surfaces, path, value),
         }
     }
 }
 
 fn collect_output_content<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: String,
+    surfaces: &mut RequestSurfaces<'a>,
+    prefix: SurfacePath,
     content: &'a mut Value,
 ) {
     let Value::Array(parts) = content else {
-        walk_all_strings(surfaces, prefix, content);
+        walk_all_scalars(surfaces, prefix, content);
         return;
     };
     for (index, part) in parts.iter_mut().enumerate() {
-        collect_output_part(surfaces, format!("{prefix}[{index}]"), part);
+        collect_output_part(surfaces, prefix.index(index), part);
     }
 }
 
 /// Surfaces one content part of a Responses API `message` output item.
 fn collect_output_part<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: String,
+    surfaces: &mut RequestSurfaces<'a>,
+    prefix: SurfacePath,
     part: &'a mut Value,
 ) {
     let is_output_text = part.get("type").and_then(Value::as_str) == Some("output_text");
     let Value::Object(fields) = part else {
-        walk_all_strings(surfaces, prefix, part);
+        walk_all_scalars(surfaces, prefix, part);
         return;
     };
     for (key, value) in fields {
-        let path = format!("{prefix}.{key}");
+        let path = prefix.member(key);
         if is_output_text && key == "text" && value.is_string() {
             push_string(surfaces, path, value, SurfaceSyntax::ModelOutput);
         } else {
-            walk_all_strings(surfaces, path, value);
+            walk_all_scalars(surfaces, path, value);
         }
     }
 }
@@ -280,7 +319,7 @@ fn collect_output_part<'a>(
 fn extend_stream<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
     stream: Option<SseStreamKey>,
-    complete: Vec<PiiSurface<'a>>,
+    complete: RequestSurfaces<'a>,
 ) {
     surfaces.extend(complete.into_iter().map(|surface| SseStreamSurface {
         stream: stream.clone(),
@@ -339,9 +378,9 @@ fn collect_responses_event_surfaces<'a>(
             return;
         }
     };
-    let mut complete = Vec::new();
+    let mut complete = RequestSurfaces::default();
     if let Some(value) = data.get_mut(field) {
-        push_string(&mut complete, field, value, syntax);
+        push_string(&mut complete, SurfacePath::root(field), value, syntax);
     }
     extend_stream(surfaces, stream, complete);
 }
@@ -353,21 +392,21 @@ fn collect_responses_snapshot_surfaces<'a>(
     kind: &str,
     data: &'a mut Value,
 ) {
-    let mut complete = Vec::new();
+    let mut complete = RequestSurfaces::default();
     match kind {
         "output_item.added" | "output_item.done" => {
             if let Some(item) = data.get_mut("item") {
-                collect_output_item(&mut complete, "item".to_string(), item);
+                collect_output_item(&mut complete, SurfacePath::root("item"), item);
             }
         }
         "content_part.added" | "content_part.done" => {
             if let Some(part) = data.get_mut("part") {
-                collect_output_part(&mut complete, "part".to_string(), part);
+                collect_output_part(&mut complete, SurfacePath::root("part"), part);
             }
         }
         "reasoning_summary_part.added" | "reasoning_summary_part.done" => {
             if let Some(part) = data.get_mut("part") {
-                walk_all_strings(&mut complete, "part".to_string(), part);
+                walk_all_scalars(&mut complete, SurfacePath::root("part"), part);
             }
         }
         "created" | "in_progress" | "queued" | "completed" | "incomplete" | "failed" => {
@@ -399,16 +438,16 @@ fn collect_choice_stream_surfaces<'a>(
         };
         let choice_index = choice.get("index").and_then(Value::as_u64);
         for (key, value) in choice {
-            let prefix = format!("choices[{position}].{key}");
+            let prefix = SurfacePath::root("choices").index(position).member(key);
             match key.as_str() {
                 "delta" => collect_delta_stream_surfaces(surfaces, &prefix, choice_index, value),
                 "message" => {
-                    let mut complete = Vec::new();
+                    let mut complete = RequestSurfaces::default();
                     collect_message_surfaces(&mut complete, prefix, value);
                     extend_stream(surfaces, None, complete);
                 }
                 "text" => {
-                    let mut fragment = Vec::new();
+                    let mut fragment = RequestSurfaces::default();
                     push_string(&mut fragment, prefix, value, SurfaceSyntax::ModelOutput);
                     let stream = Some(SseStreamKey::new("choices.text", [choice_index]));
                     extend_stream(surfaces, stream, fragment);
@@ -422,7 +461,7 @@ fn collect_choice_stream_surfaces<'a>(
 /// Surfaces one chunk's `delta`, keying its `content` and tool-call `arguments` fragments.
 fn collect_delta_stream_surfaces<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
-    prefix: &str,
+    prefix: &SurfacePath,
     choice_index: Option<u64>,
     delta: &'a mut Value,
 ) {
@@ -430,12 +469,12 @@ fn collect_delta_stream_surfaces<'a>(
         return;
     };
     for (key, value) in map {
-        let mut fragment = Vec::new();
+        let mut fragment = RequestSurfaces::default();
         match key.as_str() {
             "content" if value.is_string() => {
                 push_string(
                     &mut fragment,
-                    format!("{prefix}.content"),
+                    prefix.member("content"),
                     value,
                     SurfaceSyntax::ModelOutput,
                 );
@@ -448,10 +487,10 @@ fn collect_delta_stream_surfaces<'a>(
                 };
                 for (position, tool_call) in tool_calls.iter_mut().enumerate() {
                     let call_index = tool_call.get("index").and_then(Value::as_u64);
-                    let mut fragment = Vec::new();
+                    let mut fragment = RequestSurfaces::default();
                     collect_tool_call_arguments(
                         &mut fragment,
-                        &format!("{prefix}.tool_calls[{position}]"),
+                        &prefix.member("tool_calls").index(position),
                         tool_call,
                     );
                     let stream = Some(SseStreamKey::new(
@@ -470,8 +509,8 @@ fn collect_delta_stream_surfaces<'a>(
 }
 
 fn collect_message_surfaces<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: String,
+    surfaces: &mut RequestSurfaces<'a>,
+    prefix: SurfacePath,
     message: &'a mut Value,
 ) {
     let Value::Object(map) = message else {
@@ -483,38 +522,33 @@ fn collect_message_surfaces<'a>(
 }
 
 fn collect_message_field<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: &str,
+    surfaces: &mut RequestSurfaces<'a>,
+    prefix: &SurfacePath,
     key: &str,
     value: &'a mut Value,
 ) {
     match key {
         "content" => push_text_blocks(
             surfaces,
-            &format!("{prefix}.content"),
+            &prefix.member("content"),
             value,
             SurfaceSyntax::ModelOutput,
         ),
         "tool_results" => push_text_blocks(
             surfaces,
-            &format!("{prefix}.tool_results"),
+            &prefix.member("tool_results"),
             value,
             SurfaceSyntax::Text,
         ),
         // The participant name on a message. A person's name by definition, and read by the
         // model, so it is pseudonymized rather than rejected.
-        "name" => push_string(
-            surfaces,
-            format!("{prefix}.name"),
-            value,
-            SurfaceSyntax::Text,
-        ),
+        "name" => push_string(surfaces, prefix.member("name"), value, SurfaceSyntax::Text),
         "tool_calls" => {
             if let Value::Array(tool_calls) = value {
                 for (index, tool_call) in tool_calls.iter_mut().enumerate() {
                     collect_tool_call_arguments(
                         surfaces,
-                        &format!("{prefix}.tool_calls[{index}]"),
+                        &prefix.member("tool_calls").index(index),
                         tool_call,
                     );
                 }
@@ -527,8 +561,8 @@ fn collect_message_field<'a>(
 /// Surfaces `function.arguments` of one tool call: a serialized JSON object, in requests and
 /// responses alike.
 fn collect_tool_call_arguments<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: &str,
+    surfaces: &mut RequestSurfaces<'a>,
+    prefix: &SurfacePath,
     tool_call: &'a mut Value,
 ) {
     if let Some(args) = tool_call
@@ -537,7 +571,7 @@ fn collect_tool_call_arguments<'a>(
     {
         push_string(
             surfaces,
-            format!("{prefix}.function.arguments"),
+            prefix.member("function").member("arguments"),
             args,
             SurfaceSyntax::Json,
         );

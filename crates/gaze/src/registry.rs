@@ -1365,6 +1365,7 @@ impl RecognizerRegistry {
         let mut prior_ctx =
             DetectContext::new(ctx.locale_chain, ctx.dictionaries).with_prior_candidates(prior);
         prior_ctx.source_spans = ctx.source_spans;
+        prior_ctx.fields = ctx.fields;
         prior_ctx.degraded.set(ctx.degraded.get());
         let mut added = Vec::new();
         for recognizer in self.entries.iter().filter(|recognizer| {
@@ -1473,6 +1474,7 @@ impl RecognizerRegistry {
                 let mut locale_ctx =
                     DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
                 locale_ctx.source_spans = ctx.source_spans;
+                locale_ctx.fields = ctx.fields;
                 locale_ctx.degraded.set(ctx.degraded.get());
                 let mut class_candidates = Vec::new();
                 for (index, recognizer) in self

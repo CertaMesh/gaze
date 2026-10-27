@@ -40,8 +40,9 @@ use gaze::{DictionaryBundle, LocaleChain, LocaleTag, Pipeline};
 
 pub use adapter::{
     AdapterContract, CoveragePolicy, FormatPolicy, HeaderPolicy, PiiSurface, ProtocolContract,
-    ProviderAdapter, RedirectPolicy, RoutePolicy, SessionPolicy, SessionRegistryConfig,
-    SessionRegistryConfigError, SseEvent, SseStreamKey, SseStreamSurface, SurfaceSyntax,
+    ProviderAdapter, RedirectPolicy, RequestSurfaces, RoutePolicy, SessionPolicy,
+    SessionRegistryConfig, SessionRegistryConfigError, SseEvent, SseStreamKey, SseStreamSurface,
+    SurfaceSyntax,
 };
 pub use codec::{
     BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, OpaqueCarrierLocation,
