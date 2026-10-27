@@ -348,15 +348,35 @@ fn word_tails_require_digit_and_contiguous_suffix_evidence() {
     ] {
         for left in ["_", ".", "$", "-", "/", "#", "::", " ", "(", "\"", "'"] {
             for count in [6, 12, 24] {
-                for tail in [
+                for (index, tail) in [
                     "verify_header_setting_service_".repeat(count),
                     "verify-header-setting-service-".repeat(count),
                     "verifyHeaderSettingService".repeat(count),
                     "VERIFY_HEADER_SETTING_SERVICE_".repeat(count),
-                    // A digit alone is insufficient when every run is short.
                     "verify_header1_setting_service_".repeat(count),
-                ] {
-                    assert_whole(&core, &format!("{left}{prefix}{tail}"), &[]);
+                    "verify-header1-setting-service-".repeat(count),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let value = format!("{prefix}{tail}");
+                    let raw = format!("{left}{value}");
+                    let base64url = matches!(
+                        prefix,
+                        "sk-proj-"
+                            | "sk-svcacct-"
+                            | "sk-admin-"
+                            | "sk-None-"
+                            | "sk-ant-api03-"
+                            | "AIzaSy"
+                    );
+                    // Digit-bearing words share the alphabet of these named
+                    // issuers. Generic sk-/Stripe/Slack retain alphanumeric runs.
+                    if index >= 4 && base64url {
+                        assert_whole(&core, &raw, &[&value]);
+                    } else {
+                        assert_whole(&core, &raw, &[]);
+                    }
                 }
             }
         }
@@ -396,5 +416,51 @@ fn numbered_bulleted_and_entity_framed_private_keys_stay_whole() {
         let value =
             format!("-----BEGIN PRIVATE KEY-----\n{placeholder}\n-----END PRIVATE KEY-----");
         assert_whole(&core, &value, &[&value]);
+    }
+}
+
+#[test]
+fn issuer_alphabets_keep_separator_dense_bodies_whole() {
+    let core = core();
+    for prefix in [
+        "sk-proj-",
+        "sk-svcacct-",
+        "sk-admin-",
+        "sk-None-",
+        "sk-ant-api03-",
+        "AIzaSy",
+    ] {
+        for size in [33, 128] {
+            let body: String = "A1_-".repeat(size).chars().take(size).collect();
+            let value = format!("{prefix}{body}");
+            assert_whole(&core, &value, &[&value]);
+        }
+    }
+    let jwt = format!(
+        "ghs_123456_eyJ{}.{}.{}",
+        "A_-1".repeat(16),
+        "B_-1".repeat(16),
+        "C_-1".repeat(16)
+    );
+    assert_whole(&core, &jwt, &[&jwt]);
+    for value in [
+        "sk-learn-model-v2-config".to_owned(),
+        format!("sk-{}", "verify_header1_setting_".repeat(6)),
+        format!("sk_live_{}", "verify_header1_setting_".repeat(6)),
+        "xoxa-like-format-is-deprecated-since-2021".to_owned(),
+    ] {
+        assert_whole(&core, &value, &[]);
+    }
+}
+
+#[test]
+fn existing_credential_cues_and_fields_survive_bare_veto() {
+    let core = core();
+    for value in [
+        format!("AIzaSy{}", "A".repeat(33)),
+        format!("ghp_{}", "A".repeat(36)),
+    ] {
+        assert_whole(&core, &format!("api key: {value}"), &[&value]);
+        assert_whole(&core, &format!(r#"{{"api_key":"{value}"}}"#), &[&value]);
     }
 }

@@ -58,7 +58,8 @@ def main():
     failures = 0
     if args.kind in ('identifiers', 'all'):
         cases = [(f'{prefix}/{boundary!r}/{style}/{length}', value, ())
-                 for prefix, boundary, style, length, value in cells.identifier_cases('test')]
+                 for prefix, boundary, style, length, value in cells.identifier_cases('test')
+                 if not (style.endswith('_digit') and prefix in cells.BASE64URL_PREFIXES)]
         failures += check('identifiers', cases)
     if args.kind in ('pem', 'all'):
         cases = []
@@ -78,12 +79,30 @@ def main():
                 cases.append((prefix + '/' + repr(boundary), boundary + value, (value,)))
             for framing, br in cells.framing_cases():
                 cases.append((prefix + '/' + framing, br + value + br, (value,)))
+        for prefix in cells.BASE64URL_PREFIXES:
+            for size in (33, 128):
+                value = prefix + ('A1_-' * ((size + 3) // 4))[:size]
+                for framing, br in cells.framing_cases():
+                    cases.append((prefix + '/separator_dense/' + str(size) + '/' + framing,
+                                  br + value + br, (value,)))
+        jwt = 'ghs_123456_eyJ' + 'A_-1' * 16 + '.' + 'B_-1' * 16 + '.' + 'C_-1' * 16
+        for framing, br in cells.framing_cases():
+            cases.append(('ghs_JWT/separator_dense/' + framing, br + jwt + br, (jwt,)))
+        for prefix in cells.ISSUER_PREFIXES:
+            value = prefix + 'A' * 128
+            for surface, text in [('cue', 'api key: ' + value),
+                                  ('field', '{"api_key":"' + value + '"}')]:
+                cases.append((prefix + '/independent_' + surface, text, (value,)))
         failures += check('issuers', cases)
     if args.kind in ('residuals', 'all'):
         cases = []
         for prefix in cells.ISSUER_PREFIXES:
             value = prefix + 'verifyHeaderSettingServiceRefreshOption' * 3 + '1'
             cases.append((prefix + '/camel_digit', value, (value,)))
+        for prefix, boundary, style, length, value in cells.identifier_cases('test'):
+            if style.endswith('_digit') and prefix in cells.BASE64URL_PREFIXES:
+                cases.append((prefix + '/' + style + '/' + str(length), value,
+                              (value[len(boundary):],)))
         for placeholder in ['YourPrivateKeyGoesHere', 'Base64EncodedKeyMaterial']:
             value = f'-----BEGIN PRIVATE KEY-----\n{placeholder}\n-----END PRIVATE KEY-----'
             cases.append(('pem/letter_placeholder', value, (value,)))

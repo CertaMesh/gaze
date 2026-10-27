@@ -8,6 +8,10 @@ ISSUER_PREFIXES = (
     "xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "xapp-", "xoxe-",
     "xoxe.xoxp-", "sk_live_", "rk_live_", "sk_test_", "rk_test_", "whsec_", "AIzaSy",
 )
+# Only distinctive full issuer prefixes; never generic sk- or Stripe sk_/rk_.
+BASE64URL_PREFIXES = (
+    "sk-proj-", "sk-svcacct-", "sk-admin-", "sk-None-", "sk-ant-api03-", "AIzaSy",
+)
 IDENTIFIER_BOUNDARIES = ("_", ".", "$", "-", "/", "#", "::", " ", "(", '\"', "'")
 
 
@@ -24,6 +28,7 @@ def identifier_cases(partition):
                     ("camel", parts[0] + "".join(p.title() for p in parts[1:])),
                     ("screaming", "_".join(p.upper() for p in parts)),
                     ("snake_digit", "1_".join(parts)),
+                    ("kebab_digit", "1-".join(parts)),
                 ):
                     yield prefix, boundary, style, length, boundary + prefix + tail
 

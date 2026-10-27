@@ -154,20 +154,26 @@ attribution; there is no upper length rejection.
 | `sk_live_`, `rk_live_`, `sk_test_`, `rk_test_`, `whsec_` | ASCII letters, digits, underscore, hyphen | 24 |
 | `AIzaSy` | ASCII letters, digits, underscore, hyphen | 33 |
 
-Every bare arm also requires a contiguous `[A-Za-z0-9]{16,}` suffix run and
-at least one suffix digit. Format markers such as Anthropic's `api03` do not
-supply that digit. The existing candidate length floors above remain policy
-bounds, not issuer validity checks. The rulepack comments cite each shape's source.
+Every bare arm also requires a suffix digit and 16 contiguous units of its
+issuer body alphabet. The distinctive `sk-proj-`, `sk-svcacct-`, `sk-admin-`,
+`sk-None-`, `sk-ant-`/`api03`, `AIzaSy` and structured `ghs_APPID_JWT` arms use
+base64url, including `_` and `-`. Other components use `[A-Za-z0-9]` runs.
+Slack hyphens separate components. Generic `sk-` keeps its existing 32 initial
+alphanumeric characters; it does not gain the base64url relaxation.
+Anthropic's fixed `api03` prefix marker does not supply digit evidence.
+The existing candidate length floors remain policy bounds, not issuer validity checks.
+The rulepack comments cite each shape's source.
 
 Letter-only snake, kebab, camel and uppercase word tails remain raw. A camel
-word tail containing a digit can still match. Real credentials without a digit,
-or with separators breaking every 16-character alphanumeric run, also remain raw.
-Explicit credential code fields and cue-anchored rules retain their own grammar.
+word containing a digit can match. Named base64url arms can also match digit-bearing
+snake and kebab words, an accepted residual class. Generic text such as
+`sk-learn-model-v2-config` stays raw. Real credentials without a suffix digit
+remain raw. Explicit credential code fields and cue-anchored rules retain their grammar.
 
 For a uniform independent alphanumeric body of length `n`, the probability of no
 digit is `q(n) = (52/62)^n`. Base64url bodies use `r(n) = (54/64)^n`.
-These models describe the digit condition only, not measured issuer distributions
-or the separate contiguous-run requirement.
+These models describe the digit condition, not measured issuer distributions.
+For a complete base64url body of at least 16 units, `_` and `-` do not break its run.
 
 | Format | No-digit probability under the stated model |
 |---|---|
