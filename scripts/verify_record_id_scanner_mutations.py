@@ -110,7 +110,7 @@ def main():
         ('allow-sql-parameters', 'crates/gaze-recognizers/src/regex.rs', '        || parameter', '        || false', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
         ('allow-lowercase-sql-grouping', 'crates/gaze-recognizers/src/regex.rs', 'token.to_ascii_uppercase().as_str(),', 'token,', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
         ('allow-dml-grouping', 'crates/gaze-recognizers/src/regex.rs', '"AND"\n            | "OR"', '"_DISABLED_AND"\n            | "_DISABLED_OR"', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
-        ('veto-prose-select-without-from', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if select && !source.is_some_and', 'if false && select && !source.is_some_and', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
+        ('veto-prose-select-without-from', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if select && source.is_none_or', 'if false && select && source.is_none_or', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
         ('veto-prose-sql-at-any-position', 'crates/gaze-recognizers/src/regex/scalar_index.rs', '(?:\\A|[;\\r\\n])[ \\t]*', '[ \\t]*', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
         ('allow-short-letter-hash-id', 'crates/gaze-recognizers/src/regex.rs', 'body.len() >= 7', 'body.len() >= 1', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'),
         ('allow-long-hex-id', 'crates/gaze-recognizers/src/regex.rs', 'ch.is_ascii_alphabetic() && !ch.is_ascii_hexdigit()', 'ch.is_ascii_alphabetic()', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'),

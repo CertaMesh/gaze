@@ -73,7 +73,7 @@ impl ScalarBoundaryIndex {
                 let end = ends.get(ends.partition_point(|&end| end <= statement.end())).copied().unwrap_or(input.len());
                 let select = statement.as_str().to_ascii_lowercase().ends_with("select");
                 let source = sources.get(sources.partition_point(|source| source.start < statement.end()));
-                if select && !source.is_some_and(|source| source.end <= end) { continue; }
+                if select && source.is_none_or(|source| source.end > end) { continue; }
                 if let Some(last) = regions.last_mut().filter(|last| last.end >= statement.start()) { last.end = last.end.max(end); }
                 else { regions.push(statement.start()..end); }
             }
