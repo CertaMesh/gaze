@@ -190,6 +190,11 @@ Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
 #### Caller-known record context
 
 `gaze clean --context-json context.json` also accepts a caller-known record.
+The top level must be an object. Previously accepted positional arrays now fail
+with `PolicyConfig`; replace `[{}, {}, {}, {"full_name":"[customer name]"}]`
+with `{"record":{"full_name":"[customer name]"}}`. See
+[Upgrading Gaze](../../UPGRADE.md#action-required-replace-positional-context-arrays).
+
 Version 1 of the key alias table infers classes for common field names:
 
 ```json
@@ -282,7 +287,8 @@ Keep raw context away from agents, command arguments and logs.
 Limits: context JSON 4 MiB; encoded record 64 KiB; four object levels; 32 string
 leaves; 256 UTF-8 bytes per value. `record-v2-` dictionary prefix is reserved.
 The envelope still accepts `dictionaries`, `class_map` and `fields`. Record
-context is call-scoped in clean; daemon refuses per-document context.
+context is call-scoped in clean. Daemon clean frames accept the same envelope
+as a request-local `context` object; see the [daemon contract](../explanation/daemon/daemon-mode.md#caller-known-record-context).
 
 ### Class naming rules
 

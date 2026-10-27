@@ -110,6 +110,7 @@ pub fn attach_nym_safety_net(
         verify_nym_bundle, NymConfig, NymSafetyNet, REQUIRED_NYM_SMALL_ARTIFACTS,
     };
 
+    let _attach = gaze_types::perf_span!("nym_attach_ns");
     let model_dir = model_dir_override
         .or(policy.safety_net.nym_model_dir.as_deref())
         .ok_or(BuildError::NymModelDirMissing)?;
@@ -133,7 +134,9 @@ pub fn attach_nym_safety_net(
             ));
         }
     }
+    let outer_verify = gaze_types::perf_span!("nym_outer_verify_ns");
     verify_nym_bundle(model_dir).map_err(BuildError::NymBundle)?;
+    drop(outer_verify);
     let mut config = NymConfig::new(model_dir)
         .with_operating_point(policy.safety_net.nym.clone().unwrap_or_default());
     if let Some(bytes) = max_input_bytes {
@@ -204,6 +207,50 @@ pub fn build_pipeline_builder(
     active_locales: &LocaleChain,
     ner_threshold: Option<f32>,
 ) -> Result<PipelineBuilder, BuildError> {
+    build_pipeline_builder_inner(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        ner_threshold,
+        None,
+    )
+}
+
+/// Assemble request-local context against the resident pipeline's unchanged policy and
+/// rulepacks. NER, the DOB judge, safety nets and loggers retain their resident handles.
+/// Drop the returned pipeline and dictionary bundle after the request.
+pub fn pipeline_with_context(
+    resident: &Pipeline,
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) -> Result<Pipeline, BuildError> {
+    let detection = build_pipeline_builder_inner(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        None,
+        Some(resident.registry()),
+    )?
+    .build()?;
+    Ok(resident
+        .clone()
+        .with_recognizer_registry(detection.registry().clone()))
+}
+
+fn build_pipeline_builder_inner(
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+    ner_threshold: Option<f32>,
+    resident: Option<&gaze::RecognizerRegistry>,
+) -> Result<PipelineBuilder, BuildError> {
+    let _assembly = gaze_types::perf_span!("assembly_ns");
+    let rules = gaze_types::perf_span!("recognizer_construction_ns");
     let mut builder = registration::AssemblyBuilder::default();
     let mut registered_dictionaries = BTreeSet::<String>::new();
     let locale_vocab = merged_locale_vocab(rulepacks, active_locales);
@@ -234,13 +281,15 @@ pub fn build_pipeline_builder(
     if policy.address_blocks {
         register_address_vocabularies(&mut builder, rulepacks, active_locales);
     }
-    ner::register_ner(&mut builder, policy, ner_threshold)?;
-    ner::register_dob_judge(&mut builder, policy)?;
+    drop(rules);
+    ner::register_ner(&mut builder, policy, ner_threshold, resident)?;
+    ner::register_dob_judge(&mut builder, policy, resident)?;
 
     if builder.registered_recognizers() == 0 {
         return Err(BuildError::NoRecognizers);
     }
 
+    let _policy_rules = gaze_types::perf_span!("rule_construction_ns");
     for rule in &policy.rules {
         match rule {
             RuleSpec::Class { class, action } => {

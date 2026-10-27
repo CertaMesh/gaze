@@ -1,0 +1,29 @@
+{
+  "additional_sources": [
+    {
+      "kind": "huggingface",
+      "name": "microsoft/mdeberta-v3-base",
+      "pin": "a0484667b22365f84929a935b5e50a51f71f159d"
+    },
+    {
+      "kind": "github",
+      "name": "openai/privacy-filter",
+      "pin": "f7f00ca7fb869683eb732c010299d901457f19c3",
+      "options": {
+        "commit_pin": true,
+        "tag_prefix": ""
+      }
+    },
+    {
+      "kind": "opaque",
+      "name": "opf-checkpoint",
+      "pin": "sha256:7962be95ebe85491799c225cadaed7d1ac5aef82b530d4d3f02d0ec7e14239e5"
+    }
+  ],
+  "driver_constraints": {
+    "pypi:presidio-anonymizer": {
+      "specifier": "==2.2.364",
+      "reason": "comparison raw-coordinate resolver explicitly requires presidio-anonymizer 2.2.364"
+    }
+  }
+}

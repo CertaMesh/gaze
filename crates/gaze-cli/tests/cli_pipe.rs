@@ -17,6 +17,10 @@ use serde_json::{json, Value};
 use serial_test::file_serial;
 use tempfile::tempdir;
 
+#[cfg(feature = "perf-timers")]
+#[path = "support/perf_invocation_snapshot.rs"]
+mod perf_invocation_snapshot;
+
 use gaze::{PiiClass, Scope, Session};
 use gaze_audit::{
     build_audit_query_sql, AuditFilter, PresentColumns, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
@@ -6295,11 +6299,6 @@ fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
     use gaze::{LocaleTag, RawDocument, SensitiveSnapshot};
     use gaze_types::perf::Capture;
 
-    let core = gaze_assembly::CorePipelineConfig::new()
-        .with_locale(&[LocaleTag::DeDe, LocaleTag::EnUs, LocaleTag::Global])
-        .build()
-        .unwrap();
-    let pipeline = core.pipeline();
     let original = Session::new(Scope::Conversation("attribution-fixture".into())).unwrap();
     let snapshot = original.export().unwrap().into_bytes();
     for input in [
@@ -6314,6 +6313,11 @@ fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
         let run = |capture: bool| {
             let session = Session::import(SensitiveSnapshot::from(snapshot.clone())).unwrap();
             let capture = capture.then(Capture::new);
+            let core = gaze_assembly::CorePipelineConfig::new()
+                .with_locale(&[LocaleTag::DeDe, LocaleTag::EnUs, LocaleTag::Global])
+                .build()
+                .unwrap();
+            let pipeline = core.pipeline();
             let (clean, manifest, report) = pipeline
                 .clean_with_safety_net_detect_context(
                     &session,
@@ -6335,6 +6339,9 @@ fn attribution_capture_preserves_pipe_fixture_bytes_and_restore() {
                 serde_json::to_vec(&(&clean, &manifest, &entries, format!("{report:?}"))).unwrap();
             if let Some(capture) = capture {
                 let record = capture.finish();
+                assert_eq!(record.metrics["assembly_ns"].invocations, 1);
+                assert_eq!(record.metrics["rule_construction_ns"].invocations, 1);
+                assert_eq!(record.metrics["recognizer_construction_ns"].invocations, 1);
                 assert_eq!(record.counters["input_bytes"], input.len() as u64);
                 assert!(!record.recognizers.is_empty());
                 assert!(record.metrics["registry_ns"].invocations > 0);
@@ -6371,9 +6378,48 @@ fn attribution_cli_opt_in_emits_only_metadata() {
         .lines()
         .filter_map(|line| line.strip_prefix("GAZE_PERF "))
         .collect();
-    assert_eq!(rows.len(), 1);
-    let trace: Value = serde_json::from_str(rows[0]).unwrap();
-    assert_eq!(trace["schema"], 1);
+    assert_eq!(rows.len(), 2);
+    let startup: Value = serde_json::from_str(rows[0]).unwrap();
+    assert_eq!(startup["schema"], 3);
+    assert_eq!(startup["phase"], "startup");
+    assert_eq!(startup["ordinal"], 0);
+    for key in [
+        "process_to_ready_ns",
+        "process_to_policy_ns",
+        "policy_load_ns",
+        "pipeline_build_ns",
+        "assembly_ns",
+        "rule_construction_ns",
+        "recognizer_construction_ns",
+    ] {
+        assert_eq!(startup["metrics"][key]["invocations"], 1, "{key}");
+    }
+    let trace: Value = serde_json::from_str(rows[1]).unwrap();
+    assert_eq!(trace["schema"], 3);
+    assert_eq!(trace["phase"], "request");
+    assert_eq!(trace["ordinal"], 1);
+    assert_eq!(trace["metrics"]["request_ns"]["invocations"], 1);
     assert_eq!(trace["counters"]["input_bytes"], input.len());
-    assert!(!rows[0].contains(input));
+    assert!(!stderr.contains(input));
+}
+
+#[cfg(not(feature = "perf-timers"))]
+#[test]
+fn attribution_default_build_ignores_opt_in() {
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .env("GAZE_PERF", "1")
+        .args(["clean", "--safety-net", "none"])
+        .write_stdin("alice@example.invalid")
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(!String::from_utf8(out.stderr)
+        .unwrap()
+        .contains("GAZE_PERF "));
+    let response: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(!response["clean_text"]
+        .as_str()
+        .unwrap()
+        .contains("alice@example.invalid"));
 }

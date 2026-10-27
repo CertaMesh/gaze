@@ -25,6 +25,8 @@ gzipped by ``bench_json.py``; its pinned digest covers the decompressed bytes.
 
 from __future__ import annotations
 
+import benchmark_spec
+
 import argparse
 import copy
 import hashlib
@@ -355,6 +357,10 @@ def validate_history(history: Mapping[str, Any]) -> None:
     for entry in releases:
         if not isinstance(entry, Mapping):
             raise RenderError("every history release must be an object")
+        try:
+            benchmark_spec.identity(entry)
+        except benchmark_spec.SpecError as error:
+            raise RenderError(error.code) from error
         version = entry.get("version")
         if not isinstance(version, str) or not VERSION_RE.match(version):
             raise RenderError(f"invalid release version {version!r}")
@@ -410,6 +416,10 @@ def _validate_contract_results(entry: Mapping[str, Any]) -> None:
     for result in results:
         if not isinstance(result, Mapping):
             raise RenderError(f"{version}: every contract result must be an object")
+        try:
+            benchmark_spec.require_same(entry, result, required=False)
+        except benchmark_spec.SpecError as error:
+            raise RenderError(error.code) from error
         contract = result.get("scored_label_contract")
         if not isinstance(contract, Mapping) or type(contract.get("version")) is not int:
             raise RenderError(f"{version}: contract result needs a scored_label_contract")
@@ -475,6 +485,7 @@ def contract_result_from_scorecard(
     *,
     scorecard_filename: str,
     scorecard_sha256: str,
+    scorecard_path: Path | None = None,
 ) -> dict[str, Any]:
     """One release re-scored under another contract, checked against its row.
 
@@ -489,7 +500,12 @@ def contract_result_from_scorecard(
         scorecard_filename=scorecard_filename,
         scorecard_sha256=scorecard_sha256,
         shipped_arm=shipped_default_arm(parent),
+        scorecard_path=scorecard_path,
     )
+    try:
+        benchmark_spec.require_same(projected, parent, required=False)
+    except benchmark_spec.SpecError as error:
+        raise RenderError(error.code) from error
     contract = projected.get("scored_label_contract")
     if contract is None or contract["version"] == _contract_key(parent)[0]:
         raise RenderError(
@@ -515,6 +531,8 @@ def contract_result_from_scorecard(
                 f"from the release row's {expected!r}"
             )
     result = {
+        **({"benchmark_spec": copy.deepcopy(projected["benchmark_spec"])}
+           if "benchmark_spec" in projected else {}),
         "scored_label_contract": contract,
         "scorecard": scorecard_filename,
         "scorecard_sha256": scorecard_sha256,
@@ -652,6 +670,7 @@ def _result_numbers(entry: Mapping[str, Any]) -> tuple[Any, ...]:
     arm = entry["arms"][arm_name]
     dataset = entry["dataset"]
     return (
+        benchmark_spec.identity(entry),
         _contract_key(entry),
         dataset["integrity"]["sha256"],
         dataset["evaluated_population"]["documents"],
@@ -953,15 +972,19 @@ def history_entry_from_scorecard(
     machine: str,
     scorecard_filename: str,
     scorecard_sha256: str,
+    scorecard_path: Path | None = None,
     provisional: bool = False,
     note: str = "",
     shipped_arm: str = SHIPPED_DEFAULT_ARM,
 ) -> dict[str, Any]:
     """Project one schema-v4 scorecard onto the fields the document prints."""
-    if scorecard.get("cache_replay") is True:
-        raise RenderError("release scorecards must be fresh: cache_replay is true")
-    if "capture_cache" in scorecard:
-        raise RenderError("reusable base captures require run evidence; use --no-cache for release admission")
+    if (scorecard.get("cache_replay") is True or "capture_cache" in scorecard
+            or "release_capture" in scorecard):
+        try:
+            import past_capture
+            past_capture.admit(scorecard, scorecard_path, version=version)
+        except ValueError as error:
+            raise RenderError("release cache admission requires verified run evidence") from error
     if not VERSION_RE.match(version):
         raise RenderError(f"--version must look like v1.2.3, got {version!r}")
     if scorecard.get("schema_version") != SCORECARD_SCHEMA_VERSION:
@@ -1041,7 +1064,13 @@ def history_entry_from_scorecard(
     default_run = next(run for run in runs if run["config"] == shipped_arm)
     validator_recall = validator_recall_from_run(default_run)
 
+    try:
+        benchmark_spec.identity(scorecard)
+    except benchmark_spec.SpecError as error:
+        raise RenderError(error.code) from error
     return {
+        **({"benchmark_spec": copy.deepcopy(scorecard["benchmark_spec"])}
+           if "benchmark_spec" in scorecard else {}),
         "version": version,
         "commit": gaze["revision"],
         "date": str(scorecard.get("generated_at", ""))[:10],
@@ -1298,7 +1327,8 @@ def comparison_bars(history: Mapping[str, Any]) -> list[tuple[str, int]]:
     rows = [latest]
     if len(groups) > 1:
         previous = groups[-2]
-        if _contract_key(previous[-1]) == _contract_key(latest[-1]) and (
+        if (benchmark_spec.identity(previous[-1]) == benchmark_spec.identity(latest[-1])
+                and _contract_key(previous[-1]) == _contract_key(latest[-1])) and (
             previous[-1]["dataset"]["integrity"]["sha256"]
             == latest[-1]["dataset"]["integrity"]["sha256"]
         ):
@@ -1378,6 +1408,7 @@ def shipped_default_trend(
         (group_label(group), group[-1]["arms"][shipped_default_arm(group[-1])][field])
         for group in groups
         if _contract_key(group[-1]) == latest_contract
+        and benchmark_spec.identity(group[-1]) == benchmark_spec.identity(history["releases"][-1])
     ]
 
 
@@ -1806,6 +1837,60 @@ def render_panels(
 
 
 def render_history(history: Mapping[str, Any]) -> str:
+    body = _render_history(history)
+    releases = history["releases"]
+    if not any("benchmark_spec" in row for row in releases):
+        return body
+    latest = benchmark_spec.identity(releases[-1], required=True)
+    lines = ["| Release | Benchmark specification | Under the headline specification |",
+             "| --- | --- | --- |"]
+    for row in releases:
+        identity = benchmark_spec.identity(row)
+        status = "available" if identity == latest else "unavailable: different specification" if identity else "unavailable: specification unproven"
+        lines.append(f"| {row['version']} | `{identity or 'unproven'}` | {status} |")
+    return "\n".join(lines) + "\n\nHistorical metrics below retain their original specifications.\n\n" + body
+
+
+def render_spec_history(state: Mapping[str, Any]) -> str:
+    """Render one backfill selection without borrowing legacy metric identities."""
+    spec = benchmark_spec.validate(state["benchmark_spec"])
+    lines = [f"Benchmark specification: `{spec['id']}`", "",
+             "| Release | Requirement | Status | Validation adapter | Evidence |", "| --- | --- | --- | --- | --- |"]
+    for version, row in state['releases'].items():
+        status = row['status']
+        if status == 'available' and row.get('benchmark_spec_id') != spec['id']:
+            raise RenderError('benchmark_spec_mismatch')
+        reason = row.get('reason', '')
+        if reason not in ('', 'not_measured', 'specification_unproven', 'measurement_refused', 'evidence_invalid'):
+            raise RenderError('invalid_history_status')
+        evidence = ', '.join(f"`{name}`" for name in row.get('artifacts', {})) if status == 'available' else '—'
+        adapter = '—'
+        if status == 'available':
+            validation = row.get('response_validation')
+            if validation != benchmark_spec.RELEASE_PROTOCOLS.get(version) or validation is None:
+                raise RenderError('release_protocol_mismatch')
+            adapter = 'current' if validation == benchmark_spec.CURRENT_VALIDATION else 'legacy tokenize'
+        lines.append(f"| {version} | {'required' if row['required'] else 'optional'} | {status}{': ' + reason if reason else ''} | {adapter} | {evidence} |")
+    for number in (2, 1):
+        lines += ['', f'Gate contract v{number}', '',
+                  '| Release | Layer | Leaked B | All-gold leaked B | FP B | Refused | Exact restores | Valid manifests |',
+                  '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |']
+        for version, row in state['releases'].items():
+            if row['status'] != 'available':
+                continue
+            totals = row.get('contracts', {}).get(str(number))
+            if not isinstance(totals, dict) or set(totals) != {'C', 'A', 'D', 'R'}:
+                raise RenderError('invalid_history_metrics')
+            for layer in ('C', 'A', 'D', 'R'):
+                values = [totals[layer].get(field) for field in
+                          ('leaked', 'headline_leaked', 'false_positive', 'failed_closed', 'restore_exact', 'manifest_valid')]
+                if any(type(value) is not int or value < 0 for value in values):
+                    raise RenderError('invalid_history_metrics')
+                lines.append(f'| {version} | {layer} | ' + ' | '.join(str(value) for value in values) + ' |')
+    return "\n".join(lines) + "\n"
+
+
+def _render_history(history: Mapping[str, Any]) -> str:
     releases = history["releases"]
     if not releases:
         return "\n".join([
@@ -2319,6 +2404,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     scorecard,
                     rows[0],
                     scorecard_filename=expected,
+                    scorecard_path=args.scorecard,
                     scorecard_sha256=bench_json.content_sha256(args.scorecard),
                 )
             )
@@ -2352,6 +2438,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bench_json.load(scorecard_path),
                 version=args.release_version,
                 machine=args.machine,
+                scorecard_path=scorecard_path,
                 scorecard_filename=scorecard_path.name,
                 scorecard_sha256=bench_json.content_sha256(scorecard_path),
                 provisional=args.provisional,

@@ -16,7 +16,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-perf-timers = ["gaze-types/perf-timers", "gaze/perf-timers", "gaze-recognizers/perf-timers"]
+perf-timers = ["gaze-assembly/perf-timers", "gaze-types/perf-timers", "gaze/perf-timers", "gaze-recognizers/perf-timers"]
 default = ["proxy", "setup"]
 setup = ["dep:gaze-model-setup", "dep:tempfile", "safety-net-nym"]
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
@@ -36,7 +36,7 @@ mcp = [
     "gaze-document/mcp",
 ]
 proxy = ["dep:gaze-proxy", "dep:tokio"]
-dashboard = ["proxy", "dep:gaze-proxy-dashboard", "dep:getrandom"]
+dashboard = ["proxy", "dep:gaze-proxy-dashboard"]
 
 [[bin]]
 name = "gaze"
@@ -61,11 +61,11 @@ gaze-proxy-dashboard = { workspace = true, optional = true }
 gaze-recognizers = { path = "../gaze-recognizers", version = "0.17.0" }
 gaze-token-bridge = { path = "../gaze-token-bridge", version = "0.17.0", optional = true }
 gaze-types = { workspace = true }
-getrandom = { version = "0.3", optional = true }
+getrandom = "0.3"
 pdfium-render = { version = "0.9", optional = true }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 signal-hook = "0.3"
 sha2 = "0.10"
 tempfile = { version = "3", optional = true }

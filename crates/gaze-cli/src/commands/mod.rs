@@ -1165,9 +1165,9 @@ mod tests {
     /// What is left is deliberate, and each exclusion is justified where its
     /// value is set in `daemon::clean_options`: `--format` and `--max-bytes`
     /// configure `run_clean`'s stdio, which the daemon never uses;
-    /// `--context-json` is per-document and the daemon serves many documents per
-    /// process; `--session-scope` and `--session-ttl` are reachable through the
-    /// policy file, which is mandatory on `daemon`; `--session-out` and
+    /// `--context-json` is per-document and the daemon accepts its typed envelope
+    /// through each clean frame's `context` object; `--session-scope` and
+    /// `--session-ttl` are reachable through the policy file, which is mandatory on `daemon`; `--session-out` and
     /// `--overwrite-session-out` write one run's session to a file, while the
     /// daemon keeps sessions in its per-`session_id` registry.
     #[test]
@@ -1179,7 +1179,7 @@ mod tests {
         let daemon_only: BTreeSet<String> = daemon.difference(&clean).cloned().collect();
 
         let expected_clean_only: BTreeSet<String> = [
-            "context-json",
+            "context-json", // Replaced by the request-local `context` object, never a daemon flag.
             "format",
             "max-bytes",
             "overwrite-session-out",

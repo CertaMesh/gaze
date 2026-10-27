@@ -1,0 +1,777 @@
+{
+  "binary_sha256": "5160836d80537feeb5c961655fba9022b042c6ad4037b67c59e3ee7c0c12c46b",
+  "evidence_sha256": "9ae2252437f39a75728cc47b4564d50d270f92973d2ca1eb554d5b23e9608c80",
+  "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "note": "Retained diagnostic hooks only, with no input values or performance claim. Request ordinal is normalized only by the replay test.",
+  "policy": "[ner]\nmodel_dir=\"/synthetic/ner\"\n[safety_net]\nbackend=\"nym\"\n[safety_net.nym]\nmodel_dir=\"/synthetic/nym\"\n[address_blocks]\nenabled=true\n",
+  "records": [
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 0,
+        "ner_windows": 0,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 821182875
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 3,
+          "ns": 1294275667
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 2287927667
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 761636292
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 2,
+          "ns": 437387417
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 1395715041
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 993174041
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 402146625
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 890774416
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 5302458
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 9453500
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 2291694417
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 56979083
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 1042
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 2,
+          "ns": 424953958
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        }
+      },
+      "ordinal": 0,
+      "phase": "startup",
+      "recognizers": {},
+      "schema": 3
+    },
+    {
+      "counters": {
+        "input_bytes": 0,
+        "ner_encodes": 1,
+        "ner_windows": 1,
+        "nym_windows": 0,
+        "nym_windows_neutral": 0,
+        "nym_windows_stable": 0,
+        "sweep_candidates": 0
+      },
+      "metrics": {
+        "assembly_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "audit_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "bundle_verify_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "daemon_startup_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "manifest_ns": {
+          "candidates": 0,
+          "invocations": 5,
+          "ns": 1792
+        },
+        "model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "model_load_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "ner_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 42
+        },
+        "ner_ort_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 4409708
+        },
+        "ner_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 17292
+        },
+        "nym_attach_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_model_constructor_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_mutex_wait_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_neutral_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_ort_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_outer_verify_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "nym_stable_ns": {
+          "candidates": 0,
+          "invocations": 2,
+          "ns": 12333
+        },
+        "nym_tokenize_ns": {
+          "candidates": 0,
+          "invocations": 2,
+          "ns": 8834
+        },
+        "pipeline_build_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "policy_load_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "process_to_policy_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "process_to_ready_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "recognizer_construction_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "registry_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 4585042
+        },
+        "request_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 4639459
+        },
+        "resolve1_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 2917
+        },
+        "resolve2_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "rule_construction_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "rules_ns": {
+          "candidates": 0,
+          "invocations": 55,
+          "ns": 37628
+        },
+        "safety_model_ns": {
+          "candidates": 0,
+          "invocations": 2,
+          "ns": 12708
+        },
+        "safety_view_build_ns": {
+          "candidates": 0,
+          "invocations": 2,
+          "ns": 583
+        },
+        "sweep_ns": {
+          "candidates": 0,
+          "invocations": 1,
+          "ns": 4167
+        },
+        "tokenizer_load_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        },
+        "validators_ns": {
+          "candidates": 0,
+          "invocations": 0,
+          "ns": 0
+        }
+      },
+      "ordinal": 148,
+      "phase": "request",
+      "recognizers": {
+        "r1": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 2083
+        },
+        "r10": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r11": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 500
+        },
+        "r12": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 792
+        },
+        "r13": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 583
+        },
+        "r14": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r15": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 500
+        },
+        "r16": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 959
+        },
+        "r17": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 458
+        },
+        "r18": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        },
+        "r19": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 709
+        },
+        "r2": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 3625
+        },
+        "r20": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 541
+        },
+        "r21": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 541
+        },
+        "r22": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 500
+        },
+        "r23": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 542
+        },
+        "r24": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 542
+        },
+        "r25": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 542
+        },
+        "r26": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 500
+        },
+        "r27": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 417
+        },
+        "r28": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 417
+        },
+        "r29": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        },
+        "r3": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 833
+        },
+        "r30": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        },
+        "r31": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        },
+        "r32": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        },
+        "r33": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r34": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r35": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 459
+        },
+        "r36": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        },
+        "r37": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r38": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 542
+        },
+        "r39": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 458
+        },
+        "r4": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 792
+        },
+        "r40": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 500
+        },
+        "r41": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 542
+        },
+        "r42": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r43": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 417
+        },
+        "r44": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 416
+        },
+        "r45": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 417
+        },
+        "r46": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 417
+        },
+        "r47": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 417
+        },
+        "r48": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 458
+        },
+        "r49": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 583
+        },
+        "r5": {
+          "candidates": 0,
+          "evidence": "learned",
+          "invocations": 1,
+          "model": "ner",
+          "ns": 4444209
+        },
+        "r50": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        },
+        "r51": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 541
+        },
+        "r52": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r53": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 583
+        },
+        "r54": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 667
+        },
+        "r55": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 708
+        },
+        "r56": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 542
+        },
+        "r6": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 1166
+        },
+        "r7": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 958
+        },
+        "r8": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 792
+        },
+        "r9": {
+          "candidates": 0,
+          "evidence": "rule",
+          "invocations": 1,
+          "model": "none",
+          "ns": 625
+        }
+      },
+      "schema": 3
+    }
+  ],
+  "source_sha": "46eb1ca2bff8c406f6c3f534a2da2268a1ecd95c"
+}

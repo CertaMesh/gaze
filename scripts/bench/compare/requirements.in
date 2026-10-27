@@ -1,4 +1,9 @@
-# Recompile with Python 3.12 and uv pip compile --generate-hashes.
+# Reproduction-only dependencies for published comparison measurements.
+# requirements.lock retains cryptography==48.0.1, affected by:
+# GHSA-m2h6-j472-rp4c, GHSA-jwv3-5hgf-82ww, GHSA-g6cj-pr64-35w5.
+# Keep the lock bytes unchanged: published reports pin its full SHA-256.
+# For routine model-free checks, use scripts/bench/pyproject.toml and uv.lock.
+# Historical generation used Python 3.12 and uv pip compile --generate-hashes.
 datafog-core==0.3.0
 datafog[nlp-advanced]==4.8.1
 gliner==0.2.29

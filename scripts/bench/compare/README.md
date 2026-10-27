@@ -65,6 +65,25 @@ choice and disjoint test results stay in `competitors.md`.
 
 ## Reproduce
 
+`requirements.lock` is a reproduction-only pin for the published comparison
+measurements. It retains `cryptography==48.0.1`, affected by
+GHSA-m2h6-j472-rp4c, GHSA-jwv3-5hgf-82ww, and GHSA-g6cj-pr64-35w5.
+Its bytes stay unchanged because the published reports record its full
+SHA-256 and the renderer verifies it. Install it only in an explicitly
+selected historical reproduction environment.
+
+CI and Anvil preparation use `scripts/bench/pyproject.toml` and `uv.lock`,
+which require `cryptography>=50.0.2,<51` through the documented Presidio
+override. Routine model-free checks require uv 0.11.31, matching the CI
+job and the pinned virtualenv bootstrap source checked by GLiNER identity.
+An environment created by another uv release can retain a different bootstrap;
+recreate that environment with uv 0.11.31 before running these checks.
+
+```sh
+uv --version  # must report 0.11.31
+uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
+```
+
 Use Python 3.12. `requirements.lock` and `requirements-scrubadub.lock` pin
 package hashes in separate environments because their Transformers constraints
 conflict. Install each with `uv pip sync --require-hashes`. The spaCy model
@@ -163,13 +182,13 @@ python3.12 scripts/bench/compare/pii_tracer.py --dataset target/bench-data/datai
 native label; its output is never published. The third-party sets take the same
 `--pii-tracer-python` / `--pii-tracer-model` flags on `theirbench.py`.
 
-Presidio: https://github.com/data-privacy-stack/presidio/tree/main/docs/analyzer/nlp_engines
-DataFog Core: https://github.com/DataFog/datafog-core
-DataFog Python: https://github.com/DataFog/datafog-python
-scrubadub: https://github.com/LeapBeyond/scrubadub/blob/master/docs/usage.rst
-GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1
+Presidio: https://github.com/data-privacy-stack/presidio/blob/2.2.364/docs/analyzer/index.md
+DataFog Core: https://github.com/DataFog/datafog-core/blob/v0.3.0/README.md
+DataFog Python: https://github.com/DataFog/datafog-python/blob/v4.8.1/README.md
+scrubadub: https://github.com/LeapBeyond/scrubadub/blob/v2.0.0/docs/usage.rst
+GLiNER PII model: https://huggingface.co/urchade/gliner_multi_pii-v1/tree/1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d
 OPF: https://github.com/openai/privacy-filter
-PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer
+PII-Tracer: https://huggingface.co/perplexity-ai/PII-Tracer/blob/d25c16f2e57e321f6d2527715c01df9112f956f5/README.md
 
 ## Publish the Spanish scrubadub supplement
 
@@ -262,3 +281,178 @@ snapshot byte hashes and reconstructs the composition; altered inherited or
 fresh objects fail validation. A rejected input leaves the prior output intact.
 Tuned Presidio remains bound to the original snapshot, with the existing
 byte-identity verdict and disclosed label differences. Timing stays withheld.
+
+
+## Check competitor source freshness
+
+Run the metadata check before a release or comparison report. It reads all four
+comparison locks, spaCy wheel pins, tuned model/setup declarations, PII-Tracer,
+and the separately recorded GLiNER tokenizer and OPF sources. It never imports
+competitor runtimes, downloads model weights, installs packages, or changes pins.
+
+```sh
+uv run --project scripts/bench --locked python scripts/bench/compare/freshness.py \
+  --report docs/reference/benchmarks/comparison.json \
+  --output target/competitor-freshness.json
+```
+
+The aggregate follows `freshness.schema.json`. Each row records its exact pin,
+pinned release date, current stable version and release date, UTC check date,
+source URL, and consuming lock/setup files. PyPI dates are the first artifact
+upload. GitHub release dates are publication dates. Model snapshot dates are
+commit dates. Unknown dates remain explicit. Prereleases, development versions,
+drafts and fully yanked PyPI releases do not count as stable. A model without
+stable version tags remains `unversioned`; a moving branch is not labeled stable.
+The OPF checkpoint has only a recorded digest and no versioned release source,
+so that limitation remains visible. A missing pin, failed network request,
+unsupported metadata or bounded pagination limit produces a visible finding
+and does not abort the remaining checks. Requests use four workers, an eight
+second timeout and metadata-only response limits.
+
+A new release is `update-unverified` until a separate PR qualifies its driver,
+updates the pins and changes the measured subject identity. An incompatible
+latest release is `incompatible-latest`, and the measured row stays explicitly
+old. The existing Presidio resolver requires its exact anonymizer version;
+upstream Python requirements are checked against the locked Python 3.12
+protocol. Other driver compatibility is unverified, never assumed. This sidecar
+is report metadata and does not change benchmark specifications, subject keys,
+measurement times or cache admission.
+
+Add `--freshness target/competitor-freshness.json` to `render.py` to append the
+inventory to the comparison page. Rendering checks the comparison hash and
+source-input hashes, and rejects partial checks. Without this option, existing
+pages stay unchanged. Rerun the command when source pins change. The check date
+stays visible; rendering never queries the network or refreshes it implicitly.
+
+For a bounded source check, pass an exact key such as
+`--source pypi:presidio-anonymizer@2.2.364`. A partial check cannot accompany a
+published aggregate. For an optional scheduled check, run the full command from
+a weekly scheduler in a prepared checkout and retain its JSON and stdout. The
+command exits successfully when source checks fail so findings remain reportable;
+review the row statuses rather than interpreting exit zero as current pins.
+## Reuse competitor document captures
+
+`capture_compare.py` runs one competitor with private, content-addressed document
+captures. Its report contains aggregate metrics and digest/count bindings. Full
+subject, runtime, input and GLiNER load proofs stay in the private cache.
+A public binding commits to the ordered private observation digests. Variant-pack
+names become ordinal layer names in public output and prediction file paths.
+
+Capture entrypoints support **script-path launch only**: invoke the `.py` paths
+shown below. Module launch with `python -m` is refused. Script launch compiles
+the entrypoint from source before its import checks run; module launch can load
+that entrypoint's cached bytecode before any in-process check. Effective stdlib
+and harness bytecode must match source, including with a pycache prefix. The
+effective prefix is bound into the private runtime identity.
+
+Use a clean checkout and an installed, qualified comparison runtime. The
+measuring specification requires CPython 3.13 and the pinned parquet reader.
+GLiNER additionally requires the source hashes and loader family declared in
+`gliner_identity.py`. Unsupported runtimes, import hooks, model families and
+online GLiNER resolution are refused. Use preinstalled models for qualification.
+
+Use a private pycache prefix to avoid stale caches in a newly installed runtime.
+Capture admission refuses stale caches even when Python could recompile them.
+Keep the prefix unchanged when replaying a capture.
+
+Each script restarts under the same interpreter and flags with an empty
+environment populated only from this allowlist: `PATH`, `HOME`, `LANG`,
+`LANGUAGE`, all `LC_*` and `PYTHON*` settings (including the private pycache
+prefix), `TMPDIR`, `TMP`, `TEMP`, `TZ`, `XDG_CACHE_HOME`, `HF_HOME`,
+`HF_HUB_CACHE`, `TRANSFORMERS_CACHE`, `HF_HUB_OFFLINE`, `HF_DATASETS_OFFLINE`,
+`TRANSFORMERS_OFFLINE`, `TOKENIZERS_PARALLELISM`, `OMP_NUM_THREADS`,
+`OMP_THREAD_LIMIT`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`VECLIB_MAXIMUM_THREADS`, `NUMEXPR_NUM_THREADS`, `BLIS_NUM_THREADS`,
+`RAYON_NUM_THREADS`, `LD_LIBRARY_PATH`, `DYLD_LIBRARY_PATH`, and
+`DYLD_FALLBACK_LIBRARY_PATH`, and macOS `__CF_USER_TEXT_ENCODING`. Missing
+variables stay absent. The full resulting
+environment remains bound in the key. Shell metadata such as `TERM_SESSION_ID`
+and `SSH_AUTH_SOCK` never reaches the capture process. A later shell can reuse
+captures when its allowed inputs are identical; changing an allowed input
+invalidates reuse.
+
+Execution uses the source checkout root as its fixed working directory. CLI
+path arguments become absolute in the caller's directory before execution.
+Use absolute paths inside tuned production-plan argument vectors; relative
+paths in those vectors are interpreted from the fixed checkout root. Installed
+model loading, inference, scoring and retained timing semantics are unchanged.
+
+Prepare an immutable specification with `scripts/bench/benchmark_spec.py`. Keep
+the dataset, installed models and cache outside the repository. Set these
+variables to the scheduled qualification inputs before running the commands:
+
+```sh
+export PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1
+export PYTHONPYCACHEPREFIX="$PRIVATE/pycache"
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+"$QUALIFIED_PYTHON" scripts/bench/benchmark_spec.py \
+	--dataset "$DATASET" --output "$PRIVATE/spec.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/fresh.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/reused.json"
+cmp "$PRIVATE/fresh.json" "$PRIVATE/reused.json"
+"$QUALIFIED_PYTHON" scripts/bench/compare/capture_compare.py \
+	--tool gliner --dataset "$DATASET" --benchmark-spec "$PRIVATE/spec.json" \
+	--gliner-model "$GLINER_MODEL" \
+	--cache-dir "$PRIVATE/captures" --output "$PRIVATE/reused.json" \
+	--verify-report "$PRIVATE/reused.json"
+```
+
+These are the installed-model qualification commands. Run them only in the
+scheduled benchmark-machine window. Source tests do not establish installed-model
+qualification. A full hit constructs no backend and performs no inference.
+Latency and contention remain the original measurements. Cache replay does not
+qualify new performance evidence.
+
+Each unit key binds the exact text hash, document ID, language and region, the
+immutable benchmark specification ID, and the actual subject/config/model/runtime
+identity. Changes to current Gaze detector bytes do not change a competitor key while the
+measuring specification remains unchanged.
+Published historical tuned evidence verifies against a committed, content-addressed
+closure of its recorded revision and source hashes, bound to the exact aggregate
+bytes. Rendering needs no historical Git objects. Fresh capture admission still
+requires current source bytes; historical evidence is never relabeled as current.
+
+Runtime identity includes every Python flag, `-X` option and warning option,
+effective integer/encoding limits, and CPU count and affinity used by native
+thread defaults. Capture and tuning refuse randomized hashing or interpreters
+that ignore `PYTHONHASHSEED=0` (`-R`, `-E`, `-I`).
+An input change under the same specification invalidates that unit. A new
+specification invalidates all units. The canonical population must match the
+specification. Additional variant-pack documents also have independent unit keys.
+Tampered entries cause refusal. The cache never manufactures keys for historical
+predictions.
+
+Pass `--freshness-report` to validate and reference the independently checked
+sidecar from `freshness.py`. Its file hash, row count and check date remain
+separate from subject execution identity. The existing historical publication commands and receipts
+retain their original code bindings.
+
+For tuned production, use `tuned_presidio/capture_produce.py` with the original
+`pool` or `authors` arguments plus `--benchmark-spec` and `--cache-dir`.
+`tuned_presidio/capture_tune.py` takes `--production-plans`, a private JSON object
+mapping each pool pass and `authors` to its full production argument vector. It
+reconstructs each plan, checks its private captures, and binds the selected live
+run to the same configuration, models, findings, documents and sample used in
+scoring. `--private-dir` holds the complete binding. Public output contains
+digests and counts for those private inputs and live differences.
+`--verify-report` replays private evidence without running models; `--render`
+writes an admitted aggregate Markdown table.
+
+The retained tuned comparison uses generator v20. It cannot be assigned the
+current generator v25 specification. Rebuild matching comparison, production and
+selection inputs before installed-model tuned qualification. Historical aggregate
+rows remain historical and receive no reuse eligibility.
+
+Run the model-free checks with:
+
+```sh
+anvil run -- uv run --project scripts/bench --python 3.13 --group comparison-test \
+	python -m pytest -q scripts/bench --durations=30
+python3 scripts/ci/check_competitor_capture_mutations.py
+```
