@@ -81,6 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.2.0. Its existing fixture detections remain unchanged.
+
 - Daemon frames with `version: 2` now route to protocol v2 instead of returning
   `ProtocolVersion`.
 
@@ -150,9 +153,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `safeguards`, message-level system roles and opaque media remain refused (#814).
 
 ### Changed
-
-- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
-  0.2.0. Its existing fixture detections remain unchanged.
 
 - **Breaking:** context JSON requires a top-level object. Positional arrays of
   zero through six fields are rejected with `PolicyConfig` by
