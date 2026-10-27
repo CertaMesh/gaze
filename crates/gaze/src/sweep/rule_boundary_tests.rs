@@ -309,7 +309,14 @@ fn rule_boundary_starts_wrappers_and_grouping() {
     count += 1;
     boundary_case("record_id(42)", &[]);
     count += 1;
-    assert_eq!(count, 83);
+    for label in ["Customer ID", "Employee ID", "Member ID"] {
+        for keyword in ["AND", "OR", "BY", "ON"] {
+            let value = format!("AB12 {keyword} 34");
+            boundary_case(&format!("{label}: {value}"), &[&value]);
+            count += 1;
+        }
+    }
+    assert_eq!(count, 95);
 }
 
 #[test]
