@@ -115,7 +115,10 @@ Concurrent calls for the same profile construct it once; failed assembly remains
 fail-closed. Per-call argument admission, parsing and guess exclusions still run
 on every dispatch. Each call rebuilds its dictionary bundle after exclusions;
 compiled dictionary automata stay in the private profile. Replacing the profile
-or dropping the last selection handle releases those cached inputs. NER and safety-net handles remain resident. No default implementation discards
+or dropping the last selection handle releases those cached inputs. The profile
+also retains the miss-time resident clone (including loggers, safety-net and
+model Arcs) and its detection pipeline until replacement or the last handle
+drops. These retained handles are never used for detection. No default implementation discards
 `Present`; unsupported hosts reject it before invoking a tool.
 
 The resident pipeline protects model-authored arguments. Private context applies

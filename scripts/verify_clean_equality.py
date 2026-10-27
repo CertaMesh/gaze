@@ -29,6 +29,7 @@ MANIFEST = ROOT / "scripts/verification/clean-equality-inputs-v1.json"
 FIELDS = ("clean_text", "entries", "stats", "leak_report")
 TOKEN = re.compile(r"<([0-9a-f]{8}):([^<>\s]+)>")
 ENTRY_TOKEN = re.compile(r"\A<([0-9a-f]{8}):([^<>\s]+)>\Z")
+SESSION_PLACEHOLDER = re.compile(r"<SESSION:[^<>\s]+>")
 
 
 def sha256(data):
@@ -96,7 +97,10 @@ def differs(base, candidate):
 def one_byte_mutant(base, candidate):
     mutant = copy.deepcopy(candidate)
     text = mutant[1].get("clean_text", "")
+    placeholders = [match.span() for match in SESSION_PLACEHOLDER.finditer(text)]
     for index, char in enumerate(text):
+        if any(start <= index < end for start, end in placeholders):
+            continue
         if char.isascii() and char.isalnum():
             replacement = "B" if char == "A" else "A"
             mutant[1]["clean_text"] = text[:index] + replacement + text[index + 1:]
