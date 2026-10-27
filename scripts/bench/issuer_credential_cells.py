@@ -45,8 +45,12 @@ def records(api, partition):
             emit("R", prefix.rstrip("_-"), "repeat", index, value, wrappers[0] + " " + wrappers[1])
             # Missing attribution and near-prefix words never become credentials.
             emit("D", prefix.rstrip("_-"), "hash", index, chars(width), wrappers[1])
-            emit("D", prefix.rstrip("_-"), "lowercase_identifier", index,
-                 "word" + value, wrappers[1])
+            if prefix == "xoxe.xoxp-":
+                emit("A", "xoxp", "embedded_refresh", index, value[len("xoxe."):],
+                     wrappers[1].replace("{V}", "wordxoxe.{V}"))
+            else:
+                emit("D", prefix.rstrip("_-"), "lowercase_identifier", index,
+                     "word" + value, wrappers[1])
         for prefix in ["ghp_", "sk-proj-"]:
             value = prefix + chars(300) + "-old"
             emit("A", prefix.rstrip("_-"), "overlong", index, value, wrappers[1])

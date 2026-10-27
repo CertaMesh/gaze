@@ -116,7 +116,7 @@ Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
 | `secrets` | `password.hash` | `regex` | Whole bcrypt, PHC Argon2 v19, scrypt/yescrypt, SHA-crypt, MD5-crypt, phpass and Django password encodings, without a field cue | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
 | `secrets` | `password.code` | `regex` | Complete nonempty single-line quoted literals after EN/DE password keys; PHP arrays supported; bare keys require code punctuation, preserving line-record ownership; source escapes stay literal | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `secrets` | `security_token.code` | `regex` | Complete quoted credential literals after `api_token`, `remember_token`, `security_token`, `access_token`, `auth_token`, `authorization_token`, or `api_key` | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
-| `secrets` | `security_token.bare` | `regex` | Bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes; distinctive prefixes match inside surrounding text, while generic `sk-` requires a leading boundary | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
+| `secrets` | `security_token.bare` | `regex` | Bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes; all prefixes require a leading boundary that rejects lowercase ASCII letters and digits | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
 | `secrets` | `security_token.pem` | `regex` | Complete or truncated private, RSA, EC, DSA, OpenSSH, encrypted-private and PGP private-key armour, including source framing | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
@@ -152,7 +152,7 @@ attribution; there is no upper length rejection.
 | `sk-proj-`, `sk-svcacct-`, `sk-admin-`, `sk-None-`, `sk-ant-` | ASCII letters, digits, underscore, hyphen | 32 |
 | `xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`, `xapp-`, `xoxe-`, `xoxe.xoxp-` | Alphanumeric first character, then ASCII letters, digits, hyphen | 10 |
 | `sk_live_`, `rk_live_`, `sk_test_`, `rk_test_`, `whsec_` | ASCII letters, digits, underscore, hyphen | 24 |
-| `AIza` | ASCII letters, digits, underscore, hyphen | 35 |
+| `AIzaSy` | ASCII letters, digits, underscore, hyphen | 33 |
 
 [GitHub documents its token prefixes](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github)
 and [stateless installation tokens](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/).
@@ -162,22 +162,27 @@ The JWT rule protects the full `ghs_APPID_JWT` spelling, including both dots.
 and [Stripe documents secret and restricted keys](https://docs.stripe.com/keys).
 [Gitleaks' OpenAI rule](https://github.com/gitleaks/gitleaks/blob/master/cmd/generate/config/rules/openai.go)
 records OpenAI key prefixes. Invalid credentials with these shapes receive the
-same protection. Distinctive prefixes match inside ASCII identifiers and Unicode
-prose. Generic `sk-` requires a leading ASCII, JSON-escape or URL-encoded
-separator boundary, preserving identifiers such as `task-` followed by a hash.
+same protection. Every bare prefix requires a leading boundary that rejects a
+preceding lowercase ASCII letter or digit. Uppercase variable names, Unicode
+prose, JSON escapes and URL-encoded separators qualify. Lowercase identifiers
+such as `network_test_handles_missing_bundle_gracefully` remain raw. In
+`wordxoxe.xoxp-` followed by a qualifying suffix, the inner `xoxp-` credential
+is protected, and `wordxoxe.` stays outside the token.
 Suffixes include trailing hyphens and have no upper bound. The opaque `ghs_`
 alternative cannot protect only the first segment of a longer JWT.
 
 The PEM rule owns the BEGIN line and contiguous base64/whitespace run after at
-least 16 base64 source units. It includes an available END line, even if its
+least 16 contiguous base64 source units, with no interleaved whitespace. It includes an available END line, even if its
 private-key label differs. Supported BEGIN labels are `PRIVATE KEY`,
 `RSA PRIVATE KEY`, `EC PRIVATE KEY`, `DSA PRIVATE KEY`, `OPENSSH PRIVATE KEY`,
 `ENCRYPTED PRIVATE KEY`, and `PGP PRIVATE KEY BLOCK`. It preserves LF, CRLF,
-single/double JSON escapes, Unicode newline escapes, string concatenation,
+single/double JSON escapes, Unicode newline escapes, space-joined blocks,
+comma-separated strings, URL-encoded labels/newlines/base64, string concatenation,
 comment/blockquote prefixes, HTML breaks, shell continuations, escaped slashes,
 OpenSSL headers and PGP headers/checksum in one restorable token.
 [RFC 7468](https://www.rfc-editor.org/rfc/rfc7468) defines PKCS#8 private-key labels.
-Public keys, certificates and placeholder bodies such as `...` or
+Tutorial prose after a BEGIN label stays raw unless it provides the required
+contiguous evidence. Public keys, certificates and placeholder bodies such as `...` or
 `<your key here>` remain raw. After a truncated private key, letters-only prose
 can join the protected span until punctuation; this is a deliberate fail-closed
 tradeoff. Quotes stop a span unless they form a source-string continuation.

@@ -168,7 +168,7 @@ fn prose_and_public_material_remain_untouched() {
         "fn parser_weighs_all_candidate_spans_before_conflict_resolution() {}".into(),
         "key: user_laughs_at_the_joke_and_continues_reading_page_two".into(),
         "disk_live_bytes_written_since_the_last_collection".into(),
-        "https://example.invalid/desk-admin-panel-settings-overview-page-container".into(),
+        "/desk-admin-panel-settings-overview-page-container".into(),
         r#"class="task-proj-board-column-header-collapsed-state""#.into(),
         "--mask-None-values-in-the-output-stream".into(),
         "Your file starts with\n-----BEGIN OPENSSH PRIVATE KEY-----\nand then contains base64 lines you must never share with anyone at all.".into(),
@@ -222,7 +222,11 @@ fn issuer_boundaries_protect_framing_and_preserve_identifiers() {
         ] {
             assert_whole(&core, &format!("{left}{value}{right}"), &[&value]);
         }
-        assert_whole(&core, &format!("word{value}"), &[]);
+        if let Some(inner) = value.strip_prefix("xoxe.") {
+            assert_whole(&core, &format!("word{value}"), &[inner]);
+        } else {
+            assert_whole(&core, &format!("word{value}"), &[]);
+        }
         for (left, right) in [
             ("task-", ""),
             ("é", "é"),
@@ -287,6 +291,8 @@ fn truncated_mismatched_and_framed_private_keys_are_whole_and_restorable() {
         let value = pem("RSA PRIVATE KEY", newline).replace(' ', "%20");
         assert_whole(&core, &format!("key={value}&next=ok"), &[&value]);
     }
+    let encoded_body = "-----BEGIN%20PRIVATE%20KEY-----%0Abm90LWEta2V5c3ludGhldGlj%2B%2F%3D%0A-----END%20PRIVATE%20KEY-----";
+    assert_whole(&core, encoded_body, &[encoded_body]);
     for placeholder in ["...", "<your key here>", "example", "bm90LWEta2V5"] {
         let raw = format!("-----BEGIN PRIVATE KEY-----\n{placeholder}\n-----END PRIVATE KEY-----");
         assert_whole(&core, &raw, &[]);

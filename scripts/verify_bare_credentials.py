@@ -14,7 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 RULEPACK = ROOT / "crates/gaze-recognizers/embedded/secrets.toml"
 TEST = "crates/gaze-recognizers/tests/bare_credentials.rs"
-BOUNDARY_TEST = "issuer_boundaries_fail_closed_but_generic_prefixes_need_attribution"
+BOUNDARY_TEST = "issuer_boundaries_protect_framing_and_preserve_identifiers"
 PEM_TEST = "truncated_mismatched_and_framed_private_keys_are_whole_and_restorable"
 PROBES = [
     ("bare-disabled", "security_token.bare", "enabled = true", "enabled = false", "bare_vendor_prefixes_are_whole_restorable_credentials"),
@@ -22,7 +22,9 @@ PROBES = [
     ("pem-disabled", "security_token.pem", "enabled = true", "enabled = false", "private_pem_blocks_include_headers_body_and_footer"),
     ("start-boundary", "security_token.bare", r"\A|", "", BOUNDARY_TEST),
     ("end-boundary", "security_token.bare", r"\z|", "", BOUNDARY_TEST),
-    ("ascii-boundary", "security_token.bare", r"[^A-Za-z0-9_\\-]|", "", BOUNDARY_TEST),
+    ("ascii-boundary", "security_token.bare", r"[^a-z0-9\\]|", "", BOUNDARY_TEST),
+    ("leading-boundary-fp", "security_token.bare", r'(?:\A|[^a-z0-9\\]|\\(?:[ntrbf"\\]|u[0-9A-Fa-f]{4})|%[0-9A-Fa-f]{2})', "", "prose_and_public_material_remain_untouched"),
+    ("google-near-prefix-fp", "security_token.bare", "AIzaSy", "AIza", "prose_and_public_material_remain_untouched"),
     ("json-boundary", "security_token.bare", r'\\(?:[ntrbf"\\]|u[0-9A-Fa-f]{4})', r'\\q', BOUNDARY_TEST),
     ("unicode-boundary", "security_token.bare", r"|u[0-9A-Fa-f]{4}", "", BOUNDARY_TEST),
     ("url-boundary", "security_token.bare", r"|%[0-9A-Fa-f]{2}", "", BOUNDARY_TEST),
@@ -32,12 +34,17 @@ PROBES = [
     ("pem-unicode-newline", "security_token.pem", r"\\u000[aAdD]|", "", PEM_TEST),
     ("pem-html-newline", "security_token.pem", r"(?i:<br\x20*/?>)|", "", PEM_TEST),
     ("pem-shell-newline", "security_token.pem", r"|\\\r?\n", "", PEM_TEST),
-    ("pem-string-join", "security_token.pem", r"""(?:["'][\x20\t]*\+?[\x20\t]*(?:\r?\n[\x20\t]*)?["'])?""", "", PEM_TEST),
+    ("pem-string-join", "security_token.pem", r"""(?:["'][\x20\t]*[+,]?[\x20\t]*(?:\r?\n[\x20\t]*)?["'])?""", "", PEM_TEST),
+    ("pem-comma", "security_token.pem", "[+,]?", r"\+?", PEM_TEST),
+    ("pem-url-label", "security_token.pem", r"(?:\x20|%20)", r"\x20", PEM_TEST),
+    ("pem-url-newline", "security_token.pem", "|%0[aAdD]", "", PEM_TEST),
+    ("pem-space-joined", "security_token.pem", r"|[\x20\t]+", "", PEM_TEST),
     ("pem-comment", "security_token.pem", r"\#|", "", PEM_TEST),
-    ("pem-slash-comment", "security_token.pem", "[A-Za-z0-9+/=]", "[A-Za-z0-9+=]", PEM_TEST),
+    ("pem-slash-comment", "security_token.pem", "//|", "", PEM_TEST),
     ("pem-quote", "security_token.pem", ">|", "", PEM_TEST),
     ("pem-star", "security_token.pem", r"|\*", "", PEM_TEST),
-    ("pem-minimum", "security_token.pem", "{15}", "{0}", PEM_TEST),
+    ("pem-minimum", "security_token.pem", "{16}", "{1}", PEM_TEST),
+    ("pem-prose-fp", "security_token.pem", r"(?:[A-Za-z0-9+/=]|\\/|%2[BbFf]|%3[Dd]){16}", r"(?:[A-Za-z0-9+/=][\x20\t\r\n]*){16}", "prose_and_public_material_remain_untouched"),
     ("pem-truncation", "security_token.pem", "-----)?)", "-----))", PEM_TEST),
 ]
 
