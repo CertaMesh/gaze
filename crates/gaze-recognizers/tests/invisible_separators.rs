@@ -87,6 +87,53 @@ fn nonbreaking_hyphen_identifiers_keep_exact_source_spans() {
 }
 
 #[test]
+fn joiners_and_bom_identifiers_keep_exact_source_spans() {
+    for separator in ['\u{200c}', '\u{200d}', '\u{feff}'] {
+        assert_grouped(separator);
+    }
+}
+
+#[test]
+fn unicode_spaces_keep_exact_identifier_source_spans() {
+    for separator in ['\u{00a0}', '\u{202f}', '\u{2007}', '\u{2009}'] {
+        for (cue, groups) in [
+            ("Tax ID: ", &["123", "456", "7890"][..]),
+            (
+                "IBAN: ",
+                &["GB82", "WEST", "1234", "5698", "7654", "32"][..],
+            ),
+            ("Phone: ", &["+1", "202", "555", "0100"][..]),
+        ] {
+            assert_exact_token(cue, &groups.join(&separator.to_string()), " ; 終");
+        }
+    }
+}
+
+#[test]
+fn legitimate_joiners_and_code_bom_stay_byte_exact_without_tokens() {
+    for input in [
+        "Family: 👩\u{200d}👩\u{200d}👧\u{200d}👦; scientist: 👩\u{200d}🔬.",
+        "Persian: می\u{200c}روم and خانه\u{200c}ها.",
+        "Arabic joining: ب\u{200d}ب and ب\u{200c}ب.",
+        "Devanagari: क्\u{200d}ष and क्\u{200c}ष.",
+        "Malayalam: ന്\u{200d} and ന്\u{200c}.",
+        "\u{feff}const answer = 42;\n",
+        "const label = \"hello\u{feff}world\";\n",
+        "#!/usr/bin/env node\n\u{feff}console.log(42);\n",
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let clean = support::clean(
+            pipeline(),
+            &session,
+            input,
+            &[LocaleTag::EnUs, LocaleTag::Global],
+        );
+        assert_eq!(clean, input);
+        assert!(session.snapshot_entries().is_empty());
+    }
+}
+
+#[test]
 fn invisible_prose_and_public_fragments_stay_byte_exact_without_tokens() {
     for input in [
         "A co\u{00ad}operative team writes inter\u{00ad}national prose.",
