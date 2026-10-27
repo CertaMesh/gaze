@@ -40,6 +40,10 @@ fn one_zwsp_document_records_actual_lazy_compilation_work() {
             assert!(compiled.is_empty());
         } else {
             assert!(!compiled.is_empty());
+            assert!(
+                bytes <= 5 * 1024 * 1024,
+                "one gap document compiled {bytes} bytes"
+            );
         }
         rows.push(serde_json::json!({"document": name, "transformed_regexes_compiled": compiled.len(), "extra_immutable_compiled_bytes": bytes, "compile_nanoseconds": compiled.iter().map(|(_, ns)| ns).sum::<u64>()}));
     }
