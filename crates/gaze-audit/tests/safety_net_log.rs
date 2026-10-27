@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gaze_audit::{
-    AuditFilter, LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger,
-    SAFETY_NET_RESTRICTED_COLUMNS,
+    AuditFilter, LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger, DEFAULT_SNAPSHOT_ALG,
+    DEFAULT_SNAPSHOT_SCHEME, SAFETY_NET_RESTRICTED_COLUMNS,
 };
 use gaze_types::{
     Action, ConflictTier, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect,
@@ -16,6 +16,19 @@ fn opens_v05_db_creates_safety_net_log_and_preserves_redaction_rows() {
     let temp = tempfile::NamedTempFile::new().expect("temp db");
     create_v05_redaction_log(temp.path());
     let before = SqliteLogger::query(temp.path(), &AuditFilter::default()).expect("legacy query");
+    assert_eq!(before.len(), 2);
+    for (row, (source, class, action, decided_by, conflict_loser)) in before.iter().zip([
+        ("regex", "email", "tokenize", "none", false),
+        ("dictionary", "name", "preserve", "class_priority", true),
+    ]) {
+        assert_eq!(row.source, source);
+        assert_eq!(row.class, class);
+        assert_eq!(row.action, action);
+        assert_eq!(row.decided_by, decided_by);
+        assert_eq!(row.conflict_loser, conflict_loser);
+        assert_eq!(row.snapshot_scheme, DEFAULT_SNAPSHOT_SCHEME);
+        assert_eq!(row.snapshot_alg, DEFAULT_SNAPSHOT_ALG);
+    }
 
     let _logger = SqliteLogger::new(temp.path()).expect("migrate audit db");
 

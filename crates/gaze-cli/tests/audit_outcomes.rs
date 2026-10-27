@@ -174,6 +174,12 @@ fn audit_outcome_filters_reject_unknown_and_wrong_family_values() {
             let error = String::from_utf8(output.stderr).unwrap();
             assert!(error.contains("possible values"), "{error}");
             assert!(error.contains(expected), "{error}");
+            if matches!(
+                value,
+                "possibly-sensitve" | "protected' OR 1=1 --" | "future_reason"
+            ) {
+                assert!(!error.contains(value), "rejected value leaked into stderr");
+            }
         }
     }
 }

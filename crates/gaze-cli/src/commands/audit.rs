@@ -235,6 +235,24 @@ fn parse_outcome_filter<T: DeserializeOwned>(
 }
 
 fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
+    const OUTCOME_VALUES: [&str; 4] = [
+        "protected",
+        "non_sensitive",
+        "possibly_sensitive",
+        "confirmed_untransformable",
+    ];
+    const OUTCOME_REASON_VALUES: [&str; 10] = [
+        "json_key",
+        "json_literal",
+        "placeholder",
+        "label_value_shape_unclear",
+        "label_binding_unproven",
+        "other_field_repeat",
+        "json_number_no_text_only_path",
+        "encoded_carrier",
+        "no_safe_rendering",
+        "caller_value_too_short",
+    ];
     // Keep CLI flag parse rejection identical to any future TOML audit-filter
     // default surface: invalid timestamps are PolicyConfig/exit 2, never clap.
     let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
@@ -243,11 +261,12 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
     filter.outcome = parse_outcome_filter::<ProtectionOutcomeKind>(
         args.outcome.as_deref(),
         "--outcome",
-        "protected, non_sensitive, possibly_sensitive, confirmed_untransformable",
+        &OUTCOME_VALUES.join(", "),
     )?;
     filter.outcome_reason = parse_outcome_filter::<ProtectionOutcomeReason>(
-        args.outcome_reason.as_deref(), "--outcome-reason",
-        "json_key, json_literal, placeholder, label_value_shape_unclear, label_binding_unproven, other_field_repeat, json_number_no_text_only_path, encoded_carrier, no_safe_rendering, caller_value_too_short",
+        args.outcome_reason.as_deref(),
+        "--outcome-reason",
+        &OUTCOME_REASON_VALUES.join(", "),
     )?;
     filter.class = args.class.clone();
     filter.source = args.source.clone();
