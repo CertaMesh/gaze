@@ -69,6 +69,7 @@ checks:
     toolchain: [rustc -Vv, cargo -V]
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --release -p gaze-cli
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test --release -p gaze-recognizers --features test-support --test source_regex_cold_work -- --nocapture
   fmt:
     reusable: true
     inputs: &rust-inputs [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, .github/workflows, anvil.yaml]

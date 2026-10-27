@@ -204,9 +204,9 @@ mod tests {
     }
 }
 
-/// Drain test-only source-regex compilation work for the current thread.
+/// Drain test-only (compiled pattern, construction nanoseconds) work for this thread.
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
-pub fn take_source_regex_compilations() -> Vec<String> {
+pub fn take_source_regex_compilations() -> Vec<(String, u64)> {
     source_regex::take_compilations()
 }
