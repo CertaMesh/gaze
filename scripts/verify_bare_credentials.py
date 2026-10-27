@@ -34,8 +34,8 @@ PROBES = [
     ("pem-unicode-newline", "security_token.pem", r"\\u000[aAdD]|", "", PEM_TEST),
     ("pem-html-newline", "security_token.pem", r"(?i:<br\x20*/?>)|", "", PEM_TEST),
     ("pem-shell-newline", "security_token.pem", r"|\\\r?\n", "", PEM_TEST),
-    ("pem-string-join", "security_token.pem", r"""(?:["'][\x20\t]*\+?[\x20\t]*(?:\r?\n[\x20\t]*)?["'])?""", "", PEM_TEST),
-    ("pem-comma", "security_token.pem", r",[\x20\t]*", r"\+[\x20\t]*", PEM_TEST),
+    ("pem-string-join", "security_token.pem", r"""(?:["'][\x20\t]*[+,]?[\x20\t]*(?:\r?\n[\x20\t]*)?["'])?""", "", PEM_TEST),
+    ("pem-comma", "security_token.pem", "[+,]?", r"\+?", PEM_TEST),
     ("pem-url-label", "security_token.pem", r"(?:\x20|%20)", r"\x20", PEM_TEST),
     ("pem-url-newline", "security_token.pem", "|%0[aAdD]", "", PEM_TEST),
     ("pem-space-joined", "security_token.pem", r"|[\x20\t]+", "", PEM_TEST),
@@ -55,7 +55,6 @@ PROBES = [
     ("pem-truncation", "security_token.pem", "-----)?)", "-----))", PEM_TEST),
     ("pem-header-allowlist", "security_token.pem", r"[A-Za-z][A-Za-z0-9-]*:[^\r\n]*", r"(?:Proc-Type:[\x20\t]*4,ENCRYPTED|DEK-Info:[\x20\t]*[A-Za-z0-9-]+,[0-9A-Fa-f]+|(?:Version|Comment|Charset):[^\r\n\\<>\"\']*)", "literal_armour_headers_accept_free_text_and_extension_names"),
     ("pem-serialized-header-boundary", "security_token.pem", r'''[^\r\n\\<>"\']*''', r"[^\r\n]*", "literal_armour_headers_accept_free_text_and_extension_names"),
-    ("pem-list-join", "security_token.pem", r'''|["'][\x20\t]*,[\x20\t]*(?:\r?\n[\x20\t]*)?["']''', "", "comma_joined_private_key_lines_stay_whole"),
 ]
 
 

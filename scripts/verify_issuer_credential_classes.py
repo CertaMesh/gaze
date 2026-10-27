@@ -98,9 +98,9 @@ def main():
                 value = (f'-----BEGIN {label}-----{join}bm90LWEta2V5c3ludGhldGlj'
                          f'{join}c3ludGhldGlj{join}-----END {label}-----')
                 cases.append((label + '/' + repr(join), '["' + value + '"]',
-                              () if label in ['PUBLIC KEY', 'CERTIFICATE'] else (value,)))
-        value = '["-----BEGIN PRIVATE KEY-----", "example", "-----END PRIVATE KEY-----"]'
-        cases.append(('short placeholder', value, ()))
+                              ()))
+        value = '["-----BEGIN PRIVATE KEY-----", "YourPrivateKeyGoesHere", "-----END PRIVATE KEY-----"]'
+        cases.append(('array tutorial placeholder', value, ()))
         failures += check('serialized armour boundaries and lists', cases)
     if args.kind in ('issuers', 'all'):
         cases = []

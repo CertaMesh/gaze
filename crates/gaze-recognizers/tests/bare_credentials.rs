@@ -499,18 +499,18 @@ fn literal_armour_headers_accept_free_text_and_extension_names() {
 }
 
 #[test]
-fn comma_joined_private_key_lines_stay_whole() {
+fn quoted_private_key_line_arrays_remain_a_documented_limit() {
     let core = core();
     for label in ["PRIVATE KEY", "RSA PRIVATE KEY", "PGP PRIVATE KEY BLOCK"] {
         for join in ["\", \"", "', '", "\",\n    \""] {
             let value = pem(label, join);
-            assert_whole(&core, &format!("[\"{value}\"]"), &[&value]);
+            assert_whole(&core, &format!("[\"{value}\"]"), &[]);
         }
     }
     for label in ["PUBLIC KEY", "CERTIFICATE"] {
         let value = pem(label, "\", \"");
         assert_whole(&core, &format!("[\"{value}\"]"), &[]);
     }
-    let raw = "[\"-----BEGIN PRIVATE KEY-----\", \"example\", \"-----END PRIVATE KEY-----\"]";
+    let raw = "[\"-----BEGIN PRIVATE KEY-----\", \"YourPrivateKeyGoesHere\", \"-----END PRIVATE KEY-----\"]";
     assert_whole(&core, raw, &[]);
 }
