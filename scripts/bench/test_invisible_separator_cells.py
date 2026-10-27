@@ -1,5 +1,6 @@
 """Model-free provenance checks for the invisible-separator extension."""
 import hashlib
+from pathlib import Path
 import unittest
 
 import agentic_layers as agentic
@@ -44,3 +45,19 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
         self.assertFalse({row.text for row in dev} & {row.text for row in test})
         self.assertFalse({span.value for row in dev for span in row.gold}
                          & {span.value for row in test for span in row.gold})
+
+    def test_v27_reconstructs_byte_identically(self):
+        pins = {"dev": "1feeb7efe720f1c4a3ec773764121b7cfe33495e50f30135d0f2a3ec6097b13e",
+                "test": "7a93d8e6097ec5936047854b561e647208a8865e160ea553b7127799e2f4c638"}
+        for partition, digest in pins.items():
+            previous = agentic.records_as_of(27, agentic.generate(partition))
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(previous)).hexdigest(), digest)
+            agentic.load_contract(Path(__file__).resolve().parents[2], version=27)
+
+    def test_bom_counterweights_include_leading_and_embedded_code(self):
+        for partition in agentic.PARTITIONS:
+            rows = cells.records(agentic, partition)
+            code = [row for row in rows if row.family in {"leading_code", "embedded_code"}]
+            self.assertEqual(len(code), 2 * agentic.DOCS_PER_FAMILY)
+            self.assertTrue(all(row.layer == "D" and not row.gold for row in code))
+            self.assertTrue(all("\ufeff" in row.text for row in code))

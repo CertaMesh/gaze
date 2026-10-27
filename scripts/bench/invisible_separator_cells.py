@@ -5,7 +5,7 @@ the entire producer value, including its original UTF-8 formatting characters.
 No detector output determines gold or the negative examples.
 """
 
-SEPARATORS = {"zwsp": "\u200b", "word_joiner": "\u2060", "soft_hyphen": "\u00ad", "nb_hyphen": "\u2011"}
+SEPARATORS = {"zwsp": "\u200b", "word_joiner": "\u2060", "soft_hyphen": "\u00ad", "nb_hyphen": "\u2011", "bom": "\ufeff"}
 CUED_SURFACES = {"invisible_" + separator + "_" + surface
                  for separator in SEPARATORS for surface in ("prose", "json")}
 
@@ -58,6 +58,12 @@ def records(api, partition):
                 "path": separator.join(("/public", "manual")) if partition == "dev" else separator.join(("/assets", "guide")),
                 "mail_fragment": separator.join(("build", "@")) if partition == "dev" else separator.join(("release", "@")),
             }
+            if separator_name == "bom":
+                benign["leading_code"] = separator + (
+                    "const answer = 42;" if partition == "dev" else "let total = 17;")
+                benign["embedded_code"] = (
+                    'const label = "hello' + separator + 'world";' if partition == "dev"
+                    else 'let title = "public' + separator + 'manual";')
             for family, value in benign.items():
                 template = "Public sample: {V}; complete." if partition == "dev" else "Documentation only = {V}. Done."
                 emit("D", family, separator_name + "_" + family, index, template, value, None)
