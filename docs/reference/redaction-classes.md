@@ -219,7 +219,7 @@ HTML breaks and numeric newline entities, shell continuations, escaped slashes,
 OpenSSL headers and PGP headers/checksum in one restorable token.
 Literal LF/CRLF armour headers accept extension names and arbitrary line values,
 including quotes, apostrophes and angle brackets, following
-[RFC 9580's armour-header guidance](https://www.rfc-editor.org/rfc/rfc9580.html#section-6.2.2).
+RFC 9580's armour-header guidance (section 6.2.2).
 Serialized headers stop at quote, markup and escape boundaries. Quoted arrays
 of lines without newline escapes remain raw. Extending comma framing to those
 arrays also protects long tutorial placeholders, so this form remains a limit.
