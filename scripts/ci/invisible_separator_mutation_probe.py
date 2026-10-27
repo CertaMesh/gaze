@@ -10,6 +10,7 @@ SOURCE = ROOT / "crates/gaze/src/normalize.rs"
 MUTATIONS = (
     ("zwsp", "'\\u{200B}' | ", "zwsp_identifiers_and_email_keep_exact_source_spans"),
     ("word_joiner", " | '\\u{2060}'", "word_joiner_identifiers_keep_exact_source_spans"),
+    ("bom", " | '\\u{FEFF}'", "joiners_and_bom_identifiers_keep_exact_source_spans"),
     ("soft_hyphen", "'\\u{00AD}' | ", "soft_hyphen_identifiers_keep_exact_source_spans"),
     ("nb_hyphen", "        '\\u{2011}' => '-',\n", "nonbreaking_hyphen_identifiers_keep_exact_source_spans"),
 )
@@ -43,7 +44,7 @@ def main():
             SOURCE.write_bytes(original)
     finally:
         SOURCE.write_bytes(original)
-    print("MUTATION DONE: all four disabled mappings rejected; original source restored")
+    print(f"MUTATION DONE: all {len(MUTATIONS)} disabled mappings rejected; original source restored")
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ pub fn normalize(input: &str) -> NormalizedText {
         // covers every original byte between its first and last character.
         if matches!(
             ch,
-            '\u{00AD}' | '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}'
+            '\u{00AD}' | '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}'
         ) {
             continue;
         }
