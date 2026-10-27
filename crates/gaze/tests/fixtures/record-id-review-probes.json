@@ -1,0 +1,2024 @@
+[
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "rust_u64",
+    "kind": "F",
+    "text": "pub struct Order {\n    pub customer_id: u64,\n    pub total: f64,\n}\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "rust_i64",
+    "kind": "F",
+    "text": "struct Row { customer_id: i64 }\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "proto",
+    "kind": "F",
+    "text": "message Order {\n  int64 customer_id = 1;\n  string name = 2;\n}\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "sql_ddl_int8",
+    "kind": "F",
+    "text": "CREATE TABLE orders (\n  customer_id INT8 NOT NULL,\n  total NUMERIC\n);\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "sql_ddl_int4",
+    "kind": "F",
+    "text": "ALTER TABLE x ADD COLUMN employee_id int4 REFERENCES emp(id);\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "pandas_dtypes",
+    "kind": "F",
+    "text": "order_id         int64\ncustomer_id      int64\namount         float64\ndtype: object\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "pandas_info",
+    "kind": "F",
+    "text": " #   Column       Non-Null Count  Dtype\n 0   customer_id  1000 non-null   int64\n 1   amount       1000 non-null   float64\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "py_uuid4_call",
+    "kind": "F",
+    "text": "customer_id = uuid4()\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "py_sha256_call",
+    "kind": "F",
+    "text": "customer_id = sha256(email.encode()).hexdigest()\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "py_b64_call",
+    "kind": "F",
+    "text": "employee_id = b64encode(raw)\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "py_var2",
+    "kind": "F",
+    "text": "customer_id = cid2\nprint(customer_id)\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "py_kwarg_var",
+    "kind": "F",
+    "text": "client.get(customer_id=customer_id2, limit=10)\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "js_arrow",
+    "kind": "F",
+    "text": "const customerId = id1 ?? fallback;\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "go_struct",
+    "kind": "F",
+    "text": "type Order struct {\n\tCustomerID int64 `json:\"customer_id\"`\n}\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "ts_type",
+    "kind": "F",
+    "text": "interface O { customerId: Int32; }\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "logfmt",
+    "kind": "L",
+    "text": "level=info customer_id=731284 status=ok latency=12ms\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "logfmt2",
+    "kind": "L",
+    "text": "ts=2026-10-27 customer_id=C-731284 path=/orders\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "kv_prose_next_label",
+    "kind": "L",
+    "text": "Customer ID: C-731284 Email: fixture@example.invalid\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "kv_comma_next",
+    "kind": "L",
+    "text": "customer_id: 731284, order_id: 99812\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "kv_pipe",
+    "kind": "L",
+    "text": "customer_id=731284|status=ok\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "http_query",
+    "kind": "L",
+    "text": "GET /api?customer_id=731284&page=2 HTTP/1.1\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "default_zero",
+    "kind": "F",
+    "text": "customer_id = 0\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "env_var",
+    "kind": "L",
+    "text": "CUSTOMER_ID=731284 ./run.sh\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "yaml_list",
+    "kind": "L",
+    "text": "customer_id: 731284\nitems:\n  - 1\n  - 2\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_dash",
+    "kind": "L",
+    "text": "Customer ID - C-731284 was merged.\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_endash",
+    "kind": "L",
+    "text": "Customer ID – 731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_hash",
+    "kind": "L",
+    "text": "Customer ID #731284 called.\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_colon_hash",
+    "kind": "L",
+    "text": "Employee ID: #4521\n",
+    "values": [
+      "4521"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_no",
+    "kind": "L",
+    "text": "Customer No. 731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_angle",
+    "kind": "L",
+    "text": "Customer ID: <C-731284>\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_paren_num",
+    "kind": "L",
+    "text": "Customer ID (731284) called\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_brackets_num",
+    "kind": "L",
+    "text": "Customer ID: [731284]\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "md_bold",
+    "kind": "L",
+    "text": "**Customer ID**: C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "md_code",
+    "kind": "L",
+    "text": "Customer ID: `C-731284`\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "md_table",
+    "kind": "L",
+    "text": "| Customer ID | 731284 |\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "fullwidth_colon",
+    "kind": "L",
+    "text": "Customer ID：C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_compare_same_line",
+    "kind": "L",
+    "text": "if n <limit then customer_id = 731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_compare_prev_line",
+    "kind": "L",
+    "text": "while (i <max) i++;\nCustomer ID: C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "heredoc",
+    "kind": "L",
+    "text": "cat <<EOF\ncustomer_id=731284\nEOF\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "prose_lt",
+    "kind": "L",
+    "text": "Scores <a few points; employee_id=E-4471 noted\n",
+    "values": [
+      "E-4471"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "generic_unclosed",
+    "kind": "L",
+    "text": "let m: HashMap<String, u32\ncustomer_id = 731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "html_closed_then",
+    "kind": "L",
+    "text": "<b>Note</b> customer_id=731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "apostrophe_tag",
+    "kind": "L",
+    "text": "<p class=x>It's done</p>\ncustomer_id=731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "arrow_text",
+    "kind": "L",
+    "text": "a <b c=1 and later Customer ID: C-731284 then x > y\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "email_angle_then",
+    "kind": "L",
+    "text": "From: Ann <fixture@example.invalid>\nCustomer ID: C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "tag_eq_quote_open",
+    "kind": "L",
+    "text": "<a href='x>\nCustomer ID: C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "group_tail_prose",
+    "kind": "L",
+    "text": "Customer ID: C-731284 pending review 5 days\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "group_four",
+    "kind": "L",
+    "text": "Customer ID: AB 12 34 56 78\n",
+    "values": [
+      "AB 12 34 56"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "group_alpha_first",
+    "kind": "L",
+    "text": "customer id: AB CD 1234\n",
+    "values": [
+      "1234"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "num_space_word",
+    "kind": "L",
+    "text": "customer id 731284 and order 5\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "leading_zero",
+    "kind": "L",
+    "text": "Customer ID: 000731284\n",
+    "values": [
+      "000731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "unicode_digits",
+    "kind": "L",
+    "text": "Customer ID: ٣٤٥٦٧\n",
+    "values": [
+      "٣٤٥٦٧"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "fullwidth_digits",
+    "kind": "L",
+    "text": "Customer ID: ７３１２８４\n",
+    "values": [
+      "７３１２８４"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "trailing_period",
+    "kind": "L",
+    "text": "Customer ID: C-731284.\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "value_with_eq",
+    "kind": "L",
+    "text": "Customer ID: AB=12345\n",
+    "values": [
+      "12345"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "value_with_amp",
+    "kind": "L",
+    "text": "Customer ID: R&D-7731\n",
+    "values": [
+      "7731"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "value_semicolon_inside",
+    "kind": "L",
+    "text": "Customer ID: 7312;84\n",
+    "values": [
+      "7312"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "crlf",
+    "kind": "L",
+    "text": "Customer ID: C-731284\r\nNext\r\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_in_code",
+    "kind": "L",
+    "text": "Customer ID: 731284\nquery(\"SELECT * FROM t WHERE id = 731284\")\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_json_num_minified",
+    "kind": "F",
+    "text": "customer_id: 731284\n{\"a\":731284,\"b\":[731284]}\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_jsonc_num",
+    "kind": "F",
+    "text": "customer_id: 731284\n{\n \"total\": 731284, // c\n}\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_yaml_num",
+    "kind": "F",
+    "text": "customer_id: 731284\ntotal: 731284\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_python_dict",
+    "kind": "F",
+    "text": "customer_id: 731284\nrow = {'total': 731284, 'k': True}\n",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_ndjson_trunc",
+    "kind": "F",
+    "text": "customer_id: 731284\n{\"rows\":[{\"total\":731284",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_in_attr",
+    "kind": "L",
+    "text": "customer_id: C-731284\n<td data-x=C-731284>C-731284</td>\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "repeat_short",
+    "kind": "L",
+    "text": "Customer ID: 4711\nRoom 4711 and 4711.\n",
+    "values": [
+      "4711"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_math_prose",
+    "kind": "L",
+    "text": "Latency was <5ms, but p<bound held. Customer ID: C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_llm_xml_open",
+    "kind": "L",
+    "text": "<thinking>\nCustomer ID: C-731284\n</thinking>\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_xml_open_attr",
+    "kind": "L",
+    "text": "<note lang=en>\nCustomer ID: C-731284\n</note>\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_prev_para",
+    "kind": "L",
+    "text": "Use List<T when needed, e.g. x=1.\n\nCustomer ID: C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_shell_redirect",
+    "kind": "L",
+    "text": "sort <input.txt\ncustomer_id=731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_py_cmp",
+    "kind": "L",
+    "text": "if a<b:\n    customer_id = 731284\n",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_cpp_template",
+    "kind": "L",
+    "text": "template <typename T = int\nemployee_id = E-4471\n",
+    "values": [
+      "E-4471"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_quote_apostrophe",
+    "kind": "L",
+    "text": "<a title='it>\nemployee_id: E-4471\nlater ' end\n",
+    "values": [
+      "E-4471"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_later_gt",
+    "kind": "L",
+    "text": "x <y = 2;\nCustomer ID: C-731284\nreturn a > b;\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases.py",
+    "name": "lt_repeat_suppress",
+    "kind": "L",
+    "text": "Customer ID: C-731284\nwhile i <n: x=1\nagain C-731284 here\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases2.py",
+    "name": "tool_args",
+    "kind": "L",
+    "text": "{\"name\":\"lookup\",\"arguments\":\"{\\\"customer_id\\\":\\\"C-731284\\\",\\\"limit\\\":10}\"}",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases2.py",
+    "name": "json_v2",
+    "kind": "F",
+    "text": "{\"customerId\":\"v2\",\"api\":\"v2\"}",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases2.py",
+    "name": "json_schema_int64",
+    "kind": "F",
+    "text": "{\"customer_id\":{\"type\":\"integer\",\"format\":\"int64\"}}",
+    "values": []
+  },
+  {
+    "round": "r8",
+    "source": "cases2.py",
+    "name": "json_after_lt",
+    "kind": "L",
+    "text": "if a<b then\n{\"customer_id\":\"C-731284\"}",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases2.py",
+    "name": "jsonc_after_lt",
+    "kind": "L",
+    "text": "x <y\n{\"customer_id\": \"C-731284\", // c\n}",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases2.py",
+    "name": "yaml_after_lt",
+    "kind": "L",
+    "text": "cmp: a<b\ncustomer_id: C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r8",
+    "source": "cases2.py",
+    "name": "csv_after_lt",
+    "kind": "L",
+    "text": "note,a<b\ncustomer_id,C-731284\n",
+    "values": [
+      "C-731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m1 if a<b",
+    "kind": "L",
+    "text": "if a<b:\n    customer_id = 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m2 sort <in",
+    "kind": "L",
+    "text": "sort <input.txt\ncustomer_id=731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m3 heredoc",
+    "kind": "L",
+    "text": "cat <<EOF\ncustomer_id=731284\nEOF",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m4 HashMap<",
+    "kind": "L",
+    "text": "let m: HashMap<String, u32\ncustomer_id = 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m5 template<",
+    "kind": "L",
+    "text": "template <typename T = int\nemployee_id = E-4471",
+    "values": [
+      "E-4471",
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m6 x <y",
+    "kind": "L",
+    "text": "x <y = 2;\nCustomer ID: C-731284\nreturn a > b;",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m7 n <limit",
+    "kind": "L",
+    "text": "if n <limit then customer_id = 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m8 Scores <a",
+    "kind": "L",
+    "text": "Scores <a few points; employee_id=E-4471 noted",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m9 List<T para",
+    "kind": "L",
+    "text": "Use List<T when needed, e.g. x=1.\n\nCustomer ID: C-731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m10 a <b c=1",
+    "kind": "L",
+    "text": "a <b c=1 and later Customer ID: C-731284 then x > y",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m11 stray quote",
+    "kind": "L",
+    "text": "<a href='x>\nCustomer ID: C-731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m12 title='it",
+    "kind": "L",
+    "text": "<a title='it>\nemployee_id: E-4471\nlater ' end",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "m13 repeat while i<n",
+    "kind": "L",
+    "text": "Customer ID: C-731284\nwhile i <n: x=1\nagain C-731284 here",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v dash",
+    "kind": "L",
+    "text": "Customer ID - C-731284 was merged.",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v endash",
+    "kind": "L",
+    "text": "Customer ID – 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v emdash",
+    "kind": "L",
+    "text": "Customer ID — 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v hash",
+    "kind": "L",
+    "text": "Customer ID #731284 called.",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v hash colon",
+    "kind": "L",
+    "text": "Employee ID: #4521",
+    "values": [
+      "4521"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v AB=",
+    "kind": "L",
+    "text": "Customer ID: AB=12345",
+    "values": [
+      "12345"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v paren",
+    "kind": "L",
+    "text": "Customer ID (731284) called",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v bracket",
+    "kind": "L",
+    "text": "Customer ID: [731284]",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "v wrapped after colon paren",
+    "kind": "L",
+    "text": "customer_id: (731284)",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp ddl int8",
+    "kind": "F",
+    "text": "CREATE TABLE t (\n  customer_id INT8 NOT NULL,\n  x int\n);",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp ddl int4 ref",
+    "kind": "F",
+    "text": "  employee_id int4 REFERENCES emp(id),",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp pandas dtypes",
+    "kind": "F",
+    "text": "customer_id      int64\norder_id         int64\nname            object\ndtype: object",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp pandas info",
+    "kind": "F",
+    "text": " #   Column       Non-Null Count  Dtype\n 0   customer_id  1000 non-null   int64\n 1   order_id     1000 non-null   int64",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp rust u64",
+    "kind": "F",
+    "text": "pub struct C {\n    pub customer_id: u64,\n}",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp i64",
+    "kind": "F",
+    "text": "customer_id: i64",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp go",
+    "kind": "F",
+    "text": "type C struct {\n\tCustomerID int64 `json:\"customer_id\"`\n}",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp ts Int32",
+    "kind": "F",
+    "text": "interface C { customerId: Int32; }",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp uuid4()",
+    "kind": "F",
+    "text": "customer_id = uuid4()",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp sha256(",
+    "kind": "F",
+    "text": "customer_id = sha256(email.encode()).hexdigest()",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp b64encode",
+    "kind": "F",
+    "text": "customer_id = b64encode(raw)",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp cid2",
+    "kind": "F",
+    "text": "customer_id = cid2",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp kw var",
+    "kind": "F",
+    "text": "get(customer_id=customer_id2, limit=10)",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp ts const",
+    "kind": "F",
+    "text": "const customerId = id1 ?? fallback;",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp proto",
+    "kind": "F",
+    "text": "message C {\n  int64 customer_id = 1;\n}",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp = 0",
+    "kind": "F",
+    "text": "customer_id = 0",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp json fmt",
+    "kind": "F",
+    "text": "{\"customer_id\":{\"format\":\"int64\"}}",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp a==b",
+    "kind": "F",
+    "text": "if customer_id == b: pass",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp x=+y",
+    "kind": "F",
+    "text": "customer_id=+y",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "r8cases.py",
+    "name": "fp =>",
+    "kind": "F",
+    "text": "customer_id => 1",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id CID=",
+    "kind": "L",
+    "text": "customer_id=CID731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id CID logfmt",
+    "kind": "L",
+    "text": "level=info customer_id=CID731284 status=ok",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id CID query",
+    "kind": "L",
+    "text": "GET /api/orders?customer_id=CID731284&page=2",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id CID spaced",
+    "kind": "L",
+    "text": "Customer ID = CID731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id EID",
+    "kind": "L",
+    "text": "employee_id=EID4471",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id SID_",
+    "kind": "L",
+    "text": "employee_id=SID_88213",
+    "values": [
+      "88213"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id UID",
+    "kind": "L",
+    "text": "person_id=UID100234",
+    "values": [
+      "100234"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id PAID",
+    "kind": "L",
+    "text": "customer_id=PAID2024X1",
+    "values": [
+      "PAID2024X1"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "id colon ok",
+    "kind": "L",
+    "text": "customer_id: CID731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "sel prose wrap",
+    "kind": "L",
+    "text": "Please select the right account: Customer ID (C-731284).",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "sel prose num wrap",
+    "kind": "L",
+    "text": "Select one. Customer ID (731284)",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "create table prose",
+    "kind": "L",
+    "text": "We will create table backups later\nCustomer ID (C-731284) asked again.",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "create table quoted",
+    "kind": "L",
+    "text": "We will create table backups later\nCustomer ID: \"C-731284\" asked again.",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "alter table prose",
+    "kind": "L",
+    "text": "Don't alter table rows by hand.\nemployee_id: 'E-4471'",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "paren suffix",
+    "kind": "L",
+    "text": "Customer ID: C-731284(old) was merged",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "type-like id",
+    "kind": "L",
+    "text": "Employee ID: U16",
+    "values": [
+      "U16"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "type-like int9",
+    "kind": "L",
+    "text": "Customer ID: INT7731",
+    "values": [
+      "7731"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "fake tag and",
+    "kind": "L",
+    "text": "while i <n and customer_id=731284 > 0:\n    pass",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "fake tag shell",
+    "kind": "L",
+    "text": "run <input customer_id=731284 >out",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "fake tag sql",
+    "kind": "L",
+    "text": "WHERE a <b AND customer_id=731284 OR c >d",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "fake tag prose ml",
+    "kind": "L",
+    "text": "keep it <short\nemployee_id=E-4471\nthanks >",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "fake tag repeat",
+    "kind": "L",
+    "text": "Customer ID: C-731284\nif x <y z=C-731284 >",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html real",
+    "kind": "F",
+    "text": "<td class=x data-customer-id=C-731284>v</td>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html real ml",
+    "kind": "F",
+    "text": "<td\n  class=x\n  data-customer-id=C-731284\n>v</td>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html href colon",
+    "kind": "F",
+    "text": "<a href=https://shop.example/c data-customer-id=C-731284>x</a>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html ns attr",
+    "kind": "F",
+    "text": "<td xml:lang=en data-customer-id=C-731284>v</td>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html vue",
+    "kind": "F",
+    "text": "<Row :key=k data-customer-id=C-731284 />",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html value eq",
+    "kind": "F",
+    "text": "<a href=/x?a=1 data-customer-id=C-731284>x</a>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html style semi",
+    "kind": "F",
+    "text": "<td style=color:red data-customer-id=C-731284>v</td>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html at attr",
+    "kind": "F",
+    "text": "<button @click=go data-customer-id=C-731284>b</button>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "html repeat raw",
+    "kind": "F",
+    "text": "<td data-customer-id=C-731284>a</td><td data-x=C-731284>b</td>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "hash colour",
+    "kind": "F",
+    "text": "Customer ID: #d3d3d3 is the colour",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "hash fff",
+    "kind": "F",
+    "text": "Customer ID: #fff",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "css var",
+    "kind": "F",
+    "text": ":root { --customer-id: #1a2b3c; }",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "hash nolabel",
+    "kind": "F",
+    "text": "see foo#12345 and #d3d3d3 and https://example.invalid/p#sec-12",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "hash url anchor label",
+    "kind": "F",
+    "text": "https://example.invalid/docs#customer-id-123",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "hash md heading",
+    "kind": "F",
+    "text": "## Customer ID\n#123 is the issue number",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "tsql @p1",
+    "kind": "F",
+    "text": "SELECT * FROM t WHERE customer_id = @p1",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "tsql @p0 set",
+    "kind": "F",
+    "text": "UPDATE t SET employee_id = @p0 WHERE x = @p1",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "var x1",
+    "kind": "F",
+    "text": "customer_id = x1",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "var cust1",
+    "kind": "F",
+    "text": "customer_id = cust1",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "var e2",
+    "kind": "F",
+    "text": "employee_id = e2\n",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "serial8",
+    "kind": "F",
+    "text": "  customer_id serial8 PRIMARY KEY,",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "lower not null",
+    "kind": "F",
+    "text": "  customer_id bigint not null,",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "int8 lower kw",
+    "kind": "F",
+    "text": "  customer_id int8 not null references c(id),",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "dash prose",
+    "kind": "F",
+    "text": "- Customer ID - 12 characters max",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new1.py",
+    "name": "dash md table sep",
+    "kind": "F",
+    "text": "Customer ID — 3 formats are accepted",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ctl CID no-eq-colon",
+    "kind": "L",
+    "text": "customer_id: CID731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ctl C731284 eq",
+    "kind": "L",
+    "text": "customer_id=C731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ctl wrap no select",
+    "kind": "L",
+    "text": "Please pick the right account: Customer ID (C-731284).",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ctl paren space",
+    "kind": "L",
+    "text": "Customer ID: C-731284 (old) was merged",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ctl html no colon",
+    "kind": "F",
+    "text": "<a href=/c data-customer-id=C-731284>x</a>",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "dml where",
+    "kind": "F",
+    "text": "UPDATE orders SET customer_id = C-731284 WHERE id = 5;",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "dml where num",
+    "kind": "F",
+    "text": "UPDATE orders SET customer_id = 731284 WHERE id = 5;",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "dml and",
+    "kind": "F",
+    "text": "SELECT * FROM o WHERE customer_id = 731284 AND status = 'open'",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "dml lower and",
+    "kind": "F",
+    "text": "select * from o where customer_id = 731284 and status = 'open'",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "dml order by",
+    "kind": "F",
+    "text": "SELECT * FROM o WHERE customer_id = 731284 ORDER BY id",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "dml limit",
+    "kind": "F",
+    "text": "SELECT * FROM o WHERE customer_id = 731284 LIMIT 10",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "java generic",
+    "kind": "L",
+    "text": "List<Customer> xs = load();\nString customerId = \"C-731284\";",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "csharp cmp",
+    "kind": "L",
+    "text": "if (a <b) { }\ncustomer_id = 731284;",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "php heredoc",
+    "kind": "L",
+    "text": "$q = <<<SQL\ncustomer_id=731284\nSQL;",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ruby heredoc",
+    "kind": "L",
+    "text": "x = <<~TXT\n  employee_id: E-4471\nTXT",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "haskell",
+    "kind": "L",
+    "text": "main = print (a <b)\n-- customer_id = 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "md bold",
+    "kind": "L",
+    "text": "**Customer ID:** C-731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "md code",
+    "kind": "L",
+    "text": "Use `Customer ID: C-731284` for tests",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "log",
+    "kind": "L",
+    "text": "2026-10-27T04:00:01Z INFO checkout customer_id=731284 amount=12.50",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "log bracket",
+    "kind": "L",
+    "text": "[INFO] customer_id: [C-731284] synced",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "csv",
+    "kind": "L",
+    "text": "customer_id,name\n731284,Ann",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "email quote",
+    "kind": "L",
+    "text": "> Customer ID: C-731284\n> thanks",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "email quote2",
+    "kind": "L",
+    "text": ">> employee_id = E-4471",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "chat <user>",
+    "kind": "L",
+    "text": "<alice> my customer id is C-731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "de mixed",
+    "kind": "L",
+    "text": "Kundennummer: K-731284, Customer ID - C-998877",
+    "values": [
+      "731284",
+      "998877"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "de lautet dash",
+    "kind": "L",
+    "text": "Die Kunden-ID lautet 731284.",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "unicode quotes",
+    "kind": "L",
+    "text": "Customer ID: “C-731284”",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "guillemets",
+    "kind": "L",
+    "text": "Kundennummer: «K-731284»",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "fullwidth colon",
+    "kind": "L",
+    "text": "Customer ID：C-731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "nbsp dash",
+    "kind": "L",
+    "text": "Customer ID – 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "yaml",
+    "kind": "L",
+    "text": "customer:\n  customer_id: C-731284\n  tier: gold",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "toml",
+    "kind": "L",
+    "text": "[customer]\ncustomer_id = \"C-731284\"",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "toml bare",
+    "kind": "L",
+    "text": "customer_id = 731284",
+    "values": [
+      "731284"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ini",
+    "kind": "L",
+    "text": "[c]\nemployee_id=E-4471",
+    "values": [
+      "4471"
+    ]
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "py comment",
+    "kind": "F",
+    "text": "x = 1  # customer_id is set below",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "issue ref",
+    "kind": "F",
+    "text": "Fixes #4521 (customer id handling)",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "gh anchor",
+    "kind": "F",
+    "text": "See README.md#customer-id for details",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "ts optional",
+    "kind": "F",
+    "text": "customerId?: number;",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "go map",
+    "kind": "F",
+    "text": "m := map[string]int{\"customer_id\": 1}",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "kotlin",
+    "kind": "F",
+    "text": "val customerId: Long = 0L",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "rust option",
+    "kind": "F",
+    "text": "customer_id: Option<u64>,",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "rust generic fn",
+    "kind": "F",
+    "text": "fn load<T>(customer_id: T) -> T { customer_id }",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "jinja",
+    "kind": "F",
+    "text": "customer_id={{ cid }}",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "py fstring",
+    "kind": "F",
+    "text": "f\"customer_id={cid}\"",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "spark",
+    "kind": "F",
+    "text": " |-- customer_id: long (nullable = true)",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "clickhouse",
+    "kind": "F",
+    "text": "customer_id UInt64,",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "bigquery",
+    "kind": "F",
+    "text": "customer_id INT64 NOT NULL,",
+    "values": []
+  },
+  {
+    "round": "r9",
+    "source": "new2.py",
+    "name": "polars",
+    "kind": "F",
+    "text": "customer_id\n---\ni64",
+    "values": []
+  }
+]

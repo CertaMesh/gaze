@@ -808,3 +808,6 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
     }
     assert_eq!(checked, 117);
 }
+
+#[cfg(feature = "bundled-recognizers")]
+include!("rule_boundary_tests.rs");
