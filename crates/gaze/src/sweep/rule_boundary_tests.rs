@@ -70,7 +70,8 @@ fn rule_boundary_sql_context_and_keywords() {
     for schema in ["CREATE TABLE t (\ncustomer_id (C-731284)\n)", "CREATE TABLE t (\ncustomer_id (731284)\n)"] {
         boundary_case(schema, &[]); count += 1;
     }
-    assert_eq!(count, 141);
+    boundary_case("See CREATE TABLE t (\ncustomer_id (C-731284)\n)", &[]); count += 1;
+    assert_eq!(count, 144);
 }
 
 #[test]
