@@ -6321,7 +6321,7 @@ mod inspection_parity_tests {
     use gaze::{Scope, Session};
 
     use super::*;
-    use crate::codec::ResponseResidualValidator;
+    use crate::codec::{RequestPseudonymizer, ResponseResidualValidator};
 
     #[test]
     fn field_provenance_wide_codec_paths_retain_linear_bytes() {
