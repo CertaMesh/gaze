@@ -761,45 +761,10 @@ fn labelled_value_starts_keep_connectors_hashes_equals_and_numeric_wrappers() {
 fn code_and_sql_record_fields_never_seed_the_sweep() {
     use crate::{CleanDocument, RawDocument, Scope, Session};
     let pipeline = labelled_pipeline();
-    let cases = [
-        "customer_id INT8 NOT NULL,",
-        "employee_id int4 REFERENCES emp(id)",
-        "customer_id INT8 PRIMARY KEY DEFAULT 0,",
-        "customer_id      int64\norder_id         int64\ndtype: object",
-        " 0   customer_id   1000 non-null   int64",
-        "pub customer_id: u64,",
-        "customer_id: i64",
-        "CustomerID int64 `json:customer_id`",
-        "customerId: Int32;",
-        "customer_id = uuid4()",
-        "customer_id = sha256(email)",
-        "customer_id = b64encode(raw)",
-        "customer_id = cid2",
-        "get(customer_id=customer_id2, default=0)",
-        "const customerId = id1 ?? fallback;",
-        "int64 customer_id = 1;",
-        "customer_id = 0",
-        "customerId = customerId",
-        "record_id(42)",
-        "member_id(42)",
-        "customerId: a==b",
-        "customerId: x=+y",
-        "customerId: x=+y1",
-        "customerId: a==b2",
-        "customer_id = foo#12345",
-        "customerId: =>",
-        "customerId: #abcdef",
-        "customerId: #AB-12345",
-        "customerId: (731284\n)",
-        "CREATE TABLE records (customer_id (731284));",
-        "CREATE TABLE records (\n customer_id (731284)\n);",
-        "CREATE TABLE records (\n customer_id (C731284)\n);",
-        "ALTER TABLE records ADD COLUMN\n customer_id (731284);",
-        "SELECT 1; CREATE TABLE records (\n customer_id (731284)\n);",
-        "CREATE TABLE records (note TEXT DEFAULT 'public; text',\n customer_id (731284)\n);",
-        "let customer_id: (731284);",
-        "let customer_id: (C731284);",
-    ];
+    let cases: Vec<String> = serde_json::from_str(include_str!(
+        "../../tests/fixtures/record-id-code-counterweights.json"
+    ))
+    .unwrap();
     for case in cases {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let input = format!("{case}\nPUBLIC COPY {case}");
