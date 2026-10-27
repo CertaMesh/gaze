@@ -49,6 +49,9 @@ def once(binary, text, cwd):
     if not response["entries"] or response["clean_text"] == text:
         raise RuntimeError("sample did not perform protection")
     return {"milliseconds": elapsed,
+            "cpu_milliseconds": (usage.ru_utime + usage.ru_stime) * 1000,
+            "user_milliseconds": usage.ru_utime * 1000,
+            "system_milliseconds": usage.ru_stime * 1000,
             "peak_rss_bytes": usage.ru_maxrss if sys.platform == "darwin" else usage.ru_maxrss * 1024,
             "detections": response["stats"]["detections"], "exit_code": child.returncode}
 
@@ -61,12 +64,19 @@ def main():
     parser.add_argument("--candidate-sha", required=True)
     parser.add_argument("--rounds", type=int, default=7)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--max-load-one", type=float, default=20)
+    parser.add_argument("--max-load-wait-seconds", type=int, default=1800)
     args = parser.parse_args()
     if args.rounds < 5:
         parser.error("at least five alternating rounds are required")
     binaries = {"base": args.base_bin.resolve(strict=True), "candidate": args.candidate_bin.resolve(strict=True)}
     inputs = {"plain": "Order received. Card: 4111111111111111; email cedar@example.invalid.",
               "zwsp": "Order received. Card: 4111\u200b111111111111; email cedar@example.invalid."}
+    waiting_started = time.monotonic()
+    while os.getloadavg()[0] >= args.max_load_one and time.monotonic() - waiting_started < args.max_load_wait_seconds:
+        print(json.dumps({"waiting_for_load1_below": args.max_load_one, "load1": os.getloadavg()[0]}), flush=True)
+        time.sleep(min(30, max(0, args.max_load_wait_seconds - (time.monotonic() - waiting_started))))
+    waited = time.monotonic() - waiting_started
     before = host()
     samples = {side: {kind: [] for kind in inputs} for side in binaries}
     with tempfile.TemporaryDirectory(prefix="gaze-invisible-cold-") as cwd:
@@ -77,6 +87,9 @@ def main():
                     samples[side][kind].append(once(binaries[side], text, cwd))
     summary = {side: {kind: {
         "median_ms": statistics.median(row["milliseconds"] for row in rows),
+        "median_cpu_ms": statistics.median(row["cpu_milliseconds"] for row in rows),
+        "min_cpu_ms": min(row["cpu_milliseconds"] for row in rows),
+        "max_cpu_ms": max(row["cpu_milliseconds"] for row in rows),
         "min_ms": min(row["milliseconds"] for row in rows), "max_ms": max(row["milliseconds"] for row in rows),
         "peak_rss_min_bytes": min(row["peak_rss_bytes"] for row in rows),
         "peak_rss_max_bytes": max(row["peak_rss_bytes"] for row in rows),
@@ -88,6 +101,7 @@ def main():
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "inputs_sha256": {kind: hashlib.sha256(text.encode()).hexdigest() for kind, text in inputs.items()},
               "host_before": before, "host_after": host(), "summary": summary, "samples": samples,
+              "load_wait_seconds": waited, "busy_host": before["load_average"][0] >= args.max_load_one,
               "measurement": "fresh process to exit; loader, original regex compilation, detection and output; warm OS page cache; shared host",
               "interpretation": "descriptive cold samples; ZWSP base may leak where candidate protects, so detection work differs"}
     args.output.parent.mkdir(parents=True, exist_ok=True)
