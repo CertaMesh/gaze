@@ -46,6 +46,13 @@ fn adopter_ignorable_literals_and_class_members_keep_matching() {
         for pattern in [
             format!(r"ID{sep}\d{{6}}\b"),
             format!(r"ID[{sep}_]\d{{6}}\b"),
+            format!(r"ID[\u{{{:x}}}_]\d{{6}}\b", sep as u32),
+            format!(
+                r"ID[\u{{{:x}}}-\u{{{:x}}}]\d{{6}}\b",
+                sep as u32 - 1,
+                sep as u32 + 1
+            ),
+            format!(r"ID[[{sep}_]&&[^{0}]]\d{{6}}\b", '_'),
         ] {
             let pipeline = Pipeline::builder()
                 .detector(

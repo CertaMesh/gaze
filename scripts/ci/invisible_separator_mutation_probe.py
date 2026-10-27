@@ -62,7 +62,20 @@ def main():
         reject("source_boundaries", REGEX_SOURCE,
                "let additional = self.scanned_spans_in_view(input, source_spans, Some(regex));",
                "let additional = self.scanned_spans_in_view(input, source_spans, None);",
-               "every_default_ignorable_preserves_value_boundaries", codepoint=0x200B)
+               "mixed_outer_and_inner_separators_keep_complete_values_protected", codepoint=0x200B)
+        reject("hard_boundary", REGEX_SOURCE,
+               "let mut boundaries = self.scanned_spans_in_view(&view.text, None, None);",
+               "let mut boundaries = Vec::<LabelledValueScan>::new();",
+               "gap_neighbours_do_not_hide_or_extend_validated_values", "invisible_separators")
+        reject("hard_boundary_preference", REGEX_SOURCE,
+               "let valid = !scan.rejected", "let valid = false && !scan.rejected",
+               "gap_neighbours_do_not_hide_or_extend_validated_values", "invisible_separators")
+        reject("adopter_ignorable_literal", SOURCE_REGEX,
+               "normalize_literals(&mut ast, true)?;", "",
+               "adopter_ignorable_literals_and_class_members_keep_matching", "legacy_source_boundaries")
+        reject("adopter_prefilter", SOURCE_REGEX,
+               "normalize_literals(&mut ast, false)?;", "",
+               "adopter_ignorable_literals_and_class_members_keep_matching", "legacy_source_boundaries")
         reject("inner_gap_skip", SOURCE_REGEX,
                r'r"(?:{}(?u:\u{{2060}})*)"', r'r"{}"',
                "mixed_outer_and_inner_separators_keep_complete_values_protected")
@@ -92,7 +105,7 @@ def main():
     finally:
         for path, original in originals.items():
             path.write_bytes(original)
-    print(f"MUTATION DONE: {len(CODEPOINTS) + 10} mutations rejected; source restored")
+    print(f"MUTATION DONE: {len(CODEPOINTS) + 14} mutations rejected; source restored")
 
 
 if __name__ == "__main__":

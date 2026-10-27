@@ -384,6 +384,45 @@ impl RegexDetector {
                 })?;
             let additional = self.scanned_spans_in_view(input, source_spans, Some(regex));
             merge_recovered_scans(&mut scans, &[], additional, false, || {});
+            if let Some(view) = crate::source_regex::View::with_boundary(
+                input,
+                source_spans,
+                crate::source_regex::MARKER,
+            ) {
+                let mut boundaries = self.scanned_spans_in_view(&view.text, None, None);
+                let mut starts = std::collections::BTreeMap::<usize, usize>::new();
+                let mut ends = std::collections::BTreeMap::<usize, usize>::new();
+                for scan in &mut boundaries {
+                    let valid = !scan.rejected
+                        && self.validator_kind != Some(ValidatorKind::EmailRfc)
+                        && self
+                            .validator_kind
+                            .is_some_and(|kind| kind.validates(&view.text[scan.span.clone()]));
+                    scan.span = view.joined(scan.span.clone());
+                    scan.capture = view.joined(scan.capture.clone());
+                    scan.extension = view.joined(scan.extension.clone());
+                    if valid {
+                        starts
+                            .entry(scan.span.start)
+                            .and_modify(|end| *end = (*end).min(scan.span.end))
+                            .or_insert(scan.span.end);
+                        ends.entry(scan.span.end)
+                            .and_modify(|start| *start = (*start).max(scan.span.start))
+                            .or_insert(scan.span.start);
+                    }
+                }
+                // A valid hard-boundary value must not absorb a neighbouring digit just
+                // because a consuming atom can skip that boundary in the joined view.
+                scans.retain(|scan| {
+                    !starts
+                        .get(&scan.span.start)
+                        .is_some_and(|&end| end < scan.span.end)
+                        && !ends
+                            .get(&scan.span.end)
+                            .is_some_and(|&start| start > scan.span.start)
+                });
+                merge_recovered_scans(&mut scans, &[], boundaries, false, || {});
+            }
         }
         Ok(scans)
     }

@@ -725,3 +725,124 @@ fn digits_to_string(digits: &[u8]) -> String {
         .map(|digit| char::from(b'0' + *digit))
         .collect()
 }
+
+#[test]
+fn validator_classes_keep_gap_neighbours_outside_valid_values() {
+    let mut cases = vec![
+        (
+            ValidatorKind::EmailRfc,
+            r"\b[a-z]+@[a-z]+\.invalid\b",
+            "cedar@example.invalid".to_owned(),
+        ),
+        (
+            ValidatorKind::Luhn,
+            r"\b\d+\b",
+            "4111111111111111".to_owned(),
+        ),
+        (
+            ValidatorKind::IbanMod97,
+            r"\b[A-Z0-9]+\b",
+            "GB82WEST12345698765432".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv4Parse,
+            r"\b[0-9.]+\b",
+            "192.0.2.1".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv4ParseNonDocumentation,
+            r"\b[0-9.]+\b",
+            "192.168.10.20".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv6Parse,
+            r"\b[0-9a-f:]+\b",
+            "2001:db8::1".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv6ParseNonDocumentation,
+            r"\b[0-9a-f:]+\b",
+            "fc00::1".to_owned(),
+        ),
+        (
+            ValidatorKind::EthEip55,
+            r"\b0x[0-9a-fA-F]+\b",
+            "0x0000000000000000000000000000000000000000".to_owned(),
+        ),
+        (
+            ValidatorKind::AadhaarVerhoeff,
+            r"\b\d+\b",
+            gen_aadhaar(20).replace(' ', ""),
+        ),
+        (
+            ValidatorKind::FrNirMod97,
+            r"\b\d+\b",
+            gen_fr_nir(0).replace(' ', ""),
+        ),
+        (
+            ValidatorKind::DeSteuerIdMod1110,
+            r"\b\d+\b",
+            gen_steuer_id(0).replace(' ', ""),
+        ),
+        (ValidatorKind::BsnMod11, r"\b\d+\b", gen_bsn(0)),
+        (ValidatorKind::CpfMod11, r"\b\d+\b", gen_cpf(0)),
+        (ValidatorKind::CnpjMod11, r"\b\d+\b", gen_cnpj(0)),
+        (ValidatorKind::UkNhsMod11, r"\b\d+\b", gen_nhs(0)),
+    ];
+    #[cfg(feature = "phone-parser")]
+    for (kind, value) in [
+        (ValidatorKind::E164Phone, "+44 7700 900123"),
+        (
+            ValidatorKind::E164PhoneNational(gaze_types::Region::De),
+            "+49 171 3920000",
+        ),
+        (
+            ValidatorKind::E164PhoneNational(gaze_types::Region::Us),
+            "+1 202 555 0100",
+        ),
+        (ValidatorKind::PhoneNumber, "+44 7700 900123"),
+    ] {
+        cases.push((kind, r"\+[0-9 ]+[0-9]\b", value.to_owned()));
+    }
+    for (kind, pattern, value) in cases {
+        assert!(
+            kind.validates(&value),
+            "synthetic fixture must validate: {kind:?}"
+        );
+        let pipeline = validator_pipeline(pattern, kind, None);
+        for sep in [
+            '\u{ad}',
+            '\u{34f}',
+            '\u{61c}',
+            '\u{115f}',
+            '\u{17b4}',
+            '\u{180e}',
+            '\u{200b}',
+            '\u{200c}',
+            '\u{200d}',
+            '\u{202a}',
+            '\u{2060}',
+            '\u{3164}',
+            '\u{fe0f}',
+            '\u{feff}',
+            '\u{ffa0}',
+            '\u{fff0}',
+            '\u{1bca0}',
+            '\u{1d173}',
+            '\u{e0067}',
+        ] {
+            for prefix in [String::new(), format!("9{sep}")] {
+                let raw = format!("{prefix}{value}{sep}9");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let clean = clean_text(&pipeline, &session, &raw);
+                assert_eq!(
+                    gaze::token_shape::pattern().replace_all(&clean, "\0"),
+                    format!("{prefix}\0{sep}9"),
+                    "{kind:?}, {raw:?}"
+                );
+                assert_eq!(session.snapshot_entries()[0].raw, value);
+                assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+            }
+        }
+    }
+}

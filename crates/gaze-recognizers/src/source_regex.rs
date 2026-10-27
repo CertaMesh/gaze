@@ -10,6 +10,120 @@ use std::ops::Range;
 
 pub(super) const MARKER: char = '\u{2060}';
 
+// Dot and broad classes retain their consuming-atom cardinality.
+fn normalize_literals(ast: &mut Ast, marker: bool) -> Result<(), regex::Error> {
+    use regex_syntax::ast::{ClassSet, ClassSetItem};
+    fn named(set: &ClassSet) -> bool {
+        match set {
+            ClassSet::Item(item) => match item {
+                ClassSetItem::Literal(literal) => ignorable(literal.c),
+                ClassSetItem::Range(range) => ignorable_range(range.start.c, range.end.c),
+                ClassSetItem::Union(union) => union
+                    .items
+                    .iter()
+                    .any(|item| named(&ClassSet::Item(item.clone()))),
+                ClassSetItem::Bracketed(class) => !class.negated && named(&class.kind),
+                _ => false,
+            },
+            ClassSet::BinaryOp(op) => named(&op.lhs) || named(&op.rhs),
+        }
+    }
+    let replacement = match ast {
+        Ast::Literal(literal) if ignorable(literal.c) => Some(if marker {
+            r"(?u:\u{2060})*".to_owned()
+        } else {
+            "(?:)".to_owned()
+        }),
+        Ast::ClassBracketed(class)
+            if !class.negated
+                && named(&class.kind)
+                && class_accepts_ignorable(&ast.to_string()) =>
+        {
+            Some(if marker {
+                format!(r"(?:{}|(?u:\u{{2060}})*)", ast)
+            } else {
+                format!("(?:{}|(?:))", ast)
+            })
+        }
+        Ast::Group(group) => {
+            normalize_literals(&mut group.ast, marker)?;
+            None
+        }
+        Ast::Repetition(repetition) => {
+            normalize_literals(&mut repetition.ast, marker)?;
+            None
+        }
+        Ast::Concat(concat) => {
+            for child in &mut concat.asts {
+                normalize_literals(child, marker)?;
+            }
+            None
+        }
+        Ast::Alternation(alternation) => {
+            for child in &mut alternation.asts {
+                normalize_literals(child, marker)?;
+            }
+            None
+        }
+        _ => None,
+    };
+    if let Some(replacement) = replacement {
+        *ast = Parser::new()
+            .parse(&replacement)
+            .map_err(|err| regex::Error::Syntax(err.to_string()))?;
+    }
+    Ok(())
+}
+
+fn ignorable_ranges() -> &'static regex_syntax::hir::ClassUnicode {
+    static RANGES: std::sync::OnceLock<regex_syntax::hir::ClassUnicode> =
+        std::sync::OnceLock::new();
+    RANGES.get_or_init(|| {
+        let hir = regex_syntax::Parser::new()
+            .parse(r"\p{Default_Ignorable_Code_Point}")
+            .expect("Unicode property is supported");
+        let regex_syntax::hir::HirKind::Class(regex_syntax::hir::Class::Unicode(class)) =
+            hir.kind()
+        else {
+            unreachable!("Unicode property is a class")
+        };
+        class.clone()
+    })
+}
+
+fn ignorable_range(start: char, end: char) -> bool {
+    ignorable_ranges()
+        .iter()
+        .any(|range| range.start() <= end && range.end() >= start)
+}
+
+fn ignorable(ch: char) -> bool {
+    ignorable_range(ch, ch)
+}
+
+fn class_accepts_ignorable(pattern: &str) -> bool {
+    let Ok(hir) = regex_syntax::Parser::new().parse(pattern) else {
+        return false;
+    };
+    match hir.kind() {
+        regex_syntax::hir::HirKind::Literal(literal) => {
+            std::str::from_utf8(&literal.0).is_ok_and(|text| text.chars().any(ignorable))
+        }
+        regex_syntax::hir::HirKind::Class(regex_syntax::hir::Class::Unicode(class)) => class
+            .iter()
+            .any(|range| ignorable_range(range.start(), range.end())),
+        _ => false,
+    }
+}
+
+pub(super) fn joined_pattern(pattern: &str) -> Result<String, regex::Error> {
+    let mut ast = Parser::new()
+        .parse(pattern)
+        .map_err(|err| regex::Error::Syntax(err.to_string()))?;
+    normalize_literals(&mut ast, false)?;
+    Ok(ast.to_string())
+}
+
 pub(super) fn compile(pattern: &str) -> Result<Regex, regex::Error> {
     #[cfg(feature = "test-support")]
     let started = std::time::Instant::now();
@@ -43,6 +157,7 @@ pub(super) fn compile(pattern: &str) -> Result<Regex, regex::Error> {
     let mut ast = Parser::new()
         .parse(pattern)
         .map_err(|err| regex::Error::Syntax(err.to_string()))?;
+    normalize_literals(&mut ast, true)?;
     augment(&mut ast)?;
     let regex = Regex::new(&ast.to_string())?;
     #[cfg(feature = "test-support")]

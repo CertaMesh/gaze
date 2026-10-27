@@ -10,8 +10,11 @@ pub(super) enum Necessary {
 
 impl Necessary {
     pub(super) fn new(pattern: &str) -> Self {
+        let Ok(pattern) = crate::source_regex::joined_pattern(pattern) else {
+            return Self::Unknown;
+        };
         regex_syntax::Parser::new()
-            .parse(pattern)
+            .parse(&pattern)
             .map_or(Self::Unknown, |hir| Self::from_hir(&hir))
     }
 
