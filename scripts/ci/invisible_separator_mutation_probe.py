@@ -73,6 +73,9 @@ def main():
         reject("adopter_ignorable_literal", SOURCE_REGEX,
                "normalize_literals(&mut ast, true)?;", "",
                "adopter_ignorable_literals_and_class_members_keep_matching", "legacy_source_boundaries")
+        reject("adopter_edge_literal", REGEX_SOURCE,
+               "self.normalizes_ignorable_literals || ", "",
+               "adopter_ignorable_edge_literals_match_without_interior_gaps", "legacy_source_boundaries")
         reject("adopter_prefilter", SOURCE_REGEX,
                "normalize_literals(&mut ast, false)?;", "",
                "adopter_ignorable_literals_and_class_members_keep_matching", "legacy_source_boundaries")
@@ -105,7 +108,7 @@ def main():
     finally:
         for path, original in originals.items():
             path.write_bytes(original)
-    print(f"MUTATION DONE: {len(CODEPOINTS) + 14} mutations rejected; source restored")
+    print(f"MUTATION DONE: {len(CODEPOINTS) + 15} mutations rejected; source restored")
 
 
 if __name__ == "__main__":
