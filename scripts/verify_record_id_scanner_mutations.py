@@ -122,7 +122,7 @@ def main():
         ('drop-component-html-evidence', 'crates/gaze-types/src/markup_regions.rs', '|| (component && paired)', '|| (false && component && paired)', 'rule_boundary_markup_grammar', 'gaze-pii'),
         ('ignore-tag-name-evidence', 'crates/gaze-types/src/markup_regions.rs', "let known_tag = known_tag(&folded_tag) || tag.contains('-');", 'let known_tag = true;', 'rule_boundary_markup_grammar', 'gaze-pii'),
         ('allow-shell-fragment-tail', 'crates/gaze-types/src/markup_regions.rs', "byte.is_ascii_whitespace() || *byte == b'<'", 'true', 'rule_boundary_markup_grammar', 'gaze-pii'),
-        ('allow-sql-keyword-attributes', 'crates/gaze-types/src/markup_regions.rs', 'let fragment = non_sql_attributes', 'let fragment = true', 'rule_boundary_markup_grammar', 'gaze-pii'),
+        ('allow-sql-keyword-attributes', 'crates/gaze-types/src/markup_regions.rs', '|| !non_sql_attributes', '|| false', 'rule_boundary_markup_grammar', 'gaze-pii'),
     ]
     probes.append(('ignore-html-fragment-spacing', 'crates/gaze-types/src/markup_regions.rs', 'let compact_end = at > start && !bytes[at - 1].is_ascii_whitespace();', 'let compact_end = true;', 'rule_boundary_markup_grammar', 'gaze-pii'))
     probes.append(('extend-schema-through-prose', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if let Some(&end) = closes.get(&(statement.end()-1)) {', 'if let Some(&_end) = closes.get(&(statement.end()-1)) { let end = input.len();', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'))

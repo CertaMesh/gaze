@@ -88,14 +88,13 @@ fn assignment_tag(
             let compact_end = at > start && !bytes[at - 1].is_ascii_whitespace();
             at += if bytes[at] == b'>' { 1 } else { 2 };
             let paired = self_closing || closers.get(&folded_tag).is_some_and(|&close| close >= at);
-            let fragment = non_sql_attributes
-                && compact_end
+            let fragment = compact_end
                 && bytes
                     .get(at)
                     .is_none_or(|byte| byte.is_ascii_whitespace() || *byte == b'<');
             let established =
                 (known_tag && (paired || html_attributes || fragment)) || (component && paired);
-            if at > limit || !assignment || !established {
+            if at > limit || !assignment || !established || !non_sql_attributes {
                 return None;
             }
             syntax.push(syntax_start..at);
