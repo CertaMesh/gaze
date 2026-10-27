@@ -6327,6 +6327,9 @@ mod inspection_parity_tests {
     fn field_provenance_wide_codec_paths_retain_linear_bytes() {
         struct Recorder(Vec<gaze_types::FieldPath>);
         impl RequestPseudonymizer for Recorder {
+            fn validate_token_shapes(&mut self, _value: &str) -> Result<(), CodecErrorCode> {
+                Ok(())
+            }
             fn protect(&mut self, value: &str) -> Result<String, CodecErrorCode> {
                 Ok(value.to_owned())
             }

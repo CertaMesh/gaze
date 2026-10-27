@@ -4442,10 +4442,10 @@ mod tests {
             dictionaries: &dictionaries,
         };
         assert!(matches!(
-            scan.probe("first", "Synthetic Person"),
+            scan.probe(&"first".into(), "Synthetic Person"),
             Err(ProxyError::UnsurfacedPii { .. })
         ));
-        assert!(scan.probe("second", "synthetic person").is_ok());
+        assert!(scan.probe(&"second".into(), "synthetic person").is_ok());
         assert!(transaction.snapshot_entries().is_empty());
         assert!(session.snapshot_entries().is_empty());
     }
