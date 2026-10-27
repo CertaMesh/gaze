@@ -66,6 +66,8 @@ def records(api, partition):
                     else 'let title = "public' + separator + 'manual";')
             for family, value in benign.items():
                 template = "Public sample: {V}; complete." if partition == "dev" else "Documentation only = {V}. Done."
+                if family == "leading_code":
+                    template = "{V}"
                 emit("D", family, separator_name + "_" + family, index, template, value, None)
             # Format-matched benign twins remain invalid after any mapping:
             # an unassignable country code, unknown IBAN prefix, wrong card

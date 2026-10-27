@@ -61,3 +61,4 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
             self.assertEqual(len(code), 2 * agentic.DOCS_PER_FAMILY)
             self.assertTrue(all(row.layer == "D" and not row.gold for row in code))
             self.assertTrue(all("\ufeff" in row.text for row in code))
+            self.assertTrue(all(row.text.startswith("\ufeff") for row in code if row.family == "leading_code"))
