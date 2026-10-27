@@ -817,9 +817,9 @@ fn audit_failures_preserve_original_order_and_residual_allocate_before_log() {
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
-                None
-            None,
-)
+                None,
+                None,
+            )
             .is_err());
         drop(tx);
         assert!(staged_session.tokens().is_empty());
