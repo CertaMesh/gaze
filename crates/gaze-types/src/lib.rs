@@ -66,6 +66,7 @@ pub trait Detector: Send + Sync {
     }
 
     /// Detect with normalized-source provenance when installed in a pipeline.
+    /// Returned spans remain byte offsets into `input`.
     /// Override this when lexical boundaries depend on removed source characters.
     /// Existing backends retain their fallible detection contract by default.
     fn try_detect_with_context(
