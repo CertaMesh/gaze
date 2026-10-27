@@ -626,7 +626,7 @@ fn non_tags_never_hide_record_values_or_repeats() {
         }
     }
     assert_eq!(checked, 60);
-    for prefix in [format!("<a title='{}' ", "x".repeat(2048)), "<a data=x; ".into()] {
+    for prefix in [format!("<a title='{}' ", "x".repeat(2048)), "<a data=x; ".into(), "</a ".into()] {
         for separate_turn in [false, true] {
             let session = Session::new(Scope::Ephemeral).unwrap();
             let input = if separate_turn {

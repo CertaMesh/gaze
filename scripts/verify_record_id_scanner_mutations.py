@@ -100,6 +100,7 @@ def main():
         ('allow-code-wrapped-identifiers', 'crates/gaze-recognizers/src/regex.rs', '        || (paired && code_carrier_prefix(input, cue_start))', '        || false', 'code_and_sql_record_fields_never_seed_the_sweep', 'gaze-pii'),
         ('allow-multiline-numeric-wrappers', 'crates/gaze-recognizers/src/regex.rs', "&& !input[opening..scan.span.end].contains(['\\r', '\\n'])", '&& true', 'code_and_sql_record_fields_never_seed_the_sweep', 'gaze-pii'),
         ('allow-sql-schema-wrapped-identifiers', 'crates/gaze-recognizers/src/regex/scalar_index.rs', '        let index = regions.partition_point(|range| range.end <= at);', '        if true { return false; }\n        let index = regions.partition_point(|range| range.end <= at);', 'code_and_sql_record_fields_never_seed_the_sweep', 'gaze-pii'),
+        ('allow-closing-tag-attributes', 'crates/gaze-types/src/markup_regions.rs', "    if bytes.get(at) == Some(&b'/') {\n        return None;\n    }", "    if bytes.get(at) == Some(&b'/') {\n        at += 1;\n    }", 'non_tags_never_hide_record_values_or_repeats', 'gaze-pii'),
     ]
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}

@@ -58,7 +58,7 @@ fn assignment_tag(text: &str, start: usize) -> Option<(usize, Vec<Range<usize>>)
     let limit = start.saturating_add(MAX_TAG_BYTES).min(bytes.len());
     let mut at = start + 1;
     if bytes.get(at) == Some(&b'/') {
-        at += 1;
+        return None;
     }
     let name_start = |byte: u8| byte.is_ascii_alphabetic() || byte == b'_';
     let name_char = |byte: u8| name_start(byte) || byte.is_ascii_digit() || byte == b'-';
