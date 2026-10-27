@@ -3,9 +3,15 @@
 pub mod inspection;
 pub mod normalize;
 pub mod nym;
+pub mod outcome;
 pub mod payment_card;
 pub mod perf;
 pub mod redaction_marker;
+
+pub use outcome::{
+    FieldContext, FieldEvidence, FieldPath, FieldProvenance, HintKind, JsonScalarType,
+    NonSensitiveReason, PossiblySensitiveReason, ProtectionOutcome, UntransformableReason,
+};
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -4681,6 +4687,9 @@ pub struct Candidate {
     /// Set when validator veto kept the candidate although its validator failed
     /// ([`ValidatorOnFail::Record`]); written on the winner's audit row.
     pub validator_fail_reason: Option<ValidatorFailReason>,
+    /// Typed protection decision. None denotes a legacy candidate, interpreted as Protected.
+    /// Dormant until a producer and enforcing consumer are installed.
+    pub outcome: Option<ProtectionOutcome>,
     /// Closed reason for a labelled value boundary or length limit.
     pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
     /// End of the original labelled-value capture before extension, for cross-class trimming.
@@ -4720,6 +4729,7 @@ impl Candidate {
             merged_sources,
             evidence: EvidenceKind::Learned,
             validator_fail_reason: None,
+            outcome: None,
             labelled_value_scan_reason: None,
             labelled_value_capture_end: None,
             regex_guard_rejected: false,
@@ -4760,8 +4770,8 @@ pub struct DetectContext<'a> {
     pub locale_chain: &'a [LocaleTag],
     /// Active dictionary bundle.
     pub dictionaries: &'a DictionaryBundle,
-    /// Reserved field-aware matching slot; intentionally unit in v0.5 Phase B.
-    pub fields: &'a (),
+    /// Structured-field context. Hint alone can never yield Protected or NonSensitive.
+    pub fields: Option<FieldContext<'a>>,
     /// Whether a recognizer degraded due to unavailable optional capability.
     pub degraded: Cell<bool>,
     /// For each byte of the detection input, the byte range of the caller's source text it
@@ -4780,11 +4790,17 @@ impl<'a> DetectContext<'a> {
         Self {
             locale_chain,
             dictionaries,
-            fields: &(),
+            fields: None,
             degraded: Cell::new(false),
             source_spans: None,
             prior_candidates: None,
         }
+    }
+
+    /// Attach field context in this detection input's byte coordinates.
+    pub fn with_fields(mut self, fields: FieldContext<'a>) -> Self {
+        self.fields = Some(fields);
+        self
     }
 
     /// Records the source span of every input byte; see [`DetectContext::source_spans`].

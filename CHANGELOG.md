@@ -88,6 +88,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** `DetectContext.fields` changes from `&'a ()` to
+  `Option<FieldContext<'a>>`; attach field context with `with_fields`.
+  `ProtectionError` no longer implements `Copy`; use `.clone()` or match by
+  reference. `ProtectionError::as_str` now takes `&self`; replace function-pointer
+  calls over owned errors with a closure such as `|error| error.as_str()`.
+  New `ProtectionOutcome`, `FieldProvenance`, and `FieldContext` types declare
+  protection outcomes and structured-field evidence for future recognizers.
+  Detection behavior is unchanged.
+
 - Daemon frames with `version: 2` now route to protocol v2 instead of returning
   `ProtocolVersion`.
 

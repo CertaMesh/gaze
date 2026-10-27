@@ -29,6 +29,24 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: update recognizer context and protection error usage
+
+Rust adopters must account for these public API changes:
+
+- `DetectContext.fields` changes from `&'a ()` to `Option<FieldContext<'a>>`.
+  Handle `None` when reading it, and attach context with
+  `DetectContext::new(locales, dictionaries).with_fields(field_context)`.
+- `ProtectionError` no longer implements `Copy`. Use `.clone()` when you need
+  an owned error, or match by reference to keep borrowing it.
+- `ProtectionError::as_str` now takes `&self`. Replace
+  `.map(ProtectionError::as_str)` over owned errors with
+  `.map(|error| error.as_str())`; ordinary `error.as_str()` calls need no change.
+
+The new `ProtectionOutcome`, `FieldProvenance`, and `FieldContext` types declare
+protection outcomes and structured-field evidence for future recognizers.
+Detection behavior is unchanged. See [Protection outcomes and field
+evidence](docs/explanation/detection/outcomes.md) for the contracts.
+
 ### Breaking: trusted snapshot version 8 for private host identifiers
 
 MCP private class and dictionary labels now use domain-separated HMAC identifiers
