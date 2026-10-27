@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Disable committed separator protections and require behavioural test failures."""
+import argparse
 import os
 from pathlib import Path
 import subprocess
@@ -18,6 +19,11 @@ CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--probe", action="append", default=[], help="Run only this named mutation (repeatable)")
+    args = parser.parse_args()
+    seen = set()
+    completed = 0
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -30,6 +36,10 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
 
     def reject(name, path, before, after, test, binary="default_ignorable_boundaries", codepoint=None, features=None):
+        nonlocal completed
+        seen.add(name)
+        if args.probe and name not in args.probe:
+            return
         source = originals[path].decode()
         if source.count(before) != 1:
             raise SystemExit(f"{name}: expected exactly one mutation site")
@@ -47,6 +57,7 @@ def main():
             (output / f"{name}.log").write_bytes(result.stdout)
             if result.returncode != 101 or b"test result: FAILED" not in result.stdout:
                 raise SystemExit(f"{name}: mutation did not fail its regression; inspect {output}")
+            completed += 1
             print(f"{name}: regression rejected mutation", flush=True)
         finally:
             path.write_bytes(originals[path])
@@ -112,7 +123,9 @@ def main():
     finally:
         for path, original in originals.items():
             path.write_bytes(original)
-    print(f"MUTATION DONE: {len(CODEPOINTS) + 16} mutations rejected; source restored")
+    if unknown := set(args.probe) - seen:
+        raise SystemExit(f"Unknown mutation names: {sorted(unknown)}")
+    print(f"MUTATION DONE: {completed} mutations rejected; source restored")
 
 
 if __name__ == "__main__":
