@@ -126,16 +126,14 @@ fn spike4_query_filters_ambiguity_reason_and_collision_metadata() {
     )
     .expect("insert rows");
 
-    let rows = SqliteLogger::query(
-        temp.path(),
-        &AuditFilter {
-            has_ambiguity: Some(true),
-            ambiguity_reason: Some("no_anchor".to_string()),
-            collision_family: Some("de-postal-phone".to_string()),
-            collision_variant: Some("postal-de".to_string()),
-            ..AuditFilter::default()
-        },
-    )
+    let rows = SqliteLogger::query(temp.path(), &{
+        let mut filter = AuditFilter::default();
+        filter.has_ambiguity = Some(true);
+        filter.ambiguity_reason = Some("no_anchor".to_string());
+        filter.collision_family = Some("de-postal-phone".to_string());
+        filter.collision_variant = Some("postal-de".to_string());
+        filter
+    })
     .expect("filtered query");
 
     assert_eq!(rows.len(), 1);

@@ -1,6 +1,7 @@
 {
   "cli": [
     "gaze-cli::audit_cross_version",
+    "gaze-cli::audit_outcomes",
     "gaze-cli::bin/gaze",
     "gaze-cli::card_forward_path",
     "gaze-cli::cli_help_surface",
@@ -181,6 +182,7 @@
     "gaze-audit::entries_read_model",
     "gaze-audit::migration_spike4",
     "gaze-audit::ner_provenance_migration",
+    "gaze-audit::protection_outcomes",
     "gaze-audit::safety_net_log",
     "gaze-inspection",
     "gaze-inspection::compile_fail",
