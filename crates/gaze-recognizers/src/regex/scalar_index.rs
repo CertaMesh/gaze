@@ -15,6 +15,7 @@ use std::ops::Range;
 pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
     markup_assignments: Option<gaze_types::markup_regions::MarkupRegions>,
+    sql_schema: Option<Vec<Range<usize>>>,
     json_label_values: Option<JsonLabelValues>,
     embedded_json: Option<Option<Box<DecodedFrame>>>,
     paired: Option<PairedCloseIndex>,
@@ -27,6 +28,29 @@ pub(super) struct ScalarBoundaryIndex {
 }
 
 impl ScalarBoundaryIndex {
+    pub(super) fn inside_sql_schema(&mut self, input: &str, at: usize) -> bool {
+        let regions = self.sql_schema.get_or_insert_with(|| {
+            scanner_work(input.len());
+            static DDL: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+            let ddl = DDL.get_or_init(|| Regex::new(r"(?im)(?:\A|[;\r\n])[ \t]*(?:create[ \t]+(?:(?:temp|temporary|unlogged)[ \t]+)?table|alter[ \t]+table)\b").expect("SQL schema statement"));
+            static TOKENS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+            let tokens = TOKENS.get_or_init(|| Regex::new(r#"(?s)'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|--[^\r\n]*|/\*.*?\*/|;"#).expect("SQL statement delimiters"));
+            let ends: Vec<_> = tokens.find_iter(input).filter(|token| token.as_str() == ";").map(|token| token.end()).collect();
+            let mut regions: Vec<Range<usize>> = Vec::new();
+            for statement in ddl.find_iter(input) {
+                let start = statement.start();
+                let end = ends.get(ends.partition_point(|&end| end <= statement.end())).copied().unwrap_or(input.len());
+                if let Some(last) = regions.last_mut().filter(|last| last.end > start) {
+                    last.end = last.end.max(end);
+                } else {
+                    regions.push(start..end);
+                }
+            }
+            regions
+        });
+        let index = regions.partition_point(|range| range.end <= at);
+        regions.get(index).is_some_and(|range| range.contains(&at))
+    }
     pub(super) fn inside_markup_assignment(&mut self, input: &str, at: usize) -> bool {
         self.markup_assignments
             .get_or_insert_with(|| {

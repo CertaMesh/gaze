@@ -513,7 +513,16 @@ impl RegexDetector {
                             }
                             let markup = !scan.parent_scalar
                                 && scalar_index.inside_markup_assignment(input, scan.span.start);
-                            constrain_owned_identifier(input, scan, markup, full.start());
+                            let sql_schema = scan.quoted_value
+                                && !scan.parent_scalar
+                                && scalar_index.inside_sql_schema(input, scan.span.start);
+                            constrain_owned_identifier(
+                                input,
+                                scan,
+                                markup,
+                                full.start(),
+                                sql_schema,
+                            );
                         }
                     }
                     return Some(scans);
@@ -932,6 +941,7 @@ fn constrain_owned_identifier(
     scan: &mut LabelledValueScan,
     in_markup_tag: bool,
     cue_start: usize,
+    in_sql_schema: bool,
 ) {
     // Ownership establishes the field, never permission to consume its carrier syntax.
     let raw = &input[scan.span.clone()];
@@ -1016,7 +1026,7 @@ fn constrain_owned_identifier(
     let opener = input[..scan.span.start].chars().next_back();
     let paired = scan.quoted_value
         && opener.is_some_and(|ch| field_wrapper_opens(ch) && !matches!(ch, '"' | '\''));
-    let numeric_wrapper = paired && numeric_prose_wrapper(input, scan, cue_start);
+    let numeric_wrapper = paired && !in_sql_schema && numeric_prose_wrapper(input, scan, cue_start);
     let wrapper_rejected = paired
         && !scan.parent_scalar
         && (!body.chars().next().is_some_and(char::is_alphanumeric)
@@ -1034,7 +1044,8 @@ fn constrain_owned_identifier(
         || (in_markup_tag && !scan.quoted_value)
         || member_path.is_match(body);
     if !scan.parent_scalar {
-        scan.rejected |= code_identifier(input, scan, cue_start, paired);
+        scan.rejected |=
+            code_identifier(input, scan, cue_start, paired) || (paired && in_sql_schema);
     }
 }
 

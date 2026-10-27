@@ -715,6 +715,11 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         "customerId: #AB-12345",
         "customerId: (731284\n)",
         "CREATE TABLE records (customer_id (731284));",
+        "CREATE TABLE records (\n customer_id (731284)\n);",
+        "CREATE TABLE records (\n customer_id (C731284)\n);",
+        "ALTER TABLE records ADD COLUMN\n customer_id (731284);",
+        "SELECT 1; CREATE TABLE records (\n customer_id (731284)\n);",
+        "CREATE TABLE records (note TEXT DEFAULT 'public; text',\n customer_id (731284)\n);",
         "let customer_id: (731284);",
         "let customer_id: (C731284);",
     ];
