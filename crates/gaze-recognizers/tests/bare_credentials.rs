@@ -464,3 +464,53 @@ fn existing_credential_cues_and_fields_survive_bare_veto() {
         assert_whole(&core, &format!(r#"{{"api_key":"{value}"}}"#), &[&value]);
     }
 }
+
+#[test]
+fn literal_armour_headers_accept_free_text_and_extension_names() {
+    let core = core();
+    for label in ["PGP PRIVATE KEY BLOCK", "RSA PRIVATE KEY"] {
+        for newline in ["\n", "\r\n"] {
+            for header in [
+                "Comment: Alice Example <alice@example.invalid>",
+                "Comment: Alice's key",
+                "Comment: \"work\"",
+                "Hash: SHA256",
+                "X-Custom-2: <synthetic> \\ \"quoted\" 'text'",
+                "Proc-Type: 4,ENCRYPTED (synthetic)",
+                "DEK-Info: AES-256-CBC,00FF (synthetic)",
+            ] {
+                let value = format!("-----BEGIN {label}-----{newline}{header}{newline}{newline}bm90LWEta2V5c3ludGhldGlj{newline}bm90LWEta2V5c3ludGhldGlj{newline}=ABCD{newline}-----END {label}-----");
+                assert_whole(&core, &value, &[&value]);
+            }
+        }
+    }
+    // Serialized headers must stop at markup, quote and escape boundaries.
+    for newline in [r"\n", r"\r\n", "<br>"] {
+        for header in [
+            "Comment: <synthetic>",
+            "Comment: Alice's key",
+            "Comment: \"work\"",
+            "Comment: synthetic\\path",
+        ] {
+            let value = format!("-----BEGIN PGP PRIVATE KEY BLOCK-----{newline}{header}{newline}{newline}bm90LWEta2V5c3ludGhldGlj{newline}-----END PGP PRIVATE KEY BLOCK-----");
+            assert_whole(&core, &value, &[]);
+        }
+    }
+}
+
+#[test]
+fn comma_joined_private_key_lines_stay_whole() {
+    let core = core();
+    for label in ["PRIVATE KEY", "RSA PRIVATE KEY", "PGP PRIVATE KEY BLOCK"] {
+        for join in ["\", \"", "', '", "\",\n    \""] {
+            let value = pem(label, join);
+            assert_whole(&core, &format!("[\"{value}\"]"), &[&value]);
+        }
+    }
+    for label in ["PUBLIC KEY", "CERTIFICATE"] {
+        let value = pem(label, "\", \"");
+        assert_whole(&core, &format!("[\"{value}\"]"), &[]);
+    }
+    let raw = "[\"-----BEGIN PRIVATE KEY-----\", \"example\", \"-----END PRIVATE KEY-----\"]";
+    assert_whole(&core, raw, &[]);
+}
