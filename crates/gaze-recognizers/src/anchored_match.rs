@@ -459,6 +459,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn source_gaps_separate_name_components_without_losing_an_inner_suffix() {
+        let input = "noticeFrom: Dr.Schmidt;";
+        let gaps = [
+            "notice".len(),
+            "noticeFrom: Dr.".len(),
+            "noticeFrom: Dr.Sch".len(),
+        ];
+        let spans = (0..input.len())
+            .map(|at| {
+                let raw = at + 3 * gaps.iter().filter(|&&gap| gap <= at).count();
+                (raw, raw + 1)
+            })
+            .collect::<Vec<_>>();
+        let recognizer = test_recognizer(
+            "test.from",
+            vec!["from"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "from",
+        );
+        let mut context = ctx();
+        context.source_spans = Some(&spans);
+        let hits = recognizer.detect(input, &context).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(&input[hits[0].span.clone()], "Dr.Schmidt");
+    }
+
+    #[test]
     fn source_gaps_license_glued_cues_without_breaking_inner_name_bytes() {
         let input = "noticeFrom: Dr Schmidt;";
         let gaps = ["notice".len(), "noticeFrom: Dr Sch".len()];
