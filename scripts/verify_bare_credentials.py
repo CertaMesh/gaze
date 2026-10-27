@@ -32,7 +32,7 @@ PROBES = [
     ("pem-shell-newline", "security_token.pem", r"|\\\r?\n", "", PEM_TEST),
     ("pem-string-join", "security_token.pem", r"""(?:["'][\x20\t]*\+?[\x20\t]*(?:\r?\n[\x20\t]*)?["'])?""", "", PEM_TEST),
     ("pem-comment", "security_token.pem", r"\#|", "", PEM_TEST),
-    ("pem-slash-comment", "security_token.pem", "//|", "", PEM_TEST),
+    ("pem-slash-comment", "security_token.pem", "[A-Za-z0-9+/=]", "[A-Za-z0-9+=]", PEM_TEST),
     ("pem-quote", "security_token.pem", ">|", "", PEM_TEST),
     ("pem-star", "security_token.pem", r"|\*", "", PEM_TEST),
     ("pem-minimum", "security_token.pem", "{15}", "{0}", PEM_TEST),

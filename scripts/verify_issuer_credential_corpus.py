@@ -53,7 +53,7 @@ def main():
             {"session_blob": data["session_blob"], "text": data["clean_text"]}),
             text=True, capture_output=True, env=env, check=True)
         assert json.loads(restored.stdout)["text"] == raw, "exact restore"
-        return data["clean_text"]
+        return data
 
     baseline = subprocess.check_output(["git", "show", args.base + ":" + PACK_PATH], cwd=ROOT, text=True)
     before, after = rules(baseline), rules((ROOT / PACK_PATH).read_text())
@@ -73,7 +73,8 @@ def main():
             for start, end in spans(rx, text):
                 if (start, end) not in previous:
                     value = text[start:end]
-                    assert value not in clean(value), "Rust pipeline did not confirm new match"
+                    confirmed = clean(value)
+                    assert any(e["raw"] == value for e in confirmed["entries"]), "Rust pipeline did not confirm whole new match"
                     changed.append({"path": relative, "line": text.count("\n", 0, start) + 1,
                                     "rule": rid, "bytes": len(value.encode())})
     sys.path.insert(0, str(ROOT / "scripts/bench"))
@@ -85,12 +86,18 @@ def main():
     # One real pipeline call per side preserves syntax and permits exact negative comparison.
     separator = "\n!DOCUMENT!\n"
     positive_text = separator.join(r.text for r in positives)
-    positive_clean = clean(positive_text)
+    positive_result = clean(positive_text)
+    tokens = {entry["raw"]: entry["token"] for entry in positive_result["entries"]}
+    expected_parts = []
     for record in positives:
-        for gold in record.gold:
-            assert gold.value not in positive_clean, f"exposed generated gold: {record.uid}"
+        source = record.text.encode()
+        for gold in sorted(record.gold, key=lambda span: span.start, reverse=True):
+            assert gold.value in tokens, f"missing whole generated gold: {record.uid}"
+            source = source[:gold.start] + tokens[gold.value].encode() + source[gold.end:]
+        expected_parts.append(source.decode())
+    assert positive_result["clean_text"] == separator.join(expected_parts), "source syntax or whole-gold ownership changed"
     negative_text = separator.join(r.text for r in negatives)
-    assert clean(negative_text) == negative_text, "benign generated text changed"
+    assert clean(negative_text)["clean_text"] == negative_text, "benign generated text changed"
     print(json.dumps({"base": args.base, "files_scanned": files,
                       "new_matches": changed, "positive_documents": len(positives),
                       "positive_gold": sum(len(r.gold) for r in positives),

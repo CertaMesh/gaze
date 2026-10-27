@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - The setup-default `secrets` bundle protects whole private-key PEM blocks and
-  bare GitHub, OpenAI, Anthropic, Slack, and Stripe credential shapes. PEM
-  protection includes CRLF, JSON-escaped newlines, and traditional encrypted
-  RSA headers. Public-key and certificate blocks remain unchanged. Both rules
+  bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes.
+  Truncated private-key bodies fail closed, including DSA and PGP armour,
+  nested JSON escapes, source concatenation, comments, HTML and shell framing.
+  Overlong credentials and hyphen suffixes stay protected; generic `sk-`
+  keeps a leading boundary to preserve code identifiers. Public-key and certificate blocks remain unchanged. Both rules
   preserve exact restoration and require no network access.
 
 - Update Tokio from 1.52.3 to 1.54.1 to fix RustSec advisory
@@ -80,6 +82,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stdin and stdout contracts are unchanged.
 
 ### Changed
+
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.3.0; existing fixture detections remain identical while private-key and
+  issuer-credential coverage expands.
+
 
 - [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
   0.2.0. Its existing fixture detections remain unchanged.
