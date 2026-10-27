@@ -67,6 +67,10 @@ def main():
                "let mut boundaries = self.scanned_spans_in_view(&view.text, None, None);",
                "let mut boundaries = Vec::<LabelledValueScan>::new();",
                "gap_neighbours_do_not_hide_or_extend_validated_values", "invisible_separators")
+        reject("hard_boundary_containment", REGEX_SOURCE,
+               "scans.extend(boundaries);",
+               "merge_recovered_scans(&mut scans, &[], boundaries, false, || {});",
+               "hard_boundary_value_survives_enclosing_joined_validator_failure", "validators")
         reject("hard_boundary_preference", REGEX_SOURCE,
                "let valid = !scan.rejected", "let valid = false && !scan.rejected",
                "gap_neighbours_do_not_hide_or_extend_validated_values", "invisible_separators")
@@ -108,7 +112,7 @@ def main():
     finally:
         for path, original in originals.items():
             path.write_bytes(original)
-    print(f"MUTATION DONE: {len(CODEPOINTS) + 15} mutations rejected; source restored")
+    print(f"MUTATION DONE: {len(CODEPOINTS) + 16} mutations rejected; source restored")
 
 
 if __name__ == "__main__":

@@ -846,3 +846,41 @@ fn validator_classes_keep_gap_neighbours_outside_valid_values() {
         }
     }
 }
+
+#[test]
+fn hard_boundary_and_joined_valid_candidates_emit_one_token() {
+    assert!(ValidatorKind::Ipv4Parse.validates("192.0.2.1"));
+    assert!(ValidatorKind::Ipv4Parse.validates("192.0.2.19"));
+    let pipeline = validator_pipeline(r"\b[0-9.]+\b", ValidatorKind::Ipv4Parse, None);
+    let raw = "192.0.2.1\u{200b}9";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = clean_text(&pipeline, &session, raw);
+    assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 1);
+    assert_eq!(
+        gaze::token_shape::pattern().replace_all(&clean, "\0"),
+        "\0\u{200b}9"
+    );
+    let entries = session.snapshot_entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].raw, "192.0.2.1");
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+}
+
+#[test]
+fn hard_boundary_value_survives_enclosing_joined_validator_failure() {
+    assert!(ValidatorKind::Luhn.validates("4111111111111111"));
+    assert!(!ValidatorKind::Luhn.validates("941111111111111119"));
+    let pipeline = validator_pipeline(r"\b\d+\b", ValidatorKind::Luhn, None);
+    let raw = "9\u{200b}4111111111111111\u{200b}9";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = clean_text(&pipeline, &session, raw);
+    assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 1);
+    assert_eq!(
+        gaze::token_shape::pattern().replace_all(&clean, "\0"),
+        "9\u{200b}\0\u{200b}9"
+    );
+    let entries = session.snapshot_entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].raw, "4111111111111111");
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+}
