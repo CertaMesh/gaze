@@ -953,7 +953,7 @@ fn merge_recovered_scans(
             visit();
             at <= scan.span.start
         });
-        if require_internal_gap && !gaps.get(gap).is_some_and(|&at| at < scan.span.end) {
+        if require_internal_gap && gaps.get(gap).is_none_or(|&at| at >= scan.span.end) {
             continue;
         }
         while next < existing.len() && existing[next].start <= scan.span.start {
