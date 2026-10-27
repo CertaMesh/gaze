@@ -116,6 +116,15 @@ fn class_accepts_ignorable(pattern: &str) -> bool {
     }
 }
 
+pub(super) fn has_ignorable_literals(pattern: &str) -> Result<bool, regex::Error> {
+    let mut ast = Parser::new()
+        .parse(pattern)
+        .map_err(|err| regex::Error::Syntax(err.to_string()))?;
+    let original = ast.to_string();
+    normalize_literals(&mut ast, false)?;
+    Ok(ast.to_string() != original)
+}
+
 pub(super) fn joined_pattern(pattern: &str) -> Result<String, regex::Error> {
     let mut ast = Parser::new()
         .parse(pattern)

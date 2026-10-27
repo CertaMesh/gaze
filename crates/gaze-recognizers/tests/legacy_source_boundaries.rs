@@ -75,3 +75,37 @@ fn adopter_ignorable_literals_and_class_members_keep_matching() {
         }
     }
 }
+
+#[test]
+fn adopter_ignorable_edge_literals_match_without_interior_gaps() {
+    for sep in ['\u{200b}', '\u{ad}', '\u{fe0f}', '\u{e0067}'] {
+        for (pattern, prefix, suffix) in [
+            (format!(r"^{sep}ID\d{{6}}$"), sep.to_string(), String::new()),
+            (format!(r"^ID\d{{6}}{sep}$"), String::new(), sep.to_string()),
+            (
+                format!(r"^[{sep}_]ID\d{{6}}[{sep}_]$"),
+                sep.to_string(),
+                sep.to_string(),
+            ),
+        ] {
+            let pipeline = Pipeline::builder()
+                .detector(
+                    RegexDetector::new(&pattern, gaze::PiiClass::custom("reference").unwrap())
+                        .unwrap(),
+                )
+                .rule(DefaultRule::new(Action::Tokenize))
+                .build()
+                .unwrap();
+            let raw = format!("{prefix}ID123456{suffix}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = support::clean(&pipeline, &session, &raw, &[LocaleTag::Global]);
+            assert_eq!(
+                gaze::token_shape::pattern().replace_all(&clean, "\0"),
+                format!("{prefix}\0{suffix}"),
+                "{pattern:?}"
+            );
+            assert_eq!(session.snapshot_entries()[0].raw, "ID123456");
+            assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+        }
+    }
+}

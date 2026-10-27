@@ -44,6 +44,7 @@ impl NormalizerKind {
 /// [`Candidate::span`]: gaze_types::Candidate::span
 pub struct RegexDetector {
     regex: Regex,
+    normalizes_ignorable_literals: bool,
     source_regex: std::sync::OnceLock<std::result::Result<Regex, regex::Error>>,
     source_prefilter: std::sync::OnceLock<crate::source_prefilter::Necessary>,
     class: PiiClass,
@@ -115,6 +116,8 @@ impl RegexDetector {
 
         Ok(Self {
             regex,
+            normalizes_ignorable_literals: crate::source_regex::has_ignorable_literals(pattern)
+                .map_err(RecognizerError::InvalidRegex)?,
             source_regex: std::sync::OnceLock::new(),
             source_prefilter: std::sync::OnceLock::new(),
             class,
@@ -363,7 +366,9 @@ impl RegexDetector {
         source_spans: Option<&[(usize, usize)]>,
     ) -> std::result::Result<Vec<LabelledValueScan>, gaze_types::DetectError> {
         let mut scans = self.scanned_spans_with_recovery(input, source_spans);
-        if source_spans.is_some_and(|spans| spans.windows(2).any(|pair| pair[0].1 < pair[1].0)) {
+        if source_spans.is_some_and(|spans| {
+            self.normalizes_ignorable_literals || spans.windows(2).any(|pair| pair[0].1 < pair[1].0)
+        }) {
             if self.source_regex.get().is_none() {
                 let prefilter = self
                     .source_prefilter
@@ -500,7 +505,7 @@ impl RegexDetector {
                         view.text.as_str(),
                         view.marked(at),
                     ),
-                    None => (&self.regex, input, at),
+                    None => (source_regex.unwrap_or(&self.regex), input, at),
                 };
                 let caps = regex.captures_at(text, at)?;
                 let map = |range: std::ops::Range<usize>| match &view {
