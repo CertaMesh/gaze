@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE_SHA = "3fb02d70e756102c871c51471cfd76d7ce6de4bc"
@@ -33,14 +34,14 @@ def main():
     if subprocess.check_output(["git", "status", "--porcelain"], cwd=base, text=True).strip():
         raise RuntimeError("base checkout must be clean")
     resources(base)
-    print("RELEASE 0/3: building pinned main base", flush=True)
+    print("RELEASE 0/5: building pinned main base", flush=True)
     subprocess.run(["anvil", "run", str(base), "--", "env", "CARGO_BUILD_JOBS=2", "GAZE_DISABLE_OS_KEYSTORE=1",
                     "nice", "-n", "10", "cargo", "build", "--locked", "--release", "-p", "gaze-cli"], cwd=base, check=True)
     resources(base)
-    print("RELEASE 1/3: building candidate with identical default features", flush=True)
+    print("RELEASE 1/5: building candidate with identical default features", flush=True)
     subprocess.run(["nice", "-n", "10", "cargo", "build", "--locked", "--release", "-p", "gaze-cli"], cwd=ROOT, check=True)
     resources(base)
-    print("RELEASE 2/3: recording candidate source-regex compilation work", flush=True)
+    print("RELEASE 2/5: recording candidate source-regex compilation work", flush=True)
     subprocess.run(["nice", "-n", "10", "cargo", "test", "--release", "-p", "gaze-recognizers", "--features", "test-support",
                     "--test", "source_regex_cold_work", "--", "--nocapture"], cwd=ROOT, check=True)
     resources(base)
@@ -52,7 +53,20 @@ def main():
     output = ROOT / "target/separator-checks/release-build.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n")
-    print("RELEASE 3/3: both release artifacts built", flush=True)
+    print("RELEASE 3/5: probing the shared card-window gap on main and candidate", flush=True)
+    subprocess.run(["nice", "-n", "10", sys.executable, "scripts/ci/probe_card_window_gaps.py",
+                    "--base-bin", str(base / "target/release/gaze"),
+                    "--candidate-bin", str(ROOT / "target/release/gaze"),
+                    "--output", "target/separator-checks/card-window-main-probe.json"], cwd=ROOT, check=True)
+    resources(base)
+    print("RELEASE 4/5: comparing all pinned clean inputs under both policy modes", flush=True)
+    subprocess.run(["nice", "-n", "10", sys.executable, "scripts/verify_clean_equality.py",
+                    "--base-bin", str(base / "target/release/gaze"),
+                    "--candidate-bin", str(ROOT / "target/release/gaze"),
+                    "--base-sha", BASE_SHA, "--candidate-sha", report["candidate_sha"],
+                    "--output", "target/separator-checks/clean-equality-round2.json"], cwd=ROOT, check=True)
+    resources(base)
+    print("RELEASE 5/5: release, main-gap and clean-equality evidence complete", flush=True)
 
 
 if __name__ == "__main__":
