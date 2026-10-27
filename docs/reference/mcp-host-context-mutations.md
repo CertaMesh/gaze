@@ -97,10 +97,14 @@ record processing. Exclusion follows the recognizer's compilation mode and allow
 match kinds. The preparation regression counts normalization and fold calls without
 a clock assertion. Streamed pair matches are checked against materialized joins.
 
-The named Anvil check runs twelve baseline/mutant pairs:
+The named Anvil check passed thirteen baseline/mutant pairs on 2026-10-26 at
+source `0dc40595cea3c64b7fbaf2f527dcb7d061298059`. Each baseline ran and passed its
+named test. Every mutant compiled, ran that test and failed it. Source bytes were
+restored, and Anvil reported `passing_and_current=true`.
 
 | Probe | Regression contract |
 | --- | --- |
+| `rebuild-context-pipeline` | One construction serves six dispatches while guess exclusions stay fresh. |
 | `duplicate-views` | Identical scalar views run 4,960 pair checks once; decoded views that differ retain 9,920 checks. |
 | `normalization-drift` | Fullwidth and normalized echoes cannot reveal record membership. |
 | `split-argument-echo` | Scalar joins, including decoded JSON leaves, cannot reveal membership. |
