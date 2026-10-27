@@ -364,11 +364,13 @@ impl RegexDetector {
     ) -> std::result::Result<Vec<LabelledValueScan>, gaze_types::DetectError> {
         let mut scans = self.scanned_spans_with_recovery(input, source_spans);
         if source_spans.is_some_and(|spans| spans.windows(2).any(|pair| pair[0].1 < pair[1].0)) {
-            let prefilter = self
-                .source_prefilter
-                .get_or_init(|| crate::source_prefilter::Necessary::new(self.regex.as_str()));
-            if !prefilter.could_match(input) {
-                return Ok(scans);
+            if self.source_regex.get().is_none() {
+                let prefilter = self
+                    .source_prefilter
+                    .get_or_init(|| crate::source_prefilter::Necessary::new(self.regex.as_str()));
+                if !prefilter.could_match(input) {
+                    return Ok(scans);
+                }
             }
             let regex = self
                 .source_regex
