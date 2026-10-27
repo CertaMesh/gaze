@@ -9,7 +9,9 @@ fn pipeline() -> &'static Pipeline {
         support::pipeline_for(
             &[LocaleTag::EnUs, LocaleTag::Global],
             &["core", "locale-en"],
-            vec![RuleSpec::Default { action: Action::Tokenize }],
+            vec![RuleSpec::Default {
+                action: Action::Tokenize,
+            }],
             true,
         )
     })
@@ -17,33 +19,76 @@ fn pipeline() -> &'static Pipeline {
 
 // Unicode 17.0 DerivedCoreProperties.txt, Default_Ignorable_Code_Point.
 // Independent of the implementation predicate; every removed scalar is exercised.
-fn separators() -> impl Iterator<Item = char> {
+fn all_separators() -> impl Iterator<Item = char> {
     [
-        (0xAD, 0xAD), (0x34F, 0x34F), (0x61C, 0x61C), (0x115F, 0x1160),
-        (0x17B4, 0x17B5), (0x180B, 0x180F), (0x200B, 0x200F), (0x202A, 0x202E),
-        (0x2060, 0x206F), (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),
-        (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3),
-        (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
-    ].into_iter().flat_map(|(start, end)| start..=end).filter_map(char::from_u32)
+        (0xAD, 0xAD),
+        (0x34F, 0x34F),
+        (0x61C, 0x61C),
+        (0x115F, 0x1160),
+        (0x17B4, 0x17B5),
+        (0x180B, 0x180F),
+        (0x200B, 0x200F),
+        (0x202A, 0x202E),
+        (0x2060, 0x206F),
+        (0x3164, 0x3164),
+        (0xFE00, 0xFE0F),
+        (0xFEFF, 0xFEFF),
+        (0xFFA0, 0xFFA0),
+        (0xFFF0, 0xFFF8),
+        (0x1BCA0, 0x1BCA3),
+        (0x1D173, 0x1D17A),
+        (0xE0000, 0xE0FFF),
+    ]
+    .into_iter()
+    .flat_map(|(start, end)| start..=end)
+    .filter_map(char::from_u32)
+}
+
+fn separators() -> Vec<char> {
+    let all = all_separators().collect::<Vec<_>>();
+    match std::env::var("GAZE_SEPARATOR_PROBE") {
+        Ok(codepoint) => {
+            let ch = char::from_u32(u32::from_str_radix(&codepoint, 16).unwrap()).unwrap();
+            assert!(all.contains(&ch));
+            vec![ch]
+        }
+        Err(_) => all,
+    }
+}
+
+#[test]
+fn unicode_default_ignorable_inventory_has_expected_size() {
+    assert_eq!(all_separators().count(), 4174);
 }
 
 const VALUES: [&str; 5] = [
-    "4111111111111111", "GB82WEST12345698765432",
+    "4111111111111111",
+    "GB82WEST12345698765432",
     "0x0000000000000000000000000000000000000000",
-    "cedar@example.invalid", "+12025550100",
+    "cedar@example.invalid",
+    "+12025550100",
 ];
 
 fn assert_protected(input: &str, value: &str) {
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let clean = support::clean(pipeline(), &session, input, &[LocaleTag::EnUs, LocaleTag::Global]);
-    assert!(session.snapshot_entries().iter().any(|entry| entry.raw.contains(value)),
-        "value bytes escaped full protection: {input:?} -> {clean:?}");
+    let clean = support::clean(
+        pipeline(),
+        &session,
+        input,
+        &[LocaleTag::EnUs, LocaleTag::Global],
+    );
+    assert!(
+        session
+            .snapshot_entries()
+            .iter()
+            .any(|entry| entry.raw.contains(value)),
+        "value bytes escaped full protection: {input:?} -> {clean:?}"
+    );
     assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
 }
 
 #[test]
 fn every_default_ignorable_preserves_value_boundaries() {
-    assert_eq!(separators().count(), 4174);
     for sep in separators() {
         for value in VALUES {
             assert_protected(&format!("word{sep}{value}; done"), value);
@@ -56,8 +101,10 @@ fn every_default_ignorable_preserves_value_boundaries() {
 fn every_default_ignorable_inside_values_keeps_all_source_bytes() {
     for sep in separators() {
         for (cue, value, at) in [
-            ("Card: ", VALUES[0], 4), ("IBAN: ", VALUES[1], 8),
-            ("Wallet: ", VALUES[2], 12), ("Mail: ", VALUES[3], 3),
+            ("Card: ", VALUES[0], 4),
+            ("IBAN: ", VALUES[1], 8),
+            ("Wallet: ", VALUES[2], 12),
+            ("Mail: ", VALUES[3], 3),
             ("Phone: ", VALUES[4], 5),
         ] {
             let value = format!("{}{sep}{}", &value[..at], &value[at..]);
@@ -78,8 +125,23 @@ fn legitimate_default_ignorables_remain_byte_exact_without_tokens() {
         "const label = \"co\u{34f}operative\";\n",
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let clean = support::clean(pipeline(), &session, input, &[LocaleTag::EnUs, LocaleTag::Global]);
+        let clean = support::clean(
+            pipeline(),
+            &session,
+            input,
+            &[LocaleTag::EnUs, LocaleTag::Global],
+        );
         assert_eq!(clean, input);
         assert!(session.snapshot_entries().is_empty());
+    }
+}
+
+#[test]
+fn mixed_outer_and_inner_separators_keep_complete_values_protected() {
+    for sep in ['\u{200b}', '\u{034f}', '\u{2067}'] {
+        for (value, at) in VALUES.into_iter().zip([4, 8, 12, 3, 5]) {
+            let value = format!("{}{sep}{}", &value[..at], &value[at..]);
+            assert_protected(&format!("word{sep}{value}{sep}word; done"), &value);
+        }
     }
 }
