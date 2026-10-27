@@ -855,6 +855,57 @@ mod tests {
     }
 
     #[test]
+    fn folded_record_peer_keeps_source_boundaries_after_length_changing_case_fold() {
+        let own = gaze::record_dictionary_name(&PiiClass::Name, 0);
+        let peer = gaze::record_dictionary_name(&PiiClass::Name, 1);
+        let context = TypedContext {
+            dictionaries: HashMap::from([
+                (
+                    own.clone(),
+                    ContextDictionary {
+                        terms: vec!["May".into()],
+                        case_sensitive: true,
+                    },
+                ),
+                (
+                    peer,
+                    ContextDictionary {
+                        terms: vec!["May Schmidt".into()],
+                        case_sensitive: true,
+                    },
+                ),
+            ]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let input = "İ Dear May,\nwordMay Schmidtword";
+        let gaps = [
+            "İ Dear May,\nword".len(),
+            "İ Dear May,\nwordMay Schmidt".len(),
+        ];
+        let mut spans = Vec::new();
+        for (at, ch) in input.char_indices() {
+            let offset = 3 * gaps.iter().filter(|&&gap| gap <= at).count();
+            spans.extend(std::iter::repeat_n(
+                (at + offset, at + offset + ch.len_utf8()),
+                ch.len_utf8(),
+            ));
+        }
+        let bundle = dictionary_bundle_from_context(&context);
+        let ctx = DetectContext::new(&[LocaleTag::Global], &bundle).with_source_spans(&spans);
+        let recognizer =
+            DictionaryRecognizer::new("context/name", PiiClass::Name, &own, true, "counter")
+                .with_record_matching()
+                .with_unicode_case_insensitive();
+        let hits = recognizer.detect(input, &ctx).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(&input[hits[0].span.clone()], "May");
+        assert_eq!(hits[0].span.start, "İ Dear ".len());
+    }
+
+    #[test]
     fn single_name_homonyms_stay_raw_without_corroboration() {
         for name in ["Grace", "Lee", "May"] {
             let key = gaze::record_dictionary_name(&PiiClass::Name, 0);
