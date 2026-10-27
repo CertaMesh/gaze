@@ -727,6 +727,7 @@ fn labelled_value_starts_keep_connectors_hashes_equals_and_numeric_wrappers() {
             (" — ", "C-731284", ""),
             (" ", "#731284", " called."),
             (": ", "#FABLE731284", ""),
+            (": ", "#4521", ""),
             (": ", "AB=12345", ""),
             (" (", "731284", ") called"),
             (": [", "731284", "]"),
@@ -752,7 +753,7 @@ fn labelled_value_starts_keep_connectors_hashes_equals_and_numeric_wrappers() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 30);
+    assert_eq!(checked, 33);
 }
 
 #[cfg(feature = "bundled-recognizers")]
@@ -785,6 +786,7 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         "customerId: x=+y",
         "customerId: x=+y1",
         "customerId: a==b2",
+        "customer_id = foo#12345",
         "customerId: =>",
         "customerId: #abcdef",
         "customerId: #AB-12345",

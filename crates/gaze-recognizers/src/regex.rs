@@ -1451,10 +1451,11 @@ fn scan_field_owned_value_indexed(
     let mut reason = None;
     loop {
         let group_start = end;
+        let hash_lead = end == capture.start;
         end += input[end..]
-            .chars()
-            .take_while(|ch| *ch == '#' || field_value_char(*ch))
-            .map(char::len_utf8)
+            .char_indices()
+            .take_while(|(at, ch)| field_value_char(*ch) || (hash_lead && *at == 0 && *ch == '#'))
+            .map(|(_, ch)| ch.len_utf8())
             .sum::<usize>();
         if end == group_start {
             break;
@@ -1486,7 +1487,7 @@ fn scan_field_owned_value_indexed(
         }
         let group: String = input[next..]
             .chars()
-            .take_while(|ch| *ch == '#' || field_value_char(*ch))
+            .take_while(|ch| field_value_char(*ch))
             .collect();
         let value_like = group.chars().any(char::is_numeric)
             || (group.chars().any(char::is_alphabetic)
