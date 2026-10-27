@@ -126,6 +126,8 @@ def main():
     ]
     probes.append(('ignore-html-fragment-spacing', 'crates/gaze-types/src/markup_regions.rs', 'let compact_end = at > start && !bytes[at - 1].is_ascii_whitespace();', 'let compact_end = true;', 'rule_boundary_markup_grammar', 'gaze-pii'))
     probes.append(('extend-schema-through-prose', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if let Some(&end) = closes.get(&(statement.end()-1)) {', 'if let Some(&_end) = closes.get(&(statement.end()-1)) { let end = input.len();', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'))
+    probes.append(('drop-svg-known-tag', 'crates/gaze-types/src/markup_regions.rs', '| "animatemotion"', '| "_mutant_animatemotion"', 'rule_boundary_standard_tag_names', 'gaze-pii'))
+    probes.append(('drop-mathml-known-tag', 'crates/gaze-types/src/markup_regions.rs', '| "apply"', '| "_mutant_apply"', 'rule_boundary_standard_tag_names', 'gaze-pii'))
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}
         if unknown:
