@@ -652,6 +652,10 @@ pub enum ValidatorFailReason {
     CnpjMod11Failed,
     /// UK NHS number MOD-11 checksum validation failed.
     UkNhsMod11Failed,
+    /// French SIREN MOD-97 checksum validation failed.
+    FrSirenMod97Failed,
+    /// French SIRET MOD-97 checksum validation failed.
+    FrSiretMod97Failed,
     /// Built-in IPv4 rule excluded a loopback address (127.0.0.0/8).
     Ipv4LoopbackRange,
     /// Built-in IPv6 rule excluded a loopback address (`::1`, or an IPv4-mapped or IPv4-compatible
@@ -681,6 +685,8 @@ impl ValidatorFailReason {
         Self::CpfMod11Failed,
         Self::CnpjMod11Failed,
         Self::UkNhsMod11Failed,
+        Self::FrSirenMod97Failed,
+        Self::FrSiretMod97Failed,
         Self::Ipv4LoopbackRange,
         Self::Ipv6LoopbackRange,
     ];
@@ -707,6 +713,8 @@ impl ValidatorFailReason {
             | Self::CpfMod11Failed
             | Self::CnpjMod11Failed
             | Self::UkNhsMod11Failed
+            | Self::FrSirenMod97Failed
+            | Self::FrSiretMod97Failed
             | Self::Ipv4LoopbackRange
             | Self::Ipv6LoopbackRange => {}
         }
@@ -800,6 +808,10 @@ pub enum ValidatorKind {
     CnpjMod11,
     /// UK NHS number MOD-11 checksum validator.
     UkNhsMod11,
+    /// French SIREN MOD-97 checksum validator (9 digits, Luhn).
+    FrSirenMod97,
+    /// French SIRET MOD-97 checksum validator (14 digits, Luhn).
+    FrSiretMod97,
 }
 
 /// Regions supported by national phone validators.
@@ -881,6 +893,8 @@ impl ValidatorKind {
                 | Self::BsnMod11
                 | Self::CpfMod11
                 | Self::UkNhsMod11
+                | Self::FrSirenMod97
+                | Self::FrSiretMod97
         ) || {
             #[cfg(feature = "phone-parser")]
             {
@@ -922,6 +936,8 @@ impl ValidatorKind {
             "cpf_mod11" => Ok(Self::CpfMod11),
             "cnpj_mod11" => Ok(Self::CnpjMod11),
             "uk_nhs_mod11" => Ok(Self::UkNhsMod11),
+            "fr_siren_mod97" => Ok(Self::FrSirenMod97),
+            "fr_siret_mod97" => Ok(Self::FrSiretMod97),
             other => Err(ValidatorKindParseError::UnsupportedValidator {
                 kind: other.to_string(),
             }),
@@ -1040,6 +1056,12 @@ impl ValidatorKind {
             Self::UkNhsMod11 => {
                 canonical_ascii_digits::<10>(input).filter(|_| uk_nhs_mod11_check(input))
             }
+            Self::FrSirenMod97 => {
+                canonical_ascii_digits::<9>(input).filter(|_| fr_siren_mod97_check(input))
+            }
+            Self::FrSiretMod97 => {
+                canonical_ascii_digits::<14>(input).filter(|_| fr_siret_mod97_check(input))
+            }
         }
     }
 
@@ -1068,6 +1090,8 @@ impl ValidatorKind {
             Self::CpfMod11 => ValidatorFailReason::CpfMod11Failed,
             Self::CnpjMod11 => ValidatorFailReason::CnpjMod11Failed,
             Self::UkNhsMod11 => ValidatorFailReason::UkNhsMod11Failed,
+            Self::FrSirenMod97 => ValidatorFailReason::FrSirenMod97Failed,
+            Self::FrSiretMod97 => ValidatorFailReason::FrSiretMod97Failed,
         }
     }
 }
@@ -1551,6 +1575,50 @@ fn fr_nir_mod97_check(input: &str) -> bool {
     }
     let key = u32::from(digits[13]) * 10 + u32::from(digits[14]);
     97 - number == key
+}
+
+/// Validates a French SIREN (9 digits, Luhn checksum).
+fn fr_siren_mod97_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<9>(input) else {
+        return false;
+    };
+    // Reject all-zero runs
+    if digits.iter().all(|&d| d == 0) {
+        return false;
+    }
+    luhn_check_digits(&digits)
+}
+
+/// Validates a French SIRET (14 digits = SIREN + NIC, Luhn checksum).
+fn fr_siret_mod97_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<14>(input) else {
+        return false;
+    };
+    // Reject all-zero runs
+    if digits.iter().all(|&d| d == 0) {
+        return false;
+    }
+    luhn_check_digits(&digits)
+}
+
+/// Luhn checksum on pre-collected digits.
+fn luhn_check_digits(digits: &[u8]) -> bool {
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(index, digit)| {
+            let mut value = u32::from(*digit);
+            if index % 2 == 1 {
+                value *= 2;
+                if value > 9 {
+                    value -= 9;
+                }
+            }
+            value
+        })
+        .sum();
+    sum.is_multiple_of(10)
 }
 
 fn de_steuer_id_mod1110_check(input: &str) -> bool {
