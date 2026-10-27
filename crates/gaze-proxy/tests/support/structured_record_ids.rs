@@ -87,12 +87,12 @@ pub fn cases() -> impl Iterator<Item = Case> {
 pub fn check(case: &Case, surface: &str, captured: &str, known_failure: bool) {
     let protected = !without_tokens(captured).contains(case.raw());
     println!(
-        "RECORD_ID {surface} {case:?} {} {captured}",
+        "RECORD_ID {surface} {case:?} {}",
         if protected { "PROTECTED" } else { "LEAKS" }
     );
     assert_eq!(
         protected, !known_failure,
-        "unexpected protection outcome on {surface} {case:?}: {captured}"
+        "unexpected protection outcome on {surface} {case:?}"
     );
 }
 

@@ -134,14 +134,12 @@ async fn mcp_labelled_string_leaves_known_failure_but_numbers_fail_closed() {
                     result,
                     Err(DispatchError::Carrier(CarrierError::UndeclaredNumber))
                 ),
-                "{case:?}: {result:?}"
+                "{case:?}: expected Carrier(UndeclaredNumber)"
             );
             assert!(captured.lock().unwrap().is_empty());
-            println!(
-                "RECORD_ID MCP/args {case:?} N/A fail-closed UndeclaredNumber; input={document}"
-            );
+            println!("RECORD_ID MCP/args {case:?} N/A fail-closed UndeclaredNumber");
         } else {
-            result.unwrap();
+            result.unwrap_or_else(|_| panic!("MCP/args {case:?}: expected successful dispatch"));
             let sent = captured.lock().unwrap().pop().expect("tool must execute");
             record_ids::check(&case, "MCP/args", &sent.to_string(), true);
         }

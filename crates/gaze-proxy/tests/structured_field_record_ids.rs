@@ -194,15 +194,17 @@ async fn captures(provider: Provider) {
             if matches!(provider, Provider::Anthropic) && carrier == "call" && case.numeric {
                 assert!(!response.status().is_success());
                 let error: Value = response.json().await.unwrap();
-                assert_eq!(error["error"]["code"], "InvalidRequestFormat");
+                assert!(
+                    error["error"]["code"] == "InvalidRequestFormat",
+                    "Anthropic/call {case:?}: expected InvalidRequestFormat at /error/code"
+                );
                 assert!(forwarded.lock().await.is_empty());
-                println!("RECORD_ID Anthropic/call {case:?} N/A fail-closed numeric input; response={error}");
+                println!("RECORD_ID Anthropic/call {case:?} N/A fail-closed numeric input");
                 continue;
             }
             assert!(
                 response.status().is_success(),
-                "{provider:?} {carrier} {case:?}: {}",
-                response.text().await.unwrap()
+                "{provider:?} {carrier} {case:?}: expected successful HTTP status"
             );
             let captured = forwarded
                 .lock()
@@ -238,7 +240,7 @@ async fn captures(provider: Provider) {
                 assert_eq!(
                     serde_json::from_str::<Value>(text).is_ok(),
                     !case.numeric,
-                    "numeric JSON rendering is a known failure; promote when fixed: {text}"
+                    "numeric JSON rendering is a known failure at {pointer}; promote when fixed"
                 );
             }
         }
@@ -264,8 +266,8 @@ async fn captures(provider: Provider) {
         }
         assert!(response.status().is_success());
         let captured = forwarded.lock().await.pop().unwrap();
-        assert_eq!(
-            captured, request,
+        assert!(
+            captured == request,
             "unlabelled numbers and strings must stay unchanged"
         );
     }
