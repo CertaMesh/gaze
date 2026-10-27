@@ -574,7 +574,13 @@ mod tests {
                 &self.session_id_policy,
             );
             envelope
-                .dispatch(&Principal::new("unit-test"), tool_name, args, None)
+                .dispatch(
+                    &Principal::new("unit-test"),
+                    tool_name,
+                    args,
+                    None,
+                    gaze_mcp_core::HostContextSelection::Absent,
+                )
                 .await
                 .map(|response| response.payload)
         }
@@ -715,6 +721,7 @@ mod tests {
                     "gaze_read_file",
                     json!({"path": path}),
                     None,
+                    gaze_mcp_core::HostContextSelection::Absent,
                 )
                 .await
                 .unwrap_err();
@@ -743,6 +750,7 @@ mod tests {
                 "gaze_read_file",
                 json!({"path": unknown_path}),
                 None,
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await
             .unwrap_err();
@@ -764,6 +772,7 @@ mod tests {
                     "gaze_read_file",
                     json!({ "path": path }),
                     None,
+                    gaze_mcp_core::HostContextSelection::Absent,
                 )
                 .await
                 .unwrap_err();
@@ -966,6 +975,7 @@ mod tests {
                 "gaze_read_file",
                 json!({"path": protected_path}),
                 None,
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await
             .unwrap_err();
@@ -985,6 +995,7 @@ mod tests {
                 "gaze_read_file",
                 json!({"path": malformed}),
                 None,
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await
             .unwrap_err();
@@ -1001,6 +1012,7 @@ mod tests {
                 "gaze_read_file",
                 json!({"path": unowned_wrapped}),
                 None,
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await
             .unwrap_err();

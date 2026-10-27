@@ -223,7 +223,8 @@ impl Recognizer for DictionaryRecognizer {
             let (folded, starts, ends) = fold_with_original_offsets(
                 input,
                 self.unicode_case_insensitive,
-                self.record_matching,
+                self.record_matching
+                    .then_some(MAX_RECORD_MATCH_WHITESPACE_RUN),
             );
             let hits = self
                 .automaton_for(entry)
@@ -319,6 +320,16 @@ impl Recognizer for DictionaryRecognizer {
 }
 
 fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
+    record_match_kind_with_folded(matched, term, || {
+        matched.case_fold().collect::<String>() == term.case_fold().collect::<String>()
+    })
+}
+
+pub(crate) fn record_match_kind_with_folded(
+    matched: &str,
+    term: &str,
+    folded_equal: impl FnOnce() -> bool,
+) -> RecordMatchKind {
     if matched == term {
         return RecordMatchKind::Exact;
     }
@@ -326,7 +337,7 @@ fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
     if collapsed == term {
         return RecordMatchKind::WhitespaceFlexible;
     }
-    if matched.case_fold().collect::<String>() == term.case_fold().collect::<String>() {
+    if folded_equal() {
         RecordMatchKind::CaseFolded
     } else {
         RecordMatchKind::WhitespaceCaseFolded
@@ -336,6 +347,10 @@ fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
 /// A versioned common-word dictionary, compiled once through Aho–Corasick.
 /// Full-span checks prevent a substring such as `may` from gating `Mayer`.
 fn record_name_is_common(name: &str) -> bool {
+    record_name_is_common_folded(&name.case_fold().collect::<String>())
+}
+
+pub(crate) fn record_name_is_common_folded(folded: &str) -> bool {
     static COMMON: OnceLock<AhoCorasick> = OnceLock::new();
     let dictionary = COMMON.get_or_init(|| {
         let terms = include_str!("../assets/record-common-names-v1.txt")
@@ -347,27 +362,31 @@ fn record_name_is_common(name: &str) -> bool {
             .build(terms)
             .expect("static common-word dictionary")
     });
-    let folded = name.case_fold().collect::<String>();
     dictionary
-        .find_overlapping_iter(&folded)
+        .find_overlapping_iter(folded)
         .any(|hit| hit.start() == 0 && hit.end() == folded.len())
 }
 
 // Full Unicode folds can expand one character (for example, ß -> ss).
 // Only complete original-character boundaries may become token spans.
-fn fold_with_original_offsets(
+pub(crate) fn fold_with_original_offsets(
     input: &str,
     case_fold: bool,
-    collapse_whitespace: bool,
+    whitespace_run_limit: Option<usize>,
 ) -> (String, HashMap<usize, usize>, HashMap<usize, usize>) {
+    #[cfg(test)]
+    crate::record_guess::WORK.with(|count| {
+        let (normalize, fold) = count.get();
+        count.set((normalize, fold + 1));
+    });
     let mut folded = String::with_capacity(input.len());
     let mut starts = HashMap::new();
     let mut ends = HashMap::new();
     let mut whitespace_count = 0;
     for (start, ch) in input.char_indices() {
-        if collapse_whitespace && ch.is_whitespace() {
+        if whitespace_run_limit.is_some() && ch.is_whitespace() {
             whitespace_count += 1;
-            if whitespace_count == 1 || whitespace_count == MAX_RECORD_MATCH_WHITESPACE_RUN + 1 {
+            if whitespace_count == 1 || whitespace_run_limit == Some(whitespace_count - 1) {
                 starts.insert(folded.len(), start);
                 folded.push(' ');
             }
@@ -537,7 +556,7 @@ fn has_identifier_char_after(input: &str, end: usize) -> bool {
     has_identifier_component(input[end..].chars())
 }
 
-fn has_identifier_component(mut chars: impl Iterator<Item = char>) -> bool {
+pub(crate) fn has_identifier_component(mut chars: impl Iterator<Item = char>) -> bool {
     match chars.next() {
         // A hyphen connects components only when a base identifier character follows.
         Some('-') => chars.next().is_some_and(is_base_identifier_char),
@@ -552,6 +571,86 @@ fn is_base_identifier_char(ch: char) -> bool {
 
 #[cfg(test)]
 mod tests {
+    fn contains_record_guess(input: &str, term: &str) -> bool {
+        use crate::{RecordGuessMatcher, RecordGuessMode, RecordGuessTerm, RecordGuessText};
+        let term = crate::normalize::normalize(term)
+            .text
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut matcher = RecordGuessMatcher::new(vec![RecordGuessTerm {
+            value: &term,
+            mode: RecordGuessMode::Record {
+                class: gaze_types::PiiClass::Name,
+                allowed_kinds: [
+                    gaze_types::RecordMatchKind::Exact,
+                    gaze_types::RecordMatchKind::WhitespaceFlexible,
+                    gaze_types::RecordMatchKind::CaseFolded,
+                    gaze_types::RecordMatchKind::WhitespaceCaseFolded,
+                    gaze_types::RecordMatchKind::CorroboratedSingle,
+                ]
+                .into_iter()
+                .collect(),
+            },
+        }])
+        .unwrap();
+        matcher.check(&RecordGuessText::new(input));
+        matcher.matches()[0]
+    }
+
+    #[test]
+    fn record_guess_covers_detection_normalization_alphabet() {
+        for ascii in '!'..='~' {
+            let wide = char::from_u32(ascii as u32 + 0xFEE0).unwrap();
+            let term = format!("Q{ascii}9");
+            let guess = format!("Ｑ{wide}９");
+            assert!(
+                contains_record_guess(&guess, &term),
+                "U+{:04X}",
+                wide as u32
+            );
+            assert!(contains_record_guess(&term, &guess));
+        }
+        for space in [
+            '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+            '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{202F}',
+            '\u{205F}', '\u{3000}',
+        ] {
+            assert!(contains_record_guess(
+                &format!("Synthetic{space}Qorvex"),
+                "Synthetic Qorvex"
+            ));
+        }
+        for joiner in ['\u{200C}', '\u{200D}'] {
+            assert!(contains_record_guess(
+                &format!("Synt{joiner}hetic Qorvex"),
+                "Synthetic Qorvex"
+            ));
+        }
+        assert!(contains_record_guess("Q\u{0344}9", "Q\u{0308}\u{0301}9"));
+        assert!(contains_record_guess("STRASSE  QORVEX", "Straße Qorvex"));
+        assert!(!contains_record_guess(
+            "Synthetic Wrongname",
+            "Synthetic Qorvex"
+        ));
+        assert!(!contains_record_guess("anything", ""));
+    }
+    #[test]
+    fn record_guess_exclusion_uses_response_token_boundaries() {
+        for (input, term, expected) in [
+            ("Joanna Lim", "Anna Li", false),
+            ("İAnna Li", "Anna Li", false),
+            ("\u{0345}Anna Li", "Anna Li", false),
+            ("Anna Li\u{0345}", "Anna Li", false),
+            ("Anna Li-suffix", "Anna Li", false),
+            ("prefix_Anna Li", "Anna Li", false),
+            ("(ANNA   LI)", "Anna Li", true),
+            ("ba a a", "a a", true),
+            ("Anna Li--", "Anna Li", true),
+        ] {
+            assert_eq!(contains_record_guess(input, term), expected);
+        }
+    }
     use std::collections::HashMap;
 
     use gaze::{
@@ -635,12 +734,48 @@ mod tests {
 
     #[test]
     fn full_fold_does_not_create_partial_original_character_spans() {
-        let (folded, starts, ends) = fold_with_original_offsets("AßB", true, false);
+        let (folded, starts, ends) = fold_with_original_offsets("AßB", true, None);
         assert_eq!(folded, "assb");
         assert_eq!(starts.get(&1), Some(&1));
         assert!(!starts.contains_key(&2));
         assert!(!ends.contains_key(&2));
         assert_eq!(ends.get(&3), Some(&3));
+    }
+
+    #[test]
+    fn record_guess_whitespace_keeps_response_matcher_run_limit() {
+        let term = "Synthetic Qorvex";
+        let context = TypedContext {
+            dictionaries: HashMap::from([(
+                "record-name".into(),
+                ContextDictionary {
+                    terms: vec![term.into()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let bundle = dictionary_bundle_from_context(&context);
+        let ctx = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "context/record-name",
+            PiiClass::Name,
+            "record-name",
+            true,
+            "counter",
+        )
+        .with_record_matching();
+        for run in [1, 32, 33, 64] {
+            let input = format!("Synthetic{}Qorvex", " ".repeat(run));
+            assert_eq!(
+                recognizer.detect(&input, &ctx).unwrap().len(),
+                usize::from(run <= 32)
+            );
+            assert!(contains_record_guess(&input, term));
+        }
     }
 
     #[test]

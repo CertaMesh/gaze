@@ -1396,6 +1396,7 @@ dependencies = [
  "tracing",
  "trybuild",
  "ulid",
+ "zeroize",
 ]
 
 [[package]]
@@ -1438,6 +1439,7 @@ dependencies = [
  "gaze-recognizers",
  "gaze-types",
  "hex",
+ "hmac",
  "libc",
  "proptest",
  "pulldown-cmark",
@@ -1454,7 +1456,6 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "trybuild",
- "unicode-normalization",
  "zeroize",
 ]
 
@@ -1579,6 +1580,7 @@ dependencies = [
  "serde_json",
  "sha3",
  "thiserror 1.0.69",
+ "unicode-normalization",
 ]
 
 [[package]]

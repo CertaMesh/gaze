@@ -35,6 +35,7 @@ mod dob_judge;
 mod error;
 mod locale_aware;
 mod ner;
+pub mod normalize;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;
@@ -46,6 +47,7 @@ pub use anchored_match::{
     is_person_name_candidate, AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape,
 };
 pub use dictionary::DictionaryRecognizer;
+mod record_guess;
 pub use dob_judge::{
     verify_gliner_dob_bundle, DobJudgeLoadError, DobJudgeRecognizer, GLINER_DOB_BUNDLE_SHA256,
     GLINER_DOB_HF_COMMIT, GLINER_DOB_HF_REPO, GLINER_DOB_MODEL_DIR_NAME, GLINER_DOB_SHA256SUMS,
@@ -65,6 +67,7 @@ pub use ner::{
     DAVLAN_NER_HF_REPO, DAVLAN_NER_LABELS_JSON, DAVLAN_NER_MODEL_DIR_NAME, DAVLAN_NER_SHA256SUMS,
     DAVLAN_NER_UPSTREAM_FILES, REQUIRED_DAVLAN_NER_ARTIFACTS,
 };
+pub use record_guess::{RecordGuessMatcher, RecordGuessMode, RecordGuessTerm, RecordGuessText};
 pub use regex::{NormalizerKind, RegexDetector};
 
 // drift-ack: core snapshot version0.5.3 matches the field rulepack; all detection fields are unchanged.

@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "crates/gaze/src/normalize.rs"
+SOURCE = ROOT / "crates/gaze-types/src/normalize.rs"
 REGEX_SOURCE = ROOT / "crates/gaze-recognizers/src/regex.rs"
 SOURCE_REGEX = ROOT / "crates/gaze-recognizers/src/source_regex.rs"
 ANCHOR_SOURCE = ROOT / "crates/gaze-recognizers/src/anchored_match.rs"

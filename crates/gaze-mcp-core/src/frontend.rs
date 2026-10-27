@@ -33,6 +33,7 @@ pub trait DispatchHost: Send + Sync {
         tool_name: &str,
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
+        host_context: crate::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError>;
 
     /// Snapshot of registered tool descriptors. Transports cache this once

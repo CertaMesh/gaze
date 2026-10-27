@@ -27,6 +27,7 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror = "1"
 tracing = "0.1"
+zeroize = "1"
 ulid = { version = "1", features = ["serde"] }
 
 [features]

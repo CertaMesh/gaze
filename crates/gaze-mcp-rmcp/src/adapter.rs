@@ -14,13 +14,7 @@ use serde_json::Value;
 
 use crate::error::RmcpFrontendError;
 
-/// Argument key used to thread an MCP-side session id through `tools/call`.
-///
-/// rmcp's wire format does not natively carry a Gaze session identifier, so
-/// the rmcp adapter looks for a top-level `_session_id` argument key. When
-/// present, it is extracted before forwarding the remaining arguments to
-/// `DispatchHost::dispatch` and the value is validated by
-/// `gaze_mcp_core::SessionIdPolicy` inside dispatch.
+/// Legacy reserved argument key, removed before dispatch and never used as authority.
 pub const SESSION_ID_ARG_KEY: &str = "_session_id";
 
 /// Translate a `gaze_mcp_core::ToolDescriptor` into an `rmcp::model::Tool`
@@ -68,14 +62,12 @@ pub fn descriptor_visible_to(descriptor: &ToolDescriptor, principal_tier: ToolTi
 /// Outcome of pulling apart an inbound `tools/call` request.
 ///
 /// `tool_name` and `args` are forwarded to `DispatchHost::dispatch`.
-/// `session_id`, if present, is supplied as the dispatch's external session
-/// identifier and validated by `SessionIdPolicy` before the chokepoint runs.
+/// Reserved legacy session arguments are removed and never become host inputs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DispatchArgs {
     pub tool_name: String,
     pub args: Value,
-    pub session_id: Option<String>,
 }
 
 /// Translate an rmcp `CallToolRequestParams` into the inputs `DispatchHost::dispatch` expects.
@@ -84,28 +76,16 @@ pub struct DispatchArgs {
 /// tool implementation sees the same shape it would see when accepting JSON
 /// directly. If the request omits `arguments`, the call is treated as having
 /// an empty object, which is what rmcp's spec implies.
-pub fn rmcp_args_to_dispatch_args(
-    request: CallToolRequestParams,
-) -> Result<DispatchArgs, RmcpFrontendError> {
+pub fn rmcp_args_to_dispatch_args(request: CallToolRequestParams) -> DispatchArgs {
     let CallToolRequestParams {
         name, arguments, ..
     } = request;
     let mut map = arguments.unwrap_or_default();
-    let session_id = match map.remove(SESSION_ID_ARG_KEY) {
-        Some(Value::String(s)) => Some(s),
-        Some(Value::Null) | None => None,
-        Some(other) => {
-            return Err(RmcpFrontendError::MalformedRequest(format!(
-                "{SESSION_ID_ARG_KEY} must be a string, got {}",
-                json_kind(&other)
-            )));
-        }
-    };
-    Ok(DispatchArgs {
+    map.remove(SESSION_ID_ARG_KEY);
+    DispatchArgs {
         tool_name: name.into_owned(),
         args: Value::Object(map),
-        session_id,
-    })
+    }
 }
 
 /// Translate a successful `gaze_mcp_core::ToolResponse` into an rmcp
@@ -148,17 +128,6 @@ fn json_value_to_object(value: &Value) -> JsonObject {
             map.insert("schema".to_string(), other.clone());
             map
         }
-    }
-}
-
-fn json_kind(value: &Value) -> &'static str {
-    match value {
-        Value::Null => "null",
-        Value::Bool(_) => "bool",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
     }
 }
 
@@ -228,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn rmcp_args_extract_tool_name_and_session_id() {
+    fn rmcp_args_cannot_select_a_session_id() {
         let mut args = JsonObject::new();
         args.insert("text".to_string(), json!("hello"));
         args.insert(
@@ -236,31 +205,25 @@ mod tests {
             json!("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
         );
         let req = CallToolRequestParams::new("clean").with_arguments(args);
-        let out = rmcp_args_to_dispatch_args(req).expect("translation should succeed");
+        let out = rmcp_args_to_dispatch_args(req);
         assert_eq!(out.tool_name, "clean");
-        assert_eq!(
-            out.session_id.as_deref(),
-            Some("01ARZ3NDEKTSV4RRFFQ69G5FAV")
-        );
         assert_eq!(out.args, json!({ "text": "hello" }));
     }
 
     #[test]
     fn rmcp_args_default_to_empty_object_when_arguments_missing() {
         let req = CallToolRequestParams::new("clean");
-        let out = rmcp_args_to_dispatch_args(req).unwrap();
-        assert_eq!(out.session_id, None);
+        let out = rmcp_args_to_dispatch_args(req);
         assert_eq!(out.args, json!({}));
     }
 
     #[test]
-    fn rmcp_args_reject_non_string_session_id() {
+    fn rmcp_args_ignore_non_string_session_id() {
         let mut args = JsonObject::new();
         args.insert(SESSION_ID_ARG_KEY.to_string(), json!(42));
         let req = CallToolRequestParams::new("clean").with_arguments(args);
-        let err = rmcp_args_to_dispatch_args(req).expect_err("number sid must be rejected");
-        assert!(matches!(err, RmcpFrontendError::MalformedRequest(_)));
-        assert_eq!(err.class(), "malformed-request");
+        let out = rmcp_args_to_dispatch_args(req);
+        assert_eq!(out.args, json!({}));
     }
 
     #[test]

@@ -135,3 +135,49 @@ checks:
     commands:
       - cargo fmt --all -- --check
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --focused
+
+  mcp-host-echo:
+    description: Host-context normalization, joins, argument budgets and boundary mutations
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/gate/mcp-host-context-mutation-probe.py, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/mcp-host-context-mutation-probe.py --run --probe rebuild-context-pipeline --probe duplicate-views --probe normalization-drift --probe split-argument-echo --probe argument-budget --probe argument-scalars --probe argument-entries --probe guess-preparation --probe guess-case-mode --probe guess-allowed-kinds --probe guess-boundaries --probe folded-boundary-view --probe guess-whitespace
+
+  mcp-host-release:
+    identity_env: [GAZE_CLEAN_BASE_WORKTREE]
+    description: Release binaries for clean equality and synthetic MCP measurements
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/verification/build_clean_equality_base.py, scripts/anvil, .github/workflows, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --locked --release -p gaze-cli --features mcp
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --locked --release -p gaze-mcp-rmcp --example host_context_measure
+      - python3 scripts/verification/build_clean_equality_base.py
+
+  mcp-host-ci:
+    description: Reproduce host-context CI failures and verify cached dispatch
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci, scripts/bench/validator_recall_probe, scripts/bench/gaze_bench_score.py, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test --locked -p gaze-mcp-core --lib
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test --locked -p gaze-mcp-core --test strict_contract
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/validator_probe_gate.py
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- ci-feature-matrix --partition ci-gates
+
+  mcp-host-measure:
+    description: Five-run release MCP latency and peak RSS capture
+    expensive: true
+    reusable: false
+    locks: [workspace-build, bench-machine]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/measure_mcp_host_context.py, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - env GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/measure_mcp_host_context.py --cli-bin target/release/gaze --host-bin target/release/examples/host_context_measure --output target/gate/mcp-host-latency-rss.json --reference-host-bin target/gate/mcp-host-before-cache/host_context_measure --reference-source-sha f9f79848e6e6f4837821862801a4a795714e1547
