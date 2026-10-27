@@ -681,7 +681,7 @@ fn non_tags_never_hide_record_values_or_repeats() {
     assert_eq!(checked, 60);
     for prefix in [
         format!("<a title='{}' ", "x".repeat(2048)),
-        "<a data=x; ".into(),
+        "<a data=<x ".into(),
         "</a ".into(),
     ] {
         for separate_turn in [false, true] {
@@ -811,3 +811,12 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
 
 #[cfg(feature = "bundled-recognizers")]
 include!("rule_boundary_tests.rs");
+
+#[cfg(feature = "bundled-recognizers")]
+#[test]
+fn semicolon_unquoted_html_fragments_stay_raw() {
+    let pipeline = labelled_pipeline();
+    for label in ["customerId", "data-id"] {
+        check_boundary(&pipeline, &format!("<a data=x; {label}=C-731284>"), &[]);
+    }
+}

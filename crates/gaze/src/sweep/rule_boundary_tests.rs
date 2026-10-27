@@ -61,7 +61,7 @@ fn rule_boundary_sql_context_and_keywords() {
             boundary_case(&format!("{prefix}customer_id = {parameter}"), &[]); count += 1;
         }
     }
-    for prose in ["Please select the right account: ", "Select one. ", "We will create table backups later\n", "Don't alter table rows by hand.\n", "CREATE TABLE t (x int);\n"] {
+    for prose in ["Please select the right account: ", "Select one. ", "We will create table backups later\n", "Don't alter table rows by hand.\n", "CREATE TABLE t (x int);\n", "CREATE TABLE t (x int)\n"] {
         for (start,end) in [("(",")"),("[","]")] {
             let input = format!("{prose}Customer ID {start}C-731284{end}");
             boundary_case(&input, &["C-731284"]); count += 1;
@@ -128,11 +128,11 @@ fn rule_boundary_starts_wrappers_and_grouping() {
         for (start,value,end) in [(": ","#731284",""),(": ","#FABLE731284",""),(" - ","C-731284",""),(" – ","731284",""),(" — ","C-731284",""),(": ","AB=12345",""),(": ","+YQ==",""),(": '","opaque+YQ==","'"),(": ","AB 12 34 56",""),(" (","731284",")"),(": [","731284","]"),(": §","C-731284","§"),(": ⟨","C-731284","⟩")] {
             boundary_case(&format!("{label}{start}{value}{end}"), &[value]); count += 1;
         }
-        for public in ["#d3d3d3", "#1a2b3c", "#fff", "a==b", "+y", "=> 1", "req.params.id", "${VALUE}", "{{VALUE}}"] {
+        for public in ["#d3d3d3", "#a1b2c3d4", "#G123", "#1a2b3c", "#fff", "a==b", "+y", "=> 1", "req.params.id", "${VALUE}", "{{VALUE}}"] {
             boundary_case(&format!("{label}: {public}"), &[]); count += 1;
         }
     }
     boundary_case(":root { --customer-id: #1a2b3c; }", &[]); count += 1;
     boundary_case("record_id(42)", &[]); count += 1;
-    assert_eq!(count, 68);
+    assert_eq!(count, 74);
 }
