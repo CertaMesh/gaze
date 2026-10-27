@@ -33,7 +33,11 @@ fn assert_whole(core: &gaze_assembly::CorePipeline, raw: &str, values: &[&str]) 
     let observed: Vec<_> = spans
         .iter()
         .map(|span| {
-            assert_eq!(span.class, PiiClass::Custom("security_token".into()));
+            assert_eq!(
+                span.class,
+                PiiClass::Custom("security_token".into()),
+                "whole credential ownership: class"
+            );
             &raw[span.raw_span.clone()]
         })
         .collect();
