@@ -6,14 +6,12 @@ reported match. Reports only locations/lengths, never source values. Generated
 positives, public-material negatives and restore use the actual binary too.
 """
 import argparse
-import collections
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]

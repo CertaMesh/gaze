@@ -120,7 +120,7 @@ checks:
     expensive: true
     reusable: false
     locks: [workspace-build]
-    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts, docs/reference/benchmarks, anvil.yaml]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, scripts/bench/*.py, scripts/bench/pyproject.toml, scripts/bench/uv.lock, scripts/verify_bare_credentials.py, scripts/verify_issuer_credential_corpus.py, docs/reference/benchmarks, anvil.yaml]
     toolchain: *rust-tools
     commands:
       - cargo fmt --all -- --check
