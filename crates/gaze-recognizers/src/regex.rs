@@ -1142,10 +1142,7 @@ fn code_identifier(input: &str, scan: &LabelledValueScan, cue_start: usize, pair
 fn field_value_char(ch: char) -> bool {
     ch.is_alphanumeric()
         || unicode_normalization::char::is_combining_mark(ch)
-        || matches!(
-            ch,
-            '@' | '+' | '/' | '_' | '#' | '=' | '-' | '.' | ':' | '\\'
-        )
+        || matches!(ch, '@' | '+' | '/' | '_' | '=' | '-' | '.' | ':' | '\\')
 }
 
 const LABELLED_CUE_HORIZONTAL: &str = r"[ \t\u{00A0}\u{202F}]";
