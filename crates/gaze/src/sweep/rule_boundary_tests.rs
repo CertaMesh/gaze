@@ -298,3 +298,73 @@ fn rule_boundary_starts_wrappers_and_grouping() {
     count += 1;
     assert_eq!(count, 74);
 }
+
+#[test]
+fn rule_boundary_standard_tag_names() {
+    use crate::{CleanDocument, RawDocument, Scope, Session};
+    // https://www.w3.org/TR/SVG2/eltindex.html and MathML Core presentation elements.
+    let tags = [
+        "animateMotion",
+        "animateTransform",
+        "desc",
+        "metadata",
+        "mpath",
+        "switch",
+        "view",
+        "feBlend",
+        "feColorMatrix",
+        "feComponentTransfer",
+        "feComposite",
+        "feConvolveMatrix",
+        "feDiffuseLighting",
+        "feDisplacementMap",
+        "feDistantLight",
+        "feDropShadow",
+        "feFlood",
+        "feFuncA",
+        "feFuncB",
+        "feFuncG",
+        "feFuncR",
+        "feImage",
+        "feMerge",
+        "feMergeNode",
+        "feMorphology",
+        "feOffset",
+        "fePointLight",
+        "feSpecularLighting",
+        "feSpotLight",
+        "feTile",
+        "feTurbulence",
+        "ms",
+        "mstyle",
+        "merror",
+        "mpadded",
+        "mphantom",
+        "mmultiscripts",
+        "mprescripts",
+        "none",
+    ];
+    let pipeline = labelled_pipeline();
+    let mut count = 0;
+    for tag in tags {
+        let input = format!("<{tag} data-customer-id=C-731284 />");
+        check_boundary(&pipeline, &input, &[]);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        pipeline
+            .redact(&session, RawDocument::Text("Customer ID: C-731284".into()))
+            .unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .redact(&session, RawDocument::Text(input.clone()))
+            .unwrap()
+        else {
+            panic!("text")
+        };
+        assert_eq!(clean, input);
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
+        count += 2;
+    }
+    assert_eq!(count, 78);
+}
