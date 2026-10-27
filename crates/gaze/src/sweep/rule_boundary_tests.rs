@@ -148,7 +148,17 @@ fn rule_boundary_sql_context_and_keywords() {
     }
     boundary_case("See CREATE TABLE t (\ncustomer_id (C-731284)\n)", &[]);
     count += 1;
-    assert_eq!(count, 146);
+    for prefix in [
+        "UPDATE \"orders\" SET ",
+        "UPDATE [orders] SET ",
+        "UPDATE app.\"order rows\" SET ",
+    ] {
+        for parameter in ["@p0", "@name2", ":name", "$1"] {
+            boundary_case(&format!("{prefix}customer_id = {parameter}"), &[]);
+            count += 1;
+        }
+    }
+    assert_eq!(count, 158);
 }
 
 #[test]
