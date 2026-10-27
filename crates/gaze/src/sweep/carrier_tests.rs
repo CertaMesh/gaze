@@ -581,6 +581,51 @@ fn seeded_html_repeats_preserve_unquoted_attribute_syntax() {
 fn non_tags_never_hide_record_values_or_repeats() {
     use crate::{CleanDocument, RawDocument, Scope, Session};
     let pipeline = labelled_pipeline();
+    for (input, value) in [
+        ("if a<b:\n    customer_id = 731284", "731284"),
+        ("sort <input.txt\ncustomer_id=731284", "731284"),
+        ("cat <<EOF\ncustomer_id=731284\nEOF", "731284"),
+        ("let m: HashMap<String, u32\ncustomer_id = 731284", "731284"),
+        ("template <typename T = int\nemployee_id = E-4471", "E-4471"),
+        (
+            "x <y = 2;\nCustomer ID: C-731284\nreturn a > b;",
+            "C-731284",
+        ),
+        ("if n <limit then customer_id = 731284", "731284"),
+        ("Scores <a few points; employee_id=E-4471 noted", "E-4471"),
+        (
+            "Use List<T when needed, e.g. x=1.\n\nCustomer ID: C-731284",
+            "C-731284",
+        ),
+        (
+            "a <b c=1 and later Customer ID: C-731284 then x > y",
+            "C-731284",
+        ),
+        ("<a href='x>\nCustomer ID: C-731284", "C-731284"),
+        ("<a title='it>\nemployee_id: E-4471\nlater ' end", "E-4471"),
+        (
+            "Customer ID: C-731284\nwhile i <n: x=1\nagain C-731284 here",
+            "C-731284",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let CleanDocument::Text(clean) = pipeline
+            .redact(&session, RawDocument::Text(input.into()))
+            .unwrap()
+        else {
+            panic!("text")
+        };
+        let entries = session.snapshot_entries();
+        let entry = entries
+            .iter()
+            .find(|entry| entry.raw == value)
+            .unwrap_or_else(|| panic!("{input:?} -> {clean:?}; {entries:?}"));
+        assert_eq!(clean, input.replace(value, &entry.token));
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
+    }
     let prefixes = [
         "if a<b:\n    ",
         "sort <input.txt\n",
@@ -614,33 +659,57 @@ fn non_tags_never_hide_record_values_or_repeats() {
                     format!("{prefix}{label}: {value} then x > y;\nagain {value} here")
                 };
                 let CleanDocument::Text(clean) = pipeline
-                    .redact(&session, RawDocument::Text(input.clone())).unwrap()
-                else { panic!("text") };
+                    .redact(&session, RawDocument::Text(input.clone()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
                 let entries = session.snapshot_entries();
-                let entry = entries.iter().find(|entry| entry.raw == value)
+                let entry = entries
+                    .iter()
+                    .find(|entry| entry.raw == value)
                     .unwrap_or_else(|| panic!("ID leaked: {input:?} -> {clean:?}; {entries:?}"));
                 assert_eq!(clean, input.replace(value, &entry.token), "{input:?}");
-                assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
+                assert_eq!(
+                    pipeline.restore_strict_text(&session, &clean).unwrap(),
+                    input
+                );
                 checked += 1;
             }
         }
     }
     assert_eq!(checked, 60);
-    for prefix in [format!("<a title='{}' ", "x".repeat(2048)), "<a data=x; ".into(), "</a ".into()] {
+    for prefix in [
+        format!("<a title='{}' ", "x".repeat(2048)),
+        "<a data=x; ".into(),
+        "</a ".into(),
+    ] {
         for separate_turn in [false, true] {
             let session = Session::new(Scope::Ephemeral).unwrap();
             let input = if separate_turn {
-                pipeline.redact(&session, RawDocument::Text("customerId: C-731284".into())).unwrap();
+                pipeline
+                    .redact(&session, RawDocument::Text("customerId: C-731284".into()))
+                    .unwrap();
                 format!("{prefix}data-id=C-731284>")
             } else {
                 format!("{prefix}customerId=C-731284>")
             };
-            let CleanDocument::Text(clean) = pipeline.redact(&session, RawDocument::Text(input.clone())).unwrap()
-            else { panic!("text") };
+            let CleanDocument::Text(clean) = pipeline
+                .redact(&session, RawDocument::Text(input.clone()))
+                .unwrap()
+            else {
+                panic!("text")
+            };
             let entries = session.snapshot_entries();
-            let entry = entries.iter().find(|entry| entry.raw == "C-731284").unwrap_or_else(|| panic!("{input:?} -> {clean:?}"));
+            let entry = entries
+                .iter()
+                .find(|entry| entry.raw == "C-731284")
+                .unwrap_or_else(|| panic!("{input:?} -> {clean:?}"));
             assert_eq!(clean, input.replace("C-731284", &entry.token));
-            assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                input
+            );
         }
     }
 }
@@ -667,13 +736,19 @@ fn labelled_value_starts_keep_connectors_hashes_equals_and_numeric_wrappers() {
             let input = format!("{label}{start}{value}{end}");
             let session = Session::new(Scope::Ephemeral).unwrap();
             let CleanDocument::Text(clean) = pipeline
-                .redact(&session, RawDocument::Text(input.clone())).unwrap()
-            else { panic!("text") };
+                .redact(&session, RawDocument::Text(input.clone()))
+                .unwrap()
+            else {
+                panic!("text")
+            };
             let entries = session.snapshot_entries();
             assert_eq!(entries.len(), 1, "{input:?} -> {clean:?}");
             assert_eq!(entries[0].raw, value, "{input:?}");
             assert_eq!(clean, input.replace(value, &entries[0].token));
-            assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
+            assert_eq!(
+                pipeline.restore_strict_text(&session, &clean).unwrap(),
+                input
+            );
             checked += 1;
         }
     }
@@ -727,20 +802,36 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let input = format!("{case}\nPUBLIC COPY {case}");
         let CleanDocument::Text(clean) = pipeline
-            .redact(&session, RawDocument::Text(input.clone())).unwrap()
-        else { panic!("text") };
+            .redact(&session, RawDocument::Text(input.clone()))
+            .unwrap()
+        else {
+            panic!("text")
+        };
         assert_eq!(clean, input, "code or SQL changed");
-        assert!(session.snapshot_entries().is_empty(), "rejected value seeded sweep");
-        assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
+        assert!(
+            session.snapshot_entries().is_empty(),
+            "rejected value seeded sweep"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &clean).unwrap(),
+            input
+        );
     }
     let mut checked = 0;
     for label in ["customer_id", "employee_id", "member_id"] {
-        for dtype in ["i8", "u16", "i32", "u64", "i128", "int", "uint", "int4", "INT8", "Int32", "float32", "float64", "f64"] {
+        for dtype in [
+            "i8", "u16", "i32", "u64", "i128", "int", "uint", "int4", "INT8", "Int32", "float32",
+            "float64", "f64",
+        ] {
             for (connector, suffix) in [(": ", ","), (" ", " NOT NULL,"), ("=", "")] {
                 let input = format!("{label}{connector}{dtype}{suffix}\ncopy {dtype}");
                 let session = Session::new(Scope::Ephemeral).unwrap();
-                let CleanDocument::Text(clean) = pipeline.redact(&session, RawDocument::Text(input.clone())).unwrap()
-                else { panic!("text") };
+                let CleanDocument::Text(clean) = pipeline
+                    .redact(&session, RawDocument::Text(input.clone()))
+                    .unwrap()
+                else {
+                    panic!("text")
+                };
                 assert_eq!(clean, input, "type or its copy changed");
                 assert!(session.snapshot_entries().is_empty());
                 checked += 1;
