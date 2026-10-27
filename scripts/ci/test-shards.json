@@ -20,6 +20,7 @@
     "gaze-cli::safety_net_cli",
     "gaze-cli::secrets_rulepack",
     "gaze-cli::setup_policy",
+    "gaze-cli::structured_field_record_ids",
     "gaze-cli::wire_token_order"
   ],
   "runtime": [
@@ -121,6 +122,7 @@
     "gaze-proxy::restore_json_escape",
     "gaze-proxy::safety_net_fallback_redaction_state",
     "gaze-proxy::session_registry",
+    "gaze-proxy::structured_field_record_ids",
     "gaze-proxy::tool_call_structured_ids",
     "gaze-recognizers",
     "gaze-recognizers::anchored_match_fp_budget",
@@ -185,6 +187,7 @@
     "gaze-mcp-core::chokepoint_ordering",
     "gaze-mcp-core::concurrent_noop_conflict",
     "gaze-mcp-core::strict_contract",
+    "gaze-mcp-core::structured_field_record_ids",
     "gaze-mcp-core::tier_isolation",
     "gaze-mcp-core::tool_ctx_seal",
     "gaze-mcp-core::untrusted_request",
