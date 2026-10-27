@@ -189,7 +189,7 @@ fn prose_and_public_material_remain_untouched() {
         "--mask-None-values-in-the-output-stream".into(),
         "Your file starts with\n-----BEGIN OPENSSH PRIVATE KEY-----\nand then contains base64 lines you must never share with anyone at all.".into(),
         "A key starts with -----BEGIN PRIVATE KEY----- and ends with a matching footer.".into(),
-        format!("BAIza{}", "A".repeat(40)),
+        format!("BAIza{}", synthetic_suffix(40)),
     ];
     {
         negatives.extend([
