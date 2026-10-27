@@ -230,7 +230,13 @@ async fn dispatch_orders_begin_invoke_finish() {
     );
     let principal = Principal::new("test-principal");
     let response = envelope
-        .dispatch(&principal, "clean", json!({"text": "hi"}), None)
+        .dispatch(
+            &principal,
+            "clean",
+            json!({"text": "hi"}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
         .await
         .expect("dispatch ok");
 
@@ -289,7 +295,13 @@ async fn dispatch_redacts_agent_response_payload() {
         &policy,
     );
     let response = envelope
-        .dispatch(&Principal::new("test"), "lookup", json!({}), None)
+        .dispatch(
+            &Principal::new("test"),
+            "lookup",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
         .await
         .expect("dispatch ok");
 
@@ -334,7 +346,13 @@ async fn dispatch_bypasses_response_redaction_for_operator_with_bypass() {
         &policy,
     );
     let response = envelope
-        .dispatch(&Principal::new("operator"), "restore", json!({}), None)
+        .dispatch(
+            &Principal::new("operator"),
+            "restore",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
         .await
         .expect("dispatch ok");
 
@@ -390,6 +408,7 @@ async fn dispatch_writes_fail_call_on_tool_error() {
             "explode",
             json!({"text": "hi"}),
             None,
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect_err("tool error must propagate");
@@ -430,7 +449,13 @@ async fn dispatch_rejects_unknown_tool_before_manifest() {
         &policy,
     );
     let err = envelope
-        .dispatch(&Principal::new("test"), "absent", json!({}), None)
+        .dispatch(
+            &Principal::new("test"),
+            "absent",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
         .await
         .expect_err("unknown tool must fail closed");
 
@@ -474,7 +499,13 @@ async fn deny_all_hook_blocks_agent_dispatch_pre_manifest() {
         &policy,
     );
     let err = envelope
-        .dispatch(&Principal::new("test"), "clean", json!({}), None)
+        .dispatch(
+            &Principal::new("test"),
+            "clean",
+            json!({}),
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
         .await
         .expect_err("auth must reject");
 

@@ -420,6 +420,7 @@ fn envelope_dispatch_search_preserves_allow_deny_and_carrier_boundary() {
             "search_documents",
             args,
             None,
+            gaze_mcp_core::HostContextSelection::Absent,
         ))
     };
     let out = dispatch(json!({"source_token": token, "target_domain": CUSTOMER_DOMAIN,

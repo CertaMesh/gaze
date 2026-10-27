@@ -162,8 +162,18 @@ async fn run_case(
             session.tokenize(&gaze::PiiClass::Name, "")?;
             continue;
         }
-        let args = json!({"items": [format!("From: \"{name}\" <alice@example.invalid>")], "count": 0});
-        if let Err(error) = envelope.dispatch(&principal, "capture", args, None).await {
+        let args =
+            json!({"items": [format!("From: \"{name}\" <alice@example.invalid>")], "count": 0});
+        if let Err(error) = envelope
+            .dispatch(
+                &principal,
+                "capture",
+                args,
+                None,
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
+            .await
+        {
             return Ok(json!({"id":case.id,"phase":"seed","error":error.to_string()}));
         }
     }
@@ -192,7 +202,15 @@ async fn run_case(
             json!([])
         }
     };
-    let result = envelope.dispatch(&principal, "capture", args, None).await;
+    let result = envelope
+        .dispatch(
+            &principal,
+            "capture",
+            args,
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
+        .await;
     let (response, error) = match result {
         Ok(response) => (response.payload, Value::Null),
         Err(error) => (Value::Null, json!(error.to_string())),

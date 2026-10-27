@@ -241,6 +241,28 @@ pub fn pipeline_with_context(
         .with_recognizer_registry(detection.registry().clone()))
 }
 
+/// Assemble a request-local policy after translating private context identifiers.
+/// The caller must preserve the resident policy's actions. Models and audit sinks
+/// remain resident; the assembled request policy supplies rules and recognizers.
+pub fn pipeline_with_private_context(
+    resident: &Pipeline,
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) -> Result<Pipeline, BuildError> {
+    let request = build_pipeline_builder_inner(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        None,
+        Some(resident.registry()),
+    )?
+    .build()?;
+    Ok(resident.clone().with_detection_policy_from(&request))
+}
+
 fn build_pipeline_builder_inner(
     policy: &gaze::Policy,
     context: &Context,
