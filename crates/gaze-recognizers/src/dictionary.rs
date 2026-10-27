@@ -236,7 +236,11 @@ impl Recognizer for DictionaryRecognizer {
                     ))
                 })
                 .collect::<Vec<_>>();
-            normalized_text = Some(folded);
+            normalized_text = Some(FoldedInput {
+                text: folded,
+                starts,
+                ends,
+            });
             hits
         } else {
             self.automaton_for(entry)
@@ -268,7 +272,7 @@ impl Recognizer for DictionaryRecognizer {
                     && (!corroborate_single_name
                         || corroborated_record_name(
                             input,
-                            normalized_text.as_deref().unwrap_or(input),
+                            normalized_text.as_ref(),
                             *start,
                             *end,
                             ctx,
@@ -384,14 +388,21 @@ fn fold_with_original_offsets(
     (folded, starts, ends)
 }
 
+struct FoldedInput {
+    text: String,
+    starts: HashMap<usize, usize>,
+    ends: HashMap<usize, usize>,
+}
+
 fn corroborated_record_name(
     input: &str,
-    normalized_input: &str,
+    folded: Option<&FoldedInput>,
     start: usize,
     end: usize,
     ctx: &DetectContext<'_>,
     own_name: &str,
 ) -> bool {
+    let normalized_input = folded.map_or(input, |view| view.text.as_str());
     let matched = &input[start..end];
     let Some(first) = matched.chars().next() else {
         return false;
@@ -436,11 +447,25 @@ fn corroborated_record_name(
                         && normalized_input
                             .match_indices(&folded_term)
                             .any(|(span_start, _)| {
-                                is_token_boundary_match(
+                                let span_end = span_start + folded_term.len();
+                                // Preserve folded lexical rules; translate only the extra
+                                // source-gap evidence through length-changing case folds.
+                                let before_gap = folded
+                                    .and_then(|view| view.starts.get(&span_start))
+                                    .is_some_and(|&at| {
+                                        crate::source_regex::is_gap(ctx.source_spans, at)
+                                    });
+                                let after_gap = folded
+                                    .and_then(|view| view.ends.get(&span_end))
+                                    .is_some_and(|&at| {
+                                        crate::source_regex::is_gap(ctx.source_spans, at)
+                                    });
+                                token_boundaries_allow(
                                     normalized_input,
                                     span_start,
-                                    span_start + folded_term.len(),
-                                    None,
+                                    span_end,
+                                    before_gap,
+                                    after_gap,
                                 )
                             })
                         && name_position(input, start, end);
@@ -484,9 +509,24 @@ fn is_token_boundary_match(
     end: usize,
     source_spans: Option<&[(usize, usize)]>,
 ) -> bool {
-    (crate::source_regex::is_gap(source_spans, start) || !has_identifier_char_before(input, start))
-        && (crate::source_regex::is_gap(source_spans, end)
-            || !has_identifier_char_after(input, end))
+    token_boundaries_allow(
+        input,
+        start,
+        end,
+        crate::source_regex::is_gap(source_spans, start),
+        crate::source_regex::is_gap(source_spans, end),
+    )
+}
+
+fn token_boundaries_allow(
+    input: &str,
+    start: usize,
+    end: usize,
+    before_gap: bool,
+    after_gap: bool,
+) -> bool {
+    (before_gap || !has_identifier_char_before(input, start))
+        && (after_gap || !has_identifier_char_after(input, end))
 }
 
 fn has_identifier_char_before(input: &str, start: usize) -> bool {
