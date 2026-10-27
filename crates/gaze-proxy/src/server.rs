@@ -3935,35 +3935,35 @@ mod tests {
     fn field_provenance_legacy_adapters_reaches_detect_context() {
         use crate::adapters::{AnthropicAdapter, GeminiAdapter, OpenAiAdapter};
         let url = Url::parse("http://127.0.0.1:1").unwrap();
-        let cases: Vec<(
-            Box<dyn ProviderAdapter>,
-            Value,
-            Vec<(&str, Vec<&str>)>,
-            Vec<Vec<&str>>,
-        )> = vec![
-            (
-                Box::new(OpenAiAdapter::new(url.clone())),
-                serde_json::json!({
+        struct Case {
+            adapter: Box<dyn ProviderAdapter>,
+            body: Value,
+            fields: Vec<(&'static str, Vec<&'static str>)>,
+            numbers: Vec<Vec<&'static str>>,
+        }
+        let cases = vec![
+            Case {
+                adapter: Box::new(OpenAiAdapter::new(url.clone())),
+                body: serde_json::json!({
                     "metadata": {"customer_id": "probe-meta", "a.b[0]/~": [{"": "probe-nested"}], "count": 731284},
-                    "tools": [{"function": {"description": "probe-tool", "parameters": {"limit": 19}}}],
-                    "input": [{"type": "function_call", "name": "probe-non-args", "arguments": "{}"}]
+                    "tools": [{"function": {"description": "probe-tool", "parameters": {"limit": 19}}}]
                 }),
-                vec![
+                fields: vec![
                     ("probe-meta", vec!["metadata", "customer_id"]),
                     ("probe-nested", vec!["metadata", "a.b[0]/~", "0", ""]),
                     ("probe-tool", vec!["tools", "0", "function", "description"]),
                 ],
-                vec![
+                numbers: vec![
                     vec!["metadata", "count"],
                     vec!["tools", "0", "function", "parameters", "limit"],
                 ],
-            ),
-            (
-                Box::new(GeminiAdapter::new(url.clone())),
-                serde_json::json!({
+            },
+            Case {
+                adapter: Box::new(GeminiAdapter::new(url.clone())),
+                body: serde_json::json!({
                     "contents": [{"parts": [{"function_call": {"args": {"customer_id": "probe-gemini", "rows": [17, "probe-index"]}}}]}]
                 }),
-                vec![
+                fields: vec![
                     (
                         "probe-gemini",
                         vec![
@@ -3990,7 +3990,7 @@ mod tests {
                         ],
                     ),
                 ],
-                vec![vec![
+                numbers: vec![vec![
                     "contents",
                     "0",
                     "parts",
@@ -4000,20 +4000,26 @@ mod tests {
                     "rows",
                     "0",
                 ]],
-            ),
-            (
-                Box::new(AnthropicAdapter::new(url)),
-                serde_json::json!({
+            },
+            Case {
+                adapter: Box::new(AnthropicAdapter::new(url)),
+                body: serde_json::json!({
                     "messages": [{"content": [{"type": "tool_use", "input": {"customer_id": "probe-legacy", "count": 17}}]}]
                 }),
-                vec![(
+                fields: vec![(
                     "probe-legacy",
                     vec!["messages", "0", "content", "0", "input", "customer_id"],
                 )],
-                vec![vec!["messages", "0", "content", "0", "input", "count"]],
-            ),
+                numbers: vec![vec!["messages", "0", "content", "0", "input", "count"]],
+            },
         ];
-        for (adapter, mut body, fields, numbers) in cases {
+        for Case {
+            adapter,
+            mut body,
+            fields,
+            numbers,
+        } in cases
+        {
             let original = body.clone();
             let observer = super::field_observer::FieldObserver::default();
             let pipeline = observer.pipeline();

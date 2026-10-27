@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
+use std::sync::Arc;
 
 use zeroize::Zeroizing;
 
@@ -632,8 +633,28 @@ struct JsonDocument {
     occurrence_count: usize,
 }
 
+// Share ancestor keys across nodes. A long key above a wide array must not be
+// copied once per descendant merely to retain structural evidence.
+struct JsonFieldPath {
+    parent: Option<Arc<JsonFieldPath>>,
+    segment: String,
+}
+
+impl JsonFieldPath {
+    fn field_path(path: &Option<Arc<Self>>) -> gaze_types::FieldPath {
+        let mut segments = Vec::new();
+        let mut current = path.as_deref();
+        while let Some(node) = current {
+            segments.push(node.segment.clone());
+            current = node.parent.as_deref();
+        }
+        segments.reverse();
+        gaze_types::FieldPath::new(segments)
+    }
+}
+
 struct JsonNode {
-    path: gaze_types::FieldPath,
+    path: Option<Arc<JsonFieldPath>>,
     occurrence: usize,
     span: Range<usize>,
     raw_preserve: bool,
@@ -823,7 +844,7 @@ fn parse_json(
     };
     parser.skip_whitespace();
     let root = parser
-        .parse_value(0, &[])
+        .parse_value(0, &None)
         .map_err(|code| codec_error(code, phase))?;
     parser.skip_whitespace();
     if parser.position != input.len() {
@@ -836,7 +857,11 @@ fn parse_json(
 }
 
 impl JsonParser<'_> {
-    fn parse_value(&mut self, depth: usize, path: &[String]) -> Result<JsonNode, CodecErrorCode> {
+    fn parse_value(
+        &mut self,
+        depth: usize,
+        path: &Option<Arc<JsonFieldPath>>,
+    ) -> Result<JsonNode, CodecErrorCode> {
         if depth > self.limits.max_json_depth() {
             return Err(CodecErrorCode::DepthLimitExceeded);
         }
@@ -869,7 +894,7 @@ impl JsonParser<'_> {
             _ => return Err(CodecErrorCode::InvalidJson),
         };
         Ok(JsonNode {
-            path: gaze_types::FieldPath::new(path.iter().cloned()),
+            path: path.clone(),
             occurrence,
             span: start..self.position,
             raw_preserve: false,
@@ -877,7 +902,11 @@ impl JsonParser<'_> {
         })
     }
 
-    fn parse_object(&mut self, depth: usize, path: &[String]) -> Result<JsonKind, CodecErrorCode> {
+    fn parse_object(
+        &mut self,
+        depth: usize,
+        path: &Option<Arc<JsonFieldPath>>,
+    ) -> Result<JsonKind, CodecErrorCode> {
         self.position += 1;
         self.skip_whitespace();
         let mut members = Vec::new();
@@ -903,8 +932,10 @@ impl JsonParser<'_> {
                 return Err(CodecErrorCode::InvalidJson);
             }
             self.skip_whitespace();
-            let mut child = path.to_vec();
-            child.push(key.value.clone());
+            let child = Some(Arc::new(JsonFieldPath {
+                parent: path.clone(),
+                segment: key.value.clone(),
+            }));
             let value = self.parse_value(depth, &child)?;
             members.push(JsonMember {
                 key_occurrence,
@@ -921,7 +952,11 @@ impl JsonParser<'_> {
         Ok(JsonKind::Object(members))
     }
 
-    fn parse_array(&mut self, depth: usize, path: &[String]) -> Result<JsonKind, CodecErrorCode> {
+    fn parse_array(
+        &mut self,
+        depth: usize,
+        path: &Option<Arc<JsonFieldPath>>,
+    ) -> Result<JsonKind, CodecErrorCode> {
         self.position += 1;
         self.skip_whitespace();
         let mut values = Vec::new();
@@ -930,8 +965,10 @@ impl JsonParser<'_> {
             return Ok(JsonKind::Array(values));
         }
         loop {
-            let mut child = path.to_vec();
-            child.push(values.len().to_string());
+            let child = Some(Arc::new(JsonFieldPath {
+                parent: path.clone(),
+                segment: values.len().to_string(),
+            }));
             values.push(self.parse_value(depth, &child)?);
             self.skip_whitespace();
             match self.take() {
@@ -2857,7 +2894,7 @@ fn transform_request_string(
     guard_request_mutable_text(&value.value, ctx)?;
     ctx.validate_token_shapes(&value.value)?;
     let field = gaze_types::FieldProvenance::new(
-        node.path.clone(),
+        JsonFieldPath::field_path(&node.path),
         gaze_types::JsonScalarType::String,
         gaze_types::FieldEvidence::ValidatedParse,
     );
