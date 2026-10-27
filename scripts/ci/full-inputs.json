@@ -213,6 +213,7 @@
     "docs/explanation/detection/labelled-identifiers.md",
     "docs/explanation/detection/manifest-sweep.md",
     "docs/explanation/detection/ner-failclosed.md",
+    "docs/explanation/detection/outcomes.md",
     "docs/explanation/detection/password-credentials.md",
     "docs/explanation/detection/recognizer-normalizer-spans.md",
     "docs/explanation/detection/validator-veto.md",
