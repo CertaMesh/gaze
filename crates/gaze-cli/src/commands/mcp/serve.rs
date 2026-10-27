@@ -87,6 +87,7 @@ impl DispatchHost for McpHost {
         tool_name: &str,
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
+        host_context: gaze_mcp_core::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         let envelope = PiiEnvelope::new(
             &self.registry,
@@ -98,7 +99,15 @@ impl DispatchHost for McpHost {
             &self.session_id_policy,
         );
         envelope
-            .dispatch(principal, tool_name, raw_args, external_session_id)
+            .with_context_policy(self.pipeline.policy(), self.pipeline.rulepacks())
+            .with_dictionaries(self.pipeline.dictionaries())
+            .dispatch(
+                principal,
+                tool_name,
+                raw_args,
+                external_session_id,
+                host_context,
+            )
             .await
     }
 
@@ -285,6 +294,7 @@ mod strict_host_tests {
                 "gaze_read_text",
                 serde_json::json!({"text":input}),
                 None,
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await
             .expect("document text succeeds");
@@ -453,6 +463,7 @@ mod manifest_store_tests {
                 "gaze_read_text",
                 args.clone(),
                 Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await;
         if block_begin || block_terminal {

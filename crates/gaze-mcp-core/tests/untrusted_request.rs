@@ -171,11 +171,18 @@ async fn run(
                 "test",
                 UntrustedInvocationArgs::new(input.clone()),
                 None,
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await
     } else {
         envelope
-            .dispatch(&Principal::new("test"), "test", input.clone(), None)
+            .dispatch(
+                &Principal::new("test"),
+                "test",
+                input.clone(),
+                None,
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
             .await
     };
     let admitted =

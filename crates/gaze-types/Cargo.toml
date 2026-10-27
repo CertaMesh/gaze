@@ -23,6 +23,7 @@ path = "src/lib.rs"
 serde = { workspace = true, features = ["derive"] }
 sha3 = "0.10"
 thiserror = { workspace = true }
+unicode-normalization = "0.1"
 phonenumber = { version = "0.3.9", default-features = false, optional = true }
 
 [dev-dependencies]

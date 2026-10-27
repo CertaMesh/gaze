@@ -54,6 +54,45 @@ protection outcomes and structured-field evidence for future recognizers.
 Detection behavior is unchanged. See [Protection outcomes and field
 evidence](docs/explanation/detection/outcomes.md) for the contracts.
 
+### Breaking: trusted snapshot version 8 for private host identifiers
+
+MCP private class and dictionary labels now use domain-separated HMAC identifiers
+under a dedicated random session key. Identical names have stable labels within
+one session and different labels in independent sessions. No original identifier
+is retained for this translation. Record-generated dictionary names receive the
+same protection, including audit recognizer labels.
+
+When this namespace is used, `Session::export` writes a version 8 snapshot with
+the key in the signed trusted payload. Import preserves the key, labels and later
+turn protection. Treat this blob as sensitive owner data, like its original
+values. Do not send it to the model. Upgrade readers before opening version 8
+blobs; earlier readers reject them. Sessions that never use the namespace keep
+the existing version 6 or 7 encoding.
+
+Each label authenticates its namespace under the key. Merely allocating a new
+key does not make legacy or foreign labels valid for dispatch. Within MCP,
+`host_` followed by 32 or 64 hexadecimal digits is reserved for these labels;
+rename hand-written custom classes that use this form.
+
+Old snapshots without the key still restore their tokens. MCP dispatch refuses
+old opaque `host_` classes before invocation or audit instead of guessing their
+policy aliases. Restore owner data and start a fresh session to continue those
+legacy conversations. Ordinary old snapshots without opaque classes remain usable.
+
+### Action required: pass an explicit MCP host context selection
+
+`DispatchHost::dispatch`, `PiiEnvelope::dispatch`, and `dispatch_request` now take
+`HostContextSelection` as the final argument. Pass `HostContextSelection::Absent`
+for existing behavior. A host that supports private records forwards `Present`
+to an envelope configured with the exact resident policy and rulepacks through
+`with_context_policy`. Other hosts must return `HostContextError::Unsupported`.
+
+The rmcp adapter ignores the legacy `_session_id` tool argument. For optional audit
+correlation, embedded middleware supplies `HostCallContext::audit_session_id` in
+request extensions. The host selects the Session independently of that id.
+`DispatchArgs::session_id` is removed. `rmcp_args_to_dispatch_args` now returns
+`DispatchArgs` directly because translation no longer validates an argument id.
+
 ### Action required: replace positional context arrays
 
 Context JSON now requires a top-level object. `gaze clean --context-json`
@@ -74,12 +113,13 @@ Upgrade every process that restores a blob before, or together with, every
 process that writes one.
 
 A session now records whether each value was captured inside a JSON string
-literal in its escaped spelling. A manifest that holds such a value exports as
-envelope version 7. Every other manifest still exports as version 6.
+literal in its escaped spelling. Unless the session uses the private host identifier namespace described above,
+a manifest that holds such a value exports as envelope version 7; other
+manifests export as version 6.
 
 - A v0.17 or older reader refuses a v7 blob with `InvalidSnapshotVersion(7)`.
   It fails closed; nothing is restored.
-- This release imports v2 to v7 blobs. Older blobs restore exactly as before;
+- This release imports v2 to v8 blobs. Older blobs restore exactly as before;
   their values read as plain text.
 
 `gaze-proxy` restores such a value into Anthropic `tool_use.input` as the value
