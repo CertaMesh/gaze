@@ -65,6 +65,7 @@
     "Cargo.toml",
     "README.md",
     "UPGRADE.md",
+    "anvil.yaml",
     "crates/feature-graph-probe/Cargo.toml",
     "crates/gaze-assembly/Cargo.toml",
     "crates/gaze-assembly/README.md",
@@ -918,7 +919,8 @@
     "scripts/ci/check_competitor_capture_mutations.py",
     "scripts/ci/check_past_capture_mutations.py",
     "scripts/ci/tutorial_gate.py",
-    "scripts/fetch/fetch-ner-model.sh"
+    "scripts/fetch/fetch-ner-model.sh",
+    "scripts/gate/audit-outcome-mutation-probe.py"
   ],
   "patterns": {
     "crates/*/build.rs": "Cargo build scripts",

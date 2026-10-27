@@ -197,6 +197,11 @@ impl ColumnSpec {
 }
 
 const REDACTION_LOG_COLUMNS: &[ColumnSpec] = &[
+    ColumnSpec { name: "outcome", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "outcome_reason", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "field_path_depth", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "field_evidence", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+
     ColumnSpec { name: "source", sql_type: "TEXT", constraint: ColumnConstraint::NotNull, migrate: false, backfill: None },
     ColumnSpec { name: "recognizer_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: Some("UPDATE redaction_log SET recognizer_id = 'legacy_unversioned' WHERE recognizer_id IS NULL") },
     ColumnSpec { name: "recognizer_version_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
@@ -383,6 +388,9 @@ impl SqliteLogger {
     }
 
     fn insert_redaction(conn: &Connection, entry: &RedactionEntry) -> Result<()> {
+        let outcome = serialize_label(entry.outcome.as_ref())?;
+        let outcome_reason = serialize_label(entry.outcome_reason.as_ref())?;
+        let field_evidence = serialize_json_column(entry.field_evidence.as_ref())?;
         let validator_fail_reason = serialize_json_column(entry.validator_fail_reason.as_ref())?;
         let labelled_value_scan_reason =
             serialize_json_column(entry.labelled_value_scan_reason.as_ref())?;
@@ -395,7 +403,7 @@ impl SqliteLogger {
         let backend_silently_dropped =
             serialize_json_column(entry.backend_silently_dropped.as_ref())?;
         conn.execute(
-            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count, labelled_value_scan_reason) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count, labelled_value_scan_reason, outcome, outcome_reason, field_path_depth, field_evidence) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40)",
             params![
                 entry.source,
                 entry.recognizer_id,
@@ -433,6 +441,10 @@ impl SqliteLogger {
                 entry.restore_phase_mask.map(i64::from),
                 entry.restore_trap_shape_count.map(|value| value as i64),
                 labelled_value_scan_reason,
+                outcome,
+                outcome_reason,
+                entry.field_path_depth.map(i64::from),
+                field_evidence,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -649,6 +661,28 @@ fn redaction_log_column_names(conn: &Connection) -> Result<BTreeSet<String>> {
     Ok(names)
 }
 
+fn serialize_label<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
+    value
+        .map(|value| {
+            serde_json::to_value(value)
+                .and_then(serde_json::from_value::<String>)
+                .map_err(|err| AuditError::Sqlite(err.to_string()))
+        })
+        .transpose()
+}
+
+fn parse_label<T: DeserializeOwned>(
+    value: Option<String>,
+    column: &'static str,
+) -> rusqlite::Result<Option<T>> {
+    value
+        .map(|value| {
+            serde_json::from_value(serde_json::Value::String(value))
+                .map_err(|err| conversion_error(column, rusqlite::types::Type::Text, err))
+        })
+        .transpose()
+}
+
 fn serialize_json_column<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
     value
         .map(serde_json::to_string)
@@ -668,6 +702,10 @@ fn document_kind_to_db(kind: &DocumentKind) -> &'static str {
 fn decode_audit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AuditLogRow> {
     Ok(AuditLogRow {
         source: row.get("source")?,
+        outcome: row.get("outcome")?,
+        outcome_reason: row.get("outcome_reason")?,
+        field_path_depth: row.get("field_path_depth")?,
+        field_evidence: row.get("field_evidence")?,
         recognizer_id: row.get("recognizer_id")?,
         recognizer_version_id: row.get("recognizer_version_id")?,
         class: row.get("class")?,
@@ -804,6 +842,10 @@ fn audit_row_to_entry(
         raw.provenance_confidence,
         raw.provenance_merged_from,
     );
+    entry.outcome = parse_label(raw.outcome, "outcome")?;
+    entry.outcome_reason = parse_label(raw.outcome_reason, "outcome_reason")?;
+    entry.field_path_depth = checked_counter(raw.field_path_depth, "field_path_depth")?;
+    entry.field_evidence = parse_json(raw.field_evidence, "field_evidence")?;
     entry.validator_fail_reason = parse_json(raw.validator_fail_reason, "validator_fail_reason")?;
     entry.ambiguity_record = parse_json(raw.ambiguity_record, "ambiguity_record")?;
     entry.labelled_value_scan_reason =

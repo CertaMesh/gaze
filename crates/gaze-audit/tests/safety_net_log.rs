@@ -214,6 +214,8 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
             provenance_native_class: None,
             provenance_confidence: None,
             provenance_merged_from: None,
+            outcome: None,
+            outcome_reason: None,
             restore_events_only: false,
         },
     )
@@ -335,6 +337,11 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             snapshot_key_version: None,
             validator_fail_reason: None,
             labelled_value_scan_reason: None,
+            outcome: None,
+            outcome_reason: None,
+            field_path_depth: None,
+            field_evidence: None,
+
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,
@@ -375,6 +382,11 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             snapshot_key_version: None,
             validator_fail_reason: None,
             labelled_value_scan_reason: None,
+            outcome: None,
+            outcome_reason: None,
+            field_path_depth: None,
+            field_evidence: None,
+
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,

@@ -8,7 +8,7 @@ use gaze_audit::{
     AuditFilter, AuditLogRow, LeakSuspectRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
     SAFETY_NET_RESTRICTED_COLUMNS,
 };
-use gaze_types::{AmbiguityRecord, ValidatorFailReason};
+use gaze_types::{AmbiguityRecord, FieldEvidence, ValidatorFailReason};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -25,6 +25,8 @@ pub(crate) struct Args {
     pub(crate) session_id: Option<String>,
     pub(crate) has_ambiguity: bool,
     pub(crate) ambiguity_reason: Option<String>,
+    pub(crate) outcome: Option<String>,
+    pub(crate) outcome_reason: Option<String>,
     pub(crate) collision_family: Option<String>,
     pub(crate) collision_variant: Option<String>,
     pub(crate) restore_events_only: bool,
@@ -70,7 +72,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     }
     for row in rows {
         let base = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.recognizer_id.as_deref().unwrap_or(""),
             row.recognizer_version_id.as_deref().unwrap_or(""),
@@ -124,7 +126,11 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.restore_trap_shape_count
                 .map(|count| count.to_string())
                 .unwrap_or_default(),
-            row.labelled_value_scan_reason.as_deref().unwrap_or("")
+            row.labelled_value_scan_reason.as_deref().unwrap_or(""),
+            row.outcome.as_deref().unwrap_or(""),
+            row.outcome_reason.as_deref().unwrap_or(""),
+            row.field_path_depth.map(|depth| depth.to_string()).unwrap_or_default(),
+            row.field_evidence.as_deref().unwrap_or("")
         );
         if include_ambiguity {
             writeln!(
@@ -211,6 +217,8 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
     let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
     let to_epoch_ms = parse_iso8601_epoch_ms(args.to_iso8601.as_deref())?;
     let filter = AuditFilter {
+        outcome: args.outcome.as_deref().map(normalize_kebab_variant),
+        outcome_reason: args.outcome_reason.as_deref().map(normalize_kebab_variant),
         class: args.class.clone(),
         source: args.source.clone(),
         action: args.action.clone(),
@@ -254,6 +262,8 @@ fn read_safety_net_rows(
     let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
     let to_epoch_ms = parse_iso8601_epoch_ms(args.to_iso8601.as_deref())?;
     let filter = AuditFilter {
+        outcome: None,
+        outcome_reason: None,
         class: args.mapped_class.clone(),
         source: None,
         action: args.leak_kind.clone(),
@@ -369,6 +379,11 @@ fn ambiguity_display(value: &Option<String>) -> Result<String, CliError> {
 
 #[derive(Serialize)]
 struct JsonlRow {
+    outcome: Option<String>,
+    outcome_reason: Option<String>,
+    field_path_depth: Option<i64>,
+    field_evidence: Option<FieldEvidence>,
+
     source: String,
     recognizer_id: Option<String>,
     recognizer_version_id: Option<String>,
@@ -414,6 +429,10 @@ impl TryFrom<AuditLogRow> for JsonlRow {
 
     fn try_from(row: AuditLogRow) -> Result<Self, Self::Error> {
         Ok(Self {
+            outcome: row.outcome,
+            outcome_reason: row.outcome_reason,
+            field_path_depth: row.field_path_depth,
+            field_evidence: parse_json_opt(row.field_evidence)?,
             source: row.source,
             recognizer_id: row.recognizer_id,
             recognizer_version_id: row.recognizer_version_id,

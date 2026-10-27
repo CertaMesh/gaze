@@ -410,3 +410,18 @@ See [`docs/explanation/proxy/proxy-runtime.md`](../explanation/proxy/proxy-runti
 the adapter and daemon contract. See
 [`crates/gaze-proxy/README.md`](../../crates/gaze-proxy/README.md) for the crate
 README.
+
+## Protection outcome audit filters
+
+`gaze audit query` and `gaze audit export` accept these additional filters:
+
+| Flag | Value |
+| --- | --- |
+| `--outcome` | `protected`, `non_sensitive`, `possibly_sensitive`, or `confirmed_untransformable` |
+| `--outcome-reason` | A closed reason such as `label_value_shape_unclear`, `other_field_repeat`, or `json_number_no_text_only_path` |
+
+Kebab-case spellings are also accepted. Both filters combine with all other
+filters using AND. Legacy rows without outcome metadata do not match.
+The output includes `outcome`, `outcome_reason`, `field_path_depth`, and
+`field_evidence`. Path depth counts JSON-pointer segments. Keys and scalar values
+are excluded. See [Protection outcomes and field evidence](../explanation/detection/outcomes.md#audit-metadata).

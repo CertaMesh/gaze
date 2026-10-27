@@ -468,6 +468,8 @@ fn audit_sql_uses_restricted_column_set() {
         provenance_native_class: None,
         provenance_confidence: None,
         provenance_merged_from: None,
+        outcome: None,
+        outcome_reason: None,
         restore_events_only: false,
     };
     let current_columns = PresentColumns::new(

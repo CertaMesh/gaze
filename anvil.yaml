@@ -114,3 +114,29 @@ checks:
     commands:
       - cargo fmt --all -- --check
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/gate/os-keystore-mutation-probe.py --focused
+
+  audit-outcomes-test:
+    description: Workspace all-features tests for audit outcome changes
+    expensive: true
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/anvil/test_nonempty.py cargo test --workspace --all-features
+  audit-outcomes-lint:
+    description: Format and lint audit outcome changes with two build jobs
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - cargo fmt --all -- --check
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
+  audit-outcomes-isolation:
+    description: Metadata and Dylint audit isolation gates
+    expensive: true
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, lint/dylint, dylint.toml, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo run -p xtask --locked -- cargo-metadata-audit-isolation
+      - env CARGO_BUILD_JOBS=2 GAZE_DYLINT_REQUIRED=1 nice -n 10 cargo run -p xtask --locked -- dylint-gate

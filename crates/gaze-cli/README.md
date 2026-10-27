@@ -222,7 +222,7 @@ For the full runtime contract, see
 $ gaze audit query --audit-db audit.sqlite --class email --action tokenize
 ```
 
-Reads metadata as TSV with `SQLITE_OPEN_READ_ONLY`. Filters cover class, source, action, document kind, and inclusive `--from` / `--to` ISO8601 timestamps. Time filters omit legacy NULL timestamps; unfiltered queries retain them. Complete filters: [CLI reference](../../docs/reference/cli.md).
+Reads metadata as TSV with `SQLITE_OPEN_READ_ONLY`. Filters cover class, source, action, protection outcome and reason, document kind, and inclusive `--from` / `--to` ISO8601 timestamps. Time filters omit legacy NULL timestamps; unfiltered queries retain them. Complete filters: [CLI reference](../../docs/reference/cli.md).
 
 ## `audit export`
 

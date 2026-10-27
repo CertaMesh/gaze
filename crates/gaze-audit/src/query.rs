@@ -43,6 +43,8 @@ pub struct AuditFilter {
     pub provenance_native_class: Option<String>,
     pub provenance_confidence: Option<f64>,
     pub provenance_merged_from: Option<String>,
+    pub outcome: Option<String>,
+    pub outcome_reason: Option<String>,
     pub restore_events_only: bool,
 }
 
@@ -54,6 +56,10 @@ pub struct AuditFilter {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AuditLogRow {
     pub source: String,
+    pub outcome: Option<String>,
+    pub outcome_reason: Option<String>,
+    pub field_path_depth: Option<i64>,
+    pub field_evidence: Option<String>,
     pub recognizer_id: Option<String>,
     pub recognizer_version_id: Option<String>,
     pub class: String,
@@ -161,6 +167,10 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "restore_phase_mask",
     "restore_trap_shape_count",
     "labelled_value_scan_reason",
+    "outcome",
+    "outcome_reason",
+    "field_path_depth",
+    "field_evidence",
 ];
 
 pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
@@ -290,6 +300,22 @@ fn build_redaction_query_sql(
             predicates.push("NULL = ?");
         }
         values.push(Value::Text(recognizer_version_id.clone()));
+    }
+    if let Some(value) = &filter.outcome {
+        if present_columns.contains("outcome") {
+            predicates.push("outcome = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(value.clone()));
+    }
+    if let Some(value) = &filter.outcome_reason {
+        if present_columns.contains("outcome_reason") {
+            predicates.push("outcome_reason = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(value.clone()));
     }
     if let Some(action) = &filter.action {
         predicates.push("action = ?");
@@ -598,11 +624,11 @@ mod tests {
     fn generated_sql_is_byte_identical_for_column_presence_matrix() {
         assert_eq!(
             build_with_columns(&OPTIONAL_COLUMNS),
-            "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, snapshot_scheme, snapshot_alg, snapshot_key_version, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, NULL AS restore_trap_shape_count, labelled_value_scan_reason FROM redaction_log ORDER BY rowid"
+            "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, snapshot_scheme, snapshot_alg, snapshot_key_version, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, NULL AS restore_trap_shape_count, labelled_value_scan_reason, NULL AS outcome, NULL AS outcome_reason, NULL AS field_path_depth, NULL AS field_evidence FROM redaction_log ORDER BY rowid"
         );
         assert_eq!(
             build_with_columns(&[]),
-            "SELECT source, NULL AS recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, NULL AS created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, 'SHA-256' AS snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, NULL AS ambiguity_record, NULL AS collision_family, NULL AS collision_variant, NULL AS fallback_triggered, NULL AS provenance_stage, NULL AS provenance_model_id, NULL AS provenance_model_version, NULL AS provenance_artifact_sha256, NULL AS provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, NULL AS provenance_locale_match_kind, NULL AS provenance_canonical_class, NULL AS provenance_native_class, NULL AS provenance_confidence, NULL AS provenance_merged_from, NULL AS restore_policy, NULL AS restore_decision, NULL AS restore_unknown_token_count, NULL AS restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, NULL AS restore_phase_mask, NULL AS restore_trap_shape_count, NULL AS labelled_value_scan_reason FROM redaction_log ORDER BY rowid"
+            "SELECT source, NULL AS recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, NULL AS created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, 'SHA-256' AS snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, NULL AS ambiguity_record, NULL AS collision_family, NULL AS collision_variant, NULL AS fallback_triggered, NULL AS provenance_stage, NULL AS provenance_model_id, NULL AS provenance_model_version, NULL AS provenance_artifact_sha256, NULL AS provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, NULL AS provenance_locale_match_kind, NULL AS provenance_canonical_class, NULL AS provenance_native_class, NULL AS provenance_confidence, NULL AS provenance_merged_from, NULL AS restore_policy, NULL AS restore_decision, NULL AS restore_unknown_token_count, NULL AS restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, NULL AS restore_phase_mask, NULL AS restore_trap_shape_count, NULL AS labelled_value_scan_reason, NULL AS outcome, NULL AS outcome_reason, NULL AS field_path_depth, NULL AS field_evidence FROM redaction_log ORDER BY rowid"
         );
         let mixed = [
             "created_at",
@@ -622,7 +648,7 @@ mod tests {
         ];
         assert_eq!(
             build_with_columns(&mixed),
-            "SELECT source, recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, ambiguity_record, NULL AS collision_family, collision_variant, NULL AS fallback_triggered, provenance_stage, NULL AS provenance_model_id, provenance_model_version, NULL AS provenance_artifact_sha256, provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, provenance_locale_match_kind, NULL AS provenance_canonical_class, provenance_native_class, NULL AS provenance_confidence, provenance_merged_from, NULL AS restore_policy, restore_decision, NULL AS restore_unknown_token_count, restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, restore_phase_mask, NULL AS restore_trap_shape_count, NULL AS labelled_value_scan_reason FROM redaction_log ORDER BY rowid"
+            "SELECT source, recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, ambiguity_record, NULL AS collision_family, collision_variant, NULL AS fallback_triggered, provenance_stage, NULL AS provenance_model_id, provenance_model_version, NULL AS provenance_artifact_sha256, provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, provenance_locale_match_kind, NULL AS provenance_canonical_class, provenance_native_class, NULL AS provenance_confidence, provenance_merged_from, NULL AS restore_policy, restore_decision, NULL AS restore_unknown_token_count, restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, restore_phase_mask, NULL AS restore_trap_shape_count, NULL AS labelled_value_scan_reason, NULL AS outcome, NULL AS outcome_reason, NULL AS field_path_depth, NULL AS field_evidence FROM redaction_log ORDER BY rowid"
         );
     }
 
