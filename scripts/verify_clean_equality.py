@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -163,11 +164,14 @@ def main():
         for mode in ("no-policy", "setup-policy"):
             before = len(differences)
             mode_count = 0
+            print(f"EQUALITY {comparisons}/{len(cases) * 2}: starting {mode}", file=sys.stderr, flush=True)
             for case_id, text in cases:
                 observations = [clean(binary, text, cwd, policies[side] if mode == "setup-policy" else None)
                                     for side, binary in enumerate(binaries)]
                 comparisons += 1
                 mode_count += 1
+                if comparisons % 50 == 0 or mode_count == len(cases):
+                    print(f"EQUALITY {comparisons}/{len(cases) * 2}: {mode}", file=sys.stderr, flush=True)
                 for side, (code, body) in enumerate(observations):
                     exits[side][str(code)] = exits[side].get(str(code), 0) + 1
                     detections[side] += body.get("stats", {}).get("detections", 0)

@@ -24,6 +24,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
+    total = len(set(args.probe)) or len(CODEPOINTS) + 16
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -40,6 +41,7 @@ def main():
         seen.add(name)
         if args.probe and name not in args.probe:
             return
+        print(f"MUTATION {completed + 1}/{total}: {name}", flush=True)
         source = originals[path].decode()
         if source.count(before) != 1:
             raise SystemExit(f"{name}: expected exactly one mutation site")
@@ -58,7 +60,7 @@ def main():
             if result.returncode != 101 or b"test result: FAILED" not in result.stdout:
                 raise SystemExit(f"{name}: mutation did not fail its regression; inspect {output}")
             completed += 1
-            print(f"{name}: regression rejected mutation", flush=True)
+            print(f"MUTATION {completed}/{total}: {name} rejected", flush=True)
         finally:
             path.write_bytes(originals[path])
 
@@ -92,7 +94,7 @@ def main():
                "self.normalizes_ignorable_literals || ", "",
                "adopter_ignorable_edge_literals_match_without_interior_gaps", "legacy_source_boundaries")
         reject("adopter_prefilter", SOURCE_REGEX,
-               "normalize_literals(&mut ast, false)?;", "",
+               "    normalize_literals(&mut ast, false)?;\n    Ok(ast.to_string())", "    Ok(ast.to_string())",
                "adopter_ignorable_literals_and_class_members_keep_matching", "legacy_source_boundaries")
         reject("inner_gap_skip", SOURCE_REGEX,
                r'r"(?:{}(?u:\u{{2060}})*)"', r'r"{}"',

@@ -31,6 +31,7 @@ fn both_parent_normalizers_preserve_all_scalar_and_source_mappings() {
         let previous = branch::normalize(&raw);
         assert_eq!((&actual.text, &actual.spans), (&previous.text, &previous.spans), "branch U+{:04X}", ch as u32);
         compared_branch += 1;
+        if compared_branch % 65536 == 0 { println!("NORMALIZE {compared_branch}/1112064"); }
         // The PR deliberately adds ignorable removal and the U+2011 hyphen fold.
         if ch != '\u{2011}' && !ignorables.is_match(&raw) {
             let previous = main::normalize(&raw);

@@ -84,6 +84,8 @@ def main():
             sides = list(binaries) if index % 2 == 0 else list(reversed(binaries))
             for kind, text in inputs.items():
                 for side in sides:
+                    completed = sum(len(rows) for kinds in samples.values() for rows in kinds.values())
+                    print(f"COLD {completed + 1}/{args.rounds * 4}: {side}/{kind}", flush=True)
                     samples[side][kind].append(once(binaries[side], text, cwd))
     summary = {side: {kind: {
         "median_ms": statistics.median(row["milliseconds"] for row in rows),
