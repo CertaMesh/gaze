@@ -103,6 +103,7 @@ checks:
     commands:
       - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-types
       - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-proxy -p gaze-mcp-core --lib field_provenance
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo run -p xtask -- scrub-public-text UPGRADE.md
   field-provenance-full:
     description: Warning-denied workspace verification with a two-job resource cap
     expensive: true
@@ -114,6 +115,15 @@ checks:
       - env CARGO_BUILD_JOBS=2 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
       - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/anvil/test_nonempty.py cargo test --workspace --all-features
       - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/anvil/test_nonempty.py cargo test --config "build.rustflags=['-D','warnings']" --workspace --lib --bins --tests
+  clean-equality:
+    description: Compare gaze clean stdin against a verified frozen main build
+    expensive: true
+    locks: [workspace-build]
+    identity_env: [GAZE_CLEAN_BASE_WORKTREE, GAZE_CLEAN_BASE_BINARY_SHA256]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/verification, scripts/verify_clean_equality.py, anvil.yaml]
+    toolchain: *rust-tools
+    commands:
+      - nice -n 10 python3 scripts/verification/run_clean_equality.py
   keystore-isolation:
     description: Fake-backed guard mutations, index/audit tests, and full feature matrix
     expensive: true
