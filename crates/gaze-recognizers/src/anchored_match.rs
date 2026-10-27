@@ -140,6 +140,7 @@ impl Recognizer for AnchoredMatchRecognizer {
             return Ok(Vec::new());
         }
 
+        let boundary_view = crate::source_regex::View::with_boundary(input, ctx.source_spans, ' ');
         let mut candidates = Vec::new();
         for cue in &self.folded_cues {
             for cue_range in find_cue_ranges_with_source(input, cue, ctx.source_spans) {
@@ -147,6 +148,33 @@ impl Recognizer for AnchoredMatchRecognizer {
                     CuePosition::Before => self.candidate_after_cue(input, cue_range.end),
                     CuePosition::After => self.candidate_before_cue(input, cue_range.start),
                 };
+                let span = span.or_else(|| {
+                    let view = boundary_view.as_ref()?;
+                    let span = match self.cue_position {
+                        CuePosition::Before => {
+                            self.candidate_after_cue(&view.text, view.marked(cue_range.end))
+                        }
+                        CuePosition::After => {
+                            self.candidate_before_cue(&view.text, view.marked(cue_range.start))
+                        }
+                    }?;
+                    let mut span = view.joined(span);
+                    // A source gap inside a component can look like whitespace to
+                    // the name grammar. Keep its joined suffix protected as well.
+                    if crate::source_regex::is_gap(ctx.source_spans, span.end) {
+                        span.end += input[span.end..]
+                            .chars()
+                            .take_while(|ch| {
+                                ch.is_alphabetic()
+                                    || matches!(ch, '\'' | '-' | '\u{2019}')
+                                    || unicode_normalization::char::canonical_combining_class(*ch)
+                                        != 0
+                            })
+                            .map(char::len_utf8)
+                            .sum::<usize>();
+                    }
+                    Some(span)
+                });
                 let Some(span) = span else {
                     continue;
                 };

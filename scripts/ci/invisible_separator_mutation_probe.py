@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "crates/gaze/src/normalize.rs"
 REGEX_SOURCE = ROOT / "crates/gaze-recognizers/src/regex.rs"
 SOURCE_REGEX = ROOT / "crates/gaze-recognizers/src/source_regex.rs"
+ANCHOR_SOURCE = ROOT / "crates/gaze-recognizers/src/anchored_match.rs"
 # One representative per Unicode range, plus every original removed character.
 CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
               0x200D, 0x202A, 0x2060, 0x3164, 0xFE0F, 0xFEFF, 0xFFA0,
@@ -15,7 +16,7 @@ CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
 
 
 def main():
-    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX)
+    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
         relative = path.relative_to(ROOT).as_posix()
@@ -62,6 +63,10 @@ def main():
         reject("inner_gap_skip", SOURCE_REGEX,
                r'r"(?:{}(?u:\u{{2060}})*)"', r'r"{}"',
                "mixed_outer_and_inner_separators_keep_complete_values_protected")
+        reject("anchored_name_components", ANCHOR_SOURCE,
+               "let view = boundary_view.as_ref()?;",
+               "let view = boundary_view.as_ref().filter(|_| false)?;",
+               "anchored_match::tests::source_gaps_separate_name_components_without_losing_an_inner_suffix", None)
         reject("joined_run", REGEX_SOURCE, "if !self.complete_labelled_value {", "if true {",
                "regex::tests::joined_recovery_uses_source_gaps_for_bounded_captures", None)
         reject("linear_gap_search", REGEX_SOURCE,
@@ -74,7 +79,7 @@ def main():
     finally:
         for path, original in originals.items():
             path.write_bytes(original)
-    print(f"MUTATION DONE: {len(CODEPOINTS) + 6} mutations rejected; source restored")
+    print(f"MUTATION DONE: {len(CODEPOINTS) + 7} mutations rejected; source restored")
 
 
 if __name__ == "__main__":

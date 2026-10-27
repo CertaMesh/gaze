@@ -73,6 +73,14 @@ pub(super) struct View {
 
 impl View {
     pub(super) fn new(input: &str, spans: Option<&[(usize, usize)]>) -> Option<Self> {
+        Self::with_boundary(input, spans, MARKER)
+    }
+
+    pub(super) fn with_boundary(
+        input: &str,
+        spans: Option<&[(usize, usize)]>,
+        boundary: char,
+    ) -> Option<Self> {
         let spans = spans?;
         if !spans.windows(2).any(|pair| pair[0].1 < pair[1].0) {
             return None;
@@ -83,8 +91,8 @@ impl View {
         for (at, ch) in input.char_indices() {
             to_marked[at] = text.len();
             if is_gap(Some(spans), at) {
-                text.push(MARKER);
-                to_joined.extend(std::iter::repeat_n(at, MARKER.len_utf8()));
+                text.push(boundary);
+                to_joined.extend(std::iter::repeat_n(at, boundary.len_utf8()));
             }
             let start = text.len();
             text.push(ch);
