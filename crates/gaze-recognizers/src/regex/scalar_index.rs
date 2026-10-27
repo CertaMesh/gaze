@@ -32,7 +32,7 @@ impl ScalarBoundaryIndex {
         let regions = self.sql_schema.get_or_insert_with(|| {
             scanner_work(input.len());
             static DDL: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-            let ddl = DDL.get_or_init(|| Regex::new(r"(?im)(?:\A|[;\r\n])[ \t]*(?:create[ \t]+(?:(?:temp|temporary|unlogged)[ \t]+)?table|alter[ \t]+table)\b").expect("SQL schema statement"));
+            let ddl = DDL.get_or_init(|| Regex::new(r"(?i)\b(?:create[ \t]+(?:(?:temp|temporary|unlogged)[ \t]+)?table|alter[ \t]+table)\b").expect("SQL schema statement"));
             static TOKENS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
             let tokens = TOKENS.get_or_init(|| Regex::new(r#"(?s)'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|--[^\r\n]*|/\*.*?\*/|;"#).expect("SQL statement delimiters"));
             let ends: Vec<_> = tokens.find_iter(input).filter(|token| token.as_str() == ";").map(|token| token.end()).collect();
