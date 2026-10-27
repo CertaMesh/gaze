@@ -64,12 +64,16 @@ impl ScalarBoundaryIndex {
             let start = START.get_or_init(|| Regex::new(r"(?im)(?:\A|[;\r\n])[ \t]*(?:[a-z_]+[ \t]*:[ \t]*)?(?:select\b|update\s+[a-z_][a-z0-9_.]*\s+set\b|insert\s+into\b|replace\s+into\b|values\s*\()|\balter\s+table\s+[a-z_][a-z0-9_.]*\s+add\s+column\b").expect("SQL statement context"));
             static FROM: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
             let from = FROM.get_or_init(|| Regex::new(r"(?i)\bfrom\s+[^\s;]+").expect("SELECT source"));
-            let ends: Vec<_> = input.match_indices(';').map(|(at,_)| at+1).collect();
+            static TOKENS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+            let tokens = TOKENS.get_or_init(|| Regex::new(r#"(?s)'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|--[^\r\n]*|/\*.*?\*/|;"#).expect("SQL context delimiters"));
+            let ends: Vec<_> = tokens.find_iter(input).filter(|token| token.as_str() == ";").map(|token| token.end()).collect();
+            let sources: Vec<_> = from.find_iter(input).map(|token| token.range()).collect();
             let mut regions: Vec<Range<usize>> = Vec::new();
             for statement in start.find_iter(input) {
                 let end = ends.get(ends.partition_point(|&end| end <= statement.end())).copied().unwrap_or(input.len());
-                let select = statement.as_str().trim_start_matches([';', '\r', '\n']).trim_start().to_ascii_lowercase().starts_with("select");
-                if select && !from.is_match(&input[statement.end()..end]) { continue; }
+                let select = statement.as_str().to_ascii_lowercase().ends_with("select");
+                let source = sources.get(sources.partition_point(|source| source.start < statement.end()));
+                if select && !source.is_some_and(|source| source.end <= end) { continue; }
                 if let Some(last) = regions.last_mut().filter(|last| last.end >= statement.start()) { last.end = last.end.max(end); }
                 else { regions.push(statement.start()..end); }
             }

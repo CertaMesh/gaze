@@ -126,6 +126,7 @@ fn rule_boundary_sql_context_and_keywords() {
     }
     for prose in [
         "Please select the right account: ",
+        "Please select the customer from this account: ",
         "Select one. ",
         "We will create table backups later\n",
         "Don't alter table rows by hand.\n",
@@ -147,7 +148,7 @@ fn rule_boundary_sql_context_and_keywords() {
     }
     boundary_case("See CREATE TABLE t (\ncustomer_id (C-731284)\n)", &[]);
     count += 1;
-    assert_eq!(count, 144);
+    assert_eq!(count, 146);
 }
 
 #[test]
