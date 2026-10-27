@@ -6,7 +6,10 @@ mod record_ids;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use gaze::{Action, Context, LocaleChain, PiiClass, Policy, RuleSpec, Rulepack, Scope, Session};
+use gaze::{
+    Action, CleanDocument, Context, LocaleChain, PiiClass, Policy, RawDocument, RuleSpec, Rulepack,
+    Scope, Session,
+};
 use gaze_mcp_core::*;
 use serde_json::{json, Value};
 
@@ -101,6 +104,19 @@ async fn mcp_labelled_string_leaves_known_failure_but_numbers_fail_closed() {
     .unwrap();
     for case in record_ids::cases() {
         let document = case.document();
+        for (kind, text) in [
+            ("prose", case.prose()),
+            ("whole-json", document.to_string()),
+        ] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let CleanDocument::Text(clean) = pipeline
+                .pseudonymize_with_context(&session, RawDocument::Text(text), chain.as_slice())
+                .unwrap()
+            else {
+                panic!("text expected")
+            };
+            record_ids::check(&case, &format!("MCP/calibration/{kind}"), &clean, false);
+        }
         let mut members = vec![];
         declare_members(&document, &mut vec![], &mut members);
         let captured = Arc::new(Mutex::new(vec![]));

@@ -85,7 +85,8 @@ pub fn cases() -> impl Iterator<Item = Case> {
 // Known failures execute the same protection oracle and require its failure. If a fix
 // protects a case, this assertion fails so the case must be promoted to Protected.
 pub fn check(case: &Case, surface: &str, captured: &str, known_failure: bool) {
-    let protected = !without_tokens(captured).contains(case.raw());
+    let exposed = without_tokens(captured);
+    let protected = !exposed.contains(case.raw()) && !exposed.contains("731284");
     println!(
         "RECORD_ID {surface} {case:?} {}",
         if protected { "PROTECTED" } else { "LEAKS" }
