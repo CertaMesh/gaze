@@ -765,6 +765,7 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         "../../tests/fixtures/record-id-code-counterweights.json"
     ))
     .unwrap();
+    assert_eq!(cases.len(), 37);
     for case in cases {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let input = format!("{case}\nPUBLIC COPY {case}");
