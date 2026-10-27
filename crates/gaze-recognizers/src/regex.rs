@@ -419,12 +419,33 @@ impl RegexDetector {
                 // A valid hard-boundary value must not absorb a neighbouring digit just
                 // because a consuming atom can skip that boundary in the joined view.
                 scans.retain(|scan| {
-                    !starts
-                        .get(&scan.span.start)
-                        .is_some_and(|&end| end < scan.span.end)
-                        && !ends
-                            .get(&scan.span.end)
-                            .is_some_and(|&start| start > scan.span.start)
+                    let preserves_card_union = self.validator_kind == Some(ValidatorKind::Luhn)
+                        && (ValidatorKind::Luhn.validates(&input[scan.span.clone()])
+                            || gaze_types::payment_card::scan_card_run(
+                                input,
+                                scan.span.clone(),
+                                source_spans,
+                            )
+                            .cards
+                            .contains(&scan.span));
+                    // A cued 19-digit layout may include the card's CVV. The recorded
+                    // span stays whole even when only its card prefix passes Luhn.
+                    let preserves_recorded_card_layout = self.validator_kind
+                        == Some(ValidatorKind::Luhn)
+                        && self.validator_on_fail == ValidatorOnFail::Record
+                        && input[scan.span.clone()]
+                            .bytes()
+                            .filter(u8::is_ascii_digit)
+                            .count()
+                            == 19;
+                    preserves_card_union
+                        || preserves_recorded_card_layout
+                        || (!starts
+                            .get(&scan.span.start)
+                            .is_some_and(|&end| end < scan.span.end)
+                            && !ends
+                                .get(&scan.span.end)
+                                .is_some_and(|&start| start > scan.span.start))
                 });
                 // Keep boundary candidates even inside a joined candidate: that larger
                 // candidate may subsequently fail its validator at the registry boundary.

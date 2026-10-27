@@ -54,16 +54,29 @@ pub fn apply(
         // containment over `card.structural`'s card; without a cue `card.structural` still
         // scopes a card exactly. Review of #694 round 3.
         let outcome = match kind.validate(raw) {
-            ValidatorOutcome::Fail { .. }
-                if kind == ValidatorKind::Luhn
-                    && gaze_types::payment_card::holds_card(
-                        input,
-                        candidate.span.clone(),
-                        source_spans,
-                    ) =>
-            {
-                ValidatorOutcome::Pass {
-                    canonical_form: Some(raw.to_string()),
+            failure @ ValidatorOutcome::Fail { .. } if kind == ValidatorKind::Luhn => {
+                let cards = gaze_types::payment_card::scan_card_run(
+                    input,
+                    candidate.span.clone(),
+                    source_spans,
+                )
+                .cards;
+                let crosses_source_gap = source_spans
+                    .and_then(|spans| spans.get(candidate.span.clone()))
+                    .is_some_and(|spans| spans.windows(2).any(|pair| pair[0].1 < pair[1].0));
+                // Across source gaps, an unrecorded aggregate must be the actual
+                // union of valid windows, rather than a larger enclosing digit run.
+                let valid_union = if records || !crosses_source_gap {
+                    !cards.is_empty()
+                } else {
+                    cards.contains(&candidate.span)
+                };
+                if valid_union {
+                    ValidatorOutcome::Pass {
+                        canonical_form: Some(raw.to_string()),
+                    }
+                } else {
+                    failure
                 }
             }
             outcome => outcome,

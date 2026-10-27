@@ -12,6 +12,7 @@ SOURCE_REGEX = ROOT / "crates/gaze-recognizers/src/source_regex.rs"
 ANCHOR_SOURCE = ROOT / "crates/gaze-recognizers/src/anchored_match.rs"
 PIPELINE_SOURCE = ROOT / "crates/gaze/src/pipeline.rs"
 DICTIONARY_SOURCE = ROOT / "crates/gaze-recognizers/src/dictionary.rs"
+VETO_SOURCE = ROOT / "crates/gaze/src/validator_veto.rs"
 # One representative per Unicode range, plus every original removed character.
 CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
               0x200D, 0x202A, 0x2060, 0x3164, 0xFE0F, 0xFEFF, 0xFFA0,
@@ -24,8 +25,8 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 16
-    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE)
+    total = len(set(args.probe)) or len(CODEPOINTS) + 19
+    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
         relative = path.relative_to(ROOT).as_posix()
@@ -84,6 +85,15 @@ def main():
                "scans.extend(boundaries);",
                "merge_recovered_scans(&mut scans, &[], boundaries, false, || {});",
                "hard_boundary_value_survives_enclosing_joined_validator_failure", "validators")
+        reject("luhn_enclosing_union", VETO_SOURCE,
+               "cards.contains(&candidate.span)", "!cards.is_empty()",
+               "hard_boundary_value_survives_enclosing_joined_validator_failure", "validators")
+        reject("luhn_union_preference", REGEX_SOURCE,
+               "                    preserves_card_union\n", "                    false && preserves_card_union\n",
+               "hard_boundary_preserves_overlapping_valid_card_windows", "validators")
+        reject("recorded_card_layout", REGEX_SOURCE,
+               "|| preserves_recorded_card_layout", "|| false && preserves_recorded_card_layout",
+               "hard_boundary_preserves_recorded_card_and_verification_code", "validators")
         reject("hard_boundary_preference", REGEX_SOURCE,
                "let valid = !scan.rejected", "let valid = false && !scan.rejected",
                "gap_neighbours_do_not_hide_or_extend_validated_values", "invisible_separators")
