@@ -31,6 +31,10 @@ pub mod frontend;
 
 pub use crate::error::RmcpFrontendError;
 pub use crate::frontend::{
-    FixedPrincipalResolver, PrincipalResolver, RmcpFrontend, RmcpFrontendConfig,
+    FixedPrincipalResolver, HostCallContext, PrincipalResolver, RmcpFrontend, RmcpFrontendConfig,
     RmcpPrincipalError, RmcpTransport,
 };
+
+#[cfg(all(doctest, feature = "transport-http"))]
+#[doc = include_str!("../README.md")]
+mod readme {}

@@ -65,18 +65,119 @@ failure takes precedence over the tool error.
 
 `RmcpFrontend` treats the `operator` role specially for `tools/list`: operator-tier descriptors are only advertised to principals with `principal.has_role("operator")`. Invocation authorization still happens inside `PiiEnvelope::dispatch` through `AuthHook`; transport-side filtering is only a catalog convenience.
 
-## Session ids
+## Host context and session ids
 
-rmcp 2.x's `tools/call` payload has no native Gaze session-id field. This adapter reserves a top-level `_session_id` argument key:
+`HostContextSelection` is an explicit input to `DispatchHost::dispatch` and
+`PiiEnvelope::dispatch`. A trusted embedder selects one owner record after the
+model plans a call. `HostContextSelection::present` accepts the original context
+JSON. Dispatch uses `gaze::Context::from_json_str`, with the same schema and limits
+as `gaze clean --context-json`. The host supplies the resident assembly inputs
+through `PiiEnvelope::with_context_policy`. A host without that configuration
+rejects `Present`.
 
-```json
-{
-  "text": "hello",
-  "_session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-}
+For embedded HTTP, host middleware inserts `HostCallContext` into
+`axum::http::request::Parts::extensions`. rmcp carries these server-local request
+parts into the handler. Build your `StreamableHttpService` with
+`RmcpFrontend::into_server_handler` to install the middleware on your own router.
+`HostCallContext::selection` supplies the context for that call;
+`audit_session_id` supplies optional host-owned audit correlation.
+
+Context protects tool responses. A context value already present in model-authored
+arguments is excluded for that call.
+
+Calls with `Present` context have a per-call guess budget, independent of the
+record. `HostContextPolicy::default()` allows at most 4,096 argument bytes and
+32 scalar values in each original and recursively decoded JSON view. Keys count
+toward bytes. Both raw and normalized bytes must fit. Every visited key, scalar
+value and container also counts against an entry cap equal to
+`max_argument_bytes` (4,096 entries by default), including empty keys and
+containers. Dispatch rejects oversized arguments with a value-free error before parsing the record or changing session
+or audit state. Set `PiiEnvelope::with_host_context_policy(HostContextPolicy {
+max_argument_bytes, max_argument_scalars })` to configure these host-owned limits.
+Raising either limit increases the guess budget. `Absent` calls use the ordinary
+MCP operation limits. Batch lookups above 32 IDs or tool bodies above 4 KB of
+argument text are rejected at the defaults when context is attached.
+
+Exclusion uses the detection pipeline's normalization and the response matcher's
+token-boundary rule. It follows each recognizer's compilation mode and allowed
+match kinds: Unicode case folding applies to Name records, while exact-only
+fields retain their case and whitespace requirements. Flexible whitespace is
+considered only when that match kind is allowed. Folded matches map back to the same normalized, pre-casefold text for boundary checks. A superstring
+such as `Joanna Lim` does not exclude `Anna Li`. Coverage includes single fields
+and all scalar fields joined in lexicographic key order with empty or space
+separators. Arrays retain index order. It also checks every scalar pair in both
+orders with empty, space, `@`, `-`, and `/` separators. This covers given/family
+fields whose key order differs from schema order, an unrelated interleaved field,
+and common two-field email or identifier templates. Original strings and decoded
+JSON leaves are checked separately. Arbitrary transformations, reordered joins of
+three or more fields, and other separators can still evade exclusion.
+
+A record-returning lookup tool can still confirm a guess. A correct guess
+excludes the returned record value from private-context detection. A wrong guess
+leaves that value eligible for a token. In addition to guesses contained in the
+admitted argument text and the two full scalar joins, pair joins add up to
+`max_argument_scalars × (max_argument_scalars − 1)` candidates per separator.
+At the defaults, that is 992 pairs per separator and 4,960 pair candidates across
+the five separators in each view. The original and decoded views can differ,
+adding up to 9,920 pair candidates per call. Short numeric fields such as PINs and
+house numbers can therefore be enumerated in a few calls. Lower `max_argument_scalars` for tools that look up
+short numeric records. Enumeration that fits within the budget remains possible.
+Repeated calls are the host's rate-limit responsibility. Exclusion does not
+provide general resistance to guessing attacks. Ordinary recognizers and existing session mappings
+continue to protect their known values.
+
+Only values first matched in a response become Rule-evidence session entries for
+later turns. Unmatched values are dropped. Restoration still uses the owner's manifest.
+
+Context never enters `ToolCtx`, tool schemas, arguments, `_meta`, or manifest call
+metadata. `Present` is rejected for an operator tool that bypasses response
+protection. Stock stdio hosts have no private context channel. The CLI stdio server
+uses `Absent`; an out-of-process adapter is not supported in this release.
+
+The adapter removes the legacy `_session_id` argument and ignores its value.
+It cannot change audit correlation or select a Session. Use host-owned
+`HostCallContext::audit_session_id` for correlation. `SessionIdPolicy` validates
+that id before dispatch; the id never grants access or selects a Session.
+
+Private context requires one `Session` and one `DispatchHost` per conversation.
+Sharing a host across MCP sessions shares Rule-evidence mappings, HMAC labels,
+and restore authority. Audit session ids do not partition this state. The built-in
+`Frontend::serve(host, ...)` HTTP path reuses the supplied host across MCP sessions.
+For private conversations, embed the service and create the host inside its
+per-MCP-session factory:
+
+```rust,no_run
+use std::sync::Arc;
+use gaze_mcp_core::DispatchHost;
+use gaze_mcp_rmcp::RmcpFrontend;
+use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
+
+# #[cfg(feature = "transport-http")]
+# fn embed_http(
+# 	frontend: RmcpFrontend,
+# 	new_conversation_host: impl Fn() -> std::io::Result<Arc<dyn DispatchHost>> + Send + Sync + 'static,
+# ) {
+let service = StreamableHttpService::new(
+	move || {
+		// Allocate a fresh Session and DispatchHost on every factory invocation.
+		let host = new_conversation_host()?;
+		Ok(frontend.clone().into_server_handler(host))
+	},
+	Arc::new(LocalSessionManager::default()),
+	StreamableHttpServerConfig::default(),
+);
+# }
+# fn main() {}
 ```
 
-The adapter removes `_session_id` before dispatching tool args and passes it as `external_session_id`. `gaze-mcp-core` validates it with `SessionIdPolicy` before any manifest row opens.
+Enable `gaze-mcp-rmcp/transport-http` and add `rmcp` 2.x with
+`transport-streamable-http-server` to use this example. Implement
+`new_conversation_host` so each call constructs a new host with its own `Session`.
+Resident policies, pipelines, and model handles can be shared. Install trusted
+`HostCallContext` middleware on the router that serves this service. Authenticate
+MCP session ownership before reusing a session across requests. On reconnect,
+restore only that conversation's trusted snapshot into its host.
 
 ## rmcp version policy
 

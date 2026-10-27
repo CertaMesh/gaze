@@ -1459,7 +1459,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\trestore_trap_shape_count\tlabelled_value_scan_reason\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\trestore_trap_shape_count\tlabelled_value_scan_reason\toutcome\toutcome_reason\tfield_path_depth\tfield_evidence\n"
     ));
     assert!(
         stdout.lines().any(|line| line
@@ -5403,13 +5403,11 @@ fn strict_literal_roundtrip_agrees_with_telemetry_and_audit() {
                 assert_eq!(response["restore_telemetry"]["trap_shape_count"], 3);
             }
             if audit {
-                let rows = SqliteLogger::query(
-                    &audit_path,
-                    &AuditFilter {
-                        restore_events_only: true,
-                        ..AuditFilter::default()
-                    },
-                )
+                let rows = SqliteLogger::query(&audit_path, &{
+                    let mut filter = AuditFilter::default();
+                    filter.restore_events_only = true;
+                    filter
+                })
                 .unwrap();
                 assert_eq!(rows.len(), 1);
                 assert_eq!(rows[0].restore_decision.as_deref(), Some("success"));

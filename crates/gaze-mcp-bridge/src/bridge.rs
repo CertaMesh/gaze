@@ -221,7 +221,14 @@ impl DispatchHost for BridgeHost {
         tool_name: &str,
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
+        host_context: gaze_mcp_core::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
+        if matches!(
+            host_context,
+            gaze_mcp_core::HostContextSelection::Present(_)
+        ) {
+            return Err(gaze_mcp_core::HostContextError::Unsupported.into());
+        }
         self.dispatch_inner(principal, tool_name, raw_args, external_session_id)
             .await
             .map_err(BridgeError::into_dispatch)

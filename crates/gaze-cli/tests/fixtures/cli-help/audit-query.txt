@@ -23,6 +23,10 @@ Options:
           Include only rows with an ambiguity side-channel record
       --ambiguity-reason <AMBIGUITY_REASON>
           Filter by ambiguity reason, such as `no-anchor`
+      --outcome <OUTCOME>
+          Filter by protection category, such as `protected` or `possibly-sensitive`
+      --outcome-reason <OUTCOME_REASON>
+          Filter by a closed protection reason, such as `label-value-shape-unclear`
       --collision-family <COLLISION_FAMILY>
           Filter by collision family identifier
       --collision-variant <COLLISION_VARIANT>

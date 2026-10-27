@@ -18,6 +18,8 @@ pub struct CorePipelineConfig {
 }
 
 pub struct CorePipeline {
+    policy: Policy,
+    rulepacks: Vec<Rulepack>,
     pipeline: Pipeline,
     locale_chain: LocaleChain,
     dictionaries: DictionaryBundle,
@@ -109,6 +111,8 @@ impl CorePipelineConfig {
         )?;
 
         Ok(CorePipeline {
+            policy,
+            rulepacks: inputs.rulepacks,
             pipeline,
             locale_chain: inputs.locale_chain,
             dictionaries: inputs.dictionaries,
@@ -117,6 +121,16 @@ impl CorePipelineConfig {
 }
 
 impl CorePipeline {
+    /// Exact resident assembly policy, for request-local context assembly.
+    pub fn policy(&self) -> &Policy {
+        &self.policy
+    }
+
+    /// Exact resident rulepacks, for request-local context assembly.
+    pub fn rulepacks(&self) -> &[Rulepack] {
+        &self.rulepacks
+    }
+
     /// Low-level pipeline access. Calls must pass [`Self::locale_chain`] and
     /// [`Self::dictionaries`] to retain configured detection inputs.
     pub fn pipeline(&self) -> &Pipeline {

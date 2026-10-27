@@ -608,6 +608,29 @@ impl Pipeline {
         self
     }
 
+    /// Give private class aliases the same explicit built-in class actions.
+    /// Aliases are host policy metadata; no private record values are retained.
+    pub fn with_class_aliases(
+        mut self,
+        aliases: &std::collections::HashMap<PiiClass, PiiClass>,
+    ) -> Self {
+        self.rules = self
+            .rules
+            .iter()
+            .flat_map(|rule| std::iter::once(rule.clone()).chain(rule.class_alias(aliases)))
+            .collect();
+        self
+    }
+
+    /// Replace rule and recognizer inputs with an explicitly assembled request policy.
+    /// Resident models, safety nets and loggers retain their existing handles. Callers
+    /// must preserve policy semantics when translating private class identifiers.
+    pub fn with_detection_policy_from(mut self, policy: &Pipeline) -> Self {
+        self.registry = policy.registry.clone();
+        self.rules = policy.rules.clone();
+        self
+    }
+
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::default()
     }

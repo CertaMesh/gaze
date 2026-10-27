@@ -411,6 +411,12 @@ enum AuditCmd {
         /// Filter by ambiguity reason, such as `no-anchor`.
         #[arg(long)]
         ambiguity_reason: Option<String>,
+        /// Filter by protection category, such as `protected` or `possibly-sensitive`.
+        #[arg(long)]
+        outcome: Option<String>,
+        /// Filter by a closed protection reason, such as `label-value-shape-unclear`.
+        #[arg(long)]
+        outcome_reason: Option<String>,
         /// Filter by collision family identifier.
         #[arg(long)]
         collision_family: Option<String>,
@@ -459,6 +465,12 @@ enum AuditCmd {
         /// Filter by ambiguity reason, such as `no-anchor`.
         #[arg(long)]
         ambiguity_reason: Option<String>,
+        /// Filter by protection category, such as `protected` or `possibly-sensitive`.
+        #[arg(long)]
+        outcome: Option<String>,
+        /// Filter by a closed protection reason, such as `label-value-shape-unclear`.
+        #[arg(long)]
+        outcome_reason: Option<String>,
         /// Filter by collision family identifier.
         #[arg(long)]
         collision_family: Option<String>,
@@ -622,6 +634,8 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 session_id,
                 has_ambiguity,
                 ambiguity_reason,
+                outcome,
+                outcome_reason,
                 collision_family,
                 collision_variant,
                 restore_events,
@@ -636,6 +650,8 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 session_id,
                 has_ambiguity,
                 ambiguity_reason,
+                outcome,
+                outcome_reason,
                 collision_family,
                 collision_variant,
                 restore_events_only: restore_events,
@@ -653,6 +669,8 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 session_id,
                 has_ambiguity,
                 ambiguity_reason,
+                outcome,
+                outcome_reason,
                 collision_family,
                 collision_variant,
                 restore_events,
@@ -668,6 +686,8 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                     session_id,
                     has_ambiguity,
                     ambiguity_reason,
+                    outcome,
+                    outcome_reason,
                     collision_family,
                     collision_variant,
                     restore_events_only: restore_events,

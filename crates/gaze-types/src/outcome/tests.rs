@@ -170,3 +170,52 @@ fn unknown_wire_variants_are_rejected_instead_of_becoming_protected() {
     .is_err());
     assert!(serde_json::from_str::<FieldEvidence>("{\"hint\":\"unknown\"}").is_err());
 }
+
+#[test]
+fn audit_accessor_accepts_only_matching_outcome_reason_pairs() {
+    use crate::{Action, ConflictTier, DocumentKind, PiiClass, RedactionEntry};
+    use ProtectionOutcomeKind as Kind;
+    use ProtectionOutcomeReason as Reason;
+    let mut entry = RedactionEntry::new(
+        "synthetic",
+        PiiClass::Name,
+        Action::Tokenize,
+        None,
+        DocumentKind::Structured,
+        false,
+        ConflictTier::None,
+        0,
+        None,
+    );
+    let kinds = [
+        None,
+        Some(Kind::Protected),
+        Some(Kind::NonSensitive),
+        Some(Kind::PossiblySensitive),
+        Some(Kind::ConfirmedUntransformable),
+    ];
+    let reasons = [
+        None,
+        Some(Reason::NonSensitive(NonSensitiveReason::JsonKey)),
+        Some(Reason::PossiblySensitive(
+            PossiblySensitiveReason::OtherFieldRepeat,
+        )),
+        Some(Reason::Untransformable(
+            UntransformableReason::EncodedCarrier,
+        )),
+    ];
+    for (i, kind) in kinds.into_iter().enumerate() {
+        for (j, reason) in reasons.into_iter().enumerate() {
+            entry.outcome = kind;
+            entry.outcome_reason = reason;
+            let result = entry.protection_outcome();
+            let valid = [(0, 0), (1, 0), (2, 1), (3, 2), (4, 3)].contains(&(i, j));
+            assert_eq!(result.is_ok(), valid, "{kind:?} {reason:?}");
+            if let Ok(Some(outcome)) = result {
+                let (decoded_kind, decoded_reason) = outcome.audit_parts();
+                assert_eq!(Some(decoded_kind), kind);
+                assert_eq!(decoded_reason, reason);
+            }
+        }
+    }
+}

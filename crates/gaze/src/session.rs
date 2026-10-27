@@ -5,6 +5,7 @@ use std::sync::{Arc, OnceLock, RwLock, RwLockWriteGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use hmac::{Hmac, Mac};
 use rand::RngCore;
 use regex::Regex;
 use secrecy::{ExposeSecret, SecretBox};
@@ -38,6 +39,9 @@ const SNAPSHOT_VERSION_V6: u8 = 6;
 /// reader refuses exactly the blobs it would restore to the wrong value and
 /// keeps reading every other blob.
 const SNAPSHOT_VERSION_V7: u8 = 7;
+/// v8 preserves the private-identifier key. Older readers must reject these
+/// blobs instead of losing the namespace needed by later host-context turns.
+const SNAPSHOT_VERSION_V8: u8 = 8;
 
 pub type RestoreError = Error;
 
@@ -124,7 +128,7 @@ pub enum Scope {
 /// Serializable snapshot of a [`Session`]'s token manifest.
 ///
 /// Produced by [`Session::export`] and consumed by [`Session::import`]. Carries the full
-/// token-to-PII mapping plus a session signing key - treat it as sensitive as the original
+/// token-to-PII mapping plus any private-identifier key. Treat it as sensitive as the original
 /// document.
 ///
 /// **Storage:** the snapshot is delivered as raw bytes via [`Self::into_bytes`] and reconstructed
@@ -205,8 +209,25 @@ enum SnapshotScope {
     Persistent { ttl_secs: u64 },
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+struct SnapshotOpaqueKey([u8; 32]);
+
+impl fmt::Debug for SnapshotOpaqueKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[redacted]")
+    }
+}
+
+impl Drop for SnapshotOpaqueKey {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.0);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SnapshotPayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    opaque_identifier_key: Option<SnapshotOpaqueKey>,
     scope: SnapshotScope,
     #[serde(deserialize_with = "deserialize_session_hex")]
     session_hex: String,
@@ -290,6 +311,7 @@ struct SessionIdentity {
     session_hex: [u8; 4],
     audit_session_id: String,
     signing_key: SessionKey,
+    opaque_identifier_key: RwLock<Option<SessionKey>>,
 }
 
 /// A strict restoration result with manifest-authorized output coordinates.
@@ -524,6 +546,7 @@ impl Session {
                 session_hex: random_session_hex(),
                 audit_session_id: new_audit_session_id(),
                 signing_key: SessionKey::generate()?,
+                opaque_identifier_key: RwLock::new(None),
             }),
             state: RwLock::new(Arc::new(SessionState::empty())),
         })
@@ -542,6 +565,7 @@ impl Session {
                 session_hex,
                 audit_session_id: new_audit_session_id(),
                 signing_key: SessionKey::generate()?,
+                opaque_identifier_key: RwLock::new(None),
             }),
             state: RwLock::new(Arc::new(SessionState::empty())),
         })
@@ -774,6 +798,73 @@ impl Session {
         hex::encode(self.identity.session_hex)
     }
 
+    /// Unique manifest classes, without copying the original values.
+    pub fn classes(&self) -> BTreeSet<PiiClass> {
+        let state = self.state_snapshot();
+        state
+            .token_by_value
+            .keys()
+            .map(|key| key.class.clone())
+            .chain(state.next_by_class.keys().cloned())
+            .collect()
+    }
+
+    /// Whether a trusted private-identifier namespace is available.
+    /// Old snapshots have no key until their first new private identifier is created.
+    pub fn has_opaque_identifier_key(&self) -> bool {
+        self.identity
+            .opaque_identifier_key
+            .read()
+            .expect("session identifier key lock poisoned")
+            .is_some()
+    }
+
+    /// Create a session-scoped label without retaining `value`.
+    /// A dedicated random HMAC key is shared across turns and persisted only in
+    /// the trusted SensitiveSnapshot. Different namespaces cannot share labels.
+    pub fn opaque_identifier(&self, namespace: &str, value: &str) -> Result<String> {
+        let mut slot = self
+            .identity
+            .opaque_identifier_key
+            .write()
+            .expect("session identifier key lock poisoned");
+        if slot.is_none() {
+            *slot = Some(SessionKey::generate()?);
+        }
+        let key = slot.as_ref().expect("identifier key initialized");
+        let id = key
+            .opaque_mac(namespace, 0, value.as_bytes())
+            .finalize()
+            .into_bytes();
+        let tag = key
+            .opaque_mac(namespace, 1, &id[..16])
+            .finalize()
+            .into_bytes();
+        let mut identifier = [0; 32];
+        identifier[..16].copy_from_slice(&id[..16]);
+        identifier[16..].copy_from_slice(&tag[..16]);
+        Ok(hex::encode(identifier))
+    }
+
+    /// Authenticate a private label without knowing or retaining its original name.
+    /// Does not create a key. A keyless or unrelated namespace fails closed.
+    pub fn owns_opaque_identifier(&self, namespace: &str, identifier: &str) -> bool {
+        let mut bytes = [0; 32];
+        if identifier.len() != 64 || hex::decode_to_slice(identifier, &mut bytes).is_err() {
+            return false;
+        }
+        let slot = self
+            .identity
+            .opaque_identifier_key
+            .read()
+            .expect("session identifier key lock poisoned");
+        slot.as_ref().is_some_and(|key| {
+            key.opaque_mac(namespace, 1, &bytes[..16])
+                .verify_truncated_left(&bytes[16..])
+                .is_ok()
+        })
+    }
+
     pub fn audit_session_id(&self) -> &str {
         &self.identity.audit_session_id
     }
@@ -959,7 +1050,15 @@ impl Session {
             .collect::<Vec<_>>();
         next_by_class.sort();
 
+        let opaque_identifier_key = self
+            .identity
+            .opaque_identifier_key
+            .read()
+            .expect("session identifier key lock poisoned")
+            .as_ref()
+            .map(|key| SnapshotOpaqueKey(*key.secret.expose_secret()));
         let payload = SnapshotPayload {
+            opaque_identifier_key,
             scope: snapshot_scope(&self.identity.scope),
             session_hex: self.session_hex(),
             entries,
@@ -968,7 +1067,9 @@ impl Session {
             document,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
-        let version = if payload
+        let version = if payload.opaque_identifier_key.is_some() {
+            SNAPSHOT_VERSION_V8
+        } else if payload
             .entries
             .iter()
             .all(|entry| entry.spelling.is_plain())
@@ -1004,6 +1105,7 @@ impl Session {
             && version != SNAPSHOT_VERSION_V5
             && version != SNAPSHOT_VERSION_V6
             && version != SNAPSHOT_VERSION_V7
+            && version != SNAPSHOT_VERSION_V8
         {
             return Err(Error::InvalidSnapshotVersion(version));
         }
@@ -1036,6 +1138,13 @@ impl Session {
             .map_err(|_| Error::InvalidSnapshotSignature)?;
 
         let payload = decode_snapshot_payload(payload_bytes)?;
+        if (version == SNAPSHOT_VERSION_V8) != payload.opaque_identifier_key.is_some() {
+            return Err(Error::InvalidSnapshotPayload);
+        }
+        let opaque_identifier_key = payload
+            .opaque_identifier_key
+            .as_ref()
+            .map(|key| SessionKey::from_bytes(&key.0));
         validate_entry_prefixes(&payload)?;
         validate_entry_spellings(version, &payload)?;
         let session_hex = session_hex_bytes(&payload.session_hex)?;
@@ -1098,6 +1207,7 @@ impl Session {
                 session_hex,
                 audit_session_id: new_audit_session_id(),
                 signing_key: SessionKey::generate()?,
+                opaque_identifier_key: RwLock::new(opaque_identifier_key),
             }),
             state: RwLock::new(Arc::new(state)),
         })
@@ -2220,6 +2330,22 @@ struct SessionKey {
 }
 
 impl SessionKey {
+    fn opaque_mac(&self, namespace: &str, purpose: u8, value: &[u8]) -> Hmac<Sha256> {
+        let mut mac = Hmac::<Sha256>::new_from_slice(self.secret.expose_secret())
+            .expect("HMAC accepts a 32-byte key");
+        mac.update(b"gaze/opaque-identifier/v1\0");
+        mac.update(&(namespace.len() as u64).to_be_bytes());
+        mac.update(namespace.as_bytes());
+        mac.update(&[purpose]);
+        mac.update(value);
+        mac
+    }
+    fn from_bytes(bytes: &[u8; 32]) -> Self {
+        let secret =
+            SecretBox::init_with_mut(|target: &mut [u8; 32]| target.copy_from_slice(bytes));
+        let protection = MemoryProtection::best_effort(secret.expose_secret().as_ptr(), 32);
+        Self { secret, protection }
+    }
     fn generate() -> Result<Self> {
         let secret = SecretBox::init_with_mut(|bytes: &mut [u8; 32]| {
             rand::thread_rng().fill_bytes(bytes);
@@ -2927,6 +3053,51 @@ fn snapshot_signing_preimage(
 mod tests {
     use super::*;
 
+    #[test]
+    fn opaque_identifiers_are_private_scoped_and_persist_in_trusted_snapshots() {
+        let session = Session::new(Scope::Conversation("synthetic-opaque".into())).unwrap();
+        assert!(!session.has_opaque_identifier_key());
+        let first = session
+            .opaque_identifier("class", "private_canary_name")
+            .unwrap();
+        assert!(session.owns_opaque_identifier("class", &first));
+        assert!(!session.owns_opaque_identifier("dictionary", &first));
+        let mut altered = first.clone().into_bytes();
+        altered[63] = if altered[63] == b'0' { b'1' } else { b'0' };
+        assert!(!session.owns_opaque_identifier("class", std::str::from_utf8(&altered).unwrap()));
+        assert_eq!(
+            first,
+            session
+                .opaque_identifier("class", "private_canary_name")
+                .unwrap()
+        );
+        assert_ne!(
+            first,
+            session
+                .opaque_identifier("dictionary", "private_canary_name")
+                .unwrap()
+        );
+        let independent = Session::new(Scope::Ephemeral).unwrap();
+        assert!(!independent.owns_opaque_identifier("class", &first));
+        assert_ne!(
+            first,
+            independent
+                .opaque_identifier("class", "private_canary_name")
+                .unwrap()
+        );
+        assert!(session.snapshot_entries().is_empty());
+        let snapshot = session.export().unwrap();
+        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V8);
+        let imported = Session::import(snapshot).unwrap();
+        assert!(imported.owns_opaque_identifier("class", &first));
+        assert_eq!(
+            first,
+            imported
+                .opaque_identifier("class", "private_canary_name")
+                .unwrap()
+        );
+    }
+
     #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn restore_financial_patterns_match_forward_rulepack() {
@@ -3135,6 +3306,7 @@ mod tests {
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
         let snapshot = signed_snapshot(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
             session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
@@ -3149,6 +3321,7 @@ mod tests {
     #[test]
     fn import_rejects_v03_envelope_byte() {
         let snapshot = signed_snapshot_v03(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
             session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
@@ -3166,6 +3339,7 @@ mod tests {
     #[test]
     fn import_rejects_invalid_session_hex() {
         let snapshot = signed_snapshot(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
             session_hex: "A7F3B8E2".to_string(),
             entries: Vec::new(),
@@ -3183,6 +3357,7 @@ mod tests {
     #[test]
     fn import_rejects_manifest_entry_prefix_mismatch() {
         let snapshot = signed_snapshot(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
             session_hex: "a7f3b8e2".to_string(),
             entries: vec![SnapshotEntry {
@@ -3232,6 +3407,7 @@ mod tests {
             vec![first.clone(), duplicate_value],
         ] {
             let snapshot = signed_snapshot(SnapshotPayload {
+                opaque_identifier_key: None,
                 scope: SnapshotScope::Persistent { ttl_secs: 300 },
                 session_hex: "a7f3b8e2".to_string(),
                 entries,
@@ -3253,6 +3429,7 @@ mod tests {
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
         let snapshot = signed_snapshot(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Persistent { ttl_secs: 10 },
             session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
@@ -3273,6 +3450,7 @@ mod tests {
     #[test]
     fn import_accepts_legacy_persistent_snapshot_without_issued_at() {
         let snapshot = signed_snapshot_v2(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Persistent { ttl_secs: 1 },
             session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
@@ -3330,6 +3508,7 @@ mod tests {
         // A pre-v6 blob cannot say how its values were found, so none of them
         // seed the repeat-value sweep; restore is unchanged.
         let snapshot = signed_snapshot(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Conversation("legacy".to_string()),
             session_hex: "a7f3b8e2".to_string(),
             entries: vec![SnapshotEntry {
@@ -3406,6 +3585,7 @@ mod tests {
 
     fn json_spelled_payload(raw: &str) -> SnapshotPayload {
         SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Conversation("spelling".to_string()),
             session_hex: "a7f3b8e2".to_string(),
             entries: vec![SnapshotEntry {
@@ -3829,6 +4009,7 @@ mod tests {
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
         let snapshot = signed_snapshot(SnapshotPayload {
+            opaque_identifier_key: None,
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
             session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
