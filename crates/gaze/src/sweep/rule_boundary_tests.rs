@@ -176,7 +176,7 @@ fn rule_boundary_markup_grammar() {
             }
         }
         for close in ["/>", ">v</{T}>"] {
-            let input = format!("<{tag} customAttr=C-731284 customer_id=C-731284{close}")
+            let input = format!("<{tag} customAttr=C-731284 customer_id=C-731284 {close}")
                 .replace("{T}", tag);
             // A matching close or self-close establishes real markup even with unknown attrs.
             boundary_case(&input, &[]);
