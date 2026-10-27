@@ -169,6 +169,7 @@
     "crates/gaze/src/sweep/rule_boundary_tests.rs",
     "crates/gaze/testdata/ner/README.md",
     "crates/gaze/tests/fixtures/record-id-code-counterweights.json",
+    "crates/gaze/tests/fixtures/record-id-review-probes.json",
     "crates/gaze/tests/fixtures/session_snapshot_v3_text_only.bin",
     "crates/gaze/tests/ui/pipeline_transaction_rejects_committed_snapshot.stderr",
     "crates/gaze/tests/ui/pipeline_transaction_rejects_fake_target.stderr",

@@ -232,7 +232,23 @@ fn rule_boundary_markup_grammar() {
         );
         count += 1;
     }
-    assert_eq!(count, 207);
+    for keyword in ["AND", "OR", "NOT", "WHERE", "SELECT", "FROM", "SET"] {
+        boundary_case(
+            &format!("while x <b {keyword} customer_id=731284> 0"),
+            &["731284"],
+        );
+        count += 1;
+    }
+    for attribute in ["href=/x", "xml:lang=en", "@click=go", "v-bind.key=k"] {
+        boundary_case(
+            &format!("<a {attribute} data-customer-id=C-731284 >text"),
+            &[],
+        );
+        count += 1;
+    }
+    boundary_case("run <input customer_id=731284 >", &["731284"]);
+    count += 1;
+    assert_eq!(count, 219);
 }
 
 #[test]
