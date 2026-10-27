@@ -1,0 +1,24 @@
+{
+  "cases": [
+    {
+      "compile_nanoseconds": 0,
+      "document": "plain",
+      "extra_immutable_compiled_bytes": 0,
+      "transformed_regexes_compiled": 0
+    },
+    {
+      "compile_nanoseconds": 184658993,
+      "document": "zwsp",
+      "extra_immutable_compiled_bytes": 16729285,
+      "transformed_regexes_compiled": 47
+    }
+  ],
+  "locale": "en-US",
+  "rulepacks": [
+    "core"
+  ],
+  "schema": "gaze-source-regex-cold-work-v1",
+  "implementation_sha": "b4d6f922b744478f45c288535d659f97b33fee79",
+  "measurement": "Release test-support work counter: sum of transformed regex AST/regex construction wall time; busy shared host; no timing claim.",
+  "cli_binary_sha256": "ad587649a1b554e60704eec465311e5e1e69a64c92691b44a35047590a00f4a4"
+}
