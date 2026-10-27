@@ -15,6 +15,9 @@ maps the crates.
 
 ## Detection and conflict resolution
 
+- [Protection outcomes and field evidence](detection/outcomes.md)
+- [Labelled identifiers](detection/labelled-identifiers.md)
+- [Password hashes and code credentials](detection/password-credentials.md)
 - [Feedback loop](detection/feedback-loop.md)
 - [Validator veto](detection/validator-veto.md)
 - [Repeat-value sweep](detection/manifest-sweep.md)
