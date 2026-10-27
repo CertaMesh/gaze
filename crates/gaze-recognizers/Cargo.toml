@@ -32,7 +32,7 @@ gaze-types = { workspace = true }
 hex = "0.4"
 libc = "0.2"
 ndarray = "0.16"
-ort = { version = "=2.0.0-rc.12", default-features = false, features = ["ndarray", "std", "download-binaries", "tls-rustls"] }
+ort = { version = "^2.0.0-rc.13", default-features = false, features = ["ndarray", "std", "download-binaries", "tls-rustls"] }
 phonenumber = { version = "0.3.9", default-features = false, optional = true }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
