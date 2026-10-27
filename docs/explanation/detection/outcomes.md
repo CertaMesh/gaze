@@ -11,7 +11,8 @@ replacement safety can be evaluated separately:
 
 These types are dormant contracts. No recognizer produces these outcomes yet,
 and these types do not change detection, rendering, or refusal policy.
-`Candidate.outcome == None` denotes the legacy protected-candidate contract. It does not prove that an input contains no other sensitive values.
+`Candidate.outcome == None` denotes the legacy protected-candidate contract.
+It does not prove that an input contains no other sensitive values.
 
 `FieldProvenance` carries a field path, its original JSON scalar type, and the
 source of that context. Caller-declared context and validated parsing provide
