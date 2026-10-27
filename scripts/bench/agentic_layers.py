@@ -4491,7 +4491,7 @@ GENERATOR_ADDITIONS = {
     24: "credentials_separators_",
     25: "credentials_prefixes_",
     27: "invisible_",
-    28: "invisible_bom_",
+    28: ("invisible_bom_", "invisible_joined_"),
 }
 
 
@@ -4499,7 +4499,8 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
     """The documents of generator `version`, from the current generator's output."""
     if not 3 <= version <= GENERATOR_VERSION:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
-    later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
+    later = tuple(prefix for added, prefixes in GENERATOR_ADDITIONS.items() if added > version
+                  for prefix in ((prefixes,) if isinstance(prefixes, str) else prefixes))
     selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
     if version < 18:
         selected = [

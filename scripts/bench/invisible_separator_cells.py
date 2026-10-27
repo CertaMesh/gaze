@@ -8,6 +8,8 @@ No detector output determines gold or the negative examples.
 SEPARATORS = {"zwsp": "\u200b", "word_joiner": "\u2060", "soft_hyphen": "\u00ad", "nb_hyphen": "\u2011", "bom": "\ufeff"}
 CUED_SURFACES = {"invisible_" + separator + "_" + surface
                  for separator in SEPARATORS for surface in ("prose", "json")}
+JOINERS = {**{name: value for name, value in SEPARATORS.items() if name != "nb_hyphen"},
+           "zwj": "\u200d", "zwnj": "\u200c"}
 
 
 def records(api, partition):
@@ -84,4 +86,23 @@ def records(api, partition):
             for family, value in twins.items():
                 template = "Schema example: {V}; incomplete." if partition == "dev" else "Public format fixture = {V}. Not assigned."
                 emit("D", family, separator_name + "_" + family, index, template, value, None)
+    joined_rng = api.Rng(api.PARTITION_SEEDS[partition], "invisible-joined-runs")
+    joined_cues = (("ID card", "NATIONALID"), ("Tax number", "TAXNUM")) if partition == "dev" else (
+        ("Identity card", "NATIONALID"), ("Tax ID", "TAXNUM"))
+    for index in range(api.DOCS_PER_FAMILY):
+        prefix = "VR" if partition == "dev" else "ZT"
+        groups = (prefix + joined_rng.digits(2), prefix + joined_rng.digits(4),
+                  prefix + joined_rng.digits(9))
+        for name, separator in JOINERS.items():
+            value = groups[0] + " " + groups[1] + separator + groups[2]
+            for cue, label in joined_cues:
+                for surface, template in templates.items():
+                    joined_surface = "joined_" + name + "_" + surface
+                    emit("A", "joined_" + label.lower(), joined_surface, index, template, value, label, cue)
+                    emit("R", "joined_" + label.lower(), joined_surface, index,
+                         template + ("\nAgain: {V}" if partition == "dev" else "\nCopy = {V}"),
+                         value, label, cue)
+            template = "Public build reference: {V}." if partition == "dev" else "Public batch code = {V}."
+            emit("D", "joined_public_reference", "joined_" + name + "_reference", index,
+                 template, value, None)
     return result

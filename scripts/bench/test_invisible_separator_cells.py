@@ -62,3 +62,14 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
             self.assertTrue(all(row.layer == "D" and not row.gold for row in code))
             self.assertTrue(all("\ufeff" in row.text for row in code))
             self.assertTrue(all(row.text.startswith("\ufeff") for row in code if row.family == "leading_code"))
+
+    def test_joined_overlong_values_have_gold_repeats_and_public_counterweights(self):
+        for partition in agentic.PARTITIONS:
+            rows = cells.records(agentic, partition)
+            for name, separator in cells.JOINERS.items():
+                selected = [row for row in rows if row.surface.startswith("invisible_joined_" + name + "_")]
+                self.assertEqual({row.layer for row in selected}, {"A", "D", "R"})
+                self.assertEqual({span.label for row in selected for span in row.gold}, {"NATIONALID", "TAXNUM"})
+                for row in selected:
+                    self.assertIn(separator, row.text)
+                    self.assertEqual(len(row.gold), {"A": 1, "D": 0, "R": 2}[row.layer])

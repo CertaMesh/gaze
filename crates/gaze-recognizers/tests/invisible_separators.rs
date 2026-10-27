@@ -150,11 +150,21 @@ fn legitimate_joiners_and_code_bom_stay_byte_exact_without_tokens() {
 
 #[test]
 fn joined_public_references_do_not_become_labelled_identifiers() {
-    for separator in ['\u{200b}', '\u{2060}', '\u{00ad}', '\u{feff}', '\u{200d}', '\u{200c}'] {
+    for separator in [
+        '\u{200b}', '\u{2060}', '\u{00ad}', '\u{feff}', '\u{200d}', '\u{200c}',
+    ] {
         for prefix in ["Public build reference: ", "ID card documentation: "] {
             let input = format!("{prefix}AB12 CD3456{separator}XYZ123456");
             let session = Session::new(Scope::Ephemeral).unwrap();
-            assert_eq!(support::clean(pipeline(), &session, &input, &[LocaleTag::EnUs, LocaleTag::Global]), input);
+            assert_eq!(
+                support::clean(
+                    pipeline(),
+                    &session,
+                    &input,
+                    &[LocaleTag::EnUs, LocaleTag::Global]
+                ),
+                input
+            );
             assert!(session.snapshot_entries().is_empty());
         }
     }
