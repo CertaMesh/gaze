@@ -109,7 +109,13 @@ fn rule_boundary_markup_grammar() {
     boundary_case("<input\n customer_id=C-731284>", &[]); count += 1;
     boundary_case("run <input customer_id=731284 >out", &["731284"]); count += 1;
     boundary_case("run <input customer_id=731284>out", &["731284"]); count += 1;
-    assert_eq!(count, 196);
+    for attribute in ["Customer ID", "Employee ID", "customerId", "MEMBER_ID"] {
+        boundary_case(&format!("<input {attribute}=C-731284>"), &[]); count += 1;
+    }
+    for keyword in ["AND", "OR", "NOT", "WHERE", "SELECT", "FROM", "SET"] {
+        boundary_case(&format!("while x <b {keyword} customer_id=731284 >out"), &["731284"]); count += 1;
+    }
+    assert_eq!(count, 207);
 }
 
 #[test]

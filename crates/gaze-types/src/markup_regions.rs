@@ -78,7 +78,7 @@ fn assignment_tag(
     let known_tag = known_tag(&folded_tag) || tag.contains('-');
     let component = tag.as_bytes()[0].is_ascii_uppercase();
     let mut html_attributes = true;
-    let mut lowercase_attributes = true;
+    let mut non_sql_attributes = true;
     let mut syntax_start = start;
     let mut syntax = Vec::new();
     let mut assignment = false;
@@ -88,7 +88,7 @@ fn assignment_tag(
             let compact_end = at > start && !bytes[at - 1].is_ascii_whitespace();
             at += if bytes[at] == b'>' { 1 } else { 2 };
             let paired = self_closing || closers.get(&folded_tag).is_some_and(|&close| close >= at);
-            let fragment = lowercase_attributes
+            let fragment = non_sql_attributes
                 && compact_end
                 && bytes
                     .get(at)
@@ -123,7 +123,32 @@ fn assignment_tag(
         }
         let attribute = &text[attribute_start..at];
         html_attributes &= html_attribute(attribute);
-        lowercase_attributes &= !attribute.bytes().any(|byte| byte.is_ascii_uppercase());
+        non_sql_attributes &= !matches!(
+            attribute,
+            "AND"
+                | "OR"
+                | "NOT"
+                | "WHERE"
+                | "SELECT"
+                | "FROM"
+                | "SET"
+                | "VALUES"
+                | "ORDER"
+                | "GROUP"
+                | "BY"
+                | "LIMIT"
+                | "OFFSET"
+                | "HAVING"
+                | "JOIN"
+                | "ON"
+                | "RETURNING"
+                | "UNION"
+                | "INSERT"
+                | "UPDATE"
+                | "DELETE"
+                | "INTO"
+                | "AS"
+        );
         if at == limit {
             return None;
         }
