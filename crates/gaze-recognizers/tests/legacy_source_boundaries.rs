@@ -39,3 +39,32 @@ fn legacy_regex_detectors_keep_glued_and_internal_source_boundaries() {
         }
     }
 }
+
+#[test]
+fn adopter_ignorable_literals_and_class_members_keep_matching() {
+    for sep in ['\u{200b}', '\u{ad}', '\u{fe0f}', '\u{e0067}'] {
+        for pattern in [
+            format!(r"ID{sep}\d{{6}}\b"),
+            format!(r"ID[{sep}_]\d{{6}}\b"),
+        ] {
+            let pipeline = Pipeline::builder()
+                .detector(
+                    RegexDetector::new(&pattern, gaze::PiiClass::custom("reference").unwrap())
+                        .unwrap(),
+                )
+                .rule(DefaultRule::new(Action::Tokenize))
+                .build()
+                .unwrap();
+            let input = format!("ID{sep}123456");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = support::clean(&pipeline, &session, &input, &[LocaleTag::Global]);
+            assert_eq!(
+                session.snapshot_entries().len(),
+                1,
+                "{pattern:?}: {clean:?}"
+            );
+            assert_eq!(session.snapshot_entries()[0].raw, input);
+            assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+        }
+    }
+}

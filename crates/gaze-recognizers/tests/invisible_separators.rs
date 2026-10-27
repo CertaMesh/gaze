@@ -245,3 +245,68 @@ fn preservation_policy_keeps_original_formatting_and_emits_no_tokens() {
         assert!(session.snapshot_entries().is_empty());
     }
 }
+
+#[test]
+fn gap_neighbours_do_not_hide_or_extend_validated_values() {
+    for sep in [
+        '\u{ad}',
+        '\u{34f}',
+        '\u{61c}',
+        '\u{115f}',
+        '\u{17b4}',
+        '\u{180e}',
+        '\u{200b}',
+        '\u{200c}',
+        '\u{200d}',
+        '\u{202a}',
+        '\u{2060}',
+        '\u{3164}',
+        '\u{fe0f}',
+        '\u{feff}',
+        '\u{ffa0}',
+        '\u{fff0}',
+        '\u{1bca0}',
+        '\u{1d173}',
+        '\u{e0067}',
+    ] {
+        for (cue, value) in [
+            ("", "+44 7700 900123"),
+            ("Phone: ", "+44 7700 900123"),
+            ("Phone: ", "+49 171 3920000"),
+            ("Card: ", "4111111111111111"),
+            ("IBAN: ", "GB82WEST12345698765432"),
+            ("ip ", "192.168.10.20"),
+        ] {
+            for prefix in [cue.to_owned(), format!("{cue}9{sep}")] {
+                assert_exact_token(&prefix, value, &format!("{sep}9 ok"));
+            }
+        }
+        assert_exact_token("Phone: ", "+44 7700 900123", &format!("{sep}2024 ok"));
+    }
+}
+
+#[test]
+fn split_digit_runs_do_not_manufacture_bare_postal_codes() {
+    for sep in ['\u{200b}', '\u{2060}', '\u{ad}', '\u{3164}'] {
+        let input = "1234567890123456"
+            .chars()
+            .map(|ch| ch.to_string())
+            .collect::<Vec<_>>()
+            .join(&sep.to_string());
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let clean = support::clean(
+            pipeline(),
+            &session,
+            &input,
+            &[LocaleTag::EnUs, LocaleTag::Global],
+        );
+        assert!(
+            !session
+                .snapshot_entries()
+                .iter()
+                .any(|entry| entry.class == gaze::PiiClass::custom("postal_code").unwrap()),
+            "{input:?} -> {clean:?}"
+        );
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+    }
+}

@@ -74,4 +74,3 @@ fn is_default_ignorable(ch: char) -> bool {
         | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}'
         | '\u{E0000}'..='\u{E0FFF}')
 }
-
