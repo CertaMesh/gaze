@@ -232,7 +232,13 @@ fn all_rulepack_regexes_preserve_captures_without_source_gaps() {
         "word\u{200b}D\u{200b}OB: 2000-01-02; done.",
     ];
     let mut sizes = Vec::new();
-    for (id, pattern) in &regexes {
+    for (regex_index, (id, pattern)) in regexes.iter().enumerate() {
+        eprintln!(
+            "REGEX {}/{}: {} clean cases per pattern",
+            regex_index + 1,
+            regexes.len(),
+            corpus.len()
+        );
         let pattern = expand(pattern, &buckets);
         let original = Regex::new(&pattern).unwrap_or_else(|error| panic!("{id}: {error}"));
         let transformed = compile(&pattern).unwrap_or_else(|error| panic!("{id}: {error}"));

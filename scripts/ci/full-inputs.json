@@ -929,6 +929,7 @@
     "scripts/bench/validator_recall_probe/Cargo.toml",
     "scripts/ci/check_competitor_capture_mutations.py",
     "scripts/ci/check_past_capture_mutations.py",
+    "scripts/ci/invisible_separator_release.py",
     "scripts/ci/tutorial_gate.py",
     "scripts/ci/verify_normalize_merge.py",
     "scripts/fetch/fetch-ner-model.sh",

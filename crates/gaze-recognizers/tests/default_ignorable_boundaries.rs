@@ -89,7 +89,11 @@ fn assert_protected(input: &str, value: &str) {
 
 #[test]
 fn every_default_ignorable_preserves_value_boundaries() {
-    for sep in separators() {
+    let selected = separators();
+    for (index, sep) in selected.iter().copied().enumerate() {
+        if index % 256 == 0 || index + 1 == selected.len() {
+            eprintln!("SEPARATORS {}/{}", index + 1, selected.len());
+        }
         for value in VALUES {
             assert_protected(&format!("word{sep}{value}; done"), value);
             assert_protected(&format!("Value: {value}{sep}word; done"), value);
@@ -99,7 +103,11 @@ fn every_default_ignorable_preserves_value_boundaries() {
 
 #[test]
 fn every_default_ignorable_inside_values_keeps_all_source_bytes() {
-    for sep in separators() {
+    let selected = separators();
+    for (index, sep) in selected.iter().copied().enumerate() {
+        if index % 256 == 0 || index + 1 == selected.len() {
+            eprintln!("SEPARATORS {}/{}", index + 1, selected.len());
+        }
         for (cue, value, at) in [
             ("Card: ", VALUES[0], 4),
             ("IBAN: ", VALUES[1], 8),

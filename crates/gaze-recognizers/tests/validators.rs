@@ -804,7 +804,9 @@ fn validator_classes_keep_gap_neighbours_outside_valid_values() {
     ] {
         cases.push((kind, r"\+[0-9 ]+[0-9]\b", value.to_owned()));
     }
-    for (kind, pattern, value) in cases {
+    let total = cases.len();
+    for (index, (kind, pattern, value)) in cases.into_iter().enumerate() {
+        eprintln!("VALIDATORS {}/{}", index + 1, total);
         assert!(
             kind.validates(&value),
             "synthetic fixture must validate: {kind:?}"

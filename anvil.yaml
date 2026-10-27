@@ -69,17 +69,17 @@ checks:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/verify_normalize_merge.py
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_mutation_probe.py
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-types -p gaze-pii -p gaze-recognizers --all-features
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-types -p gaze-pii -p gaze-recognizers --all-features -- --nocapture
   invisible-release:
-    description: Build the release CLI for invisible-separator equality and cold-start evidence
+    description: Build exact integrated main and candidate for separator equality
     expensive: true
     reusable: false
     locks: [workspace-build]
-    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, anvil.yaml]
+    identity_env: [GAZE_CLEAN_BASE_WORKTREE]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/invisible_separator_release.py, anvil.yaml]
     toolchain: [rustc -Vv, cargo -V]
     commands:
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo build --release -p gaze-cli
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test --release -p gaze-recognizers --features test-support --test source_regex_cold_work -- --nocapture
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_release.py
   fmt:
     reusable: true
     inputs: &rust-inputs [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, .github/workflows, anvil.yaml]
