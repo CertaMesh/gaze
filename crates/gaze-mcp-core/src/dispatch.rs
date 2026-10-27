@@ -1016,9 +1016,9 @@ mod tests {
             .unwrap();
             let rows = audit.rows_without_clock();
             assert!(!rows.is_empty());
-            let entries = transaction.snapshot_entries();
-            assert_eq!(entries.len(), 1);
-            (serde_json::to_vec(&result).unwrap(), entries, rows)
+            let manifest = transaction.manifest_payload_for_tests().unwrap();
+            assert_eq!(manifest["entries"].as_array().unwrap().len(), 1);
+            (serde_json::to_vec(&result).unwrap(), manifest, rows)
         };
         assert_eq!(run(false), run(true));
         observer.assert_field("alice@example.invalid", &["contact", "email"]);
