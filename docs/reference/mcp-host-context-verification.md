@@ -39,7 +39,8 @@ canonical JSON, together with the exit code. Random owner-secret session blobs
 are excluded. This is equality of the documented projection, not raw whole-JSON
 equality or full-corpus detection certification.
 
-A candidate-output mutant replaces one ASCII character in `clean_text`.
+A candidate-output mutant replaces one ASCII character in `clean_text` outside
+all normalized `<SESSION:...>` placeholders. Placeholder-only output is skipped.
 The driver checks that the serialized projection changes by exactly one byte
 and that the same comparator rejects it in both policy modes.
 
@@ -59,28 +60,58 @@ The merged equality driver retains both policy modes, complete-emitted-token
 normalization and the one-byte comparator checks. It also rejects distinct paths
 with identical binary contents. Four Python tests passed against the merged
 script, covering binary identity, token normalization and one-byte rejection.
+The docs/script-only follow-up at `029233fcf955c54aa3e82976a160e9ff0ad3bb0f`
+adds two tests for placeholder-only output and prose after placeholders. All six
+tests pass on Python 3.13. Disabling the placeholder guard in a compiled in-memory
+mutant makes both new tests fail. No Rust source or Cargo inputs changed after
+the recorded equality run, so the 2,144-case comparison was not repeated.
 
 ## MCP latency and memory
 
-**Fresh five-run capture: pending.** The operator deferred timing measurements.
-The table and JSON below are the historical capture before assembly reuse,
-from source `f9f79848e6e6f4837821862801a4a795714e1547`. They do not measure the
-cached implementation, and no speedup is claimed. The driver now supports a
-reference host and alternates reference/candidate Present runs for the next
-capture.
+The cached host is faster on this fixed sequential workload. Median Present p50
+across five runs fell from 76.997 ms for the freshly rebuilt pre-cache host to
+6.400 ms for the cached host. The run ranges do not overlap. Present p95 fell
+from 97.971 ms to 7.321 ms. This is a shared-machine observation, not a latency
+budget or a resident neural model measurement.
 
 [Value-free measurement report](mcp-host-latency-rss.json).
 
+Both sides were independently rebuilt with Rust 1.96.0
+(`ac68faa20 2026-05-25`), locked release dependencies, two jobs and nice level 10.
+The cached source is `029233fcf955c54aa3e82976a160e9ff0ad3bb0f`; the pre-cache
+source is `f9f79848e6e6f4837821862801a4a795714e1547`, which produced the historical
+reference. The measurement example has identical source bytes on both sides.
+The rebuilt reference executable also matches its historical SHA-256.
+The report pins both sources, binary hashes, driver hash and build provenance.
+
 Hardware: Apple M5 Max, 18 logical CPUs, 64 GiB RAM, arm64, macOS 26.5.
-The machine was shared. Start-load averages are recorded for every run.
-All 900 calls were validated, with zero errors. Each path validated 300 calls,
-including warmup. The table gives the median and range across five runs.
+Other Gaze builds and tests were paused during capture. Non-Gaze work remained
+on the shared machine. Before/after `uptime`, `memory_pressure` and `df -g /`
+outputs are retained in the report: load1 11.57/9.75, free memory 81%/82%,
+and available disk 125/125 GiB. Per-run load averages are also recorded.
+The comparison interleaves reference and cached Present runs to reduce drift.
+
+All 1,200 calls validated with zero errors, including warmup. Each of the four
+paths validated 300 calls: five fresh server processes, ten warmup calls and
+fifty timed calls per process. The table gives median and range across five runs.
 
 | Path | p50 ms, median [range] | p95 ms, median [range] | Peak RSS MiB, median [range] |
 | --- | --- | --- | --- |
-| cli-absent | 0.721 [0.643, 0.789] | 1.235 [0.979, 5.667] | 55.953 [51.000, 63.078] |
-| embedded-absent | 1.296 [1.254, 1.362] | 1.695 [1.435, 1.996] | 59.953 [51.984, 61.438] |
-| embedded-present | 43.227 [41.983, 45.070] | 46.858 [45.091, 47.783] | 92.047 [89.359, 97.359] |
+| CLI Absent | 1.587 [0.858, 2.381] | 2.066 [1.066, 7.990] | 56.000 [55.703, 65.469] |
+| Embedded Absent | 2.218 [1.458, 2.866] | 3.118 [2.070, 3.368] | 52.828 [51.891, 59.172] |
+| Pre-cache Present | 76.997 [74.989, 90.343] | 97.971 [94.021, 160.907] | 92.172 [89.938, 100.406] |
+| Cached Present | 6.400 [4.919, 9.351] | 7.321 [5.840, 16.516] | 74.469 [73.531, 88.172] |
+
+The historical committed capture used the same pre-cache source but ran in a
+different machine session. Its numbers remain context for the requested check
+against the former 43 ms Present result. The interleaved table above supplies
+the current comparison.
+
+| Historical path | p50 ms | p95 ms | Peak RSS MiB |
+| --- | --- | --- | --- |
+| CLI Absent | 0.721 | 1.235 | 55.953 |
+| Embedded Absent | 1.296 | 1.695 | 59.953 |
+| Embedded Present | 43.227 | 46.858 | 92.047 |
 
 The release measurements cover three distinct paths:
 
@@ -92,27 +123,31 @@ The release measurements cover three distinct paths:
 
 Stock CLI stdio has no host-private context channel. The embedded example uses
 host-owned process configuration and the same core assembly and `PiiEnvelope`
-as CLI serve. It does not add a production context injection switch.
+as CLI serve. It adds no production context injection switch. All paths use
+the core pipeline without optional neural safety nets.
 
 The embedded workload supplies 32 short argument scalars and stays within the
-default byte and scalar caps. Each path runs in five fresh server processes,
-with ten warmup calls and fifty timed calls per process. Embedded Absent and
-Present alternate order. Requests are sequential at concurrency one.
+default byte and scalar caps. Embedded Absent, pre-cache Present and cached
+Present reverse their order on alternating repetitions. Requests are sequential
+at concurrency one. CLI includes manifest filesystem work, so its measurements
+cannot isolate context overhead.
 
 Each timed interval starts before writing a JSON-RPC `tools/call` request and
-ends after receipt of its complete response. The driver checks every response
-outside the timed interval. It verifies preservation for Absent and tokenization
-of the unguessed host record for Present. The tool catalog and MCP handshake
-are checked before timing.
+ends after receipt of its complete response. Response validation runs outside
+the timed interval. It checks preservation for Absent and tokenization of the
+unguessed host record for Present. The catalog and MCP handshake precede timing.
 
 Peak RSS comes from `wait4` for the exact server process, including startup and
-warmup. The report converts Darwin's byte units directly. Server and driver CPU
-seconds and shared-machine load are recorded. CLI includes manifest filesystem
-work, so its measurements cannot isolate context overhead.
+warmup. Darwin's byte units are converted directly. Server and driver CPU
+seconds are recorded. The driver uses much less CPU than the server, so it is
+not the workload's bottleneck.
 
-These are observed latencies and memory use for one fixed sequential workload.
-There is no pass/fail threshold, no claim of a speedup, and no resident neural
-model claim. Both paths use the core pipeline without optional neural safety nets.
+Separate one-second CPU samples taken after ten validated warmup calls show
+`pipeline_with_private_context` and `build_pipeline_builder_inner` in the
+pre-cache host. The cached host instead spends active CPU on response protection
+and bounded guess matching. This agrees with the construction-counter regression:
+assembly is reused while detection and per-call exclusions still execute.
+Profiling timings are discarded and do not enter the five-run report.
 
 ## Reproduction
 
@@ -132,9 +167,15 @@ anvil run -- python3 scripts/verify_clean_equality.py \
 	--candidate-bin target/release/gaze \
 	--base-sha "$BASE_SHA" --candidate-sha "$CANDIDATE_SHA" \
 	--output target/clean-equality.json
+# Build the pre-cache host in its own prepared Anvil worktree at f9f79848.
+anvil run "$REFERENCE" -- env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 \
+	nice -n 10 cargo build --locked --release -p gaze-mcp-rmcp \
+	--example host_context_measure
 anvil run -- python3 scripts/measure_mcp_host_context.py \
 	--cli-bin target/release/gaze \
 	--host-bin target/release/examples/host_context_measure \
+	--reference-host-bin "$REFERENCE/target/release/examples/host_context_measure" \
+	--reference-source-sha f9f79848e6e6f4837821862801a4a795714e1547 \
 	--output target/mcp-host-latency-rss.json
 ```
 
@@ -142,3 +183,6 @@ The latency capture requires the Solo `bench-machine` lease. Heavy work follows
 the operator's time window, free-memory floor, and disk floor. The fixed workload
 is defined in the committed driver and example. The report pins their measured
 source and binary hashes. Evidence-document commits do not alter runtime code.
+
+Before and after capture, retain `uptime`, the last line of `memory_pressure`,
+and `df -g /` alongside the measurement. These snapshots are outside timing.
