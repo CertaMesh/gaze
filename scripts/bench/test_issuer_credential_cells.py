@@ -9,7 +9,7 @@ import issuer_credential_cells as cells
 class IssuerCredentialCellsTests(unittest.TestCase):
     def test_positive_and_counterweight_cells_and_source_offsets(self):
         records = cells.records(api, "test")
-        self.assertEqual(len(records), 3190)
+        self.assertEqual(len(records), 4200)
         self.assertEqual({r.layer for r in records}, {"A", "D", "R"})
         for record in records:
             self.assertEqual(bool(record.gold), record.layer != "D")
@@ -17,6 +17,13 @@ class IssuerCredentialCellsTests(unittest.TestCase):
                 self.assertEqual(record.text.encode()[gold.start:gold.end].decode(), gold.value)
         self.assertTrue(any(r.surface.endswith("truncated_nested_json") for r in records))
         self.assertTrue(any(r.family == "generic_sk" and r.layer == "D" for r in records))
+        self.assertEqual(sum(r.layer == "D" and r.family == "code_identifier" for r in records), 90)
+        self.assertEqual(sum(r.layer == "D" and r.family == "tutorial" for r in records), 20)
+        self.assertTrue(any(r.surface.endswith("pem_comma") for r in records))
+        self.assertTrue(any(r.surface.endswith("pem_space") for r in records))
+        encoded = [r for r in records if r.surface.endswith("pem_url")]
+        self.assertEqual(len(encoded), 70)
+        self.assertTrue(all("BEGIN%20" in r.text for r in encoded))
 
     def test_partitions_use_different_values_and_rendered_templates(self):
         dev, test = [cells.records(api, p) for p in api.PARTITIONS]

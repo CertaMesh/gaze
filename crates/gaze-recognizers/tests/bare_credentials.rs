@@ -94,14 +94,14 @@ fn prefixed_values() -> Vec<String> {
     for prefix in ["sk-svcacct-", "sk-admin-", "sk-None-"] {
         values.push(format!("{prefix}{}", "A_-".repeat(100)));
     }
-    values.push(format!("AIza{}", "A_-".repeat(12)));
+    values.push(format!("AIzaSy{}", "A_-".repeat(11)));
     values.push(format!("ghp_{}-old", "A".repeat(36)));
     values
 }
 
 fn pem(label: &str, newline: &str) -> String {
     // Base64 decodes to synthetic text, never private-key material.
-    format!("-----BEGIN {label}-----{newline}bm90LWEta2V5{newline}c3ludGhldGlj{newline}-----END {label}-----")
+    format!("-----BEGIN {label}-----{newline}bm90LWEta2V5c3ludGhldGlj{newline}c3ludGhldGlj{newline}-----END {label}-----")
 }
 
 #[test]
@@ -162,11 +162,22 @@ fn prose_and_public_material_remain_untouched() {
         "00000000-0000-4000-8000-000000000000".into(),
         pem("PUBLIC KEY", "\n"),
         pem("CERTIFICATE", "\n"),
+        "def network_test_handles_missing_bundle_gracefully():".into(),
+        "fn benchmark_test_reports_peak_rss_for_every_arm() {}".into(),
+        r#"{"task_test_retry_with_exponential_backoff_ok": true}"#.into(),
+        "fn parser_weighs_all_candidate_spans_before_conflict_resolution() {}".into(),
+        "key: user_laughs_at_the_joke_and_continues_reading_page_two".into(),
+        "disk_live_bytes_written_since_the_last_collection".into(),
+        "https://example.invalid/desk-admin-panel-settings-overview-page-container".into(),
+        r#"class="task-proj-board-column-header-collapsed-state""#.into(),
+        "--mask-None-values-in-the-output-stream".into(),
+        "Your file starts with\n-----BEGIN OPENSSH PRIVATE KEY-----\nand then contains base64 lines you must never share with anyone at all.".into(),
+        "A key starts with -----BEGIN PRIVATE KEY----- and ends with a matching footer.".into(),
+        format!("BAIza{}", "A".repeat(40)),
     ];
     {
         negatives.extend([
             // Short generic prefixes must not turn code identifiers into secrets.
-            format!("task-sk-{}", "A".repeat(64)),
             format!("desk-{}", "A".repeat(64)),
             format!("mask-{}", "A".repeat(64)),
         ]);
@@ -199,7 +210,7 @@ fn legacy_encrypted_rsa_headers_and_escaped_base64_stay_in_one_span() {
 }
 
 #[test]
-fn issuer_boundaries_fail_closed_but_generic_prefixes_need_attribution() {
+fn issuer_boundaries_protect_framing_and_preserve_identifiers() {
     let core = core();
     for value in prefixed_values() {
         for (left, right) in [
@@ -211,20 +222,20 @@ fn issuer_boundaries_fail_closed_but_generic_prefixes_need_attribution() {
         ] {
             assert_whole(&core, &format!("{left}{value}{right}"), &[&value]);
         }
-        if !value.starts_with("sk-") || value[3..].contains('-') {
-            for (left, right) in [
-                ("word", ""),
-                ("task-", ""),
-                ("é", "é"),
-                ("令牌", "已泄露"),
-                ("GH_TOKEN_", ""),
-            ] {
-                assert_whole(&core, &format!("{left}{value}{right}"), &[&value]);
-            }
+        assert_whole(&core, &format!("word{value}"), &[]);
+        for (left, right) in [
+            ("task-", ""),
+            ("é", "é"),
+            ("令牌", "已泄露"),
+            ("GH_TOKEN_", ""),
+            ("BUILD_", ""),
+            ("OPENAI_KEY_", ""),
+        ] {
+            assert_whole(&core, &format!("{left}{value}{right}"), &[&value]);
         }
     }
     let generic = format!("sk-{}", "A".repeat(64));
-    for prefix in ["task-", "desk-", "mask-", "word", "_"] {
+    for prefix in ["word", "lowercase", "9"] {
         assert_whole(&core, &format!("{prefix}{generic}"), &[]);
     }
 }
@@ -248,6 +259,12 @@ fn truncated_mismatched_and_framed_private_keys_are_whole_and_restorable() {
         "\\\r\n",
         "\\n' +\n'",
         "\\n\" + \"",
+        " ",
+        "\t",
+        "\\n\", \"",
+        "\\n\",\n    \"",
+        "%0A",
+        "%0d%0a",
     ] {
         for prefix in ["", "# ", "// ", "> ", "* "] {
             let framing = format!("{newline}{prefix}");
@@ -266,6 +283,10 @@ fn truncated_mismatched_and_framed_private_keys_are_whole_and_restorable() {
     }
     let pgp = "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: Synthetic\nComment: synthetic fixture\n\nbm90LWEta2V5c3ludGhldGlj\n=ABCD\n-----END PGP PRIVATE KEY BLOCK-----";
     assert_whole(&core, pgp, &[pgp]);
+    for newline in ["%0A", "%0a", "%0D%0A", "%0d%0a"] {
+        let value = pem("RSA PRIVATE KEY", newline).replace(' ', "%20");
+        assert_whole(&core, &format!("key={value}&next=ok"), &[&value]);
+    }
     for placeholder in ["...", "<your key here>", "example", "bm90LWEta2V5"] {
         let raw = format!("-----BEGIN PRIVATE KEY-----\n{placeholder}\n-----END PRIVATE KEY-----");
         assert_whole(&core, &raw, &[]);
