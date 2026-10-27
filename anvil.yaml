@@ -125,6 +125,7 @@ checks:
     commands:
       - cargo fmt --all -- --check
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers -p gaze-pii -p gaze-assembly -p xtask --all-features
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/verify_bare_credentials.py
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- symmetric-potemkin
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- class-map-override-safety

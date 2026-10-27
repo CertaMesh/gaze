@@ -53,6 +53,9 @@ PROBES = [
     ("pem-minimum", "security_token.pem", "{16}", "{1}", PEM_TEST),
     ("pem-prose-fp", "security_token.pem", r"(?:[A-Za-z0-9+/=]|\\/|%2[BbFf]|%3[Dd]){16}", r"(?:[A-Za-z0-9+/=][\x20\t\r\n]*){16}", "prose_and_public_material_remain_untouched"),
     ("pem-truncation", "security_token.pem", "-----)?)", "-----))", PEM_TEST),
+    ("pem-header-allowlist", "security_token.pem", r"[A-Za-z][A-Za-z0-9-]*:[^\r\n]*", r"(?:Proc-Type:[\x20\t]*4,ENCRYPTED|DEK-Info:[\x20\t]*[A-Za-z0-9-]+,[0-9A-Fa-f]+|(?:Version|Comment|Charset):[^\r\n\\<>\"\']*)", "literal_armour_headers_accept_free_text_and_extension_names"),
+    ("pem-serialized-header-boundary", "security_token.pem", r'''[^\r\n\\<>"\']*''', r"[^\r\n]*", "literal_armour_headers_accept_free_text_and_extension_names"),
+    ("pem-list-join", "security_token.pem", r'''|["'][\x20\t]*,[\x20\t]*(?:\r?\n[\x20\t]*)?["']''', "", "comma_joined_private_key_lines_stay_whole"),
 ]
 
 

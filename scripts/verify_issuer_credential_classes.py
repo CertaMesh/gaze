@@ -69,6 +69,39 @@ def main():
                 value = f'-----BEGIN {label}-----{br}bm90LWEta2V5c3ludGhldGlj{br}-----END {label}-----'
                 cases.append((label + '/' + framing, value, (value,)))
         failures += check('pem', cases)
+        cases = []
+        for label in ['PGP PRIVATE KEY BLOCK', 'RSA PRIVATE KEY']:
+            for newline in ['\n', '\r\n']:
+                for header in [
+                    'Comment: Alice Example <alice@example.invalid>',
+                    "Comment: Alice's key", 'Comment: "work"', 'Hash: SHA256',
+                    'X-Custom-2: <synthetic> \\ "quoted" \'text\'',
+                    'Proc-Type: 4,ENCRYPTED (synthetic)',
+                    'DEK-Info: AES-256-CBC,00FF (synthetic)',
+                ]:
+                    value = (f'-----BEGIN {label}-----{newline}{header}{newline}{newline}'
+                             f'bm90LWEta2V5c3ludGhldGlj{newline}bm90LWEta2V5c3ludGhldGlj'
+                             f'{newline}=ABCD{newline}-----END {label}-----')
+                    cases.append((label + '/' + repr(newline) + '/' + header.split(':')[0],
+                                  value, (value,)))
+        failures += check('literal armour headers', cases)
+        cases = []
+        for newline in [r'\n', r'\r\n', '<br>']:
+            for header in ['Comment: <synthetic>', "Comment: Alice's key",
+                           'Comment: "work"', 'Comment: synthetic\\path']:
+                value = (f'-----BEGIN PGP PRIVATE KEY BLOCK-----{newline}{header}{newline}{newline}'
+                         f'bm90LWEta2V5c3ludGhldGlj{newline}-----END PGP PRIVATE KEY BLOCK-----')
+                cases.append((repr(newline) + '/' + header, value, ()))
+        for label in ['PRIVATE KEY', 'RSA PRIVATE KEY', 'PGP PRIVATE KEY BLOCK',
+                      'PUBLIC KEY', 'CERTIFICATE']:
+            for join in ['", "', "', '", '",\n    "']:
+                value = (f'-----BEGIN {label}-----{join}bm90LWEta2V5c3ludGhldGlj'
+                         f'{join}c3ludGhldGlj{join}-----END {label}-----')
+                cases.append((label + '/' + repr(join), '["' + value + '"]',
+                              () if label in ['PUBLIC KEY', 'CERTIFICATE'] else (value,)))
+        value = '["-----BEGIN PRIVATE KEY-----", "example", "-----END PRIVATE KEY-----"]'
+        cases.append(('short placeholder', value, ()))
+        failures += check('serialized armour boundaries and lists', cases)
     if args.kind in ('issuers', 'all'):
         cases = []
         for prefix in cells.ISSUER_PREFIXES:

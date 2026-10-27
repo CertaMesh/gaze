@@ -204,6 +204,8 @@ such as `network_test_handles_missing_bundle_gracefully` remain raw. In
 is protected, and `wordxoxe.` stays outside the token.
 Suffixes include trailing hyphens and have no upper bound. The opaque `ghs_`
 alternative cannot protect only the first segment of a longer JWT.
+An opaque `ghs_` body followed by a dot and a letter, such as `.Next`, stays raw;
+only the structured application-ID/JWT arm accepts credential-internal dots.
 
 The PEM rule owns the BEGIN line and contiguous base64/whitespace run after at
 least 16 contiguous base64 source units, with no interleaved whitespace. It includes an available END line, even if its
@@ -215,6 +217,11 @@ comma-separated strings, URL-encoded labels/newlines/base64, string concatenatio
 comment/blockquote prefixes, line-number and editor gutters, markdown bullets,
 HTML breaks and numeric newline entities, shell continuations, escaped slashes,
 OpenSSL headers and PGP headers/checksum in one restorable token.
+Literal LF/CRLF armour headers accept extension names and arbitrary line values,
+including quotes, apostrophes and angle brackets, following
+[RFC 9580's armour-header guidance](https://www.rfc-editor.org/rfc/rfc9580.html#section-6.2.2).
+Serialized headers stop at quote, markup and escape boundaries. Quoted arrays
+of lines can use commas directly, without a newline escape inside each element.
 [RFC 7468](https://www.rfc-editor.org/rfc/rfc7468) defines PKCS#8 private-key labels.
 Tutorial prose after a BEGIN label stays raw unless it provides the required
 contiguous evidence. Public keys, certificates and placeholder bodies such as `...` or
