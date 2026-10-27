@@ -9,6 +9,7 @@ SOURCE = ROOT / "crates/gaze/src/normalize.rs"
 REGEX_SOURCE = ROOT / "crates/gaze-recognizers/src/regex.rs"
 SOURCE_REGEX = ROOT / "crates/gaze-recognizers/src/source_regex.rs"
 ANCHOR_SOURCE = ROOT / "crates/gaze-recognizers/src/anchored_match.rs"
+PIPELINE_SOURCE = ROOT / "crates/gaze/src/pipeline.rs"
 # One representative per Unicode range, plus every original removed character.
 CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
               0x200D, 0x202A, 0x2060, 0x3164, 0xFE0F, 0xFEFF, 0xFFA0,
@@ -16,7 +17,7 @@ CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
 
 
 def main():
-    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE)
+    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
         relative = path.relative_to(ROOT).as_posix()
@@ -71,6 +72,9 @@ def main():
         reject("unfiltered_gap_compilation", REGEX_SOURCE,
                "if !prefilter.could_match(input) {", "if false && !prefilter.could_match(input) {",
                "one_zwsp_document_records_actual_lazy_compilation_work", "source_regex_cold_work", features="test-support")
+        reject("legacy_context", PIPELINE_SOURCE,
+               ".try_detect_with_context(input, ctx)", ".try_detect(input)",
+               "legacy_regex_detectors_keep_glued_and_internal_source_boundaries", "legacy_source_boundaries")
         reject("joined_run", REGEX_SOURCE, "if !self.complete_labelled_value {", "if true {",
                "regex::tests::joined_recovery_uses_source_gaps_for_bounded_captures", None)
         reject("linear_gap_search", REGEX_SOURCE,
@@ -83,7 +87,7 @@ def main():
     finally:
         for path, original in originals.items():
             path.write_bytes(original)
-    print(f"MUTATION DONE: {len(CODEPOINTS) + 8} mutations rejected; source restored")
+    print(f"MUTATION DONE: {len(CODEPOINTS) + 9} mutations rejected; source restored")
 
 
 if __name__ == "__main__":

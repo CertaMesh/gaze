@@ -5905,11 +5905,11 @@ where
     fn detect(
         &self,
         input: &str,
-        _ctx: &DetectContext<'_>,
+        ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         Ok(self
             .detector
-            .try_detect(input)
+            .try_detect_with_context(input, ctx)
             .map_err(|err| gaze_types::DetectError::backend(err.recognizer_id, err.message))?
             .into_iter()
             .map(|detection| {

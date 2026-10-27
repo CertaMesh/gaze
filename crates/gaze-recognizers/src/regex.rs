@@ -177,6 +177,25 @@ impl Detector for RegexDetector {
             .map(|span| Detection::new(span, self.class.clone(), self.source.clone()))
             .collect()
     }
+
+    fn try_detect_with_context(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Detection>, gaze_types::RecognizerRuntimeError> {
+        Ok(self
+            .scanned_spans(input, ctx.source_spans)
+            .map_err(|_| {
+                gaze_types::RecognizerRuntimeError::new(
+                    &self.source,
+                    "source-boundary detection failed",
+                )
+            })?
+            .into_iter()
+            .filter(|scan| !scan.rejected)
+            .map(|scan| Detection::new(scan.span, self.class.clone(), self.source.clone()))
+            .collect())
+    }
 }
 
 impl Recognizer for RegexDetector {

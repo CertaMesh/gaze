@@ -64,6 +64,17 @@ pub trait Detector: Send + Sync {
     fn try_detect(&self, input: &str) -> Result<Vec<Detection>, RecognizerRuntimeError> {
         Ok(self.detect(input))
     }
+
+    /// Detect with normalized-source provenance when installed in a pipeline.
+    /// Override this when lexical boundaries depend on removed source characters.
+    /// Existing backends retain their fallible detection contract by default.
+    fn try_detect_with_context(
+        &self,
+        input: &str,
+        _ctx: &DetectContext<'_>,
+    ) -> Result<Vec<Detection>, RecognizerRuntimeError> {
+        self.try_detect(input)
+    }
 }
 
 /// Runtime failure raised by a recognizer or detector backend during detection.
