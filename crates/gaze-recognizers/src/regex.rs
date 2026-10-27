@@ -338,6 +338,67 @@ impl RegexDetector {
         input: &str,
         source_spans: Option<&[(usize, usize)]>,
     ) -> Vec<LabelledValueScan> {
+        let mut scans = self.scanned_spans_in_view(input, source_spans);
+        if !self.complete_labelled_value {
+            return scans;
+        }
+        let Some(source_spans) = source_spans else {
+            return scans;
+        };
+        let gaps: Vec<usize> = input
+            .char_indices()
+            .filter_map(|(at, ch)| {
+                (at > 0
+                    && ch.is_ascii_alphanumeric()
+                    && input.as_bytes()[at - 1].is_ascii_alphanumeric()
+                    && source_spans[at].0 > source_spans[at - 1].1)
+                    .then_some(at)
+            })
+            .collect();
+        if gaps.is_empty() {
+            return scans;
+        }
+
+        // Recover the regex's original group evidence when removed formatting made a group
+        // exceed its capture bound. The ordinary scanner then protects the whole value run.
+        let mut spaced = String::with_capacity(input.len() + gaps.len());
+        let mut offsets = Vec::with_capacity(input.len() + gaps.len() + 1);
+        offsets.push(0);
+        let mut gaps_iter = gaps.iter().peekable();
+        for (at, ch) in input.char_indices() {
+            if gaps_iter.peek() == Some(&&at) {
+                spaced.push(' ');
+                offsets.push(at);
+                gaps_iter.next();
+            }
+            spaced.push(ch);
+            offsets.extend((1..=ch.len_utf8()).map(|byte| at + byte));
+        }
+        let mapped = |range: std::ops::Range<usize>| offsets[range.start]..offsets[range.end];
+        for mut scan in self.scanned_spans_in_view(&spaced, None) {
+            scan.span = mapped(scan.span);
+            if !gaps
+                .iter()
+                .any(|&at| scan.span.start < at && at < scan.span.end)
+                || scans.iter().any(|existing| {
+                    existing.span.start <= scan.span.start && existing.span.end >= scan.span.end
+                })
+            {
+                continue;
+            }
+            scan.capture = mapped(scan.capture);
+            scan.extension = mapped(scan.extension);
+            scan.reason = Some(LabelledValueScanReason::JoinedRunLimitExceeded);
+            scans.push(scan);
+        }
+        scans
+    }
+
+    fn scanned_spans_in_view(
+        &self,
+        input: &str,
+        source_spans: Option<&[(usize, usize)]>,
+    ) -> Vec<LabelledValueScan> {
         let mut search_at = Some(0);
         let matches = std::iter::from_fn(|| {
             while let Some(at) = search_at {

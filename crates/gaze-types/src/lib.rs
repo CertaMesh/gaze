@@ -729,6 +729,8 @@ pub const LABELLED_FIELD_CONNECTORS: &[char] = &[':', '=', '|', '\t', ',', ';', 
 pub enum LabelledValueScanReason {
     /// The complete value run exceeded four groups or forty bytes.
     LimitExceeded,
+    /// Removed source formatting joined value groups beyond the regex capture's bound.
+    JoinedRunLimitExceeded,
     /// A date starts the next field after the captured identifier.
     DateBoundary,
     /// A labelled field starts after the captured identifier.
