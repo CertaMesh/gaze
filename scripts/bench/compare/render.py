@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
 import row_sources  # noqa: E402
+import freshness  # noqa: E402
 from comparison_availability import unavailable_tools  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
 from markdown_table import table_header  # noqa: E402
@@ -403,7 +404,35 @@ TUNED_LABELS = {
 TUNED_BASELINES = ("presidio-all", "presidio-strong", "presidio-strong-high-recall")
 
 
-def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
+HISTORICAL_TUNED_CLOSURE_SHA256 = "9e51f9335c2a2f4a8543df6f93414977af41df316b778fe3888ccedd3a0fa430"
+HISTORICAL_TUNED_CLOSURE = REPO / "docs/reference/benchmarks/tuned-code-closures/9e51f9335c2a2f4a8543df6f93414977af41df316b778fe3888ccedd3a0fa430.json"
+
+
+class TunedClosureError(ValueError):
+    """Published historical evidence or its pinned source closure was changed."""
+
+
+def historical_tuned_code(tuned: dict, path: Path | None) -> dict | None:
+    """Only the exact published bytes may use the immutable historical closure."""
+    if path is None:
+        return None
+    try:
+        raw = HISTORICAL_TUNED_CLOSURE.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != HISTORICAL_TUNED_CLOSURE_SHA256:
+            raise ValueError()
+        closure = json.loads(raw)
+        if tuned.get("harness_revision") != closure["harness_revision"]:
+            return None
+        aggregate = path.read_bytes()
+        if (hashlib.sha256(aggregate).hexdigest() != closure["aggregate_sha256"]
+                or json.loads(aggregate) != tuned or tuned["code_sha256"] != closure["code_sha256"]):
+            raise ValueError()
+        return closure["code_sha256"]
+    except (OSError, ValueError, KeyError, TypeError):
+        raise TunedClosureError("invalid_historical_tuned_closure") from None
+
+
+def validate_tuned(tuned: dict[str, object], report_path: Path, *, tuned_path: Path | None = None) -> None:
     """Reject a tuned report whose inputs or code changed, or whose replay is unproven."""
     here = Path(__file__).parent
     comparison = json.loads(report_path.read_bytes())
@@ -411,13 +440,16 @@ def validate_tuned(tuned: dict[str, object], report_path: Path) -> None:
     if "row_sources" in comparison:
         row_sources.validate(comparison, report_path)
         anchor_path = report_path.parent / comparison["row_sources"]["base"]["path"]
+    code = historical_tuned_code(tuned, tuned_path)
+    if code is None:
+        code = {name: digest_file(here / "tuned_presidio" / name) for name in TUNED_CODE}
     expected = {
         "comparison report": (tuned["comparison_sha256"], digest_file(anchor_path)),
         "comparison adapter": (tuned["compare_sha256"], digest_file(Path(compare.__file__))),
         "comparison metrics": (tuned["comparison_metrics_sha256"], digest_file(here / "comparison_metrics.py")),
         "scorer": (tuned["scorer_sha256"], digest_file(BENCH / "gaze_bench_score.py")),
         "selection": (tuned["selection_sha256"], digest_file(report_path.parent / "presidio-tuned-selection.json")),
-        **{f"tuned_presidio/{name}": (tuned["code_sha256"][name], digest_file(here / "tuned_presidio" / name))
+        **{f"tuned_presidio/{name}": (tuned["code_sha256"][name], code[name])
            for name in TUNED_CODE},
     }
     for name, (recorded, current) in expected.items():
@@ -635,7 +667,7 @@ def render_tuned(tuned: dict[str, object], report: dict[str, object], history_pa
 def input_paths(report: dict, path: Path) -> list[Path]:
     """Evidence read by validation/rendering, including optional tuned inputs."""
     here = Path(__file__).parent
-    paths = [path, *(path.with_name(name) for name in (
+    paths = [path, HISTORICAL_TUNED_CLOSURE, *(path.with_name(name) for name in (
         TUNED_NAME, "presidio-tuned-selection.json", "presidio-tuned-overlap.json",
         "release-history.json", "release-char-level.json")),
         *(here / name for name in (
@@ -661,16 +693,23 @@ def main() -> None:
     parser.add_argument("report", type=Path)
     parser.add_argument("--page", type=Path, required=True)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--freshness", type=Path, help="optional aggregate freshness sidecar bound to this report")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
-    row_sources.protect_inputs(args.page, input_paths(report, args.report))
+    inputs = input_paths(report, args.report)
+    if args.freshness:
+        inputs.append(args.freshness)
+    row_sources.protect_inputs(args.page, inputs)
     validate_current(report, args.report)
     tuned_path = args.report.with_name(TUNED_NAME)
     tuned = None
     if tuned_path.exists():
         tuned = json.loads(tuned_path.read_text(encoding="utf-8"))
-        validate_tuned(tuned, args.report)
+        validate_tuned(tuned, args.report, tuned_path=tuned_path)
     page = render(report, args.report.name, tuned, args.report.with_name("release-history.json"))
+    if args.freshness:
+        ledger = freshness.read_for_comparison(args.freshness, args.report)
+        page = check_public(page + "\n" + freshness.markdown(ledger), "competitors.md")
     if args.check:
         if args.page.read_text(encoding="utf-8") != page:
             raise ValueError("competitor page is stale; rerender it")

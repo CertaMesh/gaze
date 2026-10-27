@@ -29,6 +29,15 @@ PIIBench's published Presidio F1 of 0.1385 comes from all ten sources. It is quo
 
 ## Reproduce
 
+`requirements-theirbench.lock` is a reproduction-only pin for the published
+vendor measurements. It retains `cryptography==48.0.1`, affected by
+GHSA-m2h6-j472-rp4c, GHSA-jwv3-5hgf-82ww, and GHSA-g6cj-pr64-35w5.
+The dependency versions and hashes stay fixed to reproduce those measurements.
+Install it only in an explicitly selected historical reproduction environment.
+The [comparison lock](../README.md#reproduce) has the same restriction.
+Neither lock is installed by CI or Anvil preparation; both use the patched
+`scripts/bench/pyproject.toml` and `uv.lock` environment for routine checks.
+
 The vendors' own evaluators run in one environment, pinned by [`requirements-theirbench.lock`](requirements-theirbench.lock). The Gaze and competitor rows run in the comparison environment from [`../requirements.lock`](../requirements.lock).
 
 ```bash

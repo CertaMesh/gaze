@@ -1322,8 +1322,8 @@ pub fn parse_request_stream_format(body: &[u8]) -> Result<WireFormat, DirectProx
 /// Production request protection over the real staged core transaction.
 ///
 /// It delegates to the single shared Pipeline algorithm introduced by P4a and performs only
-/// validation against the staged token namespace. No throwaway session, replay, or whole-value
-/// token shortcut exists here.
+/// validation against the staged token namespace. Owned tokens keep their identity when
+/// expanded-view protection covers neighboring raw bytes.
 struct PipelineRequestPseudonymizer<'pipeline, 'context, 'transaction, 'session> {
     pipeline: &'pipeline Pipeline,
     transaction: &'transaction mut SessionTransaction<'session>,
@@ -1377,6 +1377,21 @@ impl<'pipeline, 'context, 'transaction, 'session>
 }
 
 impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    fn discover_rule_sources(&mut self, input: &str) -> Result<(), CodecErrorCode> {
+        self.validate_token_shapes(input)?;
+        let expanded = self
+            .transaction
+            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let result = self.pipeline.discover_staged_rule_sources(
+            self.transaction,
+            &expanded,
+            self.locale_chain,
+            self.dictionaries,
+        );
+        self.refused(result)
+    }
+
     fn deterministic_control_would_mutate(&mut self, input: &str) -> Result<bool, CodecErrorCode> {
         self.pipeline
             .deterministic_control_would_mutate(
@@ -1398,14 +1413,19 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
         let output = self.protect_preserving_tokens(input, prefix_cache_write_mode)?;
-        let admitted = self.pipeline.admit_boundary_text_transaction(
+        let resolved = self.pipeline.resolve_staged_owned_text(
             self.transaction,
             &output,
-            self.locale_chain,
-            self.dictionaries,
+            gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries),
+            DEFAULT_MAX_REQUEST_BYTES,
         );
-        self.refused(admitted)?;
-        Ok(output)
+        self.refused(resolved)
+    }
+
+    fn verify_rule_coverage(&mut self, protected: &str) -> Result<(), CodecErrorCode> {
+        self.pipeline
+            .verify_staged_rule_coverage(self.transaction, protected, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)
     }
 
     fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
@@ -1416,50 +1436,256 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
 }
 
 impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
+    /// Intermediate primary tokens have not been sent to the caller or provider.
+    /// Merge compatible ones with Rule coverage before they become immutable output.
+    /// Every token supplied in the original leaf remains an uncrossable boundary.
+    fn coalesce_unpublished_rule_tokens(
+        &mut self,
+        input: &str,
+        caller_owned: &HashSet<(usize, usize)>,
+    ) -> Result<String, CodecErrorCode> {
+        let expanded = self
+            .transaction
+            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let entries = self.transaction.snapshot_entries();
+        let mut names = self.transaction.tokens();
+        names.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
+        let mut tokens = Vec::new();
+        let (mut wire_cursor, mut view_cursor) = (0, 0);
+        for wire in owned_token_ranges(input, &names) {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.token == input[wire.clone()])
+                .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
+            view_cursor += wire.start - wire_cursor;
+            let value = self
+                .transaction
+                .restore_strict_text(&input[wire.clone()])
+                .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+            let view = view_cursor..view_cursor + value.len();
+            let immutable = caller_owned.contains(&(wire.start, wire.end));
+            wire_cursor = wire.end;
+            view_cursor = view.end;
+            tokens.push(RuleProjectionToken {
+                wire,
+                view,
+                class: entry.class.clone(),
+                family: entry.family.clone(),
+                immutable,
+            });
+        }
+        let hits = self
+            .pipeline
+            .staged_rule_repeat_candidates(self.transaction, &expanded)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        let mut groups = std::collections::BTreeMap::<_, Vec<_>>::new();
+        for hit in hits {
+            groups
+                .entry((hit.class.clone(), hit.token_family.clone()))
+                .or_default()
+                .push(hit);
+        }
+        let mut replacements = Vec::new();
+        for hits in groups.values() {
+            let unions =
+                union_rule_ranges(hits.iter().map(|hit| (hit.span.clone(), hit)).collect());
+            let mut parts = Vec::new();
+            for (range, hit) in unions {
+                let blocked = tokens.iter().filter(|token| {
+                    token.immutable || token.class != hit.class || token.family != hit.token_family
+                });
+                let mut cursor = range.start;
+                for token in blocked {
+                    if token.view.end <= cursor || token.view.start >= range.end {
+                        continue;
+                    }
+                    if cursor < token.view.start {
+                        parts.push((cursor..token.view.start, hit));
+                    }
+                    cursor = cursor.max(token.view.end);
+                    if cursor >= range.end {
+                        break;
+                    }
+                }
+                if cursor < range.end {
+                    parts.push((cursor..range.end, hit));
+                }
+            }
+            for (range, hit) in &mut parts {
+                for token in &tokens {
+                    if token.view.start < range.end && token.view.end > range.start {
+                        if token.immutable
+                            || token.class != hit.class
+                            || token.family != hit.token_family
+                        {
+                            return Err(CodecErrorCode::ProtectionFailedClosed);
+                        }
+                        range.start = range.start.min(token.view.start);
+                        range.end = range.end.max(token.view.end);
+                    }
+                }
+            }
+            for (view, hit) in union_rule_ranges(parts) {
+                if tokens.iter().any(|token| {
+                    token.immutable
+                        && token.view.is_empty()
+                        && view.start <= token.view.start
+                        && view.end >= token.view.end
+                }) {
+                    // A zero-width owned value has no unique expanded-to-wire boundary.
+                    return Err(CodecErrorCode::ProtectionFailedClosed);
+                }
+                let start = expanded_boundary_to_wire(view.start, &tokens, expanded.len())
+                    .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
+                let end = expanded_boundary_to_wire(view.end, &tokens, expanded.len())
+                    .ok_or(CodecErrorCode::ProtectionFailedClosed)?;
+                replacements.push((start..end, view, hit.clone()));
+            }
+        }
+        replacements.sort_by_key(|(wire, _, _)| (wire.start, wire.end));
+        if replacements
+            .windows(2)
+            .any(|pair| pair[0].0.end > pair[1].0.start)
+        {
+            return Err(CodecErrorCode::ProtectionFailedClosed);
+        }
+        let mut output = String::with_capacity(input.len());
+        let mut cursor = 0;
+        for (wire, view, hit) in replacements {
+            output.push_str(&input[cursor..wire.start]);
+            if tokens
+                .iter()
+                .any(|token| token.wire == wire && token.view == view)
+            {
+                output.push_str(&input[wire.clone()]);
+                cursor = wire.end;
+                continue;
+            }
+            let token = self
+                .pipeline
+                .tokenize_staged_rule_repeat_fragment(self.transaction, &hit, &expanded[view])
+                .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+            output.push_str(&token);
+            cursor = wire.end;
+        }
+        output.push_str(&input[cursor..]);
+        Ok(output)
+    }
+
     fn protect_preserving_tokens(
         &mut self,
         input: &str,
         prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
+        let original = self
+            .transaction
+            .restore_strict_text_bounded(input, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
         let mut tokens = self.transaction.tokens();
-        if tokens.is_empty() {
-            return self.protect_unstaged_segment(input, prefix_cache_write_mode);
-        }
         tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
-
-        let mut output = String::with_capacity(input.len());
+        // Run ordinary primary protection on complete original raw gaps first.
+        // Projecting known hits before this step would split the context seen by
+        // learned recognizers even in a leaf with no caller-supplied tokens.
+        let mut prepared = String::with_capacity(input.len());
+        let mut caller_owned = HashSet::new();
         let mut cursor = 0;
-        while cursor < input.len() {
-            let next = tokens
-                .iter()
-                .filter_map(|token| {
-                    input[cursor..]
-                        .find(token)
-                        .map(|offset| (cursor + offset, token.as_str()))
-                })
-                .min_by(|left, right| {
-                    left.0
-                        .cmp(&right.0)
-                        .then_with(|| right.1.len().cmp(&left.1.len()))
-                });
-            let Some((start, token)) = next else {
-                output.push_str(
-                    &self.protect_unstaged_segment(&input[cursor..], prefix_cache_write_mode)?,
-                );
-                break;
-            };
-            if start > cursor {
-                output.push_str(
-                    &self
-                        .protect_unstaged_segment(&input[cursor..start], prefix_cache_write_mode)?,
-                );
-            }
-            output.push_str(token);
-            cursor = start + token.len();
+        for range in owned_token_ranges(input, &tokens) {
+            prepared.push_str(
+                &self.protect_unstaged_segment(
+                    &input[cursor..range.start],
+                    prefix_cache_write_mode,
+                )?,
+            );
+            let start = prepared.len();
+            prepared.push_str(&input[range.clone()]);
+            caller_owned.insert((start, prepared.len()));
+            cursor = range.end;
         }
-        Ok(output)
+        prepared
+            .push_str(&self.protect_unstaged_segment(&input[cursor..], prefix_cache_write_mode)?);
+        let prepared = self.coalesce_unpublished_rule_tokens(&prepared, &caller_owned)?;
+        if self
+            .transaction
+            .restore_strict_text_bounded(&prepared, DEFAULT_MAX_REQUEST_BYTES)
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?
+            != original
+        {
+            return Err(CodecErrorCode::ProtectionFailedClosed);
+        }
+        Ok(prepared)
     }
+}
+
+struct RuleProjectionToken {
+    wire: std::ops::Range<usize>,
+    view: std::ops::Range<usize>,
+    class: gaze::PiiClass,
+    family: String,
+    immutable: bool,
+}
+
+fn union_rule_ranges(
+    mut ranges: Vec<(std::ops::Range<usize>, &gaze::Candidate)>,
+) -> Vec<(std::ops::Range<usize>, &gaze::Candidate)> {
+    ranges.sort_by(|(left, a), (right, b)| {
+        left.start
+            .cmp(&right.start)
+            .then_with(|| right.end.cmp(&left.end))
+            .then_with(|| a.class.cmp(&b.class))
+            .then_with(|| a.token_family.cmp(&b.token_family))
+    });
+    let mut union: Vec<(std::ops::Range<usize>, &gaze::Candidate)> = Vec::new();
+    for (range, hit) in ranges {
+        if let Some((previous, _)) = union.last_mut().filter(|(r, _)| r.end >= range.start) {
+            previous.end = previous.end.max(range.end);
+        } else {
+            union.push((range, hit));
+        }
+    }
+    union
+}
+
+fn expanded_boundary_to_wire(
+    position: usize,
+    tokens: &[RuleProjectionToken],
+    length: usize,
+) -> Option<usize> {
+    let (mut wire, mut view) = (0, 0);
+    for token in tokens {
+        if position <= token.view.start {
+            return Some(wire + position - view);
+        }
+        if position < token.view.end {
+            return None;
+        }
+        wire = token.wire.end;
+        view = token.view.end;
+    }
+    (position <= length).then_some(wire + position - view)
+}
+
+/// Locate immutable owned tokens in wire order, preferring the longest at a shared start.
+fn owned_token_ranges(input: &str, tokens: &[String]) -> Vec<std::ops::Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut cursor = 0;
+    while cursor < input.len() {
+        let next = tokens
+            .iter()
+            .filter_map(|token| {
+                input[cursor..]
+                    .find(token)
+                    .map(|offset| (cursor + offset, token.len()))
+            })
+            .min_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)));
+        let Some((start, length)) = next else {
+            break;
+        };
+        ranges.push(start..start + length);
+        cursor = start + length;
+    }
+    ranges
 }
 
 struct PipelineResponseResidualValidator<'pipeline, 'context> {
@@ -2134,7 +2360,7 @@ async fn proxy_inner(
             .map_err(|_| ProxyError::ControlWouldMutate)?;
         residual_scan_model_control(
             &state.pipeline,
-            &session,
+            &redacted.transaction,
             &model,
             state.config.locale_chain(),
             state.config.dictionaries(),
@@ -2148,19 +2374,27 @@ async fn proxy_inner(
         // re-scanning the outbound body and failing closed on anything left unprotected.
         CoveragePolicy::LegacySurfaces => {
             residual_scan_request(
-                &state.pipeline,
+                RequestResidualScan {
+                    pipeline: &state.pipeline,
+                    transaction: &redacted.transaction,
+                    expansion_limit_bytes: state.config.residual_expansion_limit(),
+                    surfaced: &redacted.field_paths,
+                    locale_chain,
+                    dictionaries,
+                },
                 &json,
-                &redacted.field_paths,
-                locale_chain,
-                dictionaries,
                 adapter.name() == "openai",
-                &session,
             )?;
         }
         // A codec-proved adapter must have been routed to the codec branch above. Reaching this
         // point means the contract and the router disagree and no proof has been established.
         CoveragePolicy::CodecProved => return Err(ProxyError::UnprovenCoverage),
     }
+
+    redacted
+        .transaction
+        .commit()
+        .map_err(|source| ProxyError::SessionCommit { source })?;
 
     let upstream_url = upstream_url(adapter.upstream_base(), &uri)?;
     let mut request = state
@@ -2959,34 +3193,63 @@ const CARRIER_SUBTREE_KEYS: &[&str] = &[
 /// [`Pipeline::redact`] pins. Passing it is what lets locale-gated recognizers
 /// (`postal.de`, `postal.us`, the national phone recognizers) run on proxied traffic at all.
 /// [`residual_scan_request`] MUST be given the same slice.
-fn redact_surfaces(
+fn redact_surfaces<'session>(
     pipeline: &Pipeline,
-    session: &Session,
+    session: &'session Session,
     surfaces: Vec<crate::adapter::PiiSurface<'_>>,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
-) -> Result<RedactedSurfaces, ProxyError> {
-    let mut redacted = RedactedSurfaces::default();
-    for surface in surfaces {
-        // `gaze clean --safety-net-fallback strict`'s Resolve step, so a net-flagged date becomes
-        // a token here instead of a refusal at admission. Admission stays the final
-        // gate.
-        let text = pipeline
-            .resolve_boundary_text(session, surface.text, locale_chain, dictionaries)
-            .map_err(|refusal| ProxyError::Refused { refusal })?;
-        pipeline
-            .admit_boundary_text(session, &text, locale_chain, dictionaries)
-            .map_err(|refusal| ProxyError::Refused { refusal })?;
-        *surface.text = text;
-        redacted.field_paths.insert(surface.field_path);
+) -> Result<RedactedSurfaces<'session>, ProxyError> {
+    let mut transaction = session.begin_transaction();
+    let mut texts = Vec::with_capacity(surfaces.len());
+    let mut pseudonymizer =
+        PipelineRequestPseudonymizer::new(pipeline, locale_chain, dictionaries, &mut transaction);
+    // Discovery expands owned tokens but runs no learned detectors or nets.
+    for surface in &surfaces {
+        pseudonymizer
+            .discover_rule_sources(surface.text)
+            .map_err(|_| ProxyError::Refused {
+                refusal: pseudonymizer
+                    .refusal
+                    .take()
+                    .unwrap_or_else(|| gaze::ProtectionError::Provenance.into()),
+            })?;
     }
-    Ok(redacted)
+    for surface in &surfaces {
+        texts.push(pseudonymizer.protect(surface.text).map_err(|_| {
+            ProxyError::Refused {
+                refusal: pseudonymizer
+                    .refusal
+                    .take()
+                    .unwrap_or_else(|| gaze::ProtectionError::Provenance.into()),
+            }
+        })?);
+    }
+    // Final evidence is complete. Enumerate every overlapping Rule occurrence on
+    // each expanded original and require byte coverage, independently of protection.
+    for text in &texts {
+        pseudonymizer
+            .verify_rule_coverage(text)
+            .map_err(|_| ProxyError::Refused {
+                refusal: gaze::ProtectionError::Residual.into(),
+            })?;
+    }
+    let mut field_paths = HashSet::new();
+    for (surface, text) in surfaces.into_iter().zip(texts) {
+        *surface.text = text;
+        field_paths.insert(surface.field_path);
+    }
+    Ok(RedactedSurfaces {
+        field_paths,
+        transaction,
+    })
 }
 
-#[derive(Default)]
-struct RedactedSurfaces {
+struct RedactedSurfaces<'session> {
     /// Every redacted surface's field path, which the residual re-scan skips.
     field_paths: HashSet<String>,
+    /// Published only after the whole request's residual proof succeeds.
+    transaction: SessionTransaction<'session>,
 }
 
 /// Fails closed when the outbound legacy request body carries PII outside every adapter surface.
@@ -3005,50 +3268,43 @@ struct RedactedSurfaces {
 /// chain that activated a recognizer for the surface pass but not here would forward PII the
 /// primary would have tokenized, and the reverse would reject traffic the primary accepts.
 fn residual_scan_request(
-    pipeline: &Pipeline,
+    scan: RequestResidualScan<'_, '_>,
     body: &Value,
-    surfaced: &HashSet<String>,
-    locale_chain: &[LocaleTag],
-    dictionaries: &DictionaryBundle,
     model_is_routing_control: bool,
-    routing_session: &Session,
 ) -> Result<(), ProxyError> {
-    let session =
-        Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
-    let scan = RequestResidualScan {
-        pipeline,
-        session,
-        surfaced,
-        locale_chain,
-        dictionaries,
-    };
-    let Value::Object(root) = body else {
-        return scan.walk("", "", body, false, true);
-    };
-    for (key, value) in root {
-        match (model_is_routing_control, key.as_str(), value) {
-            (true, "model", Value::String(text)) => residual_scan_model_control(
-                pipeline,
-                routing_session,
-                text,
-                locale_chain,
-                dictionaries,
-            )?,
-            _ => scan.walk(
-                key,
-                key,
-                value,
-                CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
-                !key.is_empty() && !key.contains('.') && !key.contains('['),
-            )?,
+    let limit_bytes = scan.expansion_limit_bytes;
+    let mut remaining_bytes = limit_bytes;
+    // Charge every expanded leaf before any expansion, normalization or matching.
+    scan.visit_request(body, model_is_routing_control, &mut |_, text, control| {
+        if !control {
+            remaining_bytes = remaining_bytes
+                .checked_sub(scan.expanded_len(text)?)
+                .ok_or(ProxyError::ResidualExpansionLimitExceeded { limit_bytes })?;
         }
-    }
-    Ok(())
+        Ok(())
+    })?;
+    scan.visit_request(
+        body,
+        model_is_routing_control,
+        &mut |path, text, control| {
+            if control {
+                residual_scan_model_control(
+                    scan.pipeline,
+                    scan.transaction,
+                    text,
+                    scan.locale_chain,
+                    scan.dictionaries,
+                )
+            } else {
+                scan.probe(path, text)
+            }
+        },
+    )
 }
 
 fn residual_scan_model_control(
     pipeline: &Pipeline,
-    routing_session: &Session,
+    routing_transaction: &SessionTransaction<'_>,
     text: &str,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
@@ -3056,7 +3312,7 @@ fn residual_scan_model_control(
     if crate::codec::is_model_identifier(text) {
         if pipeline
             .deterministic_control_would_mutate(
-                &routing_session.begin_transaction(),
+                routing_transaction,
                 text,
                 locale_chain,
                 dictionaries,
@@ -3068,12 +3324,7 @@ fn residual_scan_model_control(
         return Ok(());
     }
     if pipeline
-        .control_would_mutate(
-            &routing_session.begin_transaction(),
-            text,
-            locale_chain,
-            dictionaries,
-        )
+        .control_would_mutate(routing_transaction, text, locale_chain, dictionaries)
         .map_err(|source| ProxyError::Pipeline { source })?
     {
         return Err(ProxyError::UnsurfacedPii {
@@ -3083,10 +3334,26 @@ fn residual_scan_model_control(
     Ok(())
 }
 
+/// Permit whitespace only between covered spans of the same known-value occurrence.
+fn rule_hit_is_covered(text: &str, covered: &[bool], span: std::ops::Range<usize>) -> bool {
+    let (Some(text), Some(covered)) = (text.get(span.clone()), covered.get(span)) else {
+        return false;
+    };
+    if !covered.first().copied().unwrap_or(false) || !covered.last().copied().unwrap_or(false) {
+        return false;
+    }
+    text.char_indices().all(|(start, character)| {
+        let bytes = &covered[start..start + character.len_utf8()];
+        bytes.iter().all(|byte| *byte)
+            || (character.is_whitespace() && bytes.iter().all(|byte| !*byte))
+    })
+}
+
 /// Walk state for the outbound request residual re-scan.
-struct RequestResidualScan<'a> {
+struct RequestResidualScan<'a, 'session> {
     pipeline: &'a Pipeline,
-    session: Session,
+    transaction: &'a SessionTransaction<'session>,
+    expansion_limit_bytes: usize,
     surfaced: &'a HashSet<String>,
     /// The same chain the primary pass ran under. See [`residual_scan_request`].
     locale_chain: &'a [LocaleTag],
@@ -3094,39 +3361,121 @@ struct RequestResidualScan<'a> {
     dictionaries: &'a DictionaryBundle,
 }
 
-impl RequestResidualScan<'_> {
-    fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
-        let (clean, spans, report) = self
+impl RequestResidualScan<'_, '_> {
+    fn expanded_len(&self, text: &str) -> Result<usize, ProxyError> {
+        let entries = self.transaction.snapshot_entries();
+        let values: HashMap<_, _> = entries
+            .iter()
+            .map(|entry| (entry.token.as_str(), entry.raw.as_str()))
+            .collect();
+        let ranges = owned_token_ranges(text, &self.transaction.tokens());
+        let limit_bytes = self.expansion_limit_bytes;
+        let limit_error = || ProxyError::ResidualExpansionLimitExceeded { limit_bytes };
+        let mut expanded_len = 0usize;
+        let mut cursor = 0;
+        // Check the entire size before allocating the expansion or its ownership mask.
+        for range in &ranges {
+            let value = values
+                .get(&text[range.clone()])
+                .ok_or(ProxyError::UnprovenCoverage)?;
+            expanded_len = expanded_len
+                .checked_add(range.start - cursor)
+                .and_then(|length| length.checked_add(value.len()))
+                .filter(|length| *length <= limit_bytes)
+                .ok_or_else(limit_error)?;
+            cursor = range.end;
+        }
+        expanded_len = expanded_len
+            .checked_add(text.len() - cursor)
+            .filter(|length| *length <= limit_bytes)
+            .ok_or_else(limit_error)?;
+        Ok(expanded_len)
+    }
+
+    /// Every overlapping Rule hit needs owned non-whitespace bytes. Only internal
+    /// whitespace gaps between covered spans are allowed. Unknown token-looking text
+    /// stays literal: only exact tokens in this captured request contribute ownership.
+    fn rule_repeats_are_covered(&self, text: &str) -> Result<bool, ProxyError> {
+        let expanded_len = self.expanded_len(text)?;
+        let entries = self.transaction.snapshot_entries();
+        let values: HashMap<_, _> = entries
+            .iter()
+            .map(|entry| (entry.token.as_str(), entry.raw.as_str()))
+            .collect();
+        let ranges = owned_token_ranges(text, &self.transaction.tokens());
+        let mut expanded = String::with_capacity(expanded_len);
+        let mut covered = Vec::with_capacity(expanded_len);
+        let mut cursor = 0;
+        for range in ranges {
+            expanded.push_str(&text[cursor..range.start]);
+            covered.resize(expanded.len(), false);
+            expanded.push_str(values[&text[range.clone()]]);
+            covered.resize(expanded.len(), true);
+            cursor = range.end;
+        }
+        expanded.push_str(&text[cursor..]);
+        covered.resize(expanded_len, false);
+        // Preserve the real matcher's full word, URL, normalization and name-growth context.
+        let hits = self
             .pipeline
-            .clean_with_safety_net_detect_context(
-                &self.session,
-                RawDocument::Text(text.to_owned()),
-                self.locale_chain,
-                self.dictionaries,
-            )
+            .staged_rule_repeat_candidates(self.transaction, &expanded)
             .map_err(|source| ProxyError::Pipeline { source })?;
-        // This walk forwards `text` unchanged when it returns `Ok`, so the only thing that
-        // justifies `Ok` is the pipeline having done NOTHING to this position. An empty `spans`
-        // does not say that: a safety-net fallback DELETION removes the PII from a clean text
-        // that is discarded here and emits no manifest entry, so reading `spans` alone accepts
-        // the very position a net just flagged and forwards the raw bytes to the provider.
-        let untouched = matches!(&clean, CleanDocument::Text(cleaned) if cleaned == text);
-        // Three conjuncts, deliberately overlapping. Under the policy this call site pins
-        // (`SafetyNetPolicy::default()` = Resolve + Redact) a deletion always leaves BOTH a
-        // changed text and a surviving suspect, so `untouched` and `report.suspects` are each
-        // redundant TODAY -- a mutation probe kills neither on its own. Keep both anyway:
-        // `untouched` states directly what `Ok` promises here (these exact bytes get forwarded),
-        // and `report.suspects` is the only backstop left if a future mode reports without
-        // mutating. Dropping either narrows the guard to an assumption about the current policy.
-        if untouched && spans.is_empty() && report.suspects.is_empty() {
-            return Ok(());
+        Ok(hits
+            .into_iter()
+            .all(|hit| rule_hit_is_covered(&expanded, &covered, hit.span)))
+    }
+
+    fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
+        // Captured Rule evidence is proved above the independent baseline detector/net
+        // probe. Lending owned classes to that probe changes neural context and can turn
+        // a public suffix into a new suspect even when the real Rule matcher admits it.
+        if self.rule_repeats_are_covered(text)? {
+            let probe_session =
+                Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
+            if !self
+                .pipeline
+                .control_would_mutate(
+                    &probe_session.begin_transaction(),
+                    text,
+                    self.locale_chain,
+                    self.dictionaries,
+                )
+                .map_err(|source| ProxyError::Pipeline { source })?
+            {
+                return Ok(());
+            }
         }
         Err(ProxyError::UnsurfacedPii {
             field_path: field_path.to_string(),
         })
     }
 
-    /// Recurses the outbound body probing every scalar the adapter did not surface.
+    fn visit_request(
+        &self,
+        body: &Value,
+        model_is_routing_control: bool,
+        visit: &mut dyn FnMut(&str, &str, bool) -> Result<(), ProxyError>,
+    ) -> Result<(), ProxyError> {
+        let Value::Object(root) = body else {
+            return self.walk("", "", body, false, true, visit);
+        };
+        for (key, value) in root {
+            match (model_is_routing_control, key.as_str(), value) {
+                (true, "model", Value::String(text)) => visit(key, text, true)?,
+                _ => self.walk(
+                    key,
+                    key,
+                    value,
+                    CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
+                    !key.is_empty() && !key.contains('.') && !key.contains('['),
+                    visit,
+                )?,
+            }
+        }
+        Ok(())
+    }
+
+    /// Recurses the outbound body visiting every scalar the adapter did not surface.
     ///
     /// `unambiguous` tracks whether the constructed path can still be compared against adapter
     /// field paths. An empty JSON key or one containing `.` or `[` can make distinct nodes
@@ -3139,16 +3488,17 @@ impl RequestResidualScan<'_> {
         value: &Value,
         in_carrier_subtree: bool,
         unambiguous: bool,
+        visit: &mut dyn FnMut(&str, &str, bool) -> Result<(), ProxyError>,
     ) -> Result<(), ProxyError> {
         match value {
             Value::String(text) => {
                 if !(unambiguous && self.surfaced.contains(path)) {
-                    self.probe(path, text)?;
+                    visit(path, text, false)?;
                 }
             }
             Value::Number(number) => {
                 if in_carrier_subtree || !NON_CARRIER_NUMERIC_KEYS.contains(&leaf_key) {
-                    self.probe(path, &number.to_string())?;
+                    visit(path, &number.to_string(), false)?;
                 }
             }
             Value::Array(items) => {
@@ -3159,6 +3509,7 @@ impl RequestResidualScan<'_> {
                         item,
                         in_carrier_subtree,
                         unambiguous,
+                        visit,
                     )?;
                 }
             }
@@ -3175,6 +3526,7 @@ impl RequestResidualScan<'_> {
                         child,
                         in_carrier_subtree || CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
                         unambiguous && !key.is_empty() && !key.contains('.') && !key.contains('['),
+                        visit,
                     )?;
                 }
             }
@@ -3477,7 +3829,9 @@ fn forward_headers(
 fn proxy_error_response(err: ProxyError) -> Response {
     let status = match err {
         ProxyError::AdapterNotFound { .. } => StatusCode::NOT_FOUND,
-        ProxyError::BodyTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
+        ProxyError::BodyTooLarge { .. } | ProxyError::ResidualExpansionLimitExceeded { .. } => {
+            StatusCode::PAYLOAD_TOO_LARGE
+        }
         ProxyError::InvalidJson { .. } => StatusCode::BAD_REQUEST,
         ProxyError::UnsurfacedPii { .. }
         | ProxyError::ControlWouldMutate
@@ -3516,8 +3870,10 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::ControlWouldMutate => "ControlWouldMutate",
         ProxyError::ProviderOriginPii => "ProviderOriginPii",
         ProxyError::UnprovenCoverage => "UnprovenCoverage",
+        ProxyError::ResidualExpansionLimitExceeded { .. } => "ResidualExpansionLimitExceeded",
         ProxyError::DirectAdapterMismatch => "DirectAdapterMismatch",
         ProxyError::Refused { .. } => "Refused",
+        ProxyError::SessionCommit { .. } => "SessionCommit",
         ProxyError::Pipeline { .. } => "Pipeline",
         ProxyError::Server { .. } => "Server",
         ProxyError::DaemonAlreadyRunning { .. } => "DaemonAlreadyRunning",
@@ -3530,6 +3886,9 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::DaemonStartTimeout { .. } => "DaemonStartTimeout",
     }
 }
+
+#[cfg(test)]
+mod residual_tests;
 
 #[cfg(test)]
 mod tests {
@@ -3636,7 +3995,7 @@ mod tests {
     }
 
     #[test]
-    fn net_admission_failure_discards_direct_staging_but_retains_legacy_live_mappings() {
+    fn net_admission_failure_discards_direct_and_legacy_staging() {
         struct RejectNet;
         impl gaze::SafetyNet for RejectNet {
             fn id(&self) -> &str {
@@ -3716,11 +4075,432 @@ mod tests {
             &DictionaryBundle::default()
         )
         .is_err());
-        assert_eq!(session.tokens().len(), 1);
+        assert!(session.tokens().is_empty());
+        assert_eq!(first, SYNTHETIC_EMAIL);
+        assert_eq!(second, "reject-this");
+    }
+
+    #[test]
+    fn legacy_residual_failure_discards_the_request_snapshot() {
+        let pipeline = email_pipeline();
+        let session =
+            Session::new(Scope::Conversation("synthetic-repeat-rollback".into())).unwrap();
+        let existing = session
+            .tokenize(&PiiClass::Email, "before@example.invalid")
+            .unwrap();
+        let before = session.snapshot_entries();
+        let adapter =
+            crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
+        let mut body = serde_json::json!({
+            "model":"gpt-test",
+            "messages":[{"role":"user","content":SYNTHETIC_EMAIL}],
+            "unsupported_carrier":"outside@example.invalid"
+        });
+        let staged = redact_surfaces(
+            &pipeline,
+            &session,
+            adapter.request_pii_surfaces(&mut body),
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+        assert!(residual_scan_request(
+            RequestResidualScan {
+                pipeline: &pipeline,
+                transaction: &staged.transaction,
+                expansion_limit_bytes: 32 * 1024 * 1024,
+                surfaced: &staged.field_paths,
+                locale_chain: &[LocaleTag::Global],
+                dictionaries: &DictionaryBundle::default(),
+            },
+            &body,
+            false
+        )
+        .is_err());
+        drop(staged);
+        assert_eq!(session.snapshot_entries(), before);
         assert_eq!(
-            session.restore_strict_text(&first).unwrap(),
-            SYNTHETIC_EMAIL
+            session.restore_strict(&existing).unwrap(),
+            "before@example.invalid"
         );
+    }
+
+    #[test]
+    fn legacy_residual_rejects_request_known_rule_repeats_without_publishing() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("Synthetic Person", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let existing = session
+            .tokenize(&gaze::PiiClass::Name, "Existing Synthetic")
+            .unwrap();
+        let before = session.snapshot_entries();
+        let adapter =
+            crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
+        let mut body = serde_json::json!({
+            "model":"gpt-test",
+            "messages":[{"role":"user","content":"Synthetic Person"}],
+            "unsupported_carrier":"synthetic person"
+        });
+        let dictionaries = DictionaryBundle::default();
+        let staged = redact_surfaces(
+            &pipeline,
+            &session,
+            adapter.request_pii_surfaces(&mut body),
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .unwrap();
+        let staged_before = staged.transaction.snapshot_entries();
+        assert!(matches!(residual_scan_request(RequestResidualScan {
+        pipeline: &pipeline, transaction: &staged.transaction, expansion_limit_bytes: 32 * 1024 * 1024,
+        surfaced: &staged.field_paths, locale_chain: &[LocaleTag::Global], dictionaries: &dictionaries,
+    }, &body, true), Err(ProxyError::UnsurfacedPii { field_path }) if field_path == "unsupported_carrier"));
+        assert_eq!(body["unsupported_carrier"], "synthetic person");
+        assert_eq!(staged.transaction.snapshot_entries(), staged_before);
+        drop(staged);
+        assert_eq!(session.snapshot_entries(), before);
+        assert_eq!(
+            session.restore_strict(&existing).unwrap(),
+            "Existing Synthetic"
+        );
+        assert_eq!(session.prefix_cache_entry_count(), 0);
+    }
+
+    #[test]
+    fn residual_probes_share_only_the_captured_request_evidence() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("Synthetic Person", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let transaction = session.begin_transaction();
+        let surfaced = HashSet::new();
+        let dictionaries = DictionaryBundle::default();
+        let scan = RequestResidualScan {
+            pipeline: &pipeline,
+            transaction: &transaction,
+            expansion_limit_bytes: 32 * 1024 * 1024,
+            surfaced: &surfaced,
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+        };
+        assert!(matches!(
+            scan.probe("first", "Synthetic Person"),
+            Err(ProxyError::UnsurfacedPii { .. })
+        ));
+        assert!(scan.probe("second", "synthetic person").is_ok());
+        assert!(transaction.snapshot_entries().is_empty());
+        assert!(session.snapshot_entries().is_empty());
+    }
+
+    #[test]
+    fn residual_owned_names_with_only_a_public_separator_do_not_refuse() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("Person Synthetic", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let owned = session
+            .tokenize(&PiiClass::Name, "Synthetic Person")
+            .unwrap();
+        let carrier = format!("{owned} {owned}");
+        let adapter =
+            crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
+        let mut body = serde_json::json!({
+            "model":"gpt-test",
+            "messages":[{"role":"user","content":"Person Synthetic"}],
+            "unsupported_carrier":carrier
+        });
+        let dictionaries = DictionaryBundle::default();
+        let staged = redact_surfaces(
+            &pipeline,
+            &session,
+            adapter.request_pii_surfaces(&mut body),
+            &[LocaleTag::Global],
+            &dictionaries,
+        )
+        .unwrap();
+        let result = residual_scan_request(
+            RequestResidualScan {
+                pipeline: &pipeline,
+                transaction: &staged.transaction,
+                expansion_limit_bytes: 32 * 1024 * 1024,
+                surfaced: &staged.field_paths,
+                locale_chain: &[LocaleTag::Global],
+                dictionaries: &dictionaries,
+            },
+            &body,
+            true,
+        );
+        assert!(
+            result.is_ok(),
+            "all name letters are owned; only a public separator remains: {result:?}"
+        );
+        assert_eq!(body["unsupported_carrier"], carrier);
+    }
+
+    #[test]
+    fn residual_expansion_limit_is_distinct_and_configurable() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("X+", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        pipeline
+            .redact(&session, gaze::RawDocument::Text("X".repeat(128)))
+            .unwrap();
+        let transaction = session.begin_transaction();
+        let before = transaction.snapshot_entries();
+        let token = before[0].token.clone();
+        let surfaced = HashSet::new();
+        let dictionaries = DictionaryBundle::default();
+        let mut config = crate::ProxyConfig::new("127.0.0.1:0".parse().unwrap(), vec![]);
+        assert_eq!(config.residual_expansion_limit(), 32 * 1024 * 1024);
+        config.body_limit_bytes = 64;
+        assert_eq!(config.residual_expansion_limit(), 1024);
+        let mut scan = RequestResidualScan {
+            pipeline: &pipeline,
+            transaction: &transaction,
+            expansion_limit_bytes: config.residual_expansion_limit(),
+            surfaced: &surfaced,
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+        };
+        assert!(scan.rule_repeats_are_covered(&token.repeat(8)).unwrap());
+        let above = format!("{}.", token.repeat(8));
+        assert!(matches!(
+            scan.rule_repeats_are_covered(&above),
+            Err(ProxyError::ResidualExpansionLimitExceeded { limit_bytes: 1024 })
+        ));
+        let response =
+            proxy_error_response(ProxyError::ResidualExpansionLimitExceeded { limit_bytes: 1024 });
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(
+            proxy_error_name(&ProxyError::ResidualExpansionLimitExceeded { limit_bytes: 1024 }),
+            "ResidualExpansionLimitExceeded"
+        );
+        config.request_residual_expansion_limit_bytes = Some(1025);
+        scan.expansion_limit_bytes = config.residual_expansion_limit();
+        assert!(scan.rule_repeats_are_covered(&above).unwrap());
+        assert_eq!(transaction.snapshot_entries(), before);
+        assert_eq!(session.prefix_cache_entry_count(), 0);
+    }
+
+    #[test]
+    fn request_expansion_preflight_precedes_coverage_matching() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("X+", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        pipeline
+            .redact(&session, gaze::RawDocument::Text("X".repeat(128)))
+            .unwrap();
+        let transaction = session.begin_transaction();
+        let before = transaction.snapshot_entries();
+        let body = serde_json::json!({"a": "X", "b": [{"c": before[0].token.repeat(8)}]});
+        // The first leaf would fail coverage. The total must refuse before probing it.
+        let result = residual_scan_request(
+            RequestResidualScan {
+                pipeline: &pipeline,
+                transaction: &transaction,
+                expansion_limit_bytes: 1024,
+                surfaced: &HashSet::new(),
+                locale_chain: &[LocaleTag::Global],
+                dictionaries: &DictionaryBundle::default(),
+            },
+            &body,
+            false,
+        );
+        assert!(matches!(
+            result,
+            Err(ProxyError::ResidualExpansionLimitExceeded { limit_bytes: 1024 })
+        ));
+        assert_eq!(transaction.snapshot_entries(), before);
+        assert_eq!(session.prefix_cache_entry_count(), 0);
+    }
+
+    #[test]
+    fn residual_windows_match_complete_expansion() {
+        let pipeline = Pipeline::builder()
+            .detector(
+                RegexDetector::new("Synthetic Person|Person Synthetic|Vasquez", PiiClass::Name)
+                    .unwrap(),
+            )
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        pipeline
+            .redact(
+                &session,
+                gaze::RawDocument::Text("Synthetic Person; Person Synthetic; Vasquez".to_owned()),
+            )
+            .unwrap();
+        let transaction = session.begin_transaction();
+        let surfaced = HashSet::new();
+        let dictionaries = DictionaryBundle::default();
+        let scan = RequestResidualScan {
+            pipeline: &pipeline,
+            transaction: &transaction,
+            expansion_limit_bytes: 32 * 1024 * 1024,
+            surfaced: &surfaced,
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+        };
+        let token = transaction
+            .snapshot_entries()
+            .into_iter()
+            .find(|entry| entry.raw == "Synthetic Person")
+            .unwrap()
+            .token;
+        let long_compound = "-Ellery".repeat(64);
+        for prefix in ["", "Public ", "https://example.invalid/", "www."] {
+            for gap in [
+                " ",
+                "\t\n",
+                "\u{00a0}",
+                "\u{200c}",
+                "\u{200d}",
+                " x ",
+                "-Ellery",
+                " vasquez",
+                long_compound.as_str(),
+            ] {
+                for suffix in ["", " synthetic person", "-Vasquez", " END"] {
+                    let repeated = format!("{token} ").repeat(16);
+                    let wire = format!("{prefix}{repeated}{token}{gap}{token}{repeated}{suffix}");
+                    let full = wire.replace(&token, "Synthetic Person");
+                    let mut covered = vec![false; full.len()];
+                    let mut cursor = 0;
+                    let mut expanded_cursor = 0;
+                    for range in owned_token_ranges(&wire, std::slice::from_ref(&token)) {
+                        expanded_cursor += range.start - cursor;
+                        covered[expanded_cursor..expanded_cursor + 16].fill(true);
+                        expanded_cursor += 16;
+                        cursor = range.end;
+                    }
+                    let expected = pipeline
+                        .staged_rule_repeat_candidates(&transaction, &full)
+                        .unwrap()
+                        .into_iter()
+                        .all(|hit| rule_hit_is_covered(&full, &covered, hit.span));
+                    assert_eq!(
+                        scan.rule_repeats_are_covered(&wire).unwrap(),
+                        expected,
+                        "{prefix:?}, {gap:?}, {suffix:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn residual_bounded_context_matches_distant_url_and_compound_context() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new("Vasquez", PiiClass::Name).unwrap())
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        pipeline
+            .redact(&session, gaze::RawDocument::Text("Vasquez".to_owned()))
+            .unwrap();
+        let filler = session.tokenize(&PiiClass::Name, "Ellery-").unwrap();
+        let name = session.tokenize(&PiiClass::Name, "Vasquez-").unwrap();
+        let transaction = session.begin_transaction();
+        let surfaced = HashSet::new();
+        let dictionaries = DictionaryBundle::default();
+        let scan = RequestResidualScan {
+            pipeline: &pipeline,
+            transaction: &transaction,
+            expansion_limit_bytes: 32 * 1024 * 1024,
+            surfaced: &surfaced,
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+        };
+        let mut decisions = Vec::new();
+        for wire in [
+            format!("https://example.invalid/{}Vasquez", filler.repeat(128)),
+            format!("{name}{}Public", filler.repeat(128)),
+        ] {
+            let mut full = String::new();
+            let mut covered = Vec::new();
+            let mut cursor = 0;
+            let entries = transaction.snapshot_entries();
+            for range in owned_token_ranges(&wire, &transaction.tokens()) {
+                full.push_str(&wire[cursor..range.start]);
+                covered.resize(full.len(), false);
+                full.push_str(
+                    &entries
+                        .iter()
+                        .find(|entry| entry.token == wire[range.clone()])
+                        .unwrap()
+                        .raw,
+                );
+                covered.resize(full.len(), true);
+                cursor = range.end;
+            }
+            full.push_str(&wire[cursor..]);
+            covered.resize(full.len(), false);
+            let expected = pipeline
+                .staged_rule_repeat_candidates(&transaction, &full)
+                .unwrap()
+                .iter()
+                .all(|hit| rule_hit_is_covered(&full, &covered, hit.span.clone()));
+            decisions.push((scan.rule_repeats_are_covered(&wire).unwrap(), expected));
+        }
+        assert_eq!(decisions, vec![(true, true), (false, false)]);
+    }
+
+    #[test]
+    fn residual_coverage_allows_only_internal_whitespace_gaps() {
+        for (gap, allowed) in [
+            (" ", true),
+            ("\t\n", true),
+            ("\u{00a0}\u{202f}", true),
+            ("x", false),
+            ("42", false),
+            ("-", false),
+            (".", false),
+            ("\u{200b}", false),
+            ("\u{200c}", false),
+            ("\u{200d}", false),
+            ("\u{2060}", false),
+            ("\u{feff}", false),
+        ] {
+            let text = format!("ab{gap}cd");
+            let mut covered = vec![false; text.len()];
+            covered[..2].fill(true);
+            covered[text.len() - 2..].fill(true);
+            assert_eq!(
+                rule_hit_is_covered(&text, &covered, 0..text.len()),
+                allowed,
+                "gap {gap:?}"
+            );
+            covered.fill(true);
+            assert!(rule_hit_is_covered(&text, &covered, 0..text.len()));
+        }
+        for (text, covered) in [
+            (" A B", vec![false, true, false, true]),
+            ("A B ", vec![true, false, true, false]),
+            (" ", vec![false]),
+            ("", vec![]),
+            ("A\u{00a0}B", vec![true, true, false, true]),
+        ] {
+            assert!(
+                !rule_hit_is_covered(text, &covered, 0..text.len()),
+                "boundary {text:?}"
+            );
+        }
     }
 
     const DIRECT_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}]}"#;
@@ -5829,3 +6609,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "server/repeat_coverage_tests.rs"]
+mod repeat_coverage_tests;

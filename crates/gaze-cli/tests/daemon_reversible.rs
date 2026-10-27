@@ -30,6 +30,10 @@ impl Daemon {
     }
 
     fn request(&mut self, value: Value) -> Value {
+        self.request_raw(&value.to_string())
+    }
+
+    fn request_raw(&mut self, value: &str) -> Value {
         writeln!(self.stdin, "{value}").unwrap();
         self.stdin.flush().unwrap();
         let mut line = String::new();
@@ -67,6 +71,10 @@ kind = "class"
 class = "email"
 action = "tokenize"
 [[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+[[rule]]
 kind = "default"
 action = "preserve"
 "#,
@@ -94,7 +102,7 @@ fn versioned_session_round_trips_two_calls_compaction_and_tool_json() {
         "SessionExists"
     );
     assert_eq!(
-        daemon.request(json!({"version":2,"op":"restore","session_id":"run-a","text":"x"}))
+        daemon.request(json!({"version":3,"op":"restore","session_id":"run-a","text":"x"}))
             ["error"],
         "ProtocolVersion"
     );
@@ -299,8 +307,8 @@ fn rejected_requests_never_echo_fictional_pii_session_ids() {
             "SessionMissing",
         ),
         (
-            json!({"version":2,"op":"restore","session_id":v1_id,"text":"x"}),
-            Some(2),
+            json!({"version":3,"op":"restore","session_id":v1_id,"text":"x"}),
+            Some(3),
             "ProtocolVersion",
         ),
     ];
@@ -345,4 +353,378 @@ fn rejected_requests_never_echo_fictional_pii_session_ids() {
             .windows(id.len())
             .any(|window| window == id.as_bytes()));
     }
+}
+
+#[test]
+fn context_protects_this_turn_and_matched_values_propagate_without_retaining_unused_values() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"context-run"}));
+    let name = "Zelmora Quentrix";
+    let unused = "Velmora Xantrix";
+    let text = format!("Handle {name} now.");
+    let before =
+        daemon.request(json!({"version":1,"op":"clean","session_id":"context-run","text":text}));
+    assert_eq!(
+        before["clean_text"], text,
+        "fixture must evade ordinary rules"
+    );
+    let protected = daemon.request(json!({"version":1,"op":"clean","session_id":"context-run","text":text,
+        "context":{"record":{"full_name":name,"last_name":unused},"fields":{"private_marker":"context-only-marker"}}}));
+    let clean = protected["clean_text"].as_str().unwrap();
+    assert!(!clean.contains(name), "context value leaked");
+    assert_eq!(protected["manifest"].as_array().unwrap().len(), 1);
+    assert!(protected.get("context").is_none());
+    assert!(protected.get("session_blob").is_none());
+    for raw in [name, unused, "private_marker", "context-only-marker"] {
+        assert!(!protected.to_string().contains(raw));
+    }
+    assert_eq!(
+        daemon.request(json!({"version":1,"op":"restore","session_id":"context-run","text":clean}))
+            ["text"],
+        text
+    );
+    let later =
+        daemon.request(json!({"version":1,"op":"clean","session_id":"context-run","text":text}));
+    assert_eq!(
+        later["clean_text"], clean,
+        "caller-asserted rule evidence must propagate"
+    );
+    let unobserved =
+        daemon.request(json!({"version":1,"op":"clean","session_id":"context-run","text":unused}));
+    assert_eq!(
+        unobserved["clean_text"], unused,
+        "unused context must not persist"
+    );
+    let other = daemon.request(json!({"session_id":"other-run","text":text}));
+    assert_eq!(other["clean_text"], text, "context must not cross sessions");
+    let legacy = daemon.request(
+        json!({"session_id":"legacy-context","text":name,"context":{"record":{"full_name":name}}}),
+    );
+    assert!(!legacy["clean_text"].as_str().unwrap().contains(name));
+}
+
+#[test]
+fn invalid_context_fails_closed_without_creating_or_changing_sessions() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    let name = "Zelmora Quentrix";
+    for context in [
+        json!(null),
+        json!(42),
+        json!([]),
+        json!("private-context-value"),
+        json!({"record":{"private_field_name":name}}),
+        json!({"record":{"full_name":"X".repeat(257)}}),
+        json!({"fields":{"private_field_name":"X".repeat(4 * 1024 * 1024)}}),
+    ] {
+        let response = daemon.request(json!({"session_id":"invalid-context","text":"alice@example.invalid","context":context}));
+        assert_eq!(response["error"], "PolicyConfig");
+        assert!(response["session_id"].is_null());
+        assert!(response.get("clean_text").is_none());
+        assert!(response.get("tokens").is_none());
+        for private in [name, "private_field_name", "private-context-value"] {
+            assert!(!response.to_string().contains(private));
+        }
+        assert_eq!(
+            daemon.request(json!({"version":1,"op":"open","session_id":"invalid-context"}))["op"],
+            "open"
+        );
+        let unchanged = daemon
+            .request(json!({"version":1,"op":"clean","session_id":"invalid-context","text":name}));
+        assert_eq!(unchanged["clean_text"], name);
+        assert_eq!(unchanged["tokens"], json!([]));
+        daemon.request(json!({"version":1,"op":"close","session_id":"invalid-context"}));
+    }
+    daemon.request(json!({"version":1,"op":"open","session_id":"existing"}));
+    let original = daemon.request(
+        json!({"version":1,"op":"clean","session_id":"existing","text":"alice@example.invalid"}),
+    );
+    let rejected = daemon.request(json!({"version":1,"op":"clean","session_id":"existing","text":"bob@example.invalid","context":{"record":{"full_name":42}}}));
+    assert_eq!(rejected["error"], "PolicyConfig");
+    let after = daemon
+        .request(json!({"version":1,"op":"clean","session_id":"existing","text":"ordinary text"}));
+    assert_eq!(after["tokens"], original["tokens"]);
+}
+
+#[test]
+fn context_envelope_never_reaches_protocol_diagnostics_or_audit() {
+    let (dir, policy) = policy();
+    let audit_db = dir.path().join("context-audit.db");
+    let name = "Zelmora Quentrix";
+    let marker = "private-envelope-marker";
+    let requests = [
+        json!({"session_id":"safe-run","text":name,"context":{"record":{"full_name":name},"fields":{"private_field_name":marker}}}),
+        json!({"session_id":"safe-run","text":"ignored text","context":{"record":{"private_field_name":marker}}}),
+    ];
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args([
+            "daemon",
+            "--policy",
+            policy.to_str().unwrap(),
+            "--audit-db",
+            audit_db.to_str().unwrap(),
+        ])
+        .env("RUST_LOG", "trace")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        for request in requests {
+            writeln!(stdin, "{request}").unwrap();
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let responses: Vec<Value> = stdout
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(responses.len(), 2);
+    assert_ne!(responses[0]["clean_text"], name);
+    assert_eq!(responses[1]["error"], "PolicyConfig");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let audit = fs::read(&audit_db).unwrap();
+    for private in [name, marker, "private_field_name", "full_name"] {
+        assert!(!stdout.contains(private));
+        assert!(!stderr.contains(private));
+        assert!(!audit
+            .windows(private.len())
+            .any(|bytes| bytes == private.as_bytes()));
+    }
+    let audit = rusqlite::Connection::open(audit_db).unwrap();
+    let rows: i64 = audit
+        .query_row("SELECT count(*) FROM redaction_log", [], |row| row.get(0))
+        .unwrap();
+    assert!(
+        rows > 0,
+        "successful context protection must retain normal audit metadata"
+    );
+}
+
+#[test]
+fn context_preserves_raw_duplicate_and_encoded_size_checks() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    for raw_context in [
+        r#"{"record":{"full_name":"Zelmora Quentrix","full_name":"Velmora Xantrix"}}"#.to_string(),
+        format!(
+            "{{{}\"record\":{{\"full_name\":\"Zelmora Quentrix\"}}}}",
+            " ".repeat(4 * 1024 * 1024)
+        ),
+    ] {
+        let response = daemon.request_raw(&format!(
+            r#"{{"session_id":"raw-context","text":"Zelmora Quentrix","context":{raw_context}}}"#
+        ));
+        assert_eq!(response["error"], "PolicyConfig");
+        assert!(response.get("clean_text").is_none());
+    }
+}
+
+fn clean_with_context(policy: &std::path::Path, raw_context: &str) -> std::process::Output {
+    let dir = tempdir().unwrap();
+    let context = dir.path().join("context.json");
+    fs::write(&context, raw_context).unwrap();
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .arg("clean")
+        .arg("--policy")
+        .arg(policy)
+        .arg("--context-json")
+        .arg(context)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"Zelmora Quentrix")
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn context_positional_arrays_report_object_migration_without_echoing_values() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    for count in 0..=6 {
+        let mut fields = vec!["{}"; count];
+        if count >= 4 {
+            fields[3] = r#"{"full_name":"Zelmora Quentrix"}"#;
+        }
+        let context = format!("[{}]", fields.join(","));
+        let output = clean_with_context(&policy, &context);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"], "PolicyConfig");
+        let detail = error["detail"].as_str().unwrap();
+        assert!(detail.contains("use a JSON object"), "{error}");
+        assert!(detail.contains(r#"{"record":{"full_name":"..."}}"#));
+        assert!(!detail.contains("Zelmora Quentrix"));
+        let response = daemon.request_raw(&format!(
+            r#"{{"session_id":"array-context","text":"Zelmora Quentrix","context":{context}}}"#
+        ));
+        assert_eq!(response["error"], error["error"]);
+        assert_eq!(response["detail"], error["detail"]);
+        assert!(response.get("clean_text").is_none());
+    }
+    let output = clean_with_context(&policy, r#"{"record":{"full_name":"Zelmora Quentrix"}}"#);
+    assert!(output.status.success(), "{:?}", output.stderr);
+    let cleaned: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(!cleaned["clean_text"]
+        .as_str()
+        .unwrap()
+        .contains("Zelmora Quentrix"));
+}
+
+fn nested_fields_context(depth: usize) -> String {
+    format!(
+        r#"{{"fields":{{"private":{}0{}}}}}"#,
+        "[".repeat(depth),
+        "]".repeat(depth)
+    )
+}
+
+#[test]
+fn context_depth_accepted_by_clean_is_accepted_by_daemon() {
+    let (_dir, policy) = policy();
+    let context = nested_fields_context(125);
+    let output = clean_with_context(&policy, &context);
+    assert!(output.status.success(), "{:?}", output.stderr);
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"depth"}));
+    for versioned in [true, false] {
+        let prefix = if versioned {
+            r#""version":1,"op":"clean","#
+        } else {
+            ""
+        };
+        let response = daemon.request_raw(&format!(
+            r#"{{{prefix}"session_id":"depth","text":"Zelmora Quentrix","context":{context}}}"#
+        ));
+        assert_eq!(response["clean_text"], "Zelmora Quentrix", "{response}");
+        if versioned {
+            assert_eq!(response["version"], 1);
+        }
+    }
+}
+
+#[test]
+fn context_depth_rejected_by_clean_has_same_versioned_policy_error_in_daemon() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"depth"}));
+    for depth in [126, 127, 256] {
+        let context = nested_fields_context(depth);
+        let output = clean_with_context(&policy, &context);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"], "PolicyConfig");
+        let response = daemon.request_raw(&format!(
+            r#"{{"version":1,"op":"clean","session_id":"depth","text":"Zelmora Quentrix","context":{context}}}"#
+        ));
+        assert_eq!(response["version"], 1, "{response}");
+        assert_eq!(response["error"], error["error"]);
+        assert_eq!(response["detail"], error["detail"]);
+        assert!(response.get("clean_text").is_none());
+    }
+    let malformed = daemon
+        .request_raw(r#"{"version":1,"op":"clean","session_id":"depth","context":{"fields":[}}"#);
+    assert_eq!(malformed["error"], "JsonMalformed");
+    let response =
+        daemon.request(json!({"version":1,"op":"clean","session_id":"depth","text":"ordinary"}));
+    assert_eq!(response["clean_text"], "ordinary");
+}
+
+#[test]
+fn context_is_rejected_on_non_clean_operations() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"context-ops"}));
+    for op in ["open", "restore", "close"] {
+        let mut frame = json!({"version":1,"op":op,"session_id":"context-ops","context":{}});
+        if op == "restore" {
+            frame["text"] = json!("ordinary text");
+        }
+        assert_eq!(daemon.request(frame)["error"], "ProtocolInvalid");
+    }
+    assert_eq!(
+        daemon.request(json!({"version":1,"op":"close","session_id":"context-ops"}))["op"],
+        "close"
+    );
+}
+
+#[test]
+fn context_reuses_clean_dictionary_schema_and_refuses_nonreversible_record_policies() {
+    let (dir, policy) = policy();
+    let name = "Zelmora Quentrix";
+    let mut daemon = Daemon::start(&policy);
+    let response = daemon.request(json!({"session_id":"dictionary-context","text":name,
+        "context":{"dictionaries":{"owner_names":{"terms":[name],"case_sensitive":true}},
+        "class_map":{"owner_names":"name"}}}));
+    assert!(!response["clean_text"].as_str().unwrap().contains(name));
+    assert_eq!(response["tokens"][0]["class"], "Name");
+    let preserve = dir.path().join("preserve.toml");
+    fs::write(
+        &preserve,
+        fs::read_to_string(&policy).unwrap().replace(
+            "class = \"name\"\naction = \"tokenize\"",
+            "class = \"name\"\naction = \"preserve\"",
+        ),
+    )
+    .unwrap();
+    let mut daemon = Daemon::start(&preserve);
+    let response = daemon.request(json!({"session_id":"refused-record","text":name,
+        "context":{"record":{"full_name":name}}}));
+    assert_eq!(response["error"], "PolicyConfig");
+    assert!(response.get("clean_text").is_none());
+    assert_eq!(
+        daemon.request(json!({"version":1,"op":"open","session_id":"refused-record"}))["op"],
+        "open"
+    );
+}
+
+#[test]
+fn context_requests_keep_resident_ner_and_its_learned_evidence_tier() {
+    let (_dir, policy) = policy();
+    fs::write(
+        &policy,
+        format!(
+            "{}\n[ner]\nmodel_dir = \"__gaze_test_fixed_ner\"\n",
+            fs::read_to_string(&policy).unwrap()
+        ),
+    )
+    .unwrap();
+    let mut daemon = Daemon::start(&policy);
+    let first = daemon.request(json!({"session_id":"ner-context","text":"Alice Example"}));
+    assert!(!first["clean_text"]
+        .as_str()
+        .unwrap()
+        .contains("Alice Example"));
+    let contextual = daemon.request(
+        json!({"session_id":"ner-context","text":"Alice Example and Zelmora Quentrix",
+        "context":{"record":{"full_name":"Zelmora Quentrix"}}}),
+    );
+    let cleaned = contextual["clean_text"].as_str().unwrap();
+    assert!(!cleaned.contains("Alice Example"));
+    assert!(!cleaned.contains("Zelmora Quentrix"));
+    let later = daemon
+        .request(json!({"session_id":"ner-context","text":"ALICE EXAMPLE and ZELMORA QUENTRIX"}));
+    let cleaned = later["clean_text"].as_str().unwrap();
+    assert!(
+        cleaned.contains("ALICE EXAMPLE"),
+        "learned evidence must not propagate"
+    );
+    assert!(
+        !cleaned.contains("ZELMORA QUENTRIX"),
+        "caller-known rule evidence must propagate"
+    );
 }

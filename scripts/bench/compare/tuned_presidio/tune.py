@@ -93,8 +93,8 @@ def git_state() -> dict[str, object]:
 
 
 def require_hash_seed() -> None:
-    if os.environ.get("PYTHONHASHSEED") != "0":
-        raise SystemExit("set PYTHONHASHSEED=0: Presidio de-duplicates through a set")
+    from subject_identity import require_hash_seed as require_effective_hash_seed
+    require_effective_hash_seed()
 
 
 def pool_meta(pool_dir: Path) -> dict[str, object]:

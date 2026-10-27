@@ -40,6 +40,7 @@ impl NerDetector {
     }
 
     pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
+        let _constructor = gaze_types::perf_span!("model_constructor_ns");
         let verified = Self::verify_artifacts(model_dir)?;
         let backend_kind = verified.backend_kind;
         let recognizer_version_id = format!(

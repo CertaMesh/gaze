@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
-use std::io::{self, BufRead, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
-    mpsc, Arc,
+    mpsc, Arc, Mutex,
 };
 use std::time::{Duration, Instant};
 
@@ -24,17 +24,20 @@ use crate::pipeline::build::{
 };
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
-    map_safety_net_pipeline_error, maybe_register_safety_net, policy_nym_was_overridden,
-    safety_net_policy, validate_safety_net_tolerant_gate, wire_ordered_entries, CleanOptions,
-    CORE_EXTENDED_DEPRECATION,
+    map_context_error, map_safety_net_pipeline_error, maybe_register_safety_net,
+    policy_nym_was_overridden, safety_net_policy, validate_safety_net_tolerant_gate,
+    wire_ordered_entries, CleanOptions, CORE_EXTENDED_DEPRECATION,
 };
 use crate::restore::session::restore_pass2_validate;
 use gaze::{
-    Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
-    PiiClass, Policy, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger,
-    Result as GazeResult, Session, SessionSnapshotEntry,
+    Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, PiiClass,
+    Policy, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult,
+    Rulepack, Session, SessionSnapshotEntry, TypedContext,
 };
 use gaze_audit::SqliteLogger;
+
+mod input;
+mod v2;
 
 const DEFAULT_PROCESS_IDLE_TIMEOUT_SECS: u64 = 1_800;
 const DEFAULT_SESSION_IDLE_TIMEOUT_SECS: u64 = 3_600;
@@ -98,6 +101,7 @@ pub(crate) struct Args {
 }
 
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
+    let startup = gaze_types::perf_span!("daemon_startup_ns");
     let shutdown = install_signal_flags()?;
     let deprecated_core_extended = args
         .rulepacks
@@ -111,32 +115,34 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
     for warning in policy_warnings(&daemon.policy, &daemon.pipeline) {
         eprintln!("{warning}");
     }
-    let (sender, receiver) = mpsc::channel();
+    let frame_limit = daemon_frame_max_bytes();
+    let (sender, receiver) = input::channel(frame_limit);
     std::thread::spawn(move || {
-        for line in io::stdin().lock().lines() {
-            match line {
-                Ok(line) => {
-                    if sender.send(line).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
+        input::read_frames(io::stdin().lock(), sender, frame_limit);
     });
 
     let idle_timeout = daemon.process_idle_timeout;
     let mut stdout = io::stdout().lock();
+    drop(startup);
+    #[cfg(feature = "perf-timers")]
+    crate::perf::ready();
     loop {
         if shutdown.load(Ordering::Relaxed) {
             break;
         }
         match receiver.recv_timeout(Duration::from_millis(100)) {
-            Ok(line) => {
+            Ok(frame) => {
                 daemon.last_stdin_activity = Instant::now();
                 daemon.evict_idle_sessions();
-                let response = daemon.handle_line(&line);
+                let terminal = matches!(frame, input::Frame::FrameTooLarge { .. });
+                let response = match frame {
+                    input::Frame::Line(line) => daemon.handle_line(&line),
+                    input::Frame::FrameTooLarge { limit } => DaemonResponse::frame_too_large(limit),
+                };
                 write_json_line(&mut stdout, &response)?;
+                if terminal {
+                    break;
+                }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 daemon.evict_idle_sessions();
@@ -170,12 +176,14 @@ fn write_json_line<W: Write>(writer: &mut W, response: &DaemonResponse) -> Resul
 struct Daemon {
     pipeline: gaze::Pipeline,
     policy: Policy,
-    locale_chain: Vec<LocaleTag>,
+    locale_chain: gaze::LocaleChain,
+    rulepacks: Vec<Rulepack>,
     dictionaries: DictionaryBundle,
     safety_net_mode: SafetyNetMode,
     safety_net_fallback: SafetyNetFallback,
     logger: Arc<DaemonLogger>,
     sessions: HashMap<String, SessionEntry>,
+    v2: v2::Registry,
     lru: VecDeque<String>,
     session_cap: usize,
     session_idle_timeout: Duration,
@@ -221,12 +229,14 @@ impl Daemon {
         Ok(Self {
             pipeline,
             policy: loaded_policy,
-            locale_chain: locale_chain.as_slice().to_vec(),
+            locale_chain,
+            rulepacks: resolved.rulepacks,
             dictionaries,
             safety_net_mode: args.safety_net_limits.safety_net_mode,
             safety_net_fallback: args.safety_net_limits.safety_net_fallback,
             logger,
             sessions: HashMap::new(),
+            v2: v2::Registry::new().map_err(|_| CliError::Pipeline)?,
             lru: VecDeque::new(),
             session_cap: args.session_cap,
             session_idle_timeout: Duration::from_secs(args.session_idle_timeout),
@@ -236,17 +246,35 @@ impl Daemon {
     }
 
     fn handle_line(&mut self, line: &str) -> DaemonResponse {
+        if v2::is_v2(line) {
+            return DaemonResponse::V2(self.handle_v2(line));
+        }
         #[cfg(feature = "perf-timers")]
         let _perf = crate::perf::Document::from_env();
-        let value: serde_json::Value = match serde_json::from_str(line) {
-            Ok(value) => value,
-            Err(_) => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
+        // Keep context opaque so only the shared parser applies its depth and size limits.
+        let envelope =
+            serde_json::from_str::<HashMap<String, Box<serde_json::value::RawValue>>>(line);
+        let (version, parsed) = match envelope {
+            Ok(envelope) if envelope.contains_key("context") => {
+                let version = envelope
+                    .get("version")
+                    .and_then(|raw| serde_json::from_str::<u32>(raw.get()).ok());
+                (version, serde_json::from_str::<DaemonRequest>(line))
+            }
+            _ => {
+                // Preserve the legacy no-context shape and duplicate-key behavior.
+                let value: serde_json::Value = match serde_json::from_str(line) {
+                    Ok(value) => value,
+                    Err(_) => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
+                };
+                let version = value
+                    .get("version")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|version| u32::try_from(version).ok());
+                (version, serde_json::from_value::<DaemonRequest>(value))
+            }
         };
-        let version = value
-            .get("version")
-            .and_then(serde_json::Value::as_u64)
-            .and_then(|version| u32::try_from(version).ok());
-        let request = match serde_json::from_value::<DaemonRequest>(value) {
+        let request = match parsed {
             Ok(request) if !request.session_id.trim().is_empty() => request,
             Ok(_) => {
                 return DaemonResponse::error_versioned(
@@ -266,14 +294,21 @@ impl Daemon {
                 )
             }
         };
+        if self.v2.contains(&request.session_id) {
+            return DaemonResponse::error_versioned(
+                request.version,
+                "ProtocolInvalid",
+                "invalid daemon request",
+            );
+        }
         let session_id = request.session_id.clone();
         let version = request.version;
         let result = match (request.version, request.op.as_deref()) {
             (None, None) => match request.text {
-                Some(text) => self.clean_request(session_id.clone(), text, false),
+                Some(text) => self.clean_request(session_id.clone(), text, false, request.context),
                 None => return DaemonResponse::error("JsonMalformed", "malformed JSON line"),
             },
-            (Some(1), Some("open")) if request.text.is_none() => {
+            (Some(1), Some("open")) if request.text.is_none() && request.context.0.is_none() => {
                 self.evict_idle_sessions();
                 if self.sessions.contains_key(&session_id) {
                     Err((session_id.clone(), DaemonError::SessionExists))
@@ -288,14 +323,14 @@ impl Daemon {
                 }
             }
             (Some(1), Some("clean")) => match request.text {
-                Some(text) => self.clean_request(session_id.clone(), text, true),
+                Some(text) => self.clean_request(session_id.clone(), text, true, request.context),
                 None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
             },
-            (Some(1), Some("restore")) => match request.text {
+            (Some(1), Some("restore")) if request.context.0.is_none() => match request.text {
                 Some(text) => self.restore_request(session_id.clone(), text),
                 None => Err((session_id.clone(), DaemonError::ProtocolInvalid)),
             },
-            (Some(1), Some("close")) if request.text.is_none() => {
+            (Some(1), Some("close")) if request.text.is_none() && request.context.0.is_none() => {
                 self.evict_idle_sessions();
                 if self.sessions.remove(&session_id).is_some() {
                     self.lru.retain(|id| id != &session_id);
@@ -328,7 +363,31 @@ impl Daemon {
         session_id: String,
         text: String,
         versioned: bool,
+        context: RequestContext,
     ) -> std::result::Result<DaemonResponse, (String, DaemonError)> {
+        let request_inputs = context
+            .0
+            .map(|raw| {
+                let context = TypedContext::from_json_str(raw.get()).map_err(map_context_error)?;
+                let pipeline = gaze_assembly::pipeline_with_context(
+                    &self.pipeline,
+                    &self.policy,
+                    &context,
+                    &self.rulepacks,
+                    &self.locale_chain,
+                )
+                .map_err(|_| {
+                    CliError::PolicyConfigDetail("invalid context JSON configuration".into())
+                })?;
+                let dictionaries = DictionaryBundle::merge(
+                    self.dictionaries.clone(),
+                    gaze::dictionary_bundle_from_context(&context),
+                );
+                Ok::<_, CliError>((pipeline, dictionaries))
+            })
+            .transpose()
+            .map_err(|error| (session_id.clone(), DaemonError::Cli(error)))?;
+
         if versioned {
             self.touch_session(&session_id)
         } else {
@@ -340,18 +399,21 @@ impl Daemon {
             .get(&session_id)
             .expect("session inserted")
             .session;
+        let (pipeline, dictionaries) = request_inputs
+            .as_ref()
+            .map(|(pipeline, dictionaries)| (pipeline, dictionaries))
+            .unwrap_or((&self.pipeline, &self.dictionaries));
         let policy = safety_net_policy(self.safety_net_mode, self.safety_net_fallback);
-        let (clean_doc, manifest, leak_report) = self
-            .pipeline
+        let (clean_doc, manifest, leak_report) = pipeline
             .clean_with_safety_net_policy_detect_context(
                 session,
                 RawDocument::Text(text),
-                &self.locale_chain,
-                &self.dictionaries,
+                self.locale_chain.as_slice(),
+                dictionaries,
                 policy,
             )
             .map_err(|err| {
-                let cli_error = if self.pipeline.safety_net_count() > 0 {
+                let cli_error = if pipeline.safety_net_count() > 0 {
                     map_safety_net_pipeline_error(err)
                 } else {
                     CliError::Pipeline
@@ -432,15 +494,7 @@ impl Daemon {
             self.lru.push_back(session_id.to_string());
             return Ok(());
         }
-        while self.sessions.len() >= self.session_cap {
-            if let Some(evicted) = self.lru.pop_front() {
-                if let Some(entry) = self.sessions.remove(&evicted) {
-                    self.log_eviction(&entry, "lru");
-                }
-            } else {
-                break;
-            }
-        }
+        self.make_session_room();
         let session = Session::from_policy(&self.policy).map_err(|_| DaemonError::Invariant)?;
         self.sessions.insert(
             session_id.to_string(),
@@ -454,6 +508,9 @@ impl Daemon {
     }
 
     fn evict_idle_sessions(&mut self) {
+        for session in self.v2.evict_idle(self.session_idle_timeout) {
+            self.log_eviction(&session, "idle_timeout");
+        }
         let now = Instant::now();
         let mut expired = self
             .sessions
@@ -467,15 +524,15 @@ impl Daemon {
         for evicted in expired {
             if let Some(entry) = self.sessions.remove(&evicted) {
                 self.lru.retain(|existing| existing != &evicted);
-                self.log_eviction(&entry, "idle_timeout");
+                self.log_eviction(&entry.session, "idle_timeout");
             }
         }
     }
 
-    fn log_eviction(&self, entry: &SessionEntry, reason: &str) {
-        let audit_session_id = entry.session.audit_session_id();
+    fn log_eviction(&self, session: &Session, reason: &str) {
+        let audit_session_id = session.audit_session_id();
         tracing::warn!(audit_session_id = %audit_session_id, reason = %reason, "gaze daemon evicted session");
-        if let Err(err) = self.logger.log_eviction(&entry.session, reason) {
+        if let Err(err) = self.logger.log_eviction(session, reason) {
             let audit_session_id = serde_json::to_string(audit_session_id)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             let reason = serde_json::to_string(reason)
@@ -503,12 +560,16 @@ impl Daemon {
 const DAEMON_CLEAN_FORMAT: &str = "json";
 
 /// `CleanOptions::max_bytes` bounds `read_stdin_text`, which only `run_clean` calls.
-/// The daemon reads its own newline-delimited frames from stdin and never goes through
-/// that path, so the field is inert; bounding one daemon request is a protocol concern
-/// needing a typed over-limit response, which is not smuggled in here. It carries
-/// `clean`'s default rather than `u64::MAX` so that if a later change ever does route
-/// the daemon through this field it inherits a bound instead of an unbounded read.
+/// The daemon reads its own bounded frames; this inert CleanOptions field also
+/// supplies the base for its separate wire limit.
 const DAEMON_CLEAN_MAX_BYTES: u64 = DEFAULT_MAX_BYTES;
+
+fn daemon_frame_max_bytes() -> usize {
+    DAEMON_CLEAN_MAX_BYTES
+        .checked_mul(16)
+        .and_then(|limit| usize::try_from(limit).ok())
+        .expect("daemon frame limit must fit usize")
+}
 
 fn clean_options(args: &Args) -> CleanOptions<'_> {
     CleanOptions {
@@ -538,7 +599,7 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         // A typed context envelope describes one document. The daemon serves many
         // documents across many sessions from one process, so a process-wide
         // `--context-json` would apply one document's context to every session's every
-        // request. That belongs in the per-request protocol frame, not in a flag.
+        // request. The clean frame accepts `context` instead.
         context_json: None,
         audit_db: args.audit_db.as_deref(),
         safety_net: &args.safety_net,
@@ -572,17 +633,37 @@ struct SessionEntry {
 struct DaemonLogger {
     detections: AtomicU64,
     audit: Option<SqliteLogger>,
+    deferred: Mutex<Option<AuditBuffer>>,
 }
 
 impl DaemonLogger {
     fn new(audit_db: Option<&Path>) -> GazeResult<Self> {
         Ok(Self {
             detections: AtomicU64::new(0),
+            deferred: Mutex::new(None),
             audit: audit_db
                 .map(SqliteLogger::new)
                 .transpose()
                 .map_err(|err| gaze::Error::Sqlite(err.to_string()))?,
         })
+    }
+
+    // Requests execute serially through &mut Daemon. The loaded and context
+    // pipelines share this sink, so a scope covers every synchronous detector.
+    fn defer_redactions(&self, limit: usize) -> Result<DeferredRedactions<'_>, RedactionLogError> {
+        let mut buffer = self.deferred.lock().map_err(|_| audit_buffer_error())?;
+        if buffer.is_some() {
+            return Err(RedactionLogError::Backend(
+                "audit scope already active".into(),
+            ));
+        }
+        *buffer = Some(AuditBuffer {
+            entries: Vec::new(),
+            heap_bytes: 0,
+            limit,
+            exceeded: false,
+        });
+        Ok(DeferredRedactions(self))
     }
 
     fn log_safety_net_report(
@@ -632,8 +713,8 @@ impl DaemonLogger {
     }
 }
 
-impl RedactionLogger for DaemonLogger {
-    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+impl DaemonLogger {
+    fn log_committed(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         let mut entry = entry.clone();
         entry.provenance_stage = Some("daemon".to_string());
         if let Some(audit) = &self.audit {
@@ -651,17 +732,196 @@ impl RedactionLogger for DaemonLogger {
     }
 }
 
+impl RedactionLogger for DaemonLogger {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        if let Some(buffer) = self
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .as_mut()
+        {
+            buffer.reserve_entry(entry)?;
+            buffer.entries.push(entry.clone());
+            return Ok(());
+        }
+        self.log_committed(entry)
+    }
+}
+
+fn audit_buffer_error() -> RedactionLogError {
+    RedactionLogError::Backend("audit scope unavailable".into())
+}
+
+struct AuditBuffer {
+    entries: Vec<RedactionEntry>,
+    heap_bytes: usize,
+    limit: usize,
+    exceeded: bool,
+}
+
+impl AuditBuffer {
+    fn bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            .saturating_add(
+                self.entries
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<RedactionEntry>()),
+            )
+            .saturating_add(self.heap_bytes)
+    }
+
+    fn reserve_entry(&mut self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        // The serialized metadata includes every nested field. Charge sixteen
+        // times its size for cloned heap members, container and allocator overhead,
+        // in addition to the allocated entry slots. Counting never retains JSON.
+        let mut size = AuditSize(0);
+        if serde_json::to_writer(&mut size, entry).is_err() {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        let heap = size.0.saturating_mul(16);
+        let capacity = if self.entries.len() == self.entries.capacity() {
+            self.entries.capacity().saturating_mul(2).max(4)
+        } else {
+            self.entries.capacity()
+        };
+        let requested = std::mem::size_of::<Self>()
+            .saturating_add(capacity.saturating_mul(std::mem::size_of::<RedactionEntry>()))
+            .saturating_add(self.heap_bytes)
+            .saturating_add(heap);
+        if requested > self.limit {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        if self
+            .entries
+            .try_reserve_exact(capacity - self.entries.len())
+            .is_err()
+        {
+            self.exceeded = true;
+            return Err(audit_capacity_error());
+        }
+        self.heap_bytes = self.heap_bytes.saturating_add(heap);
+        Ok(())
+    }
+}
+
+struct AuditSize(usize);
+impl Write for AuditSize {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0 = self.0.saturating_add(bytes.len());
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn audit_capacity_error() -> RedactionLogError {
+    RedactionLogError::Backend("audit capacity".into())
+}
+
+struct DeferredRedactions<'a>(&'a DaemonLogger);
+
+impl DeferredRedactions<'_> {
+    fn bytes(&self) -> Result<usize, RedactionLogError> {
+        Ok(self
+            .0
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .as_ref()
+            .expect("active audit scope")
+            .bytes())
+    }
+
+    fn capacity_exceeded(&self) -> bool {
+        self.0.deferred.lock().map_or(true, |slot| {
+            slot.as_ref().is_some_and(|buffer| buffer.exceeded)
+        })
+    }
+
+    fn reset_pass(&self) -> Result<(), RedactionLogError> {
+        let mut slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        let buffer = slot.as_mut().expect("active audit scope");
+        buffer.entries.clear();
+        buffer.heap_bytes = 0;
+        buffer.exceeded = false;
+        Ok(())
+    }
+
+    fn flush(self, reports: &[LeakReport], session_id: String) -> Result<(), RedactionLogError> {
+        let mut entries = self
+            .0
+            .deferred
+            .lock()
+            .map_err(|_| audit_buffer_error())?
+            .take()
+            .expect("active audit scope")
+            .entries;
+        for entry in &mut entries {
+            entry.provenance_stage = Some("daemon".to_string());
+        }
+        if let Some(audit) = &self.0.audit {
+            audit
+                .log_batch(
+                    &entries,
+                    reports,
+                    DocumentKind::Text,
+                    chrono::Utc::now().timestamp_millis(),
+                    Some(session_id),
+                )
+                .map_err(|err| RedactionLogError::Sqlite(err.to_string()))?;
+        }
+        let detections = entries
+            .iter()
+            .filter(|entry| {
+                !entry.conflict_loser
+                    && entry.document_kind == DocumentKind::Text
+                    && entry.action != Action::Preserve
+            })
+            .count();
+        self.0
+            .detections
+            .fetch_add(detections as u64, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+impl Drop for DeferredRedactions<'_> {
+    fn drop(&mut self) {
+        self.0
+            .deferred
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+    }
+}
+
 #[derive(Deserialize)]
 struct DaemonRequest {
     version: Option<u32>,
     op: Option<String>,
     session_id: String,
     text: Option<String>,
+    #[serde(default)]
+    context: RequestContext,
+}
+
+#[derive(Default)]
+struct RequestContext(Option<Box<serde_json::value::RawValue>>);
+
+impl<'de> Deserialize<'de> for RequestContext {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // A present null must reach Context::from_json_str and fail closed.
+        Box::<serde_json::value::RawValue>::deserialize(deserializer).map(|raw| Self(Some(raw)))
+    }
 }
 
 #[derive(Serialize)]
 #[serde(untagged)]
 enum DaemonResponse {
+    V2(Box<serde_json::value::RawValue>),
     Clean {
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<u32>,
@@ -698,6 +958,13 @@ enum DaemonResponse {
 }
 
 impl DaemonResponse {
+    fn frame_too_large(limit: usize) -> Self {
+        Self::error(
+            "FrameTooLarge",
+            format!("daemon frame exceeds {limit} bytes"),
+        )
+    }
+
     fn error(error: &'static str, detail: impl Into<String>) -> Self {
         Self::error_versioned(None, error, detail)
     }
@@ -799,6 +1066,104 @@ pub(crate) fn default_session_cap() -> usize {
 #[cfg(test)]
 mod residual_wire_tests {
     use super::*;
+
+    #[test]
+    fn daemon_frame_default_is_sixteen_times_clean_limit() {
+        assert_eq!(
+            daemon_frame_max_bytes() as u64,
+            DAEMON_CLEAN_MAX_BYTES.checked_mul(16).unwrap()
+        );
+        assert_eq!(daemon_frame_max_bytes(), 160 * 1024 * 1024);
+    }
+
+    #[test]
+    fn daemon_frame_overflow_response_is_fixed_and_value_free() {
+        let mut wire = Vec::new();
+        write_json_line(&mut wire, &DaemonResponse::frame_too_large(8)).unwrap();
+        assert_eq!(wire, b"{\"session_id\":null,\"error\":\"FrameTooLarge\",\"detail\":\"daemon frame exceeds 8 bytes\"}\n");
+    }
+
+    #[test]
+    fn daemon_frame_session_responses_match_legacy_reader_bytes() {
+        use clap::Parser;
+        use std::io::{BufRead, BufReader, Cursor};
+        #[derive(Parser)]
+        struct TestArgs {
+            #[command(flatten)]
+            daemon: Args,
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let policy = dir.path().join("policy.toml");
+        std::fs::write(
+            &policy,
+            r#"
+schema_version = "0.1.0"
+[session]
+scope = "conversation"
+[policy.rulepacks]
+bundled = ["core"]
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "synthetic_email"
+pattern = '[A-Za-z0-9._%+-]+@example[.]invalid'
+class = "email"
+safety_tier = "safe_default"
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+        )
+        .unwrap();
+        // Same synthetic email and session lifecycle as tests/daemon_reversible.rs.
+        let fixture = concat!(
+            "{\"version\":1,\"op\":\"clean\",\"session_id\":\"run-a\",\"text\":\"alice@example.invalid\"}\r\n",
+            "\n",
+            "{\"version\":1,\"op\":\"clean\",\"session_id\":\"run-a\",\"text\":\"alice@example.invalid\"}\n",
+            "{\"version\":1,\"op\":\"close\",\"session_id\":\"run-a\"}",
+        ).as_bytes();
+        let make_daemon = || {
+            Daemon::new(
+                TestArgs::parse_from(["daemon", "--policy", policy.to_str().unwrap()]).daemon,
+            )
+            .unwrap()
+        };
+        let mut legacy = make_daemon();
+        let mut bounded = make_daemon();
+        assert!(legacy.ensure_session("run-a").is_ok());
+        assert!(bounded.ensure_session("run-a").is_ok());
+        // Share the empty session identity so random token prefixes do not
+        // obscure byte-for-byte wire parity.
+        bounded.sessions.get_mut("run-a").unwrap().session =
+            Session::import(legacy.sessions["run-a"].session.export().unwrap()).unwrap();
+        let mut expected = Vec::new();
+        for line in fixture.lines() {
+            write_json_line(&mut expected, &legacy.handle_line(&line.unwrap())).unwrap();
+        }
+        let mut actual = Vec::new();
+        std::thread::scope(|scope| {
+            let (sender, receiver) = input::channel(1024);
+            scope.spawn(move || {
+                input::read_frames(
+                    BufReader::with_capacity(1, Cursor::new(fixture)),
+                    sender,
+                    1024,
+                )
+            });
+            for _ in 0..4 {
+                let frame = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+                let input::Frame::Line(line) = frame else {
+                    panic!("fixture must fit");
+                };
+                write_json_line(&mut actual, &bounded.handle_line(&line)).unwrap();
+            }
+        });
+        assert_eq!(actual, expected);
+        assert_eq!(actual.iter().filter(|byte| **byte == b'\n').count(), 4);
+    }
 
     #[test]
     fn daemon_session_restores_adjacent_format_preserving_tokens() {

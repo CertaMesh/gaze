@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import agentic_layers
+import benchmark_spec
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -198,6 +199,10 @@ def _document_contract(run: dict) -> dict[str, int]:
 def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> list[dict]:
     payload = path.read_bytes()
     scorecard = json.loads(gzip.decompress(payload) if path.suffix == '.gz' else payload)
+    try:
+        benchmark_spec.identity(scorecard)
+    except benchmark_spec.SpecError as error:
+        raise HistoryError(error.code) from error
     version = scorecard.get("measured")
     if version not in {release for release, _ in expected_rows(inputs)}:
         raise HistoryError(f"unsupported measured release {version!r}")
@@ -236,6 +241,7 @@ def rows_from_scorecard(path: Path, inputs: HistoryInputs = MEASURED_INPUTS) -> 
                 **(_document_contract(run) if inputs.version >= 16 else {}),
             }
         rows.append({
+            **({"benchmark_spec": scorecard["benchmark_spec"]} if "benchmark_spec" in scorecard else {}),
             "version": version, "arm": config, "binary_revision": revision,
             "binary_sha256": binary_sha, "scorecard_sha256": sha256(path),
             "manifest_actions": parameters.get("manifest_replacing_actions"),
@@ -266,6 +272,13 @@ def validate_history(value: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> di
     if not isinstance(rows, list) or len(rows) != len(expected_rows(inputs)) or {(row.get("version"), row.get("arm")) for row in rows} != set(expected_rows(inputs)):
         raise HistoryError("adjacency history needs exactly the displayed release arms")
     for row in rows:
+        try:
+            if 'unavailable' not in row:
+                benchmark_spec.require_same(value, row, required=False)
+            else:
+                benchmark_spec.identity(value)
+        except benchmark_spec.SpecError as error:
+            raise HistoryError(error.code) from error
         if 'unavailable' in row:
             validate_unavailable_row(row, inputs)
             continue
@@ -290,7 +303,8 @@ def render(history: dict, inputs: HistoryInputs = MEASURED_INPUTS) -> str:
     by_key = {(row["version"], row["arm"]): row for row in history["rows"]}
     unavailable = {key: validate_unavailable_row(row, inputs)
                    for key, row in by_key.items() if 'unavailable' in row}
-    lines = [
+    lines = ([f"Benchmark specification: `{benchmark_spec.identity(history, required=True)}`", ""]
+             if "benchmark_spec" in history else []) + [
         "| Release and arm | A leaked / gold B | A FP B | D FP B | R leaked / gold B | R FP B |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
@@ -377,6 +391,9 @@ def main() -> int:
                 history["rows"].extend(rows_from_scorecard(path, inputs))
             for path in args.unavailable_receipt:
                 history['rows'].extend(rows_from_unavailable_receipt(path, inputs))
+            proven = [row for row in history['rows'] if 'benchmark_spec' in row]
+            if proven:
+                history['benchmark_spec'] = proven[0]['benchmark_spec']
             validate_history(history, inputs)
             temporary = inputs.path.with_suffix('.json.tmp')
             temporary.write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")

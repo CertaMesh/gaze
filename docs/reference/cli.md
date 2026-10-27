@@ -153,6 +153,30 @@ Error:
 Malformed JSON fails closed per line as `JsonMalformed` with `session_id: null`.
 Errors never echo the input text.
 
+Each wire frame is limited to 167772160 bytes (160 MiB), including JSON syntax
+and context. LF is excluded; CR in a CRLF ending counts. The limit is checked
+on raw bytes before UTF-8 conversion or JSON parsing. An oversized frame emits
+one unversioned error with a null `session_id`, then daemon input closes:
+
+```json
+{"session_id":null,"error":"FrameTooLarge","detail":"daemon frame exceeds 167772160 bytes"}
+```
+
+The reader does not drain an oversized frame to find LF. The input queue has
+a separate 160 MiB byte budget, derived from the same checked limit. Queued
+UTF-8 bytes and one LF delimiter per frame consume that budget; an empty queue
+always admits one frame at the frame cap, plus its delimiter. Credits are
+reserved before copying into the queue and returned when processing takes a
+frame. Reader and queue buffers together retain at most the frame cap plus
+the queue budget plus a fixed read buffer and constant bookkeeping.
+
+Batches within the queue budget can finish writing before reading stdout.
+Beyond that budget, the reader blocks until processing makes room; it never
+drops, reorders, or refuses frames for queue pressure. Larger batch clients
+should read stdout concurrently with stdin writes.
+EOF without LF still processes the final frame. Invalid UTF-8 closes
+input without a response for that frame, as before.
+
 | Flag | Purpose |
 |------|---------|
 | `--policy <path>` | Required policy TOML loaded once at daemon startup. |

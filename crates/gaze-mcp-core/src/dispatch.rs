@@ -16,6 +16,8 @@
 //! the dispatcher without a corresponding `finish_call` or `fail_call` row,
 //! verified by the golden test in `tests/chokepoint_ordering.rs`.
 
+mod rule_coverage;
+
 use std::time::SystemTime;
 
 use sha2::{Digest, Sha256};
@@ -39,6 +41,9 @@ pub enum DispatchError {
     /// The entry point does not match the registered request contract.
     #[error("request mode rejected")]
     RequestMode,
+    /// Aggregate restored expansion exceeded the MCP operation budget.
+    #[error("MCP operation resource limit exceeded")]
+    ResourceLimit,
     /// Strict boundary failure, containing class-only diagnostics.
     #[error("protection failed: {0}")]
     Protection(#[from] gaze::ProtectionError),
@@ -346,7 +351,7 @@ impl<'a> PiiEnvelope<'a> {
                                 &raw_response.payload,
                             );
                             response_transaction = Some(transaction);
-                            result.map_err(Into::into)
+                            result
                         }
                     }
                 }
@@ -422,21 +427,70 @@ fn protect_json(
     transaction: &mut gaze::SessionTransaction<'_>,
     context: gaze::ProtectionContext<'_>,
     value: &serde_json::Value,
-) -> Result<serde_json::Value, gaze::ProtectionError> {
+) -> Result<serde_json::Value, DispatchError> {
     pipeline.validate_protection_context(context)?;
     // Freeze interpretation for the whole operation, not just the current leaf.
     let original_tokens = transaction.tokens();
+    // Expand every original before discovery can mint any token spelling. A later
+    // literal must never acquire ownership from an earlier discovery leaf.
+    let mut expanded = Vec::new();
+    let mut remaining = rule_coverage::MAX_OPERATION_EXPANDED_BYTES;
+    visit_text(value, &mut |text| {
+        let view = rule_coverage::expand_owned_bounded(transaction, text, remaining)?;
+        remaining -= view.len();
+        if !view.is_empty() {
+            expanded.push(view);
+        }
+        Ok(())
+    })?;
+    for view in expanded {
+        pipeline
+            .discover_staged_rule_sources(
+                transaction,
+                &view,
+                context.locale_chain(),
+                context.dictionaries(),
+            )
+            .map_err(|refusal| refusal.error)?;
+    }
     let output = protect_json_leaves(pipeline, transaction, context, value)?;
+    verify_json_rule_coverage(pipeline, transaction, &output)?;
     for token in transaction
         .tokens()
         .iter()
         .filter(|token| !original_tokens.contains(token))
     {
         if json_contains_literal(value, token) {
-            return Err(gaze::ProtectionError::Provenance);
+            return Err(gaze::ProtectionError::Provenance.into());
         }
     }
     Ok(output)
+}
+
+fn visit_text(
+    value: &serde_json::Value,
+    visit: &mut impl FnMut(&str) -> Result<(), DispatchError>,
+) -> Result<(), DispatchError> {
+    match value {
+        serde_json::Value::String(text) => visit(text),
+        serde_json::Value::Array(values) => {
+            values.iter().try_for_each(|value| visit_text(value, visit))
+        }
+        serde_json::Value::Object(values) => values
+            .values()
+            .try_for_each(|value| visit_text(value, visit)),
+        _ => Ok(()),
+    }
+}
+
+fn verify_json_rule_coverage(
+    pipeline: &gaze::Pipeline,
+    transaction: &gaze::SessionTransaction<'_>,
+    value: &serde_json::Value,
+) -> Result<(), DispatchError> {
+    visit_text(value, &mut |text| {
+        rule_coverage::verify_rule_coverage(pipeline, transaction, text)
+    })
 }
 
 fn json_contains_literal(value: &serde_json::Value, token: &str) -> bool {
@@ -455,14 +509,36 @@ fn protect_json_leaves(
     transaction: &mut gaze::SessionTransaction<'_>,
     context: gaze::ProtectionContext<'_>,
     value: &serde_json::Value,
-) -> Result<serde_json::Value, gaze::ProtectionError> {
+) -> Result<serde_json::Value, DispatchError> {
     use serde_json::Value as JsonValue;
     match value {
-        JsonValue::String(text) => Ok(JsonValue::String(pipeline.protect_text_transaction(
-            transaction,
-            text,
-            context,
-        )?)),
+        JsonValue::String(text) => {
+            let expected = rule_coverage::expand_owned_bounded(
+                transaction,
+                text,
+                rule_coverage::MAX_OPERATION_EXPANDED_BYTES,
+            )?;
+            let primary = pipeline.protect_text_transaction(transaction, text, context)?;
+            let protected =
+                rule_coverage::cover_rule_repeats(pipeline, transaction, text, &primary)?;
+            if rule_coverage::expand_owned_bounded(
+                transaction,
+                &protected,
+                rule_coverage::MAX_OPERATION_EXPANDED_BYTES,
+            )? != expected
+            {
+                return Err(gaze::ProtectionError::Provenance.into());
+            }
+            if protected != primary {
+                pipeline.admit_safety_nets_transaction(
+                    transaction,
+                    &protected,
+                    context.locale_chain(),
+                    context.dictionaries(),
+                )?;
+            }
+            Ok(JsonValue::String(protected))
+        }
         JsonValue::Array(values) => values
             .iter()
             .map(|value| protect_json_leaves(pipeline, transaction, context, value))
@@ -555,6 +631,45 @@ mod tests {
             .rule(DefaultRule::new(Action::Preserve))
             .build()
             .expect("pipeline")
+    }
+
+    #[test]
+    fn final_rule_coverage_rejects_raw_output_independently_of_projection() {
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let pipeline = core.pipeline();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        pipeline
+            .discover_staged_rule_sources(
+                &mut transaction,
+                "alice@example.invalid",
+                core.locale_chain().as_slice(),
+                default_dictionaries(),
+            )
+            .unwrap();
+        assert!(
+            matches!(
+                verify_json_rule_coverage(
+                    pipeline,
+                    &transaction,
+                    &json!(["alice@example.invalid"])
+                ),
+                Err(DispatchError::Protection(gaze::ProtectionError::Residual)),
+            ),
+            "raw Rule repeat accepted by final proof",
+        );
+        let protected = pipeline
+            .protect_text_transaction(
+                &mut transaction,
+                "alice@example.invalid",
+                gaze::ProtectionContext::strict(
+                    core.locale_chain().as_slice(),
+                    default_dictionaries(),
+                ),
+            )
+            .unwrap();
+        verify_json_rule_coverage(pipeline, &transaction, &json!([protected])).unwrap();
+        assert!(session.tokens().is_empty());
     }
 
     #[test]

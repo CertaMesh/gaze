@@ -1,0 +1,103 @@
+{
+  "scope": "diagnostic only; gold, oracle, and both scored contracts unchanged",
+  "diagnostic": {
+    "base": {
+      "raw_space_bytes": 8,
+      "other_leaked_utf8_bytes": 32,
+      "space_only_cases": [
+        "owned-contained-arguments",
+        "owned-contained-response"
+      ]
+    },
+    "candidate": {
+      "raw_space_bytes": 6,
+      "other_leaked_utf8_bytes": 0,
+      "space_only_cases": [
+        "owned-contained-arguments",
+        "owned-contained-response",
+        "owned-between-arguments",
+        "owned-between-response"
+      ]
+    }
+  },
+  "candidate_uncovered_gold": [
+    {
+      "case": "owned-contained-arguments",
+      "path": [
+        "items",
+        0
+      ],
+      "byte_offset": 21,
+      "byte": 32,
+      "gap": " ",
+      "gap_is_whitespace": true,
+      "owned_before": true,
+      "owned_after": true
+    },
+    {
+      "case": "owned-contained-response",
+      "path": [
+        "items",
+        0
+      ],
+      "byte_offset": 21,
+      "byte": 32,
+      "gap": " ",
+      "gap_is_whitespace": true,
+      "owned_before": true,
+      "owned_after": true
+    },
+    {
+      "case": "owned-between-arguments",
+      "path": [
+        "items",
+        0
+      ],
+      "byte_offset": 21,
+      "byte": 32,
+      "gap": " ",
+      "gap_is_whitespace": true,
+      "owned_before": true,
+      "owned_after": true
+    },
+    {
+      "case": "owned-between-arguments",
+      "path": [
+        "items",
+        0
+      ],
+      "byte_offset": 25,
+      "byte": 32,
+      "gap": " ",
+      "gap_is_whitespace": true,
+      "owned_before": true,
+      "owned_after": true
+    },
+    {
+      "case": "owned-between-response",
+      "path": [
+        "items",
+        0
+      ],
+      "byte_offset": 21,
+      "byte": 32,
+      "gap": " ",
+      "gap_is_whitespace": true,
+      "owned_before": true,
+      "owned_after": true
+    },
+    {
+      "case": "owned-between-response",
+      "path": [
+        "items",
+        0
+      ],
+      "byte_offset": 25,
+      "byte": 32,
+      "gap": " ",
+      "gap_is_whitespace": true,
+      "owned_before": true,
+      "owned_after": true
+    }
+  ]
+}

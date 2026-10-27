@@ -29,6 +29,20 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: replace positional context arrays
+
+Context JSON now requires a top-level object. `gaze clean --context-json`
+rejects previously accepted positional arrays with `PolicyConfig` and an
+object-form migration hint. Daemon clean frames use the same context schema.
+
+Replace `[{}, {}, {}, {"full_name":"[customer name]"}]` with
+`{"record":{"full_name":"[customer name]"}}`, using your trusted record values.
+The old array's positions were `dictionaries`, `class_map`, `fields`, `record`,
+`field_map`, and `record_match_kinds`, in that order. Arrays with zero through
+six elements were accepted when their fields passed validation. Omitted
+trailing fields defaulted. Name each supplied field in the replacement object;
+replace an empty array with `{}`. Existing objects need no migration.
+
 ### Breaking: `session_blob` envelope version 7 for JSON-escaped values
 
 Upgrade every process that restores a blob before, or together with, every

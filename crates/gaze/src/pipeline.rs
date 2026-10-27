@@ -54,6 +54,9 @@ pub enum Error {
     InvalidRegex(#[source] regex::Error),
     #[error("restore manifest matcher build failed")]
     RestoreMatcherBuild,
+    /// Staged manifest allocation would exceed the host's reserved budget.
+    #[error("session manifest capacity exceeded")]
+    SessionCapacity,
     /// An exact manifest-owned run has multiple valid token splits.
     /// Carries no token spelling or mapped owner value.
     #[error("ambiguous token run: [REDACTED]")]
@@ -598,6 +601,13 @@ impl Pipeline {
         &self.registry
     }
 
+    /// Replace detection inputs while retaining policy rules, loggers and resident safety nets.
+    /// Callers must assemble the registry against the same policy as this pipeline.
+    pub fn with_recognizer_registry(mut self, registry: RecognizerRegistry) -> Self {
+        self.registry = Arc::new(registry);
+        self
+    }
+
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::default()
     }
@@ -895,6 +905,8 @@ impl Pipeline {
         decision: SafetyNetDecision,
         report: &mut LeakReport,
     ) -> Result<CleanText> {
+        #[cfg(feature = "bundled-recognizers")]
+        let _inference_request = gaze_recognizers::inference_request();
         let mut clean = self.redact_text_with_manifest(
             target,
             text,
@@ -970,6 +982,8 @@ impl Pipeline {
         Vec<GazeLocalProtectionTraceItem>,
         Vec<CandidateEvent>,
     )> {
+        #[cfg(feature = "bundled-recognizers")]
+        let _inference_request = gaze_recognizers::inference_request();
         let decision = policy.decision();
         let mut target = ProtectionTarget::Live(session);
         let mut protection_trace = ProtectionTraceCollector::new(text);
@@ -4994,6 +5008,12 @@ impl PipelineBuilder {
         R: Recognizer + 'static,
     {
         self.registry = self.registry.register(recognizer);
+        self
+    }
+
+    /// Register an already-loaded recognizer without reloading its model or weights.
+    pub fn recognizer_arc(mut self, recognizer: Arc<dyn Recognizer>) -> Self {
+        self.registry = self.registry.register_arc(recognizer);
         self
     }
 

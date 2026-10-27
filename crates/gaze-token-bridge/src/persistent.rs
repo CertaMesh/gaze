@@ -58,10 +58,6 @@ const INDEX_KEY_ENV: &str = "GAZE_INDEX_KEY";
 const KEYCHAIN_SERVICE: &str = "dev.empiretwo.gaze.index";
 const INDEX_AAD_CONTEXT: &[u8] = b"gaze-token-bridge-owner-index-v1";
 
-#[cfg(all(test, feature = "os-keychain"))]
-static KEYCHAIN_DISABLED_FOR_TESTS: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
 /// Derived inverted index: domain -> fingerprint -> positions into
 /// `PersistentIndexFile::documents`. Rebuilt on load, never persisted.
 type Postings = HashMap<DomainId, HashMap<String, Vec<usize>>>;
@@ -836,12 +832,7 @@ fn hex_nibble(byte: u8) -> Option<u8> {
 
 #[cfg(feature = "os-keychain")]
 fn keychain_index_key(account: &str) -> Result<Option<Zeroizing<[u8; 32]>>, BridgeError> {
-    if keychain_disabled_for_tests() {
-        return Ok(None);
-    }
-
-    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, account)
-        .map_err(|err| index_crypto_error(format!("OS keychain unavailable: {err}")))?;
+    let entry = keychain_entry(account)?;
     match entry.get_password() {
         Ok(mut secret) => {
             let parsed = parse_hex_key(secret.trim());
@@ -859,14 +850,7 @@ fn keychain_index_key(account: &str) -> Result<Option<Zeroizing<[u8; 32]>>, Brid
 fn generate_and_store_keychain_index_key(
     account: &str,
 ) -> Result<Zeroizing<[u8; 32]>, BridgeError> {
-    if keychain_disabled_for_tests() {
-        return Err(index_crypto_error(
-            "no owner-side index key source available; set GAZE_INDEX_KEY or enable OS keychain",
-        ));
-    }
-
-    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, account)
-        .map_err(|err| index_crypto_error(format!("OS keychain unavailable: {err}")))?;
+    let entry = keychain_entry(account)?;
     let mut key = Zeroizing::new([0_u8; 32]);
     rand::rngs::OsRng.fill_bytes(&mut key[..]);
     let mut secret = hex(&key[..]);
@@ -880,14 +864,20 @@ fn generate_and_store_keychain_index_key(
     Ok(key)
 }
 
-#[cfg(all(test, feature = "os-keychain"))]
-fn keychain_disabled_for_tests() -> bool {
-    KEYCHAIN_DISABLED_FOR_TESTS.load(std::sync::atomic::Ordering::SeqCst)
-}
-
-#[cfg(all(not(test), feature = "os-keychain"))]
-fn keychain_disabled_for_tests() -> bool {
-    false
+#[cfg(feature = "os-keychain")]
+fn keychain_entry(account: &str) -> Result<keyring::Entry, BridgeError> {
+    // Cargo supplies CARGO_MANIFEST_DIR regardless of cwd; children inherit it.
+    // The workspace marker is independent, and unit builds always refuse access.
+    if cfg!(test)
+        || env::var_os("CARGO_MANIFEST_DIR").is_some()
+        || env::var_os("GAZE_DISABLE_OS_KEYSTORE").is_some()
+    {
+        return Err(index_crypto_error(
+            "OS key store disabled; set GAZE_INDEX_KEY",
+        ));
+    }
+    keyring::Entry::new(KEYCHAIN_SERVICE, account)
+        .map_err(|err| index_crypto_error(format!("OS keychain unavailable: {err}")))
 }
 
 fn parse_index_envelope(bytes: &[u8]) -> Result<ParsedIndexEnvelope<'_>, BridgeError> {
@@ -1245,7 +1235,6 @@ mod tests {
     fn keychain_identity_mismatch_fails_closed_without_live_keychain() {
         let _lock = ENV_LOCK.lock().expect("env lock");
         let _env = IndexKeyEnvGuard::remove();
-        let _keychain = KeychainDisabledGuard::new();
         let dir = TestDir::new("keychain-identity-mismatch");
         let index_path = dir.path().join(INDEX_FILE_NAME);
         let index_id = [0xCD; INDEX_ID_LEN];
@@ -1272,7 +1261,6 @@ mod tests {
     #[test]
     fn missing_or_empty_key_source_fails_closed_for_save_and_load() {
         let _lock = ENV_LOCK.lock().expect("env lock");
-        let _keychain = KeychainDisabledGuard::new();
 
         let missing_save_dir = TestDir::new("missing-key-save");
         let _env = IndexKeyEnvGuard::remove();
@@ -1757,23 +1745,6 @@ mod tests {
     impl Drop for IndexKeyEnvGuard {
         fn drop(&mut self) {
             std::env::remove_var(INDEX_KEY_ENV);
-        }
-    }
-
-    struct KeychainDisabledGuard;
-
-    impl KeychainDisabledGuard {
-        fn new() -> Self {
-            #[cfg(feature = "os-keychain")]
-            KEYCHAIN_DISABLED_FOR_TESTS.store(true, std::sync::atomic::Ordering::SeqCst);
-            Self
-        }
-    }
-
-    impl Drop for KeychainDisabledGuard {
-        fn drop(&mut self) {
-            #[cfg(feature = "os-keychain")]
-            KEYCHAIN_DISABLED_FOR_TESTS.store(false, std::sync::atomic::Ordering::SeqCst);
         }
     }
 

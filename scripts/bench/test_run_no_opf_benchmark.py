@@ -650,6 +650,11 @@ class PolicyNerSettingsTests(unittest.TestCase):
             self.assertEqual(binary.parent.name, "release")
 
     def test_exact_cache_hit_binds_binaries_and_skips_probe_and_detector_execution(self) -> None:
+        spec = runner.benchmark_spec.manifest({
+            'corpus_sha256': '0' * 64, 'generator': None, 'seed': 20260710,
+            'contracts': {'v1': 'synthetic'}, 'harness': {'fixture': 'synthetic'},
+            'record_schema': [1], 'protocol': {}, 'population': {},
+        })
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             root = Path(directory)
             dataset = root / "dataset.parquet"
@@ -667,6 +672,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
                 "quick", "--dataset", str(dataset), "--output-dir", str(output),
                 "--no-agentic-layers", "--no-download",
             ])
+            stack.enter_context(mock.patch.object(runner.benchmark_spec, "resolve", return_value=spec))
             stack.enter_context(mock.patch.object(
                 runner, "load_scored_label_contract",
                 return_value=score.SCORED_LABEL_CONTRACT_V1,
@@ -697,8 +703,15 @@ class PolicyNerSettingsTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(
                 runner.benchmark_cache, "restore_layers", return_value="hit",
             ))
+            metadata = {"revision": "a" * 40, "dirty": False}
+            cached_card = {"cached": True, "benchmark_spec": spec, "gaze": metadata,
+                "parameters": {"binary_profile": "debug", "configs": list(score.DEFAULT_CONFIGS)},
+                "subject_build": {"version": 1, "mode": "producer-build", "source": metadata,
+                                  "binary_sha256": score.sha256_file(dataset), "profile": "debug",
+                                  "configs": list(score.DEFAULT_CONFIGS), "features": []}}
+            stack.enter_context(mock.patch.object(score, "git_metadata", return_value=metadata))
             stack.enter_context(mock.patch.object(
-                runner.records, "rescore", return_value={"cached": True},
+                runner.records, "rescore", return_value=cached_card,
             ))
             def publish(_args, directory, card):
                 directory.mkdir(parents=True, exist_ok=True)
@@ -706,7 +719,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
                 (directory / "observations-v1.jsonl.gz").write_bytes(b"synthetic restored record")
                 return 17
             finish = stack.enter_context(mock.patch.object(runner, "finish_run", side_effect=publish))
-            build = stack.enter_context(mock.patch.object(runner.dataiku, "build_binary", return_value=dataset))
+            build = stack.enter_context(mock.patch.object(runner.subject_build, "cargo_build_binary", return_value=dataset))
             probe = stack.enter_context(mock.patch.object(runner, "build_validator_probe", return_value=dataset))
             execute = stack.enter_context(mock.patch.object(runner, "execute_measurements"))
 
@@ -714,7 +727,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
             build.assert_called_once()
             probe.assert_called_once()
             execute.assert_not_called()
-            finish.assert_called_once_with(args, output / "quick", {"cached": True})
+            finish.assert_called_once_with(args, output / "quick", cached_card)
 
     def test_run_records_absent_ner_and_portable_policy_path(self) -> None:
         class StopAfterProvenance(Exception):
@@ -738,6 +751,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
                 "--no-agentic-layers", "--no-download", "--skip-build", "--no-cache",
             ])
             patches = (
+                (runner.benchmark_spec, "resolve", {"return_value": {"id": "synthetic-spec"}}),
                 (runner, "load_scored_label_contract", {"return_value": object()}),
                 (runner.dataiku, "verify_dataset", {}),
                 (runner.dataiku, "load_documents", {"return_value": ([object()], {})}),

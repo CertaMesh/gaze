@@ -55,11 +55,21 @@ pub enum ProxyError {
     /// prevent, so the request is refused.
     #[error("adapter coverage contract is unproven on the legacy path")]
     UnprovenCoverage,
+    /// Expanded immutable request text exceeded the configured resource budget.
+    /// This is independent of whether the leaf contains uncovered private bytes.
+    #[error("residual expansion exceeds resource limit of {limit_bytes} bytes")]
+    ResidualExpansionLimitExceeded { limit_bytes: usize },
     /// The request carried text the configured protection refused to forward.
     ///
     /// Carries the typed [`gaze::ProtectionError`] and suspect classes only, never the text.
     #[error("request refused: {refusal}")]
     Refused { refusal: gaze::BoundaryRefusal },
+    /// The request's staged mappings could not be atomically published.
+    #[error("session commit failed: {source}")]
+    SessionCommit {
+        #[source]
+        source: gaze::SessionTransactionError,
+    },
     #[error("pipeline failed")]
     Pipeline {
         #[source]
