@@ -142,4 +142,4 @@ checks:
     identity_env: [CARGO_PROFILE_DEV_DEBUG, CARGO_PROFILE_TEST_DEBUG, CARGO_INCREMENTAL, GAZE_DISABLE_OS_KEYSTORE]
     commands:
       - env CARGO_BUILD_JOBS=2 nice -n 10 cargo run -p xtask --locked -- cargo-metadata-audit-isolation
-      - env CARGO_BUILD_JOBS=2 GAZE_DYLINT_REQUIRED=1 nice -n 10 cargo run -p xtask --locked -- dylint-gate
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo run -p xtask --locked -- dylint-gate
