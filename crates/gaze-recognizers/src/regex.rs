@@ -426,7 +426,13 @@ impl RegexDetector {
                             .get(&scan.span.end)
                             .is_some_and(|&start| start > scan.span.start)
                 });
-                merge_recovered_scans(&mut scans, &[], boundaries, false, || {});
+                // Keep boundary candidates even inside a joined candidate: that larger
+                // candidate may subsequently fail its validator at the registry boundary.
+                scans.extend(boundaries);
+                scans.sort_by_key(|scan| (scan.span.start, scan.span.end));
+                scans.dedup_by(|left, right| {
+                    left.span == right.span && left.rejected == right.rejected
+                });
             }
         }
         Ok(scans)
