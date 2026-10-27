@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
-use std::sync::Arc;
 
 use zeroize::Zeroizing;
 
@@ -633,28 +632,8 @@ struct JsonDocument {
     occurrence_count: usize,
 }
 
-// Share ancestor keys across nodes. A long key above a wide array must not be
-// copied once per descendant merely to retain structural evidence.
-struct JsonFieldPath {
-    parent: Option<Arc<JsonFieldPath>>,
-    segment: String,
-}
-
-impl JsonFieldPath {
-    fn field_path(path: &Option<Arc<Self>>) -> gaze_types::FieldPath {
-        let mut segments = Vec::new();
-        let mut current = path.as_deref();
-        while let Some(node) = current {
-            segments.push(node.segment.clone());
-            current = node.parent.as_deref();
-        }
-        segments.reverse();
-        gaze_types::FieldPath::new(segments)
-    }
-}
-
 struct JsonNode {
-    path: Option<Arc<JsonFieldPath>>,
+    path: gaze_types::FieldPath,
     occurrence: usize,
     span: Range<usize>,
     raw_preserve: bool,
@@ -844,7 +823,7 @@ fn parse_json(
     };
     parser.skip_whitespace();
     let root = parser
-        .parse_value(0, &None)
+        .parse_value(0, &gaze_types::FieldPath::default())
         .map_err(|code| codec_error(code, phase))?;
     parser.skip_whitespace();
     if parser.position != input.len() {
@@ -860,7 +839,7 @@ impl JsonParser<'_> {
     fn parse_value(
         &mut self,
         depth: usize,
-        path: &Option<Arc<JsonFieldPath>>,
+        path: &gaze_types::FieldPath,
     ) -> Result<JsonNode, CodecErrorCode> {
         if depth > self.limits.max_json_depth() {
             return Err(CodecErrorCode::DepthLimitExceeded);
@@ -905,7 +884,7 @@ impl JsonParser<'_> {
     fn parse_object(
         &mut self,
         depth: usize,
-        path: &Option<Arc<JsonFieldPath>>,
+        path: &gaze_types::FieldPath,
     ) -> Result<JsonKind, CodecErrorCode> {
         self.position += 1;
         self.skip_whitespace();
@@ -932,10 +911,7 @@ impl JsonParser<'_> {
                 return Err(CodecErrorCode::InvalidJson);
             }
             self.skip_whitespace();
-            let child = Some(Arc::new(JsonFieldPath {
-                parent: path.clone(),
-                segment: key.value.clone(),
-            }));
+            let child = path.child(key.value.clone());
             let value = self.parse_value(depth, &child)?;
             members.push(JsonMember {
                 key_occurrence,
@@ -955,7 +931,7 @@ impl JsonParser<'_> {
     fn parse_array(
         &mut self,
         depth: usize,
-        path: &Option<Arc<JsonFieldPath>>,
+        path: &gaze_types::FieldPath,
     ) -> Result<JsonKind, CodecErrorCode> {
         self.position += 1;
         self.skip_whitespace();
@@ -965,10 +941,7 @@ impl JsonParser<'_> {
             return Ok(JsonKind::Array(values));
         }
         loop {
-            let child = Some(Arc::new(JsonFieldPath {
-                parent: path.clone(),
-                segment: values.len().to_string(),
-            }));
+            let child = path.child(values.len().to_string());
             values.push(self.parse_value(depth, &child)?);
             self.skip_whitespace();
             match self.take() {
@@ -2894,7 +2867,7 @@ fn transform_request_string(
     guard_request_mutable_text(&value.value, ctx)?;
     ctx.validate_token_shapes(&value.value)?;
     let field = gaze_types::FieldProvenance::new(
-        JsonFieldPath::field_path(&node.path),
+        node.path.clone(),
         gaze_types::JsonScalarType::String,
         gaze_types::FieldEvidence::ValidatedParse,
     );
@@ -6349,6 +6322,65 @@ mod inspection_parity_tests {
 
     use super::*;
     use crate::codec::ResponseResidualValidator;
+
+    #[test]
+    fn field_provenance_wide_codec_paths_retain_linear_bytes() {
+        struct Recorder(Vec<gaze_types::FieldPath>);
+        impl RequestPseudonymizer for Recorder {
+            fn protect(&mut self, value: &str) -> Result<String, CodecErrorCode> {
+                Ok(value.to_owned())
+            }
+            fn protect_field(
+                &mut self,
+                value: &str,
+                field: &gaze_types::FieldProvenance,
+            ) -> Result<String, CodecErrorCode> {
+                self.0.push(field.path.clone());
+                Ok(value.to_owned())
+            }
+        }
+        let key = "k".repeat(1024 * 1024);
+        let bytes = serde_json::to_vec(&serde_json::json!({key: vec!["x"; 2000]})).unwrap();
+        let mut document = parse_json(
+            &bytes,
+            CodecLimits::default(),
+            CodecPhase::RequestProtection,
+        )
+        .unwrap();
+        let mut recorder = Recorder(Vec::new());
+        let mut context =
+            RequestTransformContext::new(&mut recorder, WireFormat::Json, CodecLimits::default());
+        let mut ledger = CoverageLedger::new(document.occurrence_count);
+        fn protect_leaves(
+            node: &mut JsonNode,
+            context: &mut RequestTransformContext<'_>,
+            ledger: &mut CoverageLedger,
+        ) {
+            match &mut node.kind {
+                JsonKind::Object(members) => {
+                    for member in members {
+                        protect_leaves(&mut member.value, context, ledger);
+                    }
+                }
+                JsonKind::Array(values) => {
+                    for value in values {
+                        protect_leaves(value, context, ledger);
+                    }
+                }
+                JsonKind::String(_) => transform_request_string(node, context, ledger).unwrap(),
+                _ => unreachable!(),
+            }
+        }
+        // Exercise leaf provenance retention directly. A provider can refuse an
+        // opaque-looking key before reaching these leaves; that is a separate guard.
+        protect_leaves(&mut document.root, &mut context, &mut ledger);
+        assert_eq!(recorder.0.len(), 2000);
+        let retained = gaze::test_support::retained_path_bytes(recorder.0.iter());
+        assert!(
+            retained <= 2 * bytes.len(),
+            "retained path bytes: {retained}"
+        );
+    }
 
     struct CleanResidual;
 

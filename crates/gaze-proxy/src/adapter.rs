@@ -517,19 +517,43 @@ pub enum SurfaceSyntax {
     ModelOutput,
 }
 
+#[non_exhaustive]
 pub struct PiiSurface<'a> {
-    pub field_path: String,
+    pub field_path: CoveragePath,
     /// Validated scalar location. Debug/Display of the path hide user-authored keys.
     pub field: Option<gaze_types::FieldProvenance>,
     pub text: &'a mut String,
     pub syntax: SurfaceSyntax,
 }
 
-/// Adapter request surfaces. Numbers retain their JSON type and are never text rewrite targets.
+impl<'a> PiiSurface<'a> {
+    /// Construct a surface without structured evidence (for custom adapters).
+    pub fn new(
+        field_path: impl Into<CoveragePath>,
+        text: &'a mut String,
+        syntax: SurfaceSyntax,
+    ) -> Self {
+        Self {
+            field_path: field_path.into(),
+            field: None,
+            text,
+            syntax,
+        }
+    }
+}
+
+/// Request string rewrite targets. Numeric leaves remain untouched; numeric
+/// admission is still proved by the residual scan. No unused number inventory is retained.
 #[derive(Default)]
+#[non_exhaustive]
 pub struct RequestSurfaces<'a> {
     pub strings: Vec<PiiSurface<'a>>,
-    pub numbers: Vec<gaze_types::FieldProvenance>,
+}
+
+impl<'a> From<Vec<PiiSurface<'a>>> for RequestSurfaces<'a> {
+    fn from(strings: Vec<PiiSurface<'a>>) -> Self {
+        Self { strings }
+    }
 }
 
 impl<'a> IntoIterator for RequestSurfaces<'a> {
@@ -555,40 +579,112 @@ impl<'a> RequestSurfaces<'a> {
     }
 }
 
-/// Keeps the existing coverage spelling separate from unescaped JSON-pointer segments.
-/// It deliberately has no Debug or Display implementation: keys may contain PII.
+/// A legacy coverage spelling with shared ancestor storage. Debug hides keys.
+/// Equality and hashing do not materialize the spelling.
+#[derive(Clone, Default)]
+#[non_exhaustive]
+pub struct CoveragePath {
+    chunks: gaze_types::FieldPath,
+    rendered: std::sync::OnceLock<String>,
+}
+
+impl CoveragePath {
+    fn append(&self, chunk: String) -> Self {
+        Self {
+            chunks: self.chunks.child(chunk),
+            rendered: std::sync::OnceLock::new(),
+        }
+    }
+    /// Materialize the legacy spelling only when a trusted caller needs it.
+    /// Calling this on every descendant copies shared ancestor bytes per call.
+    pub fn as_str(&self) -> &str {
+        self.rendered
+            .get_or_init(|| self.chunks.segments().concat())
+    }
+    fn is_empty(&self) -> bool {
+        self.chunks.segments().iter().all(|chunk| chunk.is_empty())
+    }
+    pub(crate) fn member(&self, key: &str) -> Self {
+        self.append(if self.is_empty() {
+            key.to_owned()
+        } else {
+            format!(".{key}")
+        })
+    }
+    pub(crate) fn index(&self, index: usize) -> Self {
+        self.append(format!("[{index}]"))
+    }
+}
+
+impl From<String> for CoveragePath {
+    fn from(value: String) -> Self {
+        Self::default().append(value)
+    }
+}
+impl From<&str> for CoveragePath {
+    fn from(value: &str) -> Self {
+        value.to_owned().into()
+    }
+}
+impl PartialEq for CoveragePath {
+    fn eq(&self, other: &Self) -> bool {
+        self.chunks
+            .segments()
+            .iter()
+            .flat_map(|chunk| chunk.bytes())
+            .eq(other
+                .chunks
+                .segments()
+                .iter()
+                .flat_map(|chunk| chunk.bytes()))
+    }
+}
+impl Eq for CoveragePath {}
+impl std::hash::Hash for CoveragePath {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for chunk in self.chunks.segments() {
+            for byte in chunk.bytes() {
+                state.write_u8(byte);
+            }
+        }
+        state.write_usize(self.chunks.segments().iter().map(|s| s.len()).sum());
+    }
+}
+impl std::fmt::Debug for CoveragePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoveragePath").finish_non_exhaustive()
+    }
+}
+
+/// Keeps coverage spelling separate from unescaped JSON-pointer segments.
 #[derive(Clone)]
 pub(crate) struct SurfacePath {
-    coverage: String,
-    segments: Vec<String>,
+    coverage: CoveragePath,
+    segments: gaze_types::FieldPath,
 }
 
 impl SurfacePath {
     pub(crate) fn root(key: &str) -> Self {
         Self {
-            coverage: key.to_owned(),
-            segments: vec![key.to_owned()],
+            coverage: key.into(),
+            segments: gaze_types::FieldPath::new([key.to_owned()]),
         }
     }
     pub(crate) fn member(&self, key: &str) -> Self {
-        let mut segments = self.segments.clone();
-        segments.push(key.to_owned());
         Self {
-            coverage: format!("{}.{key}", self.coverage),
-            segments,
+            coverage: self.coverage.member(key),
+            segments: self.segments.child(key.to_owned()),
         }
     }
     pub(crate) fn index(&self, index: usize) -> Self {
-        let mut segments = self.segments.clone();
-        segments.push(index.to_string());
         Self {
-            coverage: format!("{}[{index}]", self.coverage),
-            segments,
+            coverage: self.coverage.index(index),
+            segments: self.segments.child(index.to_string()),
         }
     }
     fn provenance(&self, kind: gaze_types::JsonScalarType) -> gaze_types::FieldProvenance {
         gaze_types::FieldProvenance::new(
-            gaze_types::FieldPath::new(self.segments.clone()),
+            self.segments.clone(),
             kind,
             gaze_types::FieldEvidence::ValidatedParse,
         )
@@ -700,7 +796,7 @@ pub(crate) fn push_string<'a>(
     }
 }
 
-/// Walk decoded scalar fields. Numbers are inventoried separately and cannot be rewritten.
+/// Walk decoded string leaves. Numbers are not rewrite targets or retained metadata.
 pub(crate) fn walk_all_scalars<'a>(
     surfaces: &mut RequestSurfaces<'a>,
     path: SurfacePath,
@@ -708,9 +804,7 @@ pub(crate) fn walk_all_scalars<'a>(
 ) {
     match value {
         Value::String(text) => surfaces.push(path.surface(text, SurfaceSyntax::Text)),
-        Value::Number(_) => surfaces
-            .numbers
-            .push(path.provenance(gaze_types::JsonScalarType::Number)),
+
         Value::Array(items) => {
             for (index, item) in items.iter_mut().enumerate() {
                 walk_all_scalars(surfaces, path.index(index), item);
@@ -721,7 +815,7 @@ pub(crate) fn walk_all_scalars<'a>(
                 walk_all_scalars(surfaces, path.member(key), child);
             }
         }
-        Value::Null | Value::Bool(_) => {}
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
     }
 }
 
@@ -762,5 +856,49 @@ pub(crate) fn push_text_blocks<'a>(
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod path_storage_tests {
+    use super::*;
+    use crate::adapters::OpenAiAdapter;
+
+    #[test]
+    fn field_provenance_wide_legacy_paths_retain_linear_bytes() {
+        let adapter = OpenAiAdapter::new(url::Url::parse("http://127.0.0.1:1").unwrap());
+        for leaf in [serde_json::json!(0), serde_json::json!("x")] {
+            let key = "k".repeat(1024 * 1024);
+            let mut body = serde_json::json!({"metadata": {key: vec![leaf.clone(); 2000]}});
+            let input_bytes = serde_json::to_vec(&body).unwrap().len();
+            let surfaces = adapter.request_pii_surfaces(&mut body);
+            assert_eq!(surfaces.len(), if leaf.is_number() { 0 } else { 2000 });
+            let retained =
+                gaze::test_support::retained_path_bytes(surfaces.iter().flat_map(|surface| {
+                    [
+                        &surface.field.as_ref().unwrap().path,
+                        &surface.field_path.chunks,
+                    ]
+                }));
+            // Two spellings, one allocation per unique key plus small per-leaf indices.
+            assert!(
+                retained <= 3 * input_bytes,
+                "retained path bytes: {retained}"
+            );
+            assert!(surfaces
+                .iter()
+                .all(|surface| surface.field_path.rendered.get().is_none()));
+        }
+    }
+
+    #[test]
+    fn coverage_equality_and_hash_ignore_chunk_boundaries() {
+        use std::collections::HashSet;
+        let joined = CoveragePath::from("metadata").member("rows").index(2);
+        let flat = CoveragePath::from("metadata.rows[2]");
+        assert_eq!(joined, flat);
+        assert!(HashSet::from([joined]).contains(&flat));
+        assert_eq!(flat.as_str(), "metadata.rows[2]");
+        assert!(!format!("{flat:?}").contains("metadata"));
     }
 }

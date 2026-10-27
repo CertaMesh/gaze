@@ -6,7 +6,7 @@ use super::*;
 pub struct ProtectionContext<'a> {
     locale_chain: &'a [crate::LocaleTag],
     dictionaries: &'a DictionaryBundle,
-    field: Option<&'a gaze_types::FieldProvenance>,
+    field: Option<gaze_types::FieldContext<'a>>,
 }
 
 impl<'a> ProtectionContext<'a> {
@@ -22,7 +22,16 @@ impl<'a> ProtectionContext<'a> {
     }
     /// Attach the validated scalar location for this complete input leaf.
     pub fn with_field(mut self, field: &'a gaze_types::FieldProvenance) -> Self {
-        self.field = Some(field);
+        self.field = Some(gaze_types::FieldContext::WholeInput(field));
+        self
+    }
+    /// Attach a fragment's location without claiming the complete scalar value.
+    pub fn with_field_fragment(
+        mut self,
+        field: &'a gaze_types::FieldProvenance,
+        offset: usize,
+    ) -> Self {
+        self.field = Some(gaze_types::FieldContext::Fragment { field, offset });
         self
     }
     pub fn locale_chain(self) -> &'a [crate::LocaleTag] {

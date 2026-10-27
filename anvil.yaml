@@ -4,7 +4,7 @@ env:
   PATH: "${HOME}/.cargo/bin:${PATH}"
   RUSTC: "${HOME}/.cargo/bin/rustc"
   RUSTDOC: "${HOME}/.cargo/bin/rustdoc"
-  CARGO_BUILD_JOBS: "2"
+  CARGO_BUILD_JOBS: "4"
   PYTHONDONTWRITEBYTECODE: "1"
 # Keep Cargo's cwd-relative target/. Nested mutation gates rely on that layout.
 
@@ -95,6 +95,25 @@ checks:
     commands:
       - uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench --durations=30
 
+  field-provenance:
+    description: Focused structured-field producer, storage, and equality regressions
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-types
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo test -p gaze-proxy -p gaze-mcp-core --lib field_provenance
+  field-provenance-full:
+    description: Warning-denied workspace verification with a two-job resource cap
+    expensive: true
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - cargo fmt --all -- --check
+      - env CARGO_BUILD_JOBS=2 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/anvil/test_nonempty.py cargo test --workspace --all-features
+      - env CARGO_BUILD_JOBS=2 nice -n 10 python3 scripts/anvil/test_nonempty.py cargo test --config "build.rustflags=['-D','warnings']" --workspace --lib --bins --tests
   keystore-isolation:
     description: Fake-backed guard mutations, index/audit tests, and full feature matrix
     expensive: true

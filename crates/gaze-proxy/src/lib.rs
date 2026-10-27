@@ -39,8 +39,8 @@ use adapters::AnthropicAdapter;
 use gaze::{DictionaryBundle, LocaleChain, LocaleTag, Pipeline};
 
 pub use adapter::{
-    AdapterContract, CoveragePolicy, FormatPolicy, HeaderPolicy, PiiSurface, ProtocolContract,
-    ProviderAdapter, RedirectPolicy, RequestSurfaces, RoutePolicy, SessionPolicy,
+    AdapterContract, CoveragePath, CoveragePolicy, FormatPolicy, HeaderPolicy, PiiSurface,
+    ProtocolContract, ProviderAdapter, RedirectPolicy, RequestSurfaces, RoutePolicy, SessionPolicy,
     SessionRegistryConfig, SessionRegistryConfigError, SseEvent, SseStreamKey, SseStreamSurface,
     SurfaceSyntax,
 };

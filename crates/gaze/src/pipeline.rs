@@ -929,7 +929,7 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         decision: SafetyNetDecision,
         report: &mut LeakReport,
-        field: Option<&gaze_types::FieldProvenance>,
+        field: Option<gaze_types::FieldContext<'_>>,
     ) -> Result<CleanText> {
         #[cfg(feature = "bundled-recognizers")]
         let _inference_request = gaze_recognizers::inference_request();
@@ -1251,7 +1251,7 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
-        field: Option<&gaze_types::FieldProvenance>,
+        field: Option<gaze_types::FieldContext<'_>>,
     ) -> Result<CleanText> {
         gaze_types::perf_count!("input_bytes", text.len());
         let normalized = normalize(text);
@@ -1260,7 +1260,7 @@ impl Pipeline {
         let spans = &normalized.spans;
         let mut ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
         if let Some(field) = field {
-            ctx = ctx.with_fields(gaze_types::FieldContext::WholeInput(field));
+            ctx = ctx.with_fields(field);
         }
         let (pool, vetoed) = self
             .registry

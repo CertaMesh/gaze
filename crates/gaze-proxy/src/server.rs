@@ -1,7 +1,3 @@
-#[cfg(test)]
-#[path = "../tests/support/field_observer.rs"]
-mod field_observer;
-
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::net::{IpAddr, SocketAddr};
@@ -1360,14 +1356,18 @@ impl<'pipeline, 'context, 'transaction, 'session>
         &mut self,
         input: &str,
         _prefix_cache_write_mode: PrefixCacheWriteMode,
-        field: Option<&gaze_types::FieldProvenance>,
+        field: Option<gaze_types::FieldContext<'_>>,
     ) -> Result<String, CodecErrorCode> {
         // `gaze clean --safety-net-fallback strict`'s Resolve step; admission
         // follows on the leaf.
         let mut context = gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries);
-        if let Some(field) = field {
-            context = context.with_field(field);
-        }
+        context = match field {
+            Some(gaze_types::FieldContext::WholeInput(field)) => context.with_field(field),
+            Some(gaze_types::FieldContext::Fragment { field, offset }) => {
+                context.with_field_fragment(field, offset)
+            }
+            _ => context,
+        };
         let result = self.pipeline.resolve_boundary_text_transaction_in_context(
             self.transaction,
             input,
@@ -1617,11 +1617,21 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         let mut prepared = String::with_capacity(input.len());
         let mut caller_owned = HashSet::new();
         let mut cursor = 0;
-        for range in owned_token_ranges(input, &tokens) {
+        let ranges = owned_token_ranges(input, &tokens);
+        let field_context = |offset| {
+            field.map(|field| {
+                if ranges.is_empty() {
+                    gaze_types::FieldContext::WholeInput(field)
+                } else {
+                    gaze_types::FieldContext::Fragment { field, offset }
+                }
+            })
+        };
+        for range in &ranges {
             prepared.push_str(&self.protect_unstaged_segment(
                 &input[cursor..range.start],
                 prefix_cache_write_mode,
-                field,
+                field_context(cursor),
             )?);
             let start = prepared.len();
             prepared.push_str(&input[range.clone()]);
@@ -1631,7 +1641,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         prepared.push_str(&self.protect_unstaged_segment(
             &input[cursor..],
             prefix_cache_write_mode,
-            field,
+            field_context(cursor),
         )?);
         let prepared = self.coalesce_unpublished_rule_tokens(&prepared, &caller_owned)?;
         if self
@@ -3228,10 +3238,7 @@ fn redact_surfaces<'session>(
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
 ) -> Result<RedactedSurfaces<'session>, ProxyError> {
-    let crate::adapter::RequestSurfaces {
-        strings: surfaces,
-        numbers,
-    } = surfaces;
+    let crate::adapter::RequestSurfaces { strings: surfaces } = surfaces;
     let mut transaction = session.begin_transaction();
     let mut texts = Vec::with_capacity(surfaces.len());
     let mut pseudonymizer =
@@ -3278,15 +3285,12 @@ fn redact_surfaces<'session>(
     Ok(RedactedSurfaces {
         field_paths,
         transaction,
-        _number_fields: numbers,
     })
 }
 
 struct RedactedSurfaces<'session> {
-    /// Structural inventory only; the existing residual scan still decides numeric admission.
-    _number_fields: Vec<gaze_types::FieldProvenance>,
     /// Every redacted surface's field path, which the residual re-scan skips.
-    field_paths: HashSet<String>,
+    field_paths: HashSet<crate::adapter::CoveragePath>,
     /// Published only after the whole request's residual proof succeeds.
     transaction: SessionTransaction<'session>,
 }
@@ -3393,7 +3397,7 @@ struct RequestResidualScan<'a, 'session> {
     pipeline: &'a Pipeline,
     transaction: &'a SessionTransaction<'session>,
     expansion_limit_bytes: usize,
-    surfaced: &'a HashSet<String>,
+    surfaced: &'a HashSet<crate::adapter::CoveragePath>,
     /// The same chain the primary pass ran under. See [`residual_scan_request`].
     locale_chain: &'a [LocaleTag],
     /// The exact bundle used by the primary pass.
@@ -3464,7 +3468,11 @@ impl RequestResidualScan<'_, '_> {
             .all(|hit| rule_hit_is_covered(&expanded, &covered, hit.span)))
     }
 
-    fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
+    fn probe(
+        &self,
+        field_path: &crate::adapter::CoveragePath,
+        text: &str,
+    ) -> Result<(), ProxyError> {
         // Captured Rule evidence is proved above the independent baseline detector/net
         // probe. Lending owned classes to that probe changes neural context and can turn
         // a public suffix into a new suspect even when the real Rule matcher admits it.
@@ -3485,7 +3493,7 @@ impl RequestResidualScan<'_, '_> {
             }
         }
         Err(ProxyError::UnsurfacedPii {
-            field_path: field_path.to_string(),
+            field_path: field_path.as_str().to_owned(),
         })
     }
 
@@ -3493,16 +3501,23 @@ impl RequestResidualScan<'_, '_> {
         &self,
         body: &Value,
         model_is_routing_control: bool,
-        visit: &mut dyn FnMut(&str, &str, bool) -> Result<(), ProxyError>,
+        visit: &mut dyn FnMut(&crate::adapter::CoveragePath, &str, bool) -> Result<(), ProxyError>,
     ) -> Result<(), ProxyError> {
         let Value::Object(root) = body else {
-            return self.walk("", "", body, false, true, visit);
+            return self.walk(
+                &crate::adapter::CoveragePath::default(),
+                "",
+                body,
+                false,
+                true,
+                visit,
+            );
         };
         for (key, value) in root {
             match (model_is_routing_control, key.as_str(), value) {
-                (true, "model", Value::String(text)) => visit(key, text, true)?,
+                (true, "model", Value::String(text)) => visit(&key.as_str().into(), text, true)?,
                 _ => self.walk(
-                    key,
+                    &key.as_str().into(),
                     key,
                     value,
                     CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
@@ -3522,12 +3537,12 @@ impl RequestResidualScan<'_, '_> {
     /// unconditionally. Extra probing is safe: a surfaced position is already clean.
     fn walk(
         &self,
-        path: &str,
+        path: &crate::adapter::CoveragePath,
         leaf_key: &str,
         value: &Value,
         in_carrier_subtree: bool,
         unambiguous: bool,
-        visit: &mut dyn FnMut(&str, &str, bool) -> Result<(), ProxyError>,
+        visit: &mut dyn FnMut(&crate::adapter::CoveragePath, &str, bool) -> Result<(), ProxyError>,
     ) -> Result<(), ProxyError> {
         match value {
             Value::String(text) => {
@@ -3543,7 +3558,7 @@ impl RequestResidualScan<'_, '_> {
             Value::Array(items) => {
                 for (index, item) in items.iter().enumerate() {
                     self.walk(
-                        &format!("{path}[{index}]"),
+                        &path.index(index),
                         leaf_key,
                         item,
                         in_carrier_subtree,
@@ -3554,11 +3569,7 @@ impl RequestResidualScan<'_, '_> {
             }
             Value::Object(map) => {
                 for (key, child) in map {
-                    let child_path = if path.is_empty() {
-                        key.clone()
-                    } else {
-                        format!("{path}.{key}")
-                    };
+                    let child_path = path.member(key);
                     self.walk(
                         &child_path,
                         key,
@@ -3939,7 +3950,6 @@ mod tests {
             adapter: Box<dyn ProviderAdapter>,
             body: Value,
             fields: Vec<(&'static str, Vec<&'static str>)>,
-            numbers: Vec<Vec<&'static str>>,
         }
         let cases = vec![
             Case {
@@ -3952,10 +3962,6 @@ mod tests {
                     ("probe-meta", vec!["metadata", "customer_id"]),
                     ("probe-nested", vec!["metadata", "a.b[0]/~", "0", ""]),
                     ("probe-tool", vec!["tools", "0", "function", "description"]),
-                ],
-                numbers: vec![
-                    vec!["metadata", "count"],
-                    vec!["tools", "0", "function", "parameters", "limit"],
                 ],
             },
             Case {
@@ -3990,16 +3996,6 @@ mod tests {
                         ],
                     ),
                 ],
-                numbers: vec![vec![
-                    "contents",
-                    "0",
-                    "parts",
-                    "0",
-                    "function_call",
-                    "args",
-                    "rows",
-                    "0",
-                ]],
             },
             Case {
                 adapter: Box::new(AnthropicAdapter::new(url)),
@@ -4010,33 +4006,20 @@ mod tests {
                     "probe-legacy",
                     vec!["messages", "0", "content", "0", "input", "customer_id"],
                 )],
-                numbers: vec![vec!["messages", "0", "content", "0", "input", "count"]],
             },
         ];
         for Case {
             adapter,
             mut body,
             fields,
-            numbers,
         } in cases
         {
             let original = body.clone();
-            let observer = super::field_observer::FieldObserver::default();
+            let observer = gaze::test_support::FieldObserver::default();
             let pipeline = observer.pipeline();
             let session = Session::new(Scope::Ephemeral).unwrap();
             let surfaces = adapter.request_pii_surfaces(&mut body);
-            assert_eq!(surfaces.numbers.len(), numbers.len());
-            for expected in numbers {
-                assert!(surfaces.numbers.iter().any(|field| field
-                    .path
-                    .segments()
-                    .iter()
-                    .map(String::as_str)
-                    .eq(expected.iter().copied())
-                    && field.json_type == gaze_types::JsonScalarType::Number
-                    && field.evidence == gaze_types::FieldEvidence::ValidatedParse));
-            }
-            let staged = redact_surfaces(
+            let _staged = redact_surfaces(
                 &pipeline,
                 &session,
                 surfaces,
@@ -4044,7 +4027,6 @@ mod tests {
                 &DictionaryBundle::default(),
             )
             .unwrap();
-            assert!(!staged._number_fields.is_empty());
             assert_eq!(body, original);
             for (input, path) in fields {
                 observer.assert_field(input, &path);
@@ -4055,7 +4037,7 @@ mod tests {
 
     #[test]
     fn field_provenance_anthropic_codec_reaches_detect_context() {
-        let observer = super::field_observer::FieldObserver::default();
+        let observer = gaze::test_support::FieldObserver::default();
         let pipeline = observer.pipeline();
         let session = Session::new(Scope::Ephemeral).unwrap();
         let mut transaction = session.begin_transaction();
@@ -4089,6 +4071,73 @@ mod tests {
         );
         observer.assert_field("probe-codec-meta", &["metadata", "customer_id"]);
         assert!(session.tokens().is_empty());
+    }
+
+    #[test]
+    fn field_provenance_proxy_observer_preserves_output_manifest_and_audit() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let observer = gaze::test_support::FieldObserver::default();
+        let original = serde_json::json!({"metadata": {"contact": "alice@example.invalid"}, "messages": [{"role":"user", "content":"hello"}]});
+        let adapter =
+            crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
+        let run = |observe: bool| {
+            let audit = gaze::test_support::AuditCapture::default();
+            let builder = if observe {
+                observer.builder()
+            } else {
+                Pipeline::builder()
+            };
+            let pipeline = builder
+                .detector(RegexDetector::emails().unwrap())
+                .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+                .rule(DefaultRule::new(Action::Preserve))
+                .redaction_logger(audit.clone())
+                .build()
+                .unwrap();
+            let mut body = original.clone();
+            let staged = redact_surfaces(
+                &pipeline,
+                &session,
+                adapter.request_pii_surfaces(&mut body),
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+            )
+            .unwrap();
+            let rows = audit.rows_without_clock();
+            assert!(!rows.is_empty());
+            let entries = staged.transaction.snapshot_entries();
+            assert_eq!(entries.len(), 1);
+            (serde_json::to_vec(&body).unwrap(), entries, rows)
+        };
+        assert_eq!(run(false), run(true));
+        observer.assert_field("alice@example.invalid", &["metadata", "contact"]);
+    }
+
+    #[test]
+    fn field_provenance_owned_token_gaps_are_fragments() {
+        let observer = gaze::test_support::FieldObserver::default();
+        let pipeline = observer.pipeline();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let token = transaction
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        let input = format!("before {token} after");
+        let field = gaze_types::FieldProvenance::new(
+            gaze_types::FieldPath::new(["contact".into()]),
+            gaze_types::JsonScalarType::String,
+            gaze_types::FieldEvidence::ValidatedParse,
+        );
+        let dictionaries = DictionaryBundle::default();
+        let mut pseudonymizer = PipelineRequestPseudonymizer::new(
+            &pipeline,
+            &[LocaleTag::Global],
+            &dictionaries,
+            &mut transaction,
+        );
+        assert_eq!(pseudonymizer.protect_field(&input, &field).unwrap(), input);
+        observer.assert_fragment("before ", 0);
+        observer.assert_fragment(" after", 7 + token.len());
     }
 
     use super::*;
@@ -4273,7 +4322,6 @@ mod tests {
                         syntax: SurfaceSyntax::Text,
                     },
                 ],
-                numbers: Vec::new()
             },
             &[LocaleTag::Global],
             &DictionaryBundle::default()

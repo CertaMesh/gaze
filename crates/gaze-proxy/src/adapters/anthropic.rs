@@ -427,13 +427,13 @@ impl ProviderAdapter for AnthropicAdapter {
                         if let Value::String(text) = value {
                             match key.as_str() {
                                 "text" => surfaces.push(PiiSurface {
-                                    field_path: "delta.text".to_string(),
+                                    field_path: "delta.text".into(),
                                     field: None,
                                     text,
                                     syntax: SurfaceSyntax::ModelOutput,
                                 }),
                                 "partial_json" => surfaces.push(PiiSurface {
-                                    field_path: "delta.partial_json".to_string(),
+                                    field_path: "delta.partial_json".into(),
                                     field: None,
                                     text,
                                     syntax: SurfaceSyntax::Json,

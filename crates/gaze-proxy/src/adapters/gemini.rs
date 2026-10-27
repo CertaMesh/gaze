@@ -87,7 +87,7 @@ impl ProviderAdapter for GeminiAdapter {
     /// its thought summaries are separate streams, keyed by the candidate's `index`, which
     /// protobuf JSON omits when it is the default 0. Function-call arguments arrive whole.
     fn sse_event_stream_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<SseStreamSurface<'a>> {
-        collect_gemini_stream_surfaces(&mut event.data, false, true, &mut Vec::new())
+        collect_gemini_stream_surfaces(&mut event.data, false, true)
     }
 
     /// `generationConfig.responseMimeType = "application/json"` (which a response schema
@@ -120,12 +120,11 @@ impl ProviderAdapter for GeminiAdapter {
 /// the request rather than protect it, so PII there is caught by the outbound residual re-scan and
 /// fails closed.
 fn collect_gemini_surfaces(body: &mut Value, request: bool) -> RequestSurfaces<'_> {
-    let mut numbers = Vec::new();
-    let strings = collect_gemini_stream_surfaces(body, request, false, &mut numbers)
+    let strings = collect_gemini_stream_surfaces(body, request, false)
         .into_iter()
         .map(|fragment| fragment.surface)
         .collect();
-    RequestSurfaces { strings, numbers }
+    RequestSurfaces { strings }
 }
 
 /// [`collect_gemini_surfaces`], keying each response candidate's text fragments by the
@@ -134,7 +133,6 @@ fn collect_gemini_stream_surfaces<'a>(
     body: &'a mut Value,
     request: bool,
     streamed: bool,
-    numbers: &mut Vec<gaze_types::FieldProvenance>,
 ) -> Vec<SseStreamSurface<'a>> {
     let mut surfaces = Vec::new();
     if let Value::Object(root) = body {
@@ -149,30 +147,23 @@ fn collect_gemini_stream_surfaces<'a>(
                                     SurfacePath::root(key).index(index),
                                     content,
                                     None,
-                                    numbers,
                                 );
                             }
                         }
                     }
                     "systemInstruction" => {
-                        collect_content(
-                            &mut surfaces,
-                            SurfacePath::root(key),
-                            value,
-                            None,
-                            numbers,
-                        );
+                        collect_content(&mut surfaces, SurfacePath::root(key), value, None);
                     }
                     // Tool and schema declarations: names, descriptions, and enum members are
                     // all read by the model.
                     "tools" | "toolConfig" => {
-                        walk_complete(&mut surfaces, SurfacePath::root(key), value, numbers);
+                        walk_complete(&mut surfaces, SurfacePath::root(key), value);
                     }
                     // Covers `stopSequences`, which is matched against generated text. Numeric
                     // members of this subtree are untouched here and are classified by the
                     // outbound residual re-scan's non-carrier declaration instead.
                     "generationConfig" => {
-                        walk_complete(&mut surfaces, SurfacePath::root(key), value, numbers);
+                        walk_complete(&mut surfaces, SurfacePath::root(key), value);
                     }
                     _ => {}
                 }
@@ -196,7 +187,6 @@ fn collect_gemini_stream_surfaces<'a>(
                                 .member("content"),
                             content,
                             stream,
-                            numbers,
                         );
                     }
                 }
@@ -210,11 +200,9 @@ fn walk_complete<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
     prefix: SurfacePath,
     value: &'a mut Value,
-    numbers: &mut Vec<gaze_types::FieldProvenance>,
 ) {
     let mut complete = RequestSurfaces::default();
     walk_all_scalars(&mut complete, prefix, value);
-    numbers.append(&mut complete.numbers);
     surfaces.extend(complete.into_iter().map(SseStreamSurface::complete));
 }
 
@@ -225,7 +213,6 @@ fn collect_content<'a>(
     prefix: SurfacePath,
     value: &'a mut Value,
     stream: Option<Option<u64>>,
-    numbers: &mut Vec<gaze_types::FieldProvenance>,
 ) {
     let Value::Object(content) = value else {
         return;
@@ -266,7 +253,7 @@ fn collect_content<'a>(
                         .as_object_mut()
                         .and_then(|call| call.iter_mut().find(|(key, _)| *key == "args"))
                     {
-                        walk_complete(surfaces, part_prefix.member(args_key), args, numbers);
+                        walk_complete(surfaces, part_prefix.member(args_key), args);
                     }
                 }
                 "functionResponse" => {
@@ -274,12 +261,7 @@ fn collect_content<'a>(
                         .as_object_mut()
                         .and_then(|call| call.iter_mut().find(|(key, _)| *key == "response"))
                     {
-                        walk_complete(
-                            surfaces,
-                            part_prefix.member(response_key),
-                            response,
-                            numbers,
-                        );
+                        walk_complete(surfaces, part_prefix.member(response_key), response);
                     }
                 }
                 _ => {}
