@@ -258,7 +258,9 @@ fn rule_boundary_markup_grammar() {
     }
     boundary_case("run <input customer_id=731284 >", &["731284"]);
     count += 1;
-    assert_eq!(count, 219);
+    boundary_case("while x <b AND customer_id=731284> 0 </b>", &["731284"]);
+    count += 1;
+    assert_eq!(count, 220);
 }
 
 #[test]

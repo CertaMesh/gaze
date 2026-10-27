@@ -815,8 +815,17 @@ include!("rule_boundary_tests.rs");
 #[cfg(feature = "bundled-recognizers")]
 #[test]
 fn semicolon_unquoted_html_fragments_stay_raw() {
+    use crate::{CleanDocument, RawDocument, Scope, Session};
     let pipeline = labelled_pipeline();
-    for label in ["customerId", "data-id"] {
-        check_boundary(&pipeline, &format!("<a data=x; {label}=C-731284>"), &[]);
+    for (label, seed) in [("customerId", false), ("data-id", true)] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        if seed {
+            pipeline.redact(&session, RawDocument::Text("customerId: C-731284".into())).unwrap();
+            assert_eq!(session.snapshot_entries().len(), 1);
+        }
+        let input = format!("<a data=x; {label}=C-731284>");
+        let CleanDocument::Text(clean) = pipeline.redact(&session, RawDocument::Text(input.clone())).unwrap() else { panic!("text") };
+        assert_eq!(clean, input);
+        assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
     }
 }
