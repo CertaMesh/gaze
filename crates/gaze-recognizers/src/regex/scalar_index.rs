@@ -16,6 +16,7 @@ pub(super) struct ScalarBoundaryIndex {
     encoded: Option<EncodedIndex>,
     markup_assignments: Option<gaze_types::markup_regions::MarkupRegions>,
     sql_schema: Option<Vec<Range<usize>>>,
+    sql_statements: Option<Vec<Range<usize>>>,
     json_label_values: Option<JsonLabelValues>,
     embedded_json: Option<Option<Box<DecodedFrame>>>,
     paired: Option<PairedCloseIndex>,
@@ -32,19 +33,45 @@ impl ScalarBoundaryIndex {
         let regions = self.sql_schema.get_or_insert_with(|| {
             scanner_work(input.len());
             static DDL: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-            let ddl = DDL.get_or_init(|| Regex::new(r"(?i)\b(?:create[ \t]+(?:(?:temp|temporary|unlogged)[ \t]+)?table|alter[ \t]+table)\b").expect("SQL schema statement"));
+            let ddl = DDL.get_or_init(|| Regex::new(r#"(?i)\b(?:create[ \t]+(?:(?:temp|temporary|unlogged)[ \t]+)?table|alter[ \t]+table)\s+(?:[a-z_][a-z0-9_.]*|"[^"]+"|`[^`]+`)\s*\("#).expect("SQL schema statement"));
             static TOKENS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-            let tokens = TOKENS.get_or_init(|| Regex::new(r#"(?s)'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|--[^\r\n]*|/\*.*?\*/|;"#).expect("SQL statement delimiters"));
-            let ends: Vec<_> = tokens.find_iter(input).filter(|token| token.as_str() == ";").map(|token| token.end()).collect();
+            let tokens = TOKENS.get_or_init(|| Regex::new(r#"(?s)'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|--[^\r\n]*|/\*.*?\*/|[()]"#).expect("SQL schema delimiters"));
+            let mut stack = Vec::new();
+            let mut closes = HashMap::new();
+            for token in tokens.find_iter(input) {
+                match token.as_str() {
+                    "(" => stack.push(token.start()),
+                    ")" => if let Some(opening) = stack.pop() { closes.insert(opening, token.end()); },
+                    _ => {}
+                }
+            }
             let mut regions: Vec<Range<usize>> = Vec::new();
             for statement in ddl.find_iter(input) {
-                let start = statement.start();
-                let end = ends.get(ends.partition_point(|&end| end <= statement.end())).copied().unwrap_or(input.len());
-                if let Some(last) = regions.last_mut().filter(|last| last.end > start) {
-                    last.end = last.end.max(end);
-                } else {
-                    regions.push(start..end);
+                if let Some(&end) = closes.get(&(statement.end()-1)) {
+                    if let Some(last) = regions.last_mut().filter(|last| last.end > statement.start()) { last.end = last.end.max(end); }
+                    else { regions.push(statement.start()..end); }
                 }
+            }
+            regions
+        });
+        let index = regions.partition_point(|range| range.end <= at);
+        regions.get(index).is_some_and(|range| range.contains(&at))
+    }
+    pub(super) fn inside_sql_statement(&mut self, input: &str, at: usize) -> bool {
+        let regions = self.sql_statements.get_or_insert_with(|| {
+            scanner_work(input.len());
+            static START: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+            let start = START.get_or_init(|| Regex::new(r"(?im)(?:\A|[;\r\n])[ \t]*(?:[a-z_]+[ \t]*:[ \t]*)?(?:select\b|update\s+[a-z_][a-z0-9_.]*\s+set\b|insert\s+into\b|replace\s+into\b|values\s*\(|(?:create|alter)\s+table\s+[a-z_][a-z0-9_.]*)").expect("SQL statement context"));
+            static FROM: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+            let from = FROM.get_or_init(|| Regex::new(r"(?i)\bfrom\s+[^\s;]+").expect("SELECT source"));
+            let ends: Vec<_> = input.match_indices(';').map(|(at,_)| at+1).collect();
+            let mut regions: Vec<Range<usize>> = Vec::new();
+            for statement in start.find_iter(input) {
+                let end = ends.get(ends.partition_point(|&end| end <= statement.end())).copied().unwrap_or(input.len());
+                let select = statement.as_str().trim_start_matches([';', '\r', '\n']).trim_start().to_ascii_lowercase().starts_with("select");
+                if select && !from.is_match(&input[statement.end()..end]) { continue; }
+                if let Some(last) = regions.last_mut().filter(|last| last.end >= statement.start()) { last.end = last.end.max(end); }
+                else { regions.push(statement.start()..end); }
             }
             regions
         });
