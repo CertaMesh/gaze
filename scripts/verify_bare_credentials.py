@@ -4,6 +4,7 @@
 Run from a committed checkout with RUSTC/RUSTDOC and CARGO_BUILD_JOBS set.
 The original rulepack bytes are restored even when Cargo or an assertion fails.
 """
+import argparse
 import os
 from pathlib import Path
 import subprocess
@@ -17,6 +18,7 @@ BOUNDARY_TEST = "issuer_boundaries_fail_closed_but_generic_prefixes_need_attribu
 PEM_TEST = "truncated_mismatched_and_framed_private_keys_are_whole_and_restorable"
 PROBES = [
     ("bare-disabled", "security_token.bare", "enabled = true", "enabled = false", "bare_vendor_prefixes_are_whole_restorable_credentials"),
+    ("opaque-ghs-dot", "security_token.bare", r"|\.(?:\z|[^A-Za-z0-9_\\-])", "", "bare_vendor_prefixes_are_whole_restorable_credentials"),
     ("pem-disabled", "security_token.pem", "enabled = true", "enabled = false", "private_pem_blocks_include_headers_body_and_footer"),
     ("start-boundary", "security_token.bare", r"\A|", "", BOUNDARY_TEST),
     ("end-boundary", "security_token.bare", r"\z|", "", BOUNDARY_TEST),
@@ -41,6 +43,10 @@ PROBES = [
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--probe", choices=[probe[0] for probe in PROBES])
+    args = parser.parse_args()
+    selected_probes = [probe for probe in PROBES if args.probe is None or probe[0] == args.probe]
     if os.environ.get("CARGO_BUILD_JOBS") != "2":
         raise SystemExit("Set CARGO_BUILD_JOBS=2 before running mutation probes")
     subprocess.run(["git", "diff", "--exit-code", "HEAD", "--", str(RULEPACK), TEST], cwd=ROOT, check=True)
@@ -50,7 +56,7 @@ def main():
     original = RULEPACK.read_bytes()
     logs = Path(tempfile.mkdtemp(prefix="gaze-bare-credential-mutations-"))
     try:
-        for name, rule, before, after, test in PROBES:
+        for name, rule, before, after, test in selected_probes:
             sections = original.decode().split("[[recognizers]]")
             selected = [i for i, section in enumerate(sections) if f'id = "{rule}"\n' in section]
             if len(selected) != 1:
@@ -70,7 +76,7 @@ def main():
             RULEPACK.write_bytes(original)
     finally:
         RULEPACK.write_bytes(original)
-    print(f"MUTATION DONE: {len(PROBES)} mutations caught; source restored")
+    print(f"MUTATION DONE: {len(selected_probes)} mutations caught; source restored")
 
 
 if __name__ == "__main__":
