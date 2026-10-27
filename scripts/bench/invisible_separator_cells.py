@@ -105,4 +105,44 @@ def records(api, partition):
             template = "Public build reference: {V}." if partition == "dev" else "Public batch code = {V}."
             emit("D", "joined_public_reference", "joined_" + name + "_reference", index,
                  template, value, None)
+    boundary_rng = api.Rng(api.PARTITION_SEEDS[partition], "invisible-boundaries")
+    controls = {**JOINERS, "lrm": "\u200e", "rlm": "\u200f", "cgj": "\u034f",
+                "mvs": "\u180e", "vs16": "\ufe0f", "tag": "\U000e0067",
+                **{f"bidi_{cp:x}": chr(cp) for cp in (*range(0x202a, 0x202f),
+                                                     *range(0x2061, 0x206a))}}
+    for index in range(api.DOCS_PER_FAMILY):
+        values = (
+            ("CREDITCARDNUMBER", api._card(boundary_rng), 4),
+            ("IBAN", api._iban_gb(boundary_rng) if partition == "dev" else api._iban_nl(boundary_rng), 6),
+            ("ETHADDRESS", "0x" + "".join(boundary_rng.choice("0123456789abcdef") for _ in range(40)), 14),
+            ("EMAIL", ("elm" if partition == "dev" else "birch") + boundary_rng.digits(6) + "@example.invalid", 3),
+            ("TELEPHONENUM", ("+120255501" if partition == "dev" else "+121255501") + f"{boundary_rng.below(100):02d}", 5),
+        )
+        before, after = ("item", "paid") if partition == "dev" else ("entry", "ready")
+        for name, separator in controls.items():
+            for label, value, at in values:
+                for shape, template, rendered in (
+                    ("before", before + separator + "{V}; end.", value),
+                    ("after", "Value: {V}" + separator + after + "; end.", value),
+                    ("inside", "Value: {V}; end.", value[:at] + separator + value[at:]),
+                    ("mixed", before + separator + "{V}" + separator + after + "; end.",
+                     value[:at] + separator + value[at:]),
+                ):
+                    surface = f"boundary_{name}_{shape}"
+                    emit("A", "boundary_" + label.lower(), surface, index, template, rendered, label)
+                    emit("R", "boundary_" + label.lower(), surface, index,
+                         template + ("\nAgain: {V}" if partition == "dev" else "\nCopy = {V}"), rendered, label)
+        benign = {
+            "emoji_zwj": "👩\u200d🔬" if partition == "dev" else "👨\u200d🚀",
+            "emoji_vs16": "❤️" if partition == "dev" else "☀️",
+            "emoji_tag_flag": "🏴\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f" if partition == "dev" else
+                              "🏴\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074\U000e007f",
+            "persian": "می\u200cروم" if partition == "dev" else "خانه\u200cها",
+            "arabic": "ب\u200dب" if partition == "dev" else "ب\u200cب",
+            "indic": "क्\u200dष" if partition == "dev" else "क्\u200cष",
+            "rtl": "\u200fمرحبا\u200e" if partition == "dev" else "\u2067שלום\u2069",
+        }
+        for name, value in benign.items():
+            emit("D", "formatting_" + name, "boundary_benign_" + name, index,
+                 "Public icon: {V}." if partition == "dev" else "Documentation sample = {V}.", value, None)
     return result

@@ -73,3 +73,21 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
                 for row in selected:
                     self.assertIn(separator, row.text)
                     self.assertEqual(len(row.gold), {"A": 1, "D": 0, "R": 2}[row.layer])
+
+    def test_boundary_shapes_have_whole_value_gold_and_formatting_counterweights(self):
+        for partition in agentic.PARTITIONS:
+            rows = [row for row in cells.records(agentic, partition)
+                    if row.surface.startswith("invisible_boundary_")]
+            self.assertEqual({row.layer for row in rows}, {"A", "R", "D"})
+            self.assertEqual({span.label for row in rows for span in row.gold},
+                             {"CREDITCARDNUMBER", "IBAN", "ETHADDRESS", "EMAIL", "TELEPHONENUM"})
+            for shape in ("before", "after", "inside", "mixed"):
+                selected = [row for row in rows if row.surface.endswith("_" + shape)]
+                self.assertTrue(selected)
+                self.assertTrue(all(row.gold for row in selected))
+            self.assertEqual({row.family for row in rows if row.layer == "D"},
+                             {"formatting_" + name for name in ("emoji_zwj", "emoji_vs16", "emoji_tag_flag",
+                                                                "persian", "arabic", "indic", "rtl")})
+            for row in rows:
+                for span in row.gold:
+                    self.assertEqual(row.text.encode()[span.start:span.end].decode(), span.value)

@@ -4491,7 +4491,7 @@ GENERATOR_ADDITIONS = {
     24: "credentials_separators_",
     25: "credentials_prefixes_",
     27: "invisible_",
-    28: ("invisible_bom_", "invisible_joined_"),
+    28: ("invisible_bom_", "invisible_joined_", "invisible_boundary_"),
 }
 
 

@@ -13,13 +13,7 @@ pub fn normalize(input: &str) -> NormalizedText {
 
     for (start, ch) in input.char_indices() {
         let end = start + ch.len_utf8();
-        // Formatting characters can split an identifier without changing its
-        // visible spelling. Detection sees the joined value; raw_range still
-        // covers every original byte between its first and last character.
-        if matches!(
-            ch,
-            '\u{00AD}' | '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}'
-        ) {
+        if is_default_ignorable(ch) {
             continue;
         }
 
@@ -64,4 +58,45 @@ fn fullwidth_to_ascii(ch: char) -> char {
         '\u{2011}' => '-',
         _ => ch,
     }
+}
+
+// Unicode 17.0 Default_Ignorable_Code_Point, including reserved scalars:
+// https://www.unicode.org/Public/17.0.0/ucd/DerivedCoreProperties.txt
+fn is_default_ignorable(ch: char) -> bool {
+    matches!(ch,
+        '\u{00AD}' | '\u{034F}' | '\u{061C}' | '\u{115F}'..='\u{1160}'
+        | '\u{17B4}'..='\u{17B5}' | '\u{180B}'..='\u{180F}'
+        | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
+        | '\u{2060}'..='\u{206F}' | '\u{3164}' | '\u{FE00}'..='\u{FE0F}'
+        | '\u{FEFF}' | '\u{FFA0}' | '\u{FFF0}'..='\u{FFF8}'
+        | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}'
+        | '\u{E0000}'..='\u{E0FFF}')
+}
+
+pub(crate) struct BoundaryView {
+    pub(crate) normalized: NormalizedText,
+}
+
+/// Reinsert a boundary at each removed source run for the outbound scanner;
+/// source spans retain the original UTF-8 geometry.
+pub(crate) fn boundary_view(input: &str, spans: &[(usize, usize)]) -> Option<BoundaryView> {
+    if !spans.windows(2).any(|pair| pair[0].1 < pair[1].0) {
+        return None;
+    }
+    let mut text = String::with_capacity(input.len());
+    let mut source = Vec::with_capacity(input.len());
+    for (at, ch) in input.char_indices() {
+        if at > 0 && spans[at - 1].1 < spans[at].0 {
+            text.push(' ');
+            source.push((spans[at - 1].1, spans[at].0));
+        }
+        text.push(ch);
+        source.extend_from_slice(&spans[at..at + ch.len_utf8()]);
+    }
+    Some(BoundaryView {
+        normalized: NormalizedText {
+            text,
+            spans: source,
+        },
+    })
 }

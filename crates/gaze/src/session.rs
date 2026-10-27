@@ -2387,19 +2387,22 @@ fn restore_boundary_events(
 /// value in the manifest whatever separator either side used.
 fn structural_findings(text: &str) -> Vec<StructuralFinding> {
     let view = crate::normalize::normalize(text);
+    let boundary = crate::normalize::boundary_view(&view.text, &view.spans);
     let mut findings = Vec::new();
-    collect_email_findings(&view.text, &mut findings);
-    collect_phone_findings(&view.text, &mut findings);
-    collect_iban_findings(&view.text, &mut findings);
-    collect_credit_card_findings(&view, &mut findings);
-    collect_api_key_findings(&view.text, &mut findings);
-    for finding in &mut findings {
-        // Regex matches are non-empty and inside the view, so the mapping cannot fail; if it
-        // ever did, flag the whole text rather than drop the finding.
-        let location = crate::normalize::raw_range(finding.location.clone(), &view.spans)
-            .unwrap_or(0..text.len());
-        finding.raw = text[location.clone()].to_string();
-        finding.location = location;
+    for view in std::iter::once(&view).chain(boundary.as_ref().map(|view| &view.normalized)) {
+        let mut in_view = Vec::new();
+        collect_email_findings(&view.text, &mut in_view);
+        collect_phone_findings(&view.text, &mut in_view);
+        collect_iban_findings(&view.text, &mut in_view);
+        collect_credit_card_findings(view, &mut in_view);
+        collect_api_key_findings(&view.text, &mut in_view);
+        for finding in &mut in_view {
+            let location = crate::normalize::raw_range(finding.location.clone(), &view.spans)
+                .unwrap_or(0..text.len());
+            finding.raw = text[location.clone()].to_string();
+            finding.location = location;
+        }
+        findings.extend(in_view);
     }
     findings.sort_by(|left, right| {
         left.location
@@ -4547,6 +4550,36 @@ mod tests {
             let findings = structural_findings(text);
             assert_eq!(findings.len(), 1, "{text}");
             assert_eq!(findings[0].class, PiiClass::custom("credit_card").unwrap());
+        }
+    }
+
+    #[test]
+    fn restore_dlp_keeps_invisible_boundaries_and_source_bytes() {
+        for sep in [
+            '\u{200b}',
+            '\u{034f}',
+            '\u{200f}',
+            '\u{2067}',
+            '\u{fe0f}',
+            '\u{e0067}',
+        ] {
+            for value in [
+                "4111111111111111",
+                "GB82WEST12345698765432",
+                "cedar@example.invalid",
+                "+44 7700 900100",
+            ] {
+                for input in [format!("word{sep}{value};"), format!("{value}{sep}word;")] {
+                    let findings = structural_findings(&input);
+                    assert!(
+                        findings.iter().any(|finding| finding.raw.contains(value)),
+                        "{input:?}"
+                    );
+                    for finding in findings {
+                        assert_eq!(finding.raw, input[finding.location.clone()]);
+                    }
+                }
+            }
         }
     }
 

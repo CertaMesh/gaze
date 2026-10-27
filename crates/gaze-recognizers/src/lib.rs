@@ -38,6 +38,7 @@ mod ner;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;
+mod source_regex;
 pub mod validators;
 
 pub use anchored_match::{
@@ -201,4 +202,11 @@ mod tests {
 
         Rulepack::parse_bundled(core).expect("bundled recognizers declare locale_basis");
     }
+}
+
+/// Drain test-only source-regex compilation work for the current thread.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub fn take_source_regex_compilations() -> Vec<String> {
+    source_regex::take_compilations()
 }

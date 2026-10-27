@@ -247,7 +247,9 @@ impl Recognizer for DictionaryRecognizer {
 
         Ok(matches
             .into_iter()
-            .filter(|(start, end, _)| is_token_boundary_match(input, *start, *end))
+            .filter(|(start, end, _)| {
+                is_token_boundary_match(input, *start, *end, ctx.source_spans)
+            })
             .filter(|(start, end, index)| {
                 if !self.record_matching {
                     return true;
@@ -438,13 +440,14 @@ fn corroborated_record_name(
                                     normalized_input,
                                     span_start,
                                     span_start + folded_term.len(),
+                                    None,
                                 )
                             })
                         && name_position(input, start, end);
                 }
                 input.match_indices(term).any(|(peer_start, _)| {
                     let peer_end = peer_start + term.len();
-                    if !is_token_boundary_match(input, peer_start, peer_end) {
+                    if !is_token_boundary_match(input, peer_start, peer_end, ctx.source_spans) {
                         return false;
                     }
                     let between = if peer_end <= start {
@@ -475,8 +478,15 @@ fn name_position(input: &str, start: usize, end: usize) -> bool {
             .is_some_and(|ch| matches!(ch, ',' | '!' | ':'))
 }
 
-fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
-    !has_identifier_char_before(input, start) && !has_identifier_char_after(input, end)
+fn is_token_boundary_match(
+    input: &str,
+    start: usize,
+    end: usize,
+    source_spans: Option<&[(usize, usize)]>,
+) -> bool {
+    (crate::source_regex::is_gap(source_spans, start) || !has_identifier_char_before(input, start))
+        && (crate::source_regex::is_gap(source_spans, end)
+            || !has_identifier_char_after(input, end))
 }
 
 fn has_identifier_char_before(input: &str, start: usize) -> bool {
@@ -520,6 +530,19 @@ mod tests {
             0
         }
         fn write(&mut self, _: &[u8]) {}
+    }
+
+    #[test]
+    fn dictionary_source_gaps_are_token_boundaries() {
+        let input = "wordSchmidtword";
+        let spans = (0..input.len())
+            .map(|at| {
+                let raw = at + if at >= 4 { 3 } else { 0 } + if at >= 11 { 3 } else { 0 };
+                (raw, raw + 1)
+            })
+            .collect::<Vec<_>>();
+        assert!(!is_token_boundary_match(input, 4, 11, None));
+        assert!(is_token_boundary_match(input, 4, 11, Some(&spans)));
     }
 
     #[test]
