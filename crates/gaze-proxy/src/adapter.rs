@@ -581,19 +581,48 @@ impl<'a> RequestSurfaces<'a> {
 
 /// A legacy coverage spelling with shared ancestor storage. Debug hides keys.
 /// Equality and hashing do not materialize the spelling.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 #[non_exhaustive]
 pub struct CoveragePath {
     chunks: gaze_types::FieldPath,
     rendered: std::sync::OnceLock<String>,
+    prefix_hash: std::collections::hash_map::DefaultHasher,
+    byte_len: usize,
+}
+
+impl Default for CoveragePath {
+    fn default() -> Self {
+        static HASHER: std::sync::OnceLock<std::collections::hash_map::RandomState> =
+            std::sync::OnceLock::new();
+        Self {
+            chunks: gaze_types::FieldPath::default(),
+            rendered: std::sync::OnceLock::new(),
+            prefix_hash: std::hash::BuildHasher::build_hasher(
+                HASHER.get_or_init(std::collections::hash_map::RandomState::new),
+            ),
+            byte_len: 0,
+        }
+    }
 }
 
 impl CoveragePath {
     fn append(&self, chunk: String) -> Self {
+        let mut prefix_hash = self.prefix_hash.clone();
+        // Extend the ancestor's keyed hash state, visiting only new bytes. Writing
+        // bytes individually keeps flat and segmented spellings equivalent.
+        for byte in chunk.bytes() {
+            std::hash::Hasher::write_u8(&mut prefix_hash, byte);
+        }
+        let byte_len = self.byte_len + chunk.len();
         Self {
             chunks: self.chunks.child(chunk),
             rendered: std::sync::OnceLock::new(),
+            prefix_hash,
+            byte_len,
         }
+    }
+    fn fingerprint(&self) -> u64 {
+        std::hash::Hasher::finish(&self.prefix_hash)
     }
     /// Materialize the legacy spelling only when a trusted caller needs it.
     /// Calling this on every descendant copies shared ancestor bytes per call.
@@ -602,7 +631,7 @@ impl CoveragePath {
             .get_or_init(|| self.chunks.segments().concat())
     }
     fn is_empty(&self) -> bool {
-        self.chunks.segments().iter().all(|chunk| chunk.is_empty())
+        self.byte_len == 0
     }
     pub(crate) fn member(&self, key: &str) -> Self {
         self.append(if self.is_empty() {
@@ -628,26 +657,28 @@ impl From<&str> for CoveragePath {
 }
 impl PartialEq for CoveragePath {
     fn eq(&self, other: &Self) -> bool {
-        self.chunks
-            .segments()
+        if self.byte_len != other.byte_len || self.fingerprint() != other.fingerprint() {
+            return false;
+        }
+        let left = self.chunks.segments();
+        let right = other.chunks.segments();
+        if left
             .iter()
+            .map(|s| s.len())
+            .eq(right.iter().map(|s| s.len()))
+        {
+            return left == right;
+        }
+        left.iter()
             .flat_map(|chunk| chunk.bytes())
-            .eq(other
-                .chunks
-                .segments()
-                .iter()
-                .flat_map(|chunk| chunk.bytes()))
+            .eq(right.iter().flat_map(|chunk| chunk.bytes()))
     }
 }
 impl Eq for CoveragePath {}
 impl std::hash::Hash for CoveragePath {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        for chunk in self.chunks.segments() {
-            for byte in chunk.bytes() {
-                state.write_u8(byte);
-            }
-        }
-        state.write_usize(self.chunks.segments().iter().map(|s| s.len()).sum());
+        state.write_u64(self.fingerprint());
+        state.write_usize(self.byte_len);
     }
 }
 impl std::fmt::Debug for CoveragePath {
