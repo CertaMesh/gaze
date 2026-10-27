@@ -112,8 +112,8 @@ def main():
         ('allow-dml-grouping', 'crates/gaze-recognizers/src/regex.rs', '"AND"\n            | "OR"', '"_DISABLED_AND"\n            | "_DISABLED_OR"', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
         ('veto-prose-select-without-from', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if select && source.is_none_or', 'if false && select && source.is_none_or', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
         ('veto-prose-sql-at-any-position', 'crates/gaze-recognizers/src/regex/scalar_index.rs', '(?:\\A|[;\\r\\n])[ \\t]*', '[ \\t]*', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'),
-        ('allow-short-letter-hash-id', 'crates/gaze-recognizers/src/regex.rs', 'body.len() >= 7', 'body.len() >= 1', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'),
-        ('allow-long-hex-id', 'crates/gaze-recognizers/src/regex.rs', 'ch.is_ascii_alphabetic() && !ch.is_ascii_hexdigit()', 'ch.is_ascii_alphabetic()', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'),
+        ('allow-short-letter-hash-id', 'crates/gaze-recognizers/src/regex.rs', 'body.chars().count() >= 7', 'body.chars().count() >= 1', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'),
+        ('allow-long-hex-id', 'crates/gaze-recognizers/src/regex.rs', 'ch.is_alphabetic() && !ch.is_ascii_hexdigit()', 'ch.is_alphabetic()', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'),
         ('restrict-html-attribute-names', 'crates/gaze-types/src/markup_regions.rs', 'name_char(byte) || b":@.".contains(&byte)', 'name_char(byte)', 'rule_boundary_markup_grammar', 'gaze-pii'),
         ('restrict-html-unquoted-punctuation', 'crates/gaze-types/src/markup_regions.rs', 'if b"<\\"\'`".contains(&bytes[at]) {', 'if b"<,;:=\\"\'`".contains(&bytes[at]) {', 'rule_boundary_markup_grammar', 'gaze-pii'),
         ('drop-paired-html-evidence', 'crates/gaze-types/src/markup_regions.rs', '(paired || html_attributes || fragment)', '(html_attributes || fragment)', 'rule_boundary_markup_grammar', 'gaze-pii'),
@@ -128,6 +128,9 @@ def main():
     probes.append(('extend-schema-through-prose', 'crates/gaze-recognizers/src/regex/scalar_index.rs', 'if let Some(&end) = closes.get(&(statement.end()-1)) {', 'if let Some(&_end) = closes.get(&(statement.end()-1)) { let end = input.len();', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'))
     probes.append(('drop-svg-known-tag', 'crates/gaze-types/src/markup_regions.rs', '| "animatemotion"', '| "_mutant_animatemotion"', 'rule_boundary_standard_tag_names', 'gaze-pii'))
     probes.append(('drop-mathml-known-tag', 'crates/gaze-types/src/markup_regions.rs', '| "apply"', '| "_mutant_apply"', 'rule_boundary_standard_tag_names', 'gaze-pii'))
+    probes.append(('count-hash-bytes-instead-of-characters', 'crates/gaze-recognizers/src/regex.rs', 'body.chars().count() >= 7', 'body.len() >= 7', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'))
+    probes.append(('drop-unicode-hash-letters', 'crates/gaze-recognizers/src/regex.rs', 'ch.is_alphabetic() && !ch.is_ascii_hexdigit()', 'ch.is_ascii_alphabetic() && !ch.is_ascii_hexdigit()', 'rule_boundary_starts_wrappers_and_grouping', 'gaze-pii'))
+    probes.append(('drop-quoted-sql-table-context', 'crates/gaze-recognizers/src/regex/scalar_index.rs', r'update\s+{table}\s+set', r'update\s+[a-z_][a-z0-9_.]*\s+set', 'rule_boundary_sql_context_and_keywords', 'gaze-pii'))
     if args.only:
         unknown = set(args.only) - {probe[0] for probe in probes}
         if unknown:

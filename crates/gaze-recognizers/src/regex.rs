@@ -913,11 +913,11 @@ struct LabelledValueScan {
 fn owned_id_start(value: &str) -> bool {
     if let Some(body) = value.strip_prefix('#') {
         return body.chars().all(char::is_alphanumeric)
-            && (body.chars().all(|ch| ch.is_ascii_digit())
-                || (body.len() >= 7
+            && (body.chars().all(char::is_numeric)
+                || (body.chars().count() >= 7
                     && body
                         .chars()
-                        .any(|ch| ch.is_ascii_alphabetic() && !ch.is_ascii_hexdigit())));
+                        .any(|ch| ch.is_alphabetic() && !ch.is_ascii_hexdigit())));
     }
     let value = value.strip_prefix(['-', '@', '_']).unwrap_or(value);
     value.chars().next().is_some_and(char::is_alphanumeric)

@@ -61,7 +61,11 @@ impl ScalarBoundaryIndex {
         let regions = self.sql_statements.get_or_insert_with(|| {
             scanner_work(input.len());
             static START: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-            let start = START.get_or_init(|| Regex::new(r"(?im)(?:\A|[;\r\n])[ \t]*(?:[a-z_]+[ \t]*:[ \t]*)?(?:select\b|update\s+[a-z_][a-z0-9_.]*\s+set\b|insert\s+into\b|replace\s+into\b|values\s*\()|\balter\s+table\s+[a-z_][a-z0-9_.]*\s+add\s+column\b").expect("SQL statement context"));
+            let start = START.get_or_init(|| {
+                let name = r#"(?:[a-z_][a-z0-9_]*|"(?:""|[^"])+"|`(?:``|[^`])+`|\[(?:\]\]|[^\]])+\])"#;
+                let table = format!(r"{name}(?:[ \t]*\.[ \t]*{name})*");
+                Regex::new(&format!(r"(?im)(?:\A|[;\r\n])[ \t]*(?:[a-z_]+[ \t]*:[ \t]*)?(?:select\b|update\s+{table}\s+set\b|insert\s+into\b|replace\s+into\b|values\s*\()|\balter\s+table\s+{table}\s+add\s+column\b")).expect("SQL statement context")
+            });
             static FROM: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
             let from = FROM.get_or_init(|| Regex::new(r"(?i)\bfrom\s+[^\s;]+").expect("SELECT source"));
             static TOKENS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
