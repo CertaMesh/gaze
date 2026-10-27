@@ -70,7 +70,6 @@ fn audit_query_and_export_filter_outcome_and_reason_without_disclosing_keys() {
             ],
             vec![],
         ),
-        (vec!["--outcome", "protected' OR 1=1 --"], vec![]),
     ] {
         for command in ["query", "export"] {
             let output = Command::cargo_bin("gaze")
@@ -86,7 +85,10 @@ fn audit_query_and_export_filter_outcome_and_reason_without_disclosing_keys() {
                 .unwrap();
             assert!(output.status.success(), "{command} {flags:?} failed");
             let text = String::from_utf8(output.stdout).unwrap();
-            assert!(!text.contains("synthetic-key"));
+            assert!(
+                !text.contains("synthetic-key"),
+                "field key leaked into audit output"
+            );
             let sources: Vec<String> = if command == "export" {
                 text.lines()
                     .map(|line| {
@@ -123,7 +125,10 @@ fn audit_outcome_filters_on_unmigrated_database_return_no_rows() {
         INSERT INTO redaction_log VALUES ('legacy', 'name', 'tokenize', NULL, 'text', 0);",
     )
     .unwrap();
-    for flag in ["--outcome", "--outcome-reason"] {
+    for (flag, value) in [
+        ("--outcome", "protected"),
+        ("--outcome-reason", "other_field_repeat"),
+    ] {
         let output = Command::cargo_bin("gaze")
             .unwrap()
             .args([
@@ -132,7 +137,7 @@ fn audit_outcome_filters_on_unmigrated_database_return_no_rows() {
                 "--audit-db",
                 file.path().to_str().unwrap(),
                 flag,
-                "protected",
+                value,
             ])
             .output()
             .unwrap();
@@ -147,4 +152,28 @@ fn audit_outcome_filters_on_unmigrated_database_return_no_rows() {
         )
         .unwrap();
     assert_eq!(count, 6, "read-only query must not migrate the schema");
+}
+
+#[test]
+fn audit_outcome_filters_reject_unknown_and_wrong_family_values() {
+    for command in ["query", "export"] {
+        for (flag, value, expected) in [
+            ("--outcome", "possibly-sensitve", "protected"),
+            ("--outcome", "other_field_repeat", "possibly_sensitive"),
+            ("--outcome", "protected' OR 1=1 --", "non_sensitive"),
+            ("--outcome-reason", "future_reason", "other_field_repeat"),
+            ("--outcome-reason", "protected", "json_key"),
+        ] {
+            let output = Command::cargo_bin("gaze")
+                .unwrap()
+                .args(["audit", command, "--audit-db", "unused.sqlite", flag, value])
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(2), "{command} {flag} {value}");
+            assert!(output.stdout.is_empty());
+            let error = String::from_utf8(output.stderr).unwrap();
+            assert!(error.contains("possible values"), "{error}");
+            assert!(error.contains(expected), "{error}");
+        }
+    }
 }

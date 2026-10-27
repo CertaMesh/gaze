@@ -29,6 +29,13 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: construct audit filters from defaults
+
+`gaze-audit::AuditFilter` and `AuditLogRow` are now `#[non_exhaustive]`.
+Replace filter struct literals with `let mut filter = AuditFilter::default();`
+and assign each desired field. Obtain audit rows from `SqliteLogger::query`;
+replace exhaustive row patterns with patterns containing `..`.
+
 ### Action required: update recognizer context and protection error usage
 
 Rust adopters must account for these public API changes:

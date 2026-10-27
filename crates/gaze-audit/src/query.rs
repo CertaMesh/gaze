@@ -13,6 +13,7 @@ pub const DEFAULT_SNAPSHOT_ALG: &str = "SHA-256";
 /// narrow by class, source, action, document kind, raw safety-net label, field
 /// path, epoch-millisecond time range, or session ID.
 #[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
 pub struct AuditFilter {
     pub class: Option<String>,
     pub source: Option<String>,
@@ -54,6 +55,7 @@ pub struct AuditFilter {
 /// display and reporting, but it is not restore material and contains no
 /// original PII or token values.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct AuditLogRow {
     pub source: String,
     pub outcome: Option<String>,

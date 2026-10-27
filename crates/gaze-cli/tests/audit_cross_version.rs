@@ -438,40 +438,16 @@ fn legacy_schema_without_decided_by_is_queryable() {
 
 #[test]
 fn audit_sql_uses_restricted_column_set() {
-    let filter = AuditFilter {
-        class: Some("email".to_string()),
-        source: Some("email.global".to_string()),
-        action: Some("tokenize".to_string()),
-        document_kind: Some("text".to_string()),
-        raw_label: None,
-        field_path: None,
-        from_epoch_ms: Some(1_700_000_000_000),
-        to_epoch_ms: Some(1_700_000_010_000),
-        session_id: Some("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string()),
-        snapshot_scheme: Some(DEFAULT_SNAPSHOT_SCHEME.to_string()),
-        snapshot_alg: Some(DEFAULT_SNAPSHOT_ALG.to_string()),
-        snapshot_key_version: None,
-        has_ambiguity: None,
-        ambiguity_reason: None,
-        collision_family: None,
-        collision_variant: None,
-        recognizer_id: None,
-        recognizer_version_id: None,
-        provenance_stage: None,
-        provenance_model_id: None,
-        provenance_model_version: None,
-        provenance_artifact_sha256: None,
-        provenance_tokenizer_sha256: None,
-        provenance_locale_resolved: None,
-        provenance_locale_match_kind: None,
-        provenance_canonical_class: None,
-        provenance_native_class: None,
-        provenance_confidence: None,
-        provenance_merged_from: None,
-        outcome: None,
-        outcome_reason: None,
-        restore_events_only: false,
-    };
+    let mut filter = AuditFilter::default();
+    filter.class = Some("email".to_string());
+    filter.source = Some("email.global".to_string());
+    filter.action = Some("tokenize".to_string());
+    filter.document_kind = Some("text".to_string());
+    filter.from_epoch_ms = Some(1_700_000_000_000);
+    filter.to_epoch_ms = Some(1_700_000_010_000);
+    filter.session_id = Some("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string());
+    filter.snapshot_scheme = Some(DEFAULT_SNAPSHOT_SCHEME.to_string());
+    filter.snapshot_alg = Some(DEFAULT_SNAPSHOT_ALG.to_string());
     let current_columns = PresentColumns::new(
         AUDIT_RESTRICTED_COLUMNS
             .iter()
@@ -503,15 +479,13 @@ fn audit_sql_uses_restricted_column_set() {
     assert!(current_sql.contains("snapshot_alg = ?"));
     assert!(!current_sql.contains("created_at IS NULL"));
 
-    let legacy_filter = AuditFilter {
-        from_epoch_ms: Some(1_700_000_000_000),
-        to_epoch_ms: Some(1_700_000_010_000),
-        session_id: Some("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string()),
-        snapshot_scheme: Some(DEFAULT_SNAPSHOT_SCHEME.to_string()),
-        snapshot_alg: Some(DEFAULT_SNAPSHOT_ALG.to_string()),
-        snapshot_key_version: Some(1),
-        ..AuditFilter::default()
-    };
+    let mut legacy_filter = AuditFilter::default();
+    legacy_filter.from_epoch_ms = Some(1_700_000_000_000);
+    legacy_filter.to_epoch_ms = Some(1_700_000_010_000);
+    legacy_filter.session_id = Some("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string());
+    legacy_filter.snapshot_scheme = Some(DEFAULT_SNAPSHOT_SCHEME.to_string());
+    legacy_filter.snapshot_alg = Some(DEFAULT_SNAPSHOT_ALG.to_string());
+    legacy_filter.snapshot_key_version = Some(1);
     let legacy_columns = PresentColumns::default();
     let (legacy_sql, legacy_values) = build_audit_query_sql(&legacy_filter, &legacy_columns);
     assert_restricted_sql(&legacy_sql);

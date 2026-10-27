@@ -8,9 +8,9 @@ pub mod perf;
 pub mod redaction_marker;
 
 pub use outcome::{
-    FieldContext, FieldEvidence, FieldPath, FieldProvenance, HintKind, JsonScalarType,
-    NonSensitiveReason, PossiblySensitiveReason, ProtectionOutcome, ProtectionOutcomeKind,
-    ProtectionOutcomeReason, UntransformableReason,
+    FieldContext, FieldEvidence, FieldPath, FieldProvenance, HintKind, InvalidProtectionOutcome,
+    JsonScalarType, NonSensitiveReason, PossiblySensitiveReason, ProtectionOutcome,
+    ProtectionOutcomeKind, ProtectionOutcomeReason, UntransformableReason,
 };
 
 use std::cell::Cell;
@@ -3344,6 +3344,29 @@ impl RedactionEntry {
         self.outcome = Some(kind);
         self.outcome_reason = reason;
         self
+    }
+
+    /// Rebuild the typed decision, rejecting missing or mismatched reason families.
+    /// A legacy entry without either label has no explicit outcome.
+    pub fn protection_outcome(
+        &self,
+    ) -> Result<Option<ProtectionOutcome>, InvalidProtectionOutcome> {
+        use ProtectionOutcomeKind as Kind;
+        use ProtectionOutcomeReason as Reason;
+        match (self.outcome, self.outcome_reason) {
+            (None, None) => Ok(None),
+            (Some(Kind::Protected), None) => Ok(Some(ProtectionOutcome::Protected)),
+            (Some(Kind::NonSensitive), Some(Reason::NonSensitive(reason))) => {
+                Ok(Some(ProtectionOutcome::NonSensitive(reason)))
+            }
+            (Some(Kind::PossiblySensitive), Some(Reason::PossiblySensitive(reason))) => {
+                Ok(Some(ProtectionOutcome::PossiblySensitive(reason)))
+            }
+            (Some(Kind::ConfirmedUntransformable), Some(Reason::Untransformable(reason))) => {
+                Ok(Some(ProtectionOutcome::ConfirmedUntransformable(reason)))
+            }
+            _ => Err(InvalidProtectionOutcome),
+        }
     }
 
     /// Attach only structural depth and closed evidence. Object keys may contain PII

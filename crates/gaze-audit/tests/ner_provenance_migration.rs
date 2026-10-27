@@ -100,35 +100,39 @@ fn ner_provenance_row_round_trips_through_sqlite_logger_query() {
 fn ner_provenance_filters_bind_expected_sql() {
     let cases = [
         (
-            AuditFilter {
-                provenance_stage: Some("ner".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_stage = Some("ner".to_string());
+                filter
             },
             "provenance_stage = ?",
             SqlValue::Text("ner".to_string()),
         ),
         (
-            AuditFilter {
-                provenance_model_id: Some("davlan/mbert".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_model_id = Some("davlan/mbert".to_string());
+                filter
             },
             "provenance_model_id = ?",
             SqlValue::Text("davlan/mbert".to_string()),
         ),
         (
-            AuditFilter {
-                provenance_model_version: Some("v1".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_model_version = Some("v1".to_string());
+                filter
             },
             "provenance_model_version = ?",
             SqlValue::Text("v1".to_string()),
         ),
         (
-            AuditFilter {
-                provenance_artifact_sha256: Some(
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_artifact_sha256 = Some(
                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-                ),
-                ..AuditFilter::default()
+                );
+                filter
             },
             "provenance_artifact_sha256 = ?",
             SqlValue::Text(
@@ -136,11 +140,12 @@ fn ner_provenance_filters_bind_expected_sql() {
             ),
         ),
         (
-            AuditFilter {
-                provenance_tokenizer_sha256: Some(
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_tokenizer_sha256 = Some(
                     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
-                ),
-                ..AuditFilter::default()
+                );
+                filter
             },
             "provenance_tokenizer_sha256 = ?",
             SqlValue::Text(
@@ -148,49 +153,55 @@ fn ner_provenance_filters_bind_expected_sql() {
             ),
         ),
         (
-            AuditFilter {
-                provenance_locale_resolved: Some("de-DE".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_locale_resolved = Some("de-DE".to_string());
+                filter
             },
             "provenance_locale_resolved = ?",
             SqlValue::Text("de-DE".to_string()),
         ),
         (
-            AuditFilter {
-                provenance_locale_match_kind: Some("exact".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_locale_match_kind = Some("exact".to_string());
+                filter
             },
             "provenance_locale_match_kind = ?",
             SqlValue::Text("exact".to_string()),
         ),
         (
-            AuditFilter {
-                provenance_canonical_class: Some("name".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_canonical_class = Some("name".to_string());
+                filter
             },
             "provenance_canonical_class = ?",
             SqlValue::Text("name".to_string()),
         ),
         (
-            AuditFilter {
-                provenance_native_class: Some("PER".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_native_class = Some("PER".to_string());
+                filter
             },
             "provenance_native_class = ?",
             SqlValue::Text("PER".to_string()),
         ),
         (
-            AuditFilter {
-                provenance_confidence: Some(0.875),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_confidence = Some(0.875);
+                filter
             },
             "provenance_confidence = ?",
             SqlValue::Real(0.875),
         ),
         (
-            AuditFilter {
-                provenance_merged_from: Some("[\"regex.name\"]".to_string()),
-                ..AuditFilter::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.provenance_merged_from = Some("[\"regex.name\"]".to_string());
+                filter
             },
             "provenance_merged_from = ?",
             SqlValue::Text("[\"regex.name\"]".to_string()),

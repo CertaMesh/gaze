@@ -46,6 +46,11 @@ pub enum ProtectionOutcomeReason {
     Untransformable(UntransformableReason),
 }
 
+/// Audit outcome columns do not describe one valid protection decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("invalid protection outcome and reason pairing")]
+pub struct InvalidProtectionOutcome;
+
 impl ProtectionOutcome {
     /// Split an outcome into the two value-free audit columns.
     pub fn audit_parts(self) -> (ProtectionOutcomeKind, Option<ProtectionOutcomeReason>) {

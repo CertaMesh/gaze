@@ -10,8 +10,8 @@ replacement safety can be evaluated separately:
   safe reversible rendering. Privacy-enforcing consumers must refuse it.
 
 These types are dormant contracts. No recognizer produces these outcomes yet,
-and these types do not change detection, rendering, or refusal policy. `Candidate.outcome == None` denotes the legacy protected-candidate
-contract. It does not prove that an input contains no other sensitive values.
+and these types do not change detection, rendering, or refusal policy.
+`Candidate.outcome == None` denotes the legacy protected-candidate contract. It does not prove that an input contains no other sensitive values.
 
 `FieldProvenance` carries a field path, its original JSON scalar type, and the
 source of that context. Caller-declared context and validated parsing provide
@@ -36,7 +36,9 @@ but has no producer.
 `RedactionEntry::with_protection_outcome` sets two closed labels together:
 `outcome` identifies the category and `outcome_reason` identifies the reason.
 `protected` and `possibly_sensitive` remain separate even when both use a
-protection action. Family ambiguity stays in `AmbiguityRecord`.
+protection action. `protection_outcome()` rebuilds the typed decision and
+rejects missing or mismatched reason families. Typed SQLite reads enforce the
+same pairing. Family ambiguity stays in `AmbiguityRecord`.
 
 `with_field_provenance` copies only `field_path_depth` and `field_evidence`.
 JSON object keys can contain PII, so audit entries never copy the path segments.

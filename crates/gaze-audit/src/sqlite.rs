@@ -197,11 +197,6 @@ impl ColumnSpec {
 }
 
 const REDACTION_LOG_COLUMNS: &[ColumnSpec] = &[
-    ColumnSpec { name: "outcome", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
-    ColumnSpec { name: "outcome_reason", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
-    ColumnSpec { name: "field_path_depth", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
-    ColumnSpec { name: "field_evidence", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
-
     ColumnSpec { name: "source", sql_type: "TEXT", constraint: ColumnConstraint::NotNull, migrate: false, backfill: None },
     ColumnSpec { name: "recognizer_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: Some("UPDATE redaction_log SET recognizer_id = 'legacy_unversioned' WHERE recognizer_id IS NULL") },
     ColumnSpec { name: "recognizer_version_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
@@ -241,6 +236,10 @@ const REDACTION_LOG_COLUMNS: &[ColumnSpec] = &[
     ColumnSpec { name: "restore_fresh_pii_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "restore_phase_mask", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "restore_trap_shape_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "outcome", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "outcome_reason", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "field_path_depth", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "field_evidence", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
 ];
 impl SqliteLogger {
     pub fn new(path: &Path) -> Result<Self> {
@@ -844,6 +843,9 @@ fn audit_row_to_entry(
     );
     entry.outcome = parse_label(raw.outcome, "outcome")?;
     entry.outcome_reason = parse_label(raw.outcome_reason, "outcome_reason")?;
+    entry
+        .protection_outcome()
+        .map_err(|err| conversion_error("outcome_reason", rusqlite::types::Type::Text, err))?;
     entry.field_path_depth = checked_counter(raw.field_path_depth, "field_path_depth")?;
     entry.field_evidence = parse_json(raw.field_evidence, "field_evidence")?;
     entry.validator_fail_reason = parse_json(raw.validator_fail_reason, "validator_fail_reason")?;

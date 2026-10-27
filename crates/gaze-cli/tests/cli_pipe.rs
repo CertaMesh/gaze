@@ -5403,13 +5403,11 @@ fn strict_literal_roundtrip_agrees_with_telemetry_and_audit() {
                 assert_eq!(response["restore_telemetry"]["trap_shape_count"], 3);
             }
             if audit {
-                let rows = SqliteLogger::query(
-                    &audit_path,
-                    &AuditFilter {
-                        restore_events_only: true,
-                        ..AuditFilter::default()
-                    },
-                )
+                let rows = SqliteLogger::query(&audit_path, &{
+                    let mut filter = AuditFilter::default();
+                    filter.restore_events_only = true;
+                    filter
+                })
                 .unwrap();
                 assert_eq!(rows.len(), 1);
                 assert_eq!(rows[0].restore_decision.as_deref(), Some("success"));

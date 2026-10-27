@@ -23,12 +23,7 @@ fn entry() -> RedactionEntry {
 fn legacy_db(path: &std::path::Path) {
     Connection::open(path)
         .unwrap()
-        .execute_batch(
-            "CREATE TABLE redaction_log (source TEXT NOT NULL, class TEXT NOT NULL,
-        action TEXT NOT NULL, field_name TEXT, document_kind TEXT NOT NULL,
-        conflict_loser INTEGER NOT NULL);
-        INSERT INTO redaction_log VALUES ('legacy', 'name', 'tokenize', NULL, 'text', 0);",
-        )
+        .execute_batch(include_str!("fixtures/v0_17_redaction_log.sql"))
         .unwrap();
 }
 
@@ -36,12 +31,22 @@ fn legacy_db(path: &std::path::Path) {
 fn outcome_migration_preserves_legacy_rows_and_is_idempotent() {
     let file = tempfile::NamedTempFile::new().unwrap();
     legacy_db(file.path());
+    let before = SqliteLogger::query(file.path(), &AuditFilter::default()).unwrap();
+    let old_columns: Vec<String> = Connection::open(file.path())
+        .unwrap()
+        .prepare("PRAGMA table_info(redaction_log)")
+        .unwrap()
+        .query_map([], |row| row.get(1))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
     // Read-only queries work before migration and do not label legacy rows protected.
     for migrated in [false, true, true] {
         if migrated {
             SqliteLogger::new(file.path()).unwrap();
         }
         let rows = SqliteLogger::query(file.path(), &AuditFilter::default()).unwrap();
+        assert_eq!(rows, before);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].source, "legacy");
         assert_eq!(rows[0].outcome, None);
@@ -49,13 +54,15 @@ fn outcome_migration_preserves_legacy_rows_and_is_idempotent() {
         assert_eq!(rows[0].field_path_depth, None);
         assert_eq!(rows[0].field_evidence, None);
         for filter in [
-            AuditFilter {
-                outcome: Some("protected".into()),
-                ..Default::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.outcome = Some("protected".into());
+                filter
             },
-            AuditFilter {
-                outcome_reason: Some("label_value_shape_unclear".into()),
-                ..Default::default()
+            {
+                let mut filter = AuditFilter::default();
+                filter.outcome_reason = Some("label_value_shape_unclear".into());
+                filter
             },
         ] {
             assert!(SqliteLogger::query(file.path(), &filter)
@@ -70,6 +77,27 @@ fn outcome_migration_preserves_legacy_rows_and_is_idempotent() {
                 .unwrap()
                 .collect::<Result<Vec<_>, _>>()
                 .unwrap();
+            assert_eq!(&columns[..old_columns.len()], old_columns);
+            assert_eq!(
+                &columns[old_columns.len()..],
+                [
+                    "outcome",
+                    "outcome_reason",
+                    "field_path_depth",
+                    "field_evidence"
+                ]
+            );
+            let fresh = tempfile::NamedTempFile::new().unwrap();
+            SqliteLogger::new(fresh.path()).unwrap();
+            let fresh_columns: Vec<String> = Connection::open(fresh.path())
+                .unwrap()
+                .prepare("PRAGMA table_info(redaction_log)")
+                .unwrap()
+                .query_map([], |row| row.get(1))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            assert_eq!(columns, fresh_columns);
             for column in [
                 "outcome",
                 "outcome_reason",
@@ -127,6 +155,7 @@ fn outcomes_round_trip_without_keys_or_scalar_values() {
         let row = entry()
             .with_protection_outcome(outcome)
             .with_field_provenance(&provenance);
+        assert_eq!(row.protection_outcome().unwrap(), Some(outcome));
         let json = serde_json::to_string(&row).unwrap();
         assert!(!json.contains("synthetic-key"));
         assert!(!format!("{row:?}").contains("synthetic-key"));
@@ -174,14 +203,12 @@ fn outcome_filters_are_bound_and_distinguish_possible_from_confirmed() {
         (Some("protected"), Some("other_field_repeat"), 0),
         (Some("protected' OR 1=1 --"), None, 0),
     ] {
-        let rows = SqliteLogger::query(
-            file.path(),
-            &AuditFilter {
-                outcome: outcome.map(str::to_owned),
-                outcome_reason: reason.map(str::to_owned),
-                ..Default::default()
-            },
-        )
+        let rows = SqliteLogger::query(file.path(), &{
+            let mut filter = AuditFilter::default();
+            filter.outcome = outcome.map(str::to_owned);
+            filter.outcome_reason = reason.map(str::to_owned);
+            filter
+        })
         .unwrap();
         assert_eq!(rows.len(), count);
     }
@@ -195,6 +222,20 @@ fn typed_entries_reject_unknown_outcomes_and_invalid_depth() {
         ("field_evidence", "'\"future_evidence\"'"),
         ("field_path_depth", "-1"),
         ("field_path_depth", "4294967296"),
+        ("outcome", "'possibly_sensitive'"),
+        ("outcome_reason", "'other_field_repeat'"),
+        (
+            "outcome",
+            "'protected', outcome_reason = 'other_field_repeat'",
+        ),
+        (
+            "outcome",
+            "'non_sensitive', outcome_reason = 'other_field_repeat'",
+        ),
+        (
+            "outcome",
+            "'confirmed_untransformable', outcome_reason = 'json_key'",
+        ),
     ] {
         let file = tempfile::NamedTempFile::new().unwrap();
         let logger = SqliteLogger::new(file.path()).unwrap();

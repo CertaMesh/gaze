@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gaze_audit::{
-    AuditFilter, AuditLogRow, LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger,
-    DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME, SAFETY_NET_RESTRICTED_COLUMNS,
+    AuditFilter, LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger,
+    SAFETY_NET_RESTRICTED_COLUMNS,
 };
 use gaze_types::{
     Action, ConflictTier, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect,
@@ -37,7 +37,11 @@ fn opens_v05_db_creates_safety_net_log_and_preserves_redaction_rows() {
         row.recognizer_id.as_deref() == Some("legacy_unversioned")
             && row.recognizer_version_id.is_none()
     }));
-    assert_eq!(after, legacy_rows());
+    let mut expected = before;
+    for row in &mut expected {
+        row.recognizer_id = Some("legacy_unversioned".into());
+    }
+    assert_eq!(after, expected);
 }
 
 #[test]
@@ -182,43 +186,17 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
     logger.log_leak_suspect(&email).expect("log email suspect");
     logger.log_leak_suspect(&name).expect("log name suspect");
 
-    let rows = SqliteLogger::query_safety_net(
-        temp.path(),
-        &AuditFilter {
-            class: Some("name".to_string()),
-            source: Some("openai-privacy-filter".to_string()),
-            action: Some("partial_bleed".to_string()),
-            document_kind: Some("structured".to_string()),
-            raw_label: None,
-            field_path: None,
-            from_epoch_ms: Some(150),
-            to_epoch_ms: Some(250),
-            session_id: Some("session-b".to_string()),
-            snapshot_scheme: None,
-            snapshot_alg: None,
-            snapshot_key_version: None,
-            has_ambiguity: None,
-            ambiguity_reason: None,
-            collision_family: None,
-            collision_variant: None,
-            recognizer_id: None,
-            recognizer_version_id: None,
-            provenance_stage: None,
-            provenance_model_id: None,
-            provenance_model_version: None,
-            provenance_artifact_sha256: None,
-            provenance_tokenizer_sha256: None,
-            provenance_locale_resolved: None,
-            provenance_locale_match_kind: None,
-            provenance_canonical_class: None,
-            provenance_native_class: None,
-            provenance_confidence: None,
-            provenance_merged_from: None,
-            outcome: None,
-            outcome_reason: None,
-            restore_events_only: false,
-        },
-    )
+    let rows = SqliteLogger::query_safety_net(temp.path(), &{
+        let mut filter = AuditFilter::default();
+        filter.class = Some("name".to_string());
+        filter.source = Some("openai-privacy-filter".to_string());
+        filter.action = Some("partial_bleed".to_string());
+        filter.document_kind = Some("structured".to_string());
+        filter.from_epoch_ms = Some(150);
+        filter.to_epoch_ms = Some(250);
+        filter.session_id = Some("session-b".to_string());
+        filter
+    })
     .expect("filtered query");
 
     assert_eq!(rows.len(), 1);
@@ -316,101 +294,6 @@ fn create_v05_redaction_log(path: &std::path::Path) {
         "#,
     )
     .expect("legacy schema and rows");
-}
-
-fn legacy_rows() -> Vec<AuditLogRow> {
-    vec![
-        AuditLogRow {
-            source: "regex".to_string(),
-            recognizer_id: Some("legacy_unversioned".to_string()),
-            recognizer_version_id: None,
-            class: "email".to_string(),
-            action: "tokenize".to_string(),
-            field_name: Some("contact.email".to_string()),
-            document_kind: "structured".to_string(),
-            conflict_loser: false,
-            decided_by: "none".to_string(),
-            created_at: Some(100),
-            session_id: Some("session-a".to_string()),
-            snapshot_scheme: DEFAULT_SNAPSHOT_SCHEME.to_string(),
-            snapshot_alg: DEFAULT_SNAPSHOT_ALG.to_string(),
-            snapshot_key_version: None,
-            validator_fail_reason: None,
-            labelled_value_scan_reason: None,
-            outcome: None,
-            outcome_reason: None,
-            field_path_depth: None,
-            field_evidence: None,
-
-            ambiguity_record: None,
-            collision_family: None,
-            collision_variant: None,
-            fallback_triggered: None,
-            provenance_stage: None,
-            provenance_model_id: None,
-            provenance_model_version: None,
-            provenance_artifact_sha256: None,
-            provenance_tokenizer_sha256: None,
-            provenance_locale_resolved: None,
-            provenance_locale_match_kind: None,
-            provenance_canonical_class: None,
-            provenance_native_class: None,
-            provenance_confidence: None,
-            provenance_merged_from: None,
-            restore_policy: None,
-            restore_decision: None,
-            restore_unknown_token_count: None,
-            restore_manifest_bypass_count: None,
-            restore_fresh_pii_count: None,
-            restore_phase_mask: None,
-            restore_trap_shape_count: None,
-        },
-        AuditLogRow {
-            source: "dictionary".to_string(),
-            recognizer_id: Some("legacy_unversioned".to_string()),
-            recognizer_version_id: None,
-            class: "name".to_string(),
-            action: "preserve".to_string(),
-            field_name: None,
-            document_kind: "text".to_string(),
-            conflict_loser: true,
-            decided_by: "class_priority".to_string(),
-            created_at: Some(200),
-            session_id: None,
-            snapshot_scheme: DEFAULT_SNAPSHOT_SCHEME.to_string(),
-            snapshot_alg: DEFAULT_SNAPSHOT_ALG.to_string(),
-            snapshot_key_version: None,
-            validator_fail_reason: None,
-            labelled_value_scan_reason: None,
-            outcome: None,
-            outcome_reason: None,
-            field_path_depth: None,
-            field_evidence: None,
-
-            ambiguity_record: None,
-            collision_family: None,
-            collision_variant: None,
-            fallback_triggered: None,
-            provenance_stage: None,
-            provenance_model_id: None,
-            provenance_model_version: None,
-            provenance_artifact_sha256: None,
-            provenance_tokenizer_sha256: None,
-            provenance_locale_resolved: None,
-            provenance_locale_match_kind: None,
-            provenance_canonical_class: None,
-            provenance_native_class: None,
-            provenance_confidence: None,
-            provenance_merged_from: None,
-            restore_policy: None,
-            restore_decision: None,
-            restore_unknown_token_count: None,
-            restore_manifest_bypass_count: None,
-            restore_fresh_pii_count: None,
-            restore_phase_mask: None,
-            restore_trap_shape_count: None,
-        },
-    ]
 }
 
 fn leak_suspect(span: Range<usize>, class: PiiClass, kind: LeakKind) -> LeakSuspect {

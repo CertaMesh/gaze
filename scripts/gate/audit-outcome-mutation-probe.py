@@ -12,7 +12,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_probe(name, source, old, new, command):
+def run_probe(name, source, old, new, command, failure_marker="test result: FAILED"):
     path = ROOT / source
     original = path.read_bytes()
     text = original.decode()
@@ -28,7 +28,7 @@ def run_probe(name, source, old, new, command):
             result = subprocess.run(["nice", "-n", "10", "cargo", "test", *command],
                                     cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
         output = (logs / f"{name}.log").read_text()
-        if result.returncode == 0 or "test result: FAILED" not in output:
+        if result.returncode == 0 or "test result: FAILED" not in output or failure_marker not in output:
             raise RuntimeError(f"mutation was not killed by an assertion: {name}")
         print(f"KILLED {name}", flush=True)
     finally:
@@ -47,8 +47,20 @@ def main():
               'if let Some(value) = &None::<String> {',
               ["-p", "gaze-cli", "--test", "audit_outcomes",
                "audit_query_and_export_filter_outcome_and_reason_without_disclosing_keys", "--", "--exact"])
+    run_probe("ignore-outcome-reason-filter", "crates/gaze-audit/src/query.rs",
+              'if let Some(value) = &filter.outcome_reason {',
+              'if let Some(value) = &None::<String> {',
+              ["-p", "gaze-cli", "--test", "audit_outcomes",
+               "audit_query_and_export_filter_outcome_and_reason_without_disclosing_keys", "--", "--exact"])
+    run_probe("leak-field-key", "crates/gaze-types/src/lib.rs",
+              '        self.field_evidence = Some(provenance.evidence);',
+              '        self.source = provenance.path.segments().join(".");\n'
+              '        self.field_evidence = Some(provenance.evidence);',
+              ["-p", "gaze-cli", "--test", "audit_outcomes",
+               "audit_query_and_export_filter_outcome_and_reason_without_disclosing_keys", "--", "--exact"],
+              failure_marker="field key leaked into audit output")
     subprocess.run(["git", "diff", "--quiet", "HEAD"], cwd=ROOT, check=True)
-    print("MUTATIONS DONE: migration and filter mutations killed")
+    print("MUTATIONS DONE: migration, both filters, and field-key leak mutations killed")
 
 
 if __name__ == "__main__":

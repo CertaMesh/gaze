@@ -81,6 +81,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** `gaze-audit::AuditFilter` and `AuditLogRow` are now
+  `#[non_exhaustive]` and include protection outcome metadata. Construct filters
+  with `AuditFilter::default()` and assign the desired fields; obtain audit rows
+  through `SqliteLogger::query` rather than struct literals.
+
 - **Breaking:** `DetectContext.fields` changes from `&'a ()` to
   `Option<FieldContext<'a>>`; attach field context with `with_fields`.
   `ProtectionError` no longer implements `Copy`; use `.clone()` or match by
