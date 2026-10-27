@@ -148,7 +148,7 @@ attribution; there is no upper length rejection.
 | `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_` | ASCII letters, digits, underscore, hyphen | 36 |
 | `github_pat_` | ASCII letters, digits, underscore, hyphen | 82 |
 | `ghs_` with application identifier and JWT | Identifier then `_eyJ`; three base64url JWT segments | 5 after `eyJ`, then 5 per segment |
-| `sk-` | Alphanumeric first character, then ASCII letters, digits, underscore, hyphen | 32 |
+| `sk-` | 32 alphanumeric characters, then optional ASCII letters, digits, underscore, hyphen | 32 |
 | `sk-proj-`, `sk-svcacct-`, `sk-admin-`, `sk-None-`, `sk-ant-` | ASCII letters, digits, underscore, hyphen | 32 |
 | `xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`, `xapp-`, `xoxe-`, `xoxe.xoxp-` | Alphanumeric first character, then ASCII letters, digits, hyphen | 10 |
 | `sk_live_`, `rk_live_`, `sk_test_`, `rk_test_`, `whsec_` | ASCII letters, digits, underscore, hyphen | 24 |
