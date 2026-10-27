@@ -96,6 +96,18 @@ impl RuleEntry {
             description,
         }
     }
+    pub(crate) fn class_alias(
+        &self,
+        aliases: &std::collections::HashMap<PiiClass, PiiClass>,
+    ) -> Option<Self> {
+        match &self.description {
+            Some(StaticRule::Class(class, action)) => aliases
+                .get(class)
+                .map(|alias| Self::new(ClassRule::new(alias.clone(), *action))),
+            _ => None,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn inject_runtime(&mut self, runtime: impl Rule + 'static) {
         self.runtime = Arc::new(runtime);

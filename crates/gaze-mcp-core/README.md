@@ -117,7 +117,14 @@ Snapshot refs use `sha256(audit_session_id || 0x00 || call_id || 0x00 || payload
 
 ## Session ownership boundary
 
-Use one `gaze::Session` per authorization domain. `export_session_tokens` exposes the session’s entire token/raw map without per-call filtering. Sharing a session across users or agents lets one authorized operator read another’s PII. Hosts must create and pass separate sessions to `PiiEnvelope::new`.
+Use one `gaze::Session` per authorization domain. With private record context,
+use one `Session` and one `DispatchHost` per conversation. Sharing either across
+conversations shares Rule-evidence token mappings, HMAC labels, and restore
+authority. An audit session id labels calls but does not partition this state.
+
+`export_session_tokens` exposes the session's entire token/raw map without per-call
+filtering. Sharing a session across users or agents lets one authorized operator
+read another's PII. Hosts must create and pass separate sessions to `PiiEnvelope::new`.
 
 ## Operator-tier tools and audit storage
 
@@ -316,3 +323,74 @@ as literal text. They are not expanded or newly rejected by this operation proof
 Their adopter-specific validation and error stage remain unchanged. A separate
 opaque-carrier and foreign-namespace contract is a follow-up. Ordinary filenames
 such as `scan_1.png` remain literal text too.
+
+## Per-call host record context
+
+`PiiEnvelope::dispatch`, `dispatch_request`, and `DispatchHost::dispatch` take an
+explicit final `HostContextSelection` argument. Pass `Absent` for ordinary calls.
+For a private owner record, pass `HostContextSelection::present(raw_json)` and
+configure the envelope with `with_context_policy(policy, rulepacks)`, using the
+exact resident assembly inputs. `CorePipeline::policy` and `rulepacks` expose
+those inputs for the bundled configuration. Unsupported hosts reject `Present`.
+
+The shared Context parser preserves CLI and daemon record limits. Context affects
+only tool responses. Private terms present in model-authored arguments are excluded
+for the call. Ordinary detection still protects arguments and responses.
+
+Calls with `Present` context have a per-call guess budget, independent of the
+record. `HostContextPolicy::default()` allows at most 4,096 argument bytes and
+32 scalar values in each original and recursively decoded JSON view. Keys count
+toward bytes. Both raw and normalized bytes must fit. Every visited key, scalar
+value and container also counts against an entry cap equal to
+`max_argument_bytes` (4,096 entries by default), including empty keys and
+containers. Dispatch rejects oversized arguments with a value-free error before parsing the record or changing session
+or audit state. Set `PiiEnvelope::with_host_context_policy(HostContextPolicy {
+max_argument_bytes, max_argument_scalars })` to configure these host-owned limits.
+Raising either limit increases the guess budget. `Absent` calls use the ordinary
+MCP operation limits. Batch lookups above 32 IDs or tool bodies above 4 KB of
+argument text are rejected at the defaults when context is attached.
+
+Exclusion uses the detection pipeline's normalization and the response matcher's
+token-boundary rule. It follows each recognizer's compilation mode and allowed
+match kinds: Unicode case folding applies to Name records, while exact-only
+fields retain their case and whitespace requirements. Flexible whitespace is
+considered only when that match kind is allowed, with no run-length cap
+(the response matcher caps a whitespace run at 32). Folded matches map back to the same normalized, pre-casefold text for boundary checks. A superstring
+such as `Joanna Lim` does not exclude `Anna Li`. Coverage includes single fields
+and all scalar fields joined in lexicographic key order with empty or space
+separators. Arrays retain index order. It also checks every scalar pair in both
+orders with empty, space, `@`, `-`, and `/` separators. This covers given/family
+fields whose key order differs from schema order, an unrelated interleaved field,
+and common two-field email or identifier templates. Original strings and decoded
+JSON leaves are checked separately. Arbitrary transformations, reordered joins of
+three or more fields, and other separators can still evade exclusion.
+
+A record-returning lookup tool can still confirm a guess. A correct guess
+excludes the returned record value from private-context detection. A wrong guess
+leaves that value eligible for a token. In addition to guesses contained in the
+admitted argument text and the two full scalar joins, pair joins add up to
+`max_argument_scalars × (max_argument_scalars − 1)` candidates per separator.
+At the defaults, that is 992 pairs per separator and 4,960 pair candidates across
+the five separators in each view. The original and decoded views can differ,
+adding up to 9,920 pair candidates per call. Short numeric fields such as PINs and
+house numbers can therefore be enumerated in a few calls. Lower `max_argument_scalars` for tools that look up
+short numeric records. Enumeration that fits within the budget remains possible.
+Repeated calls are the host's rate-limit responsibility. Exclusion does not
+provide general resistance to guessing attacks. Ordinary recognizers and existing session mappings
+continue to protect their known values.
+
+Only actual response matches enter the session as Rule evidence. Unused record
+values do not persist; matched values restore exactly and remain protected on
+later turns. `Present` cannot accompany an operator response bypass.
+
+Keep context out of tool args, schemas, `_meta`, `ToolCtx`, audit payloads, and
+logs. The raw wrapper has redacting Debug and clears its owned buffer on final
+drop. This does not guarantee erasure of allocator or parser copies. The HTTP
+adapter accepts host middleware extensions; ordinary stdio has no private channel.
+
+Private class and dictionary identifiers use domain-separated HMAC labels under
+a random per-session key. They are stable across turns and trusted snapshot
+imports, while independent sessions use unrelated labels. The key is stored only
+in the live session and its signed version 8 sensitive snapshot. Keyless legacy
+opaque classes remain restorable but cannot dispatch tools. See
+[UPGRADE.md](../../UPGRADE.md) for the migration boundary.

@@ -12,7 +12,7 @@ use thiserror::Error;
 use crate::PiiClass;
 use gaze_types::{RecordMatchKind, ValidatorKind};
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RawContext {
     #[serde(default)]
@@ -27,6 +27,12 @@ pub(crate) struct RawContext {
     pub(crate) field_map: HashMap<String, String>,
     #[serde(default)]
     pub(crate) record_match_kinds: HashMap<String, BTreeSet<RecordMatchKind>>,
+}
+
+impl std::fmt::Debug for RawContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RawContext([redacted])")
+    }
 }
 
 const MAX_CONTEXT_BYTES: usize = 4 * 1024 * 1024;
@@ -44,7 +50,7 @@ pub fn record_dictionary_name(class: &PiiClass, slot: usize) -> String {
     format!("{RECORD_DICTIONARY_PREFIX}{}-{slot}", hex::encode(digest))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RawContextDictionary {
     pub(crate) terms: Vec<String>,
@@ -569,6 +575,16 @@ fn inferred_record_class(key: &str) -> Option<PiiClass> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_context_debug_is_value_free() {
+        let raw: RawContext =
+            serde_json::from_str(r#"{"fields":{"private_canary_key":"private_canary_value"}}"#)
+                .unwrap();
+        let debug = format!("{raw:?}");
+        assert!(!debug.contains("private_canary_key"));
+        assert!(!debug.contains("private_canary_value"));
+    }
 
     #[test]
     fn context_requires_an_object_even_when_all_fields_have_defaults() {

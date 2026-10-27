@@ -168,3 +168,11 @@ protection still requires its full primary and locale contract. Direct failures
 abandon staged mappings before commit/send. Legacy mappings are already live and
 remain so on failure; there is no whole-request rollback guarantee. Response
 restoration and response residual validation retain their existing contracts.
+
+## Caller-known record context
+
+Per-request caller-known record context is **not supported** by `gaze-proxy`.
+No header, provider body field, or model-authored metadata supplies trusted context.
+Use the daemon's per-request `context` field or an in-process MCP host integration
+when you need private record matching. Existing proxy detection and restoration
+continue to apply. A host-authenticated sidecar is deferred until an adopter needs it.

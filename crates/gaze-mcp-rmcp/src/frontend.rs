@@ -28,6 +28,35 @@ use crate::adapter::{
     response_to_rmcp_call_tool_result, rmcp_args_to_dispatch_args,
 };
 
+/// Host middleware input for one call. Never deserialize this from tool args or `_meta`.
+/// The session id is audit correlation only; the host selects the actual Session.
+#[derive(Clone, Default)]
+pub struct HostCallContext {
+    /// Private response detection input.
+    pub selection: gaze_mcp_core::HostContextSelection,
+    /// Host-owned audit correlation, validated by SessionIdPolicy.
+    pub audit_session_id: Option<String>,
+}
+
+impl std::fmt::Debug for HostCallContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("HostCallContext([redacted])")
+    }
+}
+
+fn host_call_context(extensions: &rmcp::model::Extensions) -> HostCallContext {
+    if let Some(host) = extensions.get::<HostCallContext>() {
+        return host.clone();
+    }
+    #[cfg(feature = "transport-http")]
+    if let Some(parts) = extensions.get::<axum::http::request::Parts>()
+        && let Some(host) = parts.extensions.get::<HostCallContext>()
+    {
+        return host.clone();
+    }
+    HostCallContext::default()
+}
+
 /// Transport choice for [`RmcpFrontend`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -158,7 +187,10 @@ impl RmcpFrontend {
         &self.config
     }
 
-    #[doc(hidden)]
+    /// Build an embeddable rmcp handler. HTTP hosts install middleware on their own
+    /// StreamableHttpService and insert HostCallContext in request extensions.
+    /// Private context requires a fresh host and Session per conversation. Construct
+    /// both inside the service factory; cloning a shared host does not isolate sessions.
     pub fn into_server_handler(self, host: Arc<dyn DispatchHost>) -> impl ServerHandler {
         RmcpServer::new(host, self.config.principal_resolver)
     }
@@ -253,14 +285,16 @@ impl ServerHandler for RmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         let principal = self.principal(&context).await?;
-        let dispatch_args = rmcp_args_to_dispatch_args(request).map_err(rmcp_error_to_mcp)?;
+        let host = host_call_context(&context.extensions);
+        let dispatch_args = rmcp_args_to_dispatch_args(request);
         let response = self
             .host
             .dispatch(
                 &principal,
                 &dispatch_args.tool_name,
                 dispatch_args.args,
-                dispatch_args.session_id.as_deref(),
+                host.audit_session_id.as_deref(),
+                host.selection,
             )
             .await;
 
@@ -341,6 +375,9 @@ fn tier_for_principal(principal: &Principal) -> ToolTier {
 
 fn dispatch_error_to_tool_result(err: DispatchError) -> CallToolResult {
     match err {
+        DispatchError::HostContext(_) => {
+            CallToolResult::error(vec![ContentBlock::text("host-context-rejected")])
+        }
         DispatchError::ToolError(err) => error_to_rmcp_call_tool_result(err),
         DispatchError::UnknownTool(_) => {
             CallToolResult::error(vec![ContentBlock::text("not-found")])
@@ -382,6 +419,49 @@ fn principal_error_to_mcp(err: RmcpPrincipalError) -> ErrorData {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn host_context_extensions_are_explicit_and_debug_is_redacted() {
+        let mut extensions = rmcp::model::Extensions::new();
+        assert!(matches!(
+            host_call_context(&extensions).selection,
+            gaze_mcp_core::HostContextSelection::Absent
+        ));
+        extensions.insert(HostCallContext {
+            selection: gaze_mcp_core::HostContextSelection::present(
+                r#"{"fields":{"private_canary_key":"private_canary_value"}}"#.into(),
+            ),
+            audit_session_id: Some("private_canary_session".into()),
+        });
+        let host = host_call_context(&extensions);
+        assert!(matches!(
+            host.selection,
+            gaze_mcp_core::HostContextSelection::Present(_)
+        ));
+        assert_eq!(
+            host.audit_session_id.as_deref(),
+            Some("private_canary_session")
+        );
+        assert!(!format!("{host:?} {:?}", host.selection).contains("private_canary"));
+    }
+
+    #[cfg(feature = "transport-http")]
+    #[test]
+    fn embedded_http_reads_host_middleware_request_extensions() {
+        let (mut parts, _) = axum::http::Request::new(()).into_parts();
+        parts.extensions.insert(HostCallContext {
+            selection: gaze_mcp_core::HostContextSelection::present("{}".into()),
+            audit_session_id: Some("host-audit".into()),
+        });
+        let mut extensions = rmcp::model::Extensions::new();
+        extensions.insert(parts);
+        let host = host_call_context(&extensions);
+        assert!(matches!(
+            host.selection,
+            gaze_mcp_core::HostContextSelection::Present(_)
+        ));
+        assert_eq!(host.audit_session_id.as_deref(), Some("host-audit"));
+    }
 
     #[test]
     fn operator_role_maps_to_operator_tier() {

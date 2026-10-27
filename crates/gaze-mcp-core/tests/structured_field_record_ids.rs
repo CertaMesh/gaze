@@ -142,7 +142,13 @@ async fn mcp_labelled_string_leaves_known_failure_but_numbers_fail_closed() {
             &session_policy,
         );
         let result = envelope
-            .dispatch(&Principal::new("agent"), "lookup", document.clone(), None)
+            .dispatch(
+                &Principal::new("agent"),
+                "lookup",
+                document.clone(),
+                None,
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
             .await;
         if case.numeric {
             assert!(

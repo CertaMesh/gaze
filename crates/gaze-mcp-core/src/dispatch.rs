@@ -42,6 +42,9 @@ use crate::tool::{ResponseRedaction, ToolError, ToolResponse, ToolTier};
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum DispatchError {
+    /// Host-only context admission failed before invoking or mutating the session.
+    #[error("{0}")]
+    HostContext(#[from] crate::HostContextError),
     /// The entry point does not match the registered request contract.
     #[error("request mode rejected")]
     RequestMode,
@@ -110,6 +113,8 @@ pub struct PiiEnvelope<'a> {
     pub dictionaries: &'a gaze::DictionaryBundle,
     /// Transport-supplied session id validation policy.
     pub session_id_policy: &'a SessionIdPolicy,
+    host_context_policy: crate::HostContextPolicy,
+    context_policy: Option<(&'a gaze::Policy, &'a [gaze::Rulepack])>,
 }
 
 enum RequestState {
@@ -140,6 +145,8 @@ impl<'a> PiiEnvelope<'a> {
         session_id_policy: &'a SessionIdPolicy,
     ) -> Self {
         Self {
+            context_policy: None,
+            host_context_policy: crate::HostContextPolicy::default(),
             dictionaries: default_dictionaries(),
             registry,
             auth,
@@ -157,6 +164,24 @@ impl<'a> PiiEnvelope<'a> {
         self
     }
 
+    /// Supply the exact policy and rulepacks used to assemble the resident pipeline.
+    /// Present context is rejected when these inputs are absent.
+    pub fn with_context_policy(
+        mut self,
+        policy: &'a gaze::Policy,
+        rulepacks: &'a [gaze::Rulepack],
+    ) -> Self {
+        self.context_policy = Some((policy, rulepacks));
+        self
+    }
+
+    /// Set the record-independent argument budget for calls with Present context.
+    /// Raising limits increases the per-call guess budget; hosts must rate-limit calls.
+    pub fn with_host_context_policy(mut self, policy: crate::HostContextPolicy) -> Self {
+        self.host_context_policy = policy;
+        self
+    }
+
     /// Protect one declared JSON argument operation, invoke with live resources,
     /// then protect a fresh response operation. Egress requires response commit
     /// and successful manifest finish. A failed terminal attempt is never retried;
@@ -167,12 +192,14 @@ impl<'a> PiiEnvelope<'a> {
         tool_name: &str,
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
+        host_context: crate::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         self.dispatch_with(
             principal,
             tool_name,
             RequestState::Protected(raw_args),
             external_session_id,
+            host_context,
         )
         .await
     }
@@ -186,12 +213,14 @@ impl<'a> PiiEnvelope<'a> {
         tool_name: &str,
         args: crate::UntrustedInvocationArgs,
         external_session_id: Option<&str>,
+        host_context: crate::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         self.dispatch_with(
             principal,
             tool_name,
             RequestState::Untrusted(args),
             external_session_id,
+            host_context,
         )
         .await
     }
@@ -202,6 +231,7 @@ impl<'a> PiiEnvelope<'a> {
         tool_name: &str,
         request: RequestState,
         external_session_id: Option<&str>,
+        host_context: crate::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         // 1. Validate the session id (cheapest fail-closed check; do this
         //    before any auth call to avoid leaking which session ids exist).
@@ -232,6 +262,72 @@ impl<'a> PiiEnvelope<'a> {
             ToolTier::Operator => self.auth.authorize_operator(principal, tool_name).await?,
         };
 
+        // Admit argument size before parsing a record, inspecting session mappings,
+        // or allocating private labels. Rejection cannot depend on record content.
+        let argument_text = if matches!(host_context, crate::HostContextSelection::Present(_)) {
+            let args = match &request {
+                RequestState::Protected(args) => args,
+                RequestState::Untrusted(args) => args.as_value(),
+            };
+            argument_guess_material(args, self.host_context_policy)?
+        } else {
+            ArgumentGuessMaterial::default()
+        };
+
+        // Static policy aliases let matched private custom classes remain protected
+        // on later calls without retaining a record or context class map.
+        crate::host_context::validate_session(self.session)?;
+        let host_context_selection = host_context;
+        let mut host_context = crate::host_context::parse(&host_context_selection)?;
+        if host_context.is_some() && descriptor.response_redaction() != ResponseRedaction::Apply {
+            return Err(crate::HostContextError::Unsupported.into());
+        }
+        let aliased_pipeline = self
+            .context_policy
+            .filter(|_| host_context.is_some() || self.session.has_opaque_identifier_key())
+            .map(|(policy, _)| {
+                let aliases = crate::host_context::policy_aliases(self.session, policy)?;
+                Ok::<_, crate::HostContextError>(self.pipeline.clone().with_class_aliases(&aliases))
+            })
+            .transpose()?;
+        let resident_pipeline = aliased_pipeline.as_ref().unwrap_or(self.pipeline);
+        let response_inputs = if let Some(context) = host_context.as_mut() {
+            let (policy, rulepacks) = self
+                .context_policy
+                .ok_or(crate::HostContextError::Unsupported)?;
+            let policy = crate::host_context::opaque_context(self.session, context, policy)?;
+            if context
+                .class_map
+                .values()
+                .any(|class| !gaze_assembly::class_has_reversible_action(&policy.rules, class))
+                || context
+                    .dictionaries
+                    .keys()
+                    .any(|name| self.dictionaries.get(name).is_some())
+            {
+                return Err(crate::HostContextError::Policy.into());
+            }
+            // Validate the complete record before argument-dependent exclusions, so
+            // a guessed term cannot change whether the policy admits the call.
+            let pipeline = crate::host_context::response_pipeline(
+                &host_context_selection,
+                self.session,
+                resident_pipeline,
+                &policy,
+                context,
+                rulepacks,
+                self.locale_chain,
+            )?;
+            exclude_argument_guesses(context, &argument_text)?;
+            let dictionaries = gaze::DictionaryBundle::merge(
+                self.dictionaries.clone(),
+                gaze::dictionary_bundle_from_context(context),
+            );
+            Some((pipeline, dictionaries))
+        } else {
+            None
+        };
+
         // 4. Prepare the registered request contract before opening audit.
         let context = gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries);
         let (redacted_args, args_transaction, invocation_args, args_audit) = match request {
@@ -239,7 +335,8 @@ impl<'a> PiiEnvelope<'a> {
                 descriptor.argument_carriers().preflight(&raw_args)?;
                 let mut transaction = self.session.begin_transaction();
                 let pre_commit_token_count = transaction.tokens().len();
-                let protected = protect_json(self.pipeline, &mut transaction, context, &raw_args)?;
+                let protected =
+                    protect_json(resident_pipeline, &mut transaction, context, &raw_args)?;
                 (
                     protected,
                     Some((transaction, pre_commit_token_count)),
@@ -301,7 +398,7 @@ impl<'a> PiiEnvelope<'a> {
         };
         let session_handle = SessionHandle::new(&audit_session_id_owned);
         let resources = ToolResources::new_with_dictionaries(
-            self.pipeline,
+            resident_pipeline,
             self.session,
             self.manifest,
             self.locale_chain,
@@ -349,9 +446,18 @@ impl<'a> PiiEnvelope<'a> {
                         Ok(()) => {
                             let mut transaction = self.session.begin_transaction();
                             let result = protect_json(
-                                self.pipeline,
+                                response_inputs
+                                    .as_ref()
+                                    .map_or(resident_pipeline, |(pipeline, _)| pipeline),
                                 &mut transaction,
-                                context,
+                                gaze::ProtectionContext::strict(
+                                    self.locale_chain,
+                                    response_inputs
+                                        .as_ref()
+                                        .map_or(self.dictionaries, |(_, dictionaries)| {
+                                            dictionaries
+                                        }),
+                                ),
                                 &raw_response.payload,
                             );
                             response_transaction = Some(transaction);
@@ -418,6 +524,199 @@ impl<'a> PiiEnvelope<'a> {
 
         Ok(ToolResponse::json(response_payload))
     }
+}
+
+#[cfg(test)]
+thread_local! { static PAIR_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+
+#[derive(Default)]
+struct ArgumentGuessMaterial {
+    texts: Vec<gaze_recognizers::RecordGuessText>,
+    scalars: Vec<Vec<usize>>,
+}
+
+fn argument_guess_material(
+    args: &serde_json::Value,
+    policy: crate::HostContextPolicy,
+) -> Result<ArgumentGuessMaterial, crate::HostContextError> {
+    let mut material = ArgumentGuessMaterial::default();
+    let mut interned = std::collections::HashMap::<String, usize>::new();
+    for decode_json in [false, true] {
+        let mut scalars = Vec::new();
+        let mut raw_bytes = 0usize;
+        let mut normalized_bytes = 0usize;
+        let mut entries = 0usize;
+        visit_argument_text(args, decode_json, &mut |entry| {
+            entries = entries
+                .checked_add(1)
+                .filter(|size| *size <= policy.max_argument_bytes)
+                .ok_or(crate::HostContextError::ArgumentLimit)?;
+            let Some((text, is_scalar)) = entry else {
+                return Ok(());
+            };
+            raw_bytes = raw_bytes
+                .checked_add(text.len())
+                .filter(|size| *size <= policy.max_argument_bytes)
+                .ok_or(crate::HostContextError::ArgumentLimit)?;
+            let index = *interned.entry(text.to_owned()).or_insert_with(|| {
+                let index = material.texts.len();
+                material
+                    .texts
+                    .push(gaze_recognizers::RecordGuessText::new(text));
+                index
+            });
+            normalized_bytes = normalized_bytes
+                .checked_add(material.texts[index].budget_bytes())
+                .filter(|size| *size <= policy.max_argument_bytes)
+                .ok_or(crate::HostContextError::ArgumentLimit)?;
+            if is_scalar {
+                if scalars.len() >= policy.max_argument_scalars {
+                    return Err(crate::HostContextError::ArgumentLimit);
+                }
+                scalars.push(index);
+            }
+            Ok(())
+        })?;
+        if material.scalars.first() != Some(&scalars) {
+            material.scalars.push(scalars);
+        }
+    }
+    Ok(material)
+}
+
+fn exclude_argument_guesses(
+    context: &mut gaze::Context,
+    material: &ArgumentGuessMaterial,
+) -> Result<(), crate::HostContextError> {
+    use gaze_recognizers::{RecordGuessMatcher, RecordGuessMode, RecordGuessTerm, RecordGuessText};
+    let mut keys = Vec::new();
+    let mut terms = Vec::new();
+    for (name, dictionary) in &context.dictionaries {
+        for term in &dictionary.terms {
+            let mode = if name.starts_with(gaze::RECORD_DICTIONARY_PREFIX) {
+                let class = context
+                    .class_map
+                    .get(name)
+                    .ok_or(crate::HostContextError::Policy)?;
+                RecordGuessMode::Record {
+                    class: class.clone(),
+                    allowed_kinds: context.record_allowed_match_kinds(class, term),
+                }
+            } else {
+                RecordGuessMode::Dictionary {
+                    case_sensitive: dictionary.case_sensitive,
+                }
+            };
+            keys.push((name, term));
+            terms.push(RecordGuessTerm { value: term, mode });
+        }
+    }
+    let mut matcher =
+        RecordGuessMatcher::new(terms).map_err(|_| crate::HostContextError::Policy)?;
+    for text in &material.texts {
+        matcher.check(text);
+    }
+    let separators = ["", " ", "@", "-", "/"].map(RecordGuessText::new);
+    for scalars in &material.scalars {
+        let texts = scalars
+            .iter()
+            .map(|index| &material.texts[*index])
+            .collect::<Vec<_>>();
+        for separator in &separators[..2] {
+            matcher.check_join(&texts, separator);
+        }
+        for (left_index, left) in texts.iter().enumerate() {
+            for (right_index, right) in texts.iter().enumerate() {
+                if left_index != right_index {
+                    for separator in &separators {
+                        #[cfg(test)]
+                        PAIR_SCANS.with(|count| count.set(count.get() + 1));
+                        matcher.check_pair(left, separator, right);
+                    }
+                }
+            }
+        }
+    }
+    let excluded = keys
+        .into_iter()
+        .zip(matcher.matches())
+        .filter(|(_, matched)| **matched)
+        .map(|((name, term), _)| ((name.clone(), term.clone()), ()))
+        .collect::<std::collections::HashMap<_, _>>();
+    drop(matcher);
+    for (name, dictionary) in &mut context.dictionaries {
+        dictionary
+            .terms
+            .retain(|term| !excluded.contains_key(&(name.clone(), term.clone())));
+    }
+    context
+        .dictionaries
+        .retain(|_, dictionary| !dictionary.terms.is_empty());
+    Ok(())
+}
+
+fn visit_argument_text(
+    value: &serde_json::Value,
+    decode_json: bool,
+    visit: &mut impl FnMut(Option<(&str, bool)>) -> Result<(), crate::HostContextError>,
+) -> Result<(), crate::HostContextError> {
+    fn text(
+        value: &str,
+        is_scalar: bool,
+        remaining: &mut usize,
+        visit: &mut impl FnMut(Option<(&str, bool)>) -> Result<(), crate::HostContextError>,
+    ) -> Result<(), crate::HostContextError> {
+        *remaining = remaining
+            .checked_sub(value.len())
+            .ok_or(crate::HostContextError::Invalid)?;
+        visit(Some((value, is_scalar)))
+    }
+    fn walk(
+        value: &serde_json::Value,
+        depth: usize,
+        decode_json: bool,
+        remaining: &mut usize,
+        visit: &mut impl FnMut(Option<(&str, bool)>) -> Result<(), crate::HostContextError>,
+    ) -> Result<(), crate::HostContextError> {
+        if depth > 128 {
+            return Err(crate::HostContextError::Invalid);
+        }
+        match value {
+            serde_json::Value::String(value) => {
+                let nested = decode_json
+                    .then(|| serde_json::from_str::<serde_json::Value>(value).ok())
+                    .flatten();
+                text(value, nested.is_none(), remaining, visit)?;
+                if let Some(nested) = nested {
+                    walk(&nested, depth + 1, decode_json, remaining, visit)?;
+                }
+            }
+            serde_json::Value::Array(values) => {
+                visit(None)?;
+                for value in values {
+                    walk(value, depth + 1, decode_json, remaining, visit)?;
+                }
+            }
+            serde_json::Value::Object(values) => {
+                visit(None)?;
+                for (key, value) in values {
+                    text(key, false, remaining, visit)?;
+                    walk(value, depth + 1, decode_json, remaining, visit)?;
+                }
+            }
+            serde_json::Value::Number(value) => text(&value.to_string(), true, remaining, visit)?,
+            serde_json::Value::Bool(value) => text(
+                if *value { "true" } else { "false" },
+                true,
+                remaining,
+                visit,
+            )?,
+            serde_json::Value::Null => text("null", true, remaining, visit)?,
+        }
+        Ok(())
+    }
+    let mut remaining = rule_coverage::MAX_OPERATION_EXPANDED_BYTES;
+    walk(value, 0, decode_json, &mut remaining, visit)
 }
 
 pub(crate) fn default_dictionaries() -> &'static gaze::DictionaryBundle {
@@ -659,6 +958,147 @@ mod tests {
     use super::*;
     use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, RawDocument};
     use serde_json::json;
+
+    struct CacheAuth;
+    #[async_trait::async_trait]
+    impl AuthHook for CacheAuth {
+        async fn authorize_agent(&self, _: &Principal, _: &str) -> Result<(), AuthError> {
+            Ok(())
+        }
+        async fn authorize_operator(&self, _: &Principal, _: &str) -> Result<(), AuthError> {
+            Err(AuthError::Denied("agent only".into()))
+        }
+    }
+
+    struct CacheStore;
+    #[async_trait::async_trait]
+    impl ManifestStore for CacheStore {
+        async fn begin_call(
+            &self,
+            context: BeginCallContext<'_>,
+        ) -> Result<CallHandle, ManifestError> {
+            Ok(CallHandle::new(context.call_id))
+        }
+        async fn finish_call(&self, _: CallHandle, _: SnapshotRef) -> Result<(), ManifestError> {
+            Ok(())
+        }
+        async fn fail_call(&self, _: CallHandle, _: FailureReason) -> Result<(), ManifestError> {
+            Ok(())
+        }
+    }
+
+    struct CacheTool(crate::ToolDescriptor);
+    #[async_trait::async_trait]
+    impl crate::Tool for CacheTool {
+        fn descriptor(&self) -> &crate::ToolDescriptor {
+            &self.0
+        }
+        async fn invoke(&self, context: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
+            Ok(ToolResponse::json(json!({
+                "guess": context.redacted_args()["guess"],
+                "found": "Qorvex Zunvela",
+            })))
+        }
+    }
+
+    #[tokio::test]
+    async fn host_context_reuses_one_construction_across_calls_with_fresh_exclusions() {
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let mut registry = ToolRegistry::new();
+        registry
+            .register(CacheTool(
+                crate::ToolDescriptor::agent("cache-test", json!({"type":"object"})).with_carriers(
+                    crate::CarrierDeclaration::text_fields(&["guess"]),
+                    crate::CarrierDeclaration::text_fields(&["guess", "found"]),
+                ),
+            ))
+            .unwrap();
+        let selection = crate::HostContextSelection::present(
+            r#"{"record":{"name":"Qorvex Zunvela","other":"Nalvex Trivula"},"field_map":{"/other":"Name"}}"#.into(),
+        );
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let session_policy = SessionIdPolicy::default_strict();
+        for call in 0..6 {
+            let guess = if call == 0 {
+                "Qorvex Zunvela"
+            } else {
+                "Nalvex Trivula"
+            };
+            // Hosts commonly reconstruct the borrowed envelope for every call.
+            let response = PiiEnvelope::new(
+                &registry,
+                &CacheAuth,
+                &CacheStore,
+                core.pipeline(),
+                &session,
+                core.locale_chain().as_slice(),
+                &session_policy,
+            )
+            .with_context_policy(core.policy(), core.rulepacks())
+            .with_dictionaries(core.dictionaries())
+            .dispatch(
+                &Principal::new("agent"),
+                "cache-test",
+                json!({"guess":guess}),
+                None,
+                selection.clone(),
+            )
+            .await
+            .unwrap();
+            assert!(
+                response.payload["guess"] == guess,
+                "guess changed on call {call}"
+            );
+            if call == 0 {
+                assert!(response.payload["found"] == "Qorvex Zunvela");
+                assert!(session.tokens().is_empty());
+            } else {
+                assert!(response.payload["found"] != "Qorvex Zunvela");
+                let restored = session
+                    .restore_strict_text(response.payload["found"].as_str().unwrap())
+                    .unwrap();
+                assert!(restored == "Qorvex Zunvela");
+            }
+        }
+        assert_eq!(crate::host_context::construction_count(&selection), 1);
+    }
+
+    #[test]
+    fn host_argument_identical_views_scan_pairs_once() {
+        let policy = crate::HostContextPolicy::default();
+        let plain = json!((0..32).map(|i| format!("Synthetic{i}")).collect::<Vec<_>>());
+        let encoded = json!((0..32)
+            .map(|i| format!("\"Synthetic{i}\""))
+            .collect::<Vec<_>>());
+        for (args, views) in [(plain, 1), (encoded, 2)] {
+            let material = argument_guess_material(&args, policy).unwrap();
+            let mut context =
+                gaze::Context::from_json_str(r#"{"record":{"name":"Synthetic Qorvex"}}"#).unwrap();
+            PAIR_SCANS.with(|count| count.set(0));
+            exclude_argument_guesses(&mut context, &material).unwrap();
+            assert_eq!(PAIR_SCANS.with(|count| count.get()), views * 32 * 31 * 5);
+        }
+    }
+
+    #[test]
+    fn host_argument_entry_budget_counts_every_structural_entry_and_empty_key() {
+        let policy = crate::HostContextPolicy {
+            max_argument_bytes: 8,
+            max_argument_scalars: 2,
+        };
+        for (args, admitted) in [
+            (json!([[], [], [], [], [], [], []]), true),
+            (json!([[], [], [], [], [], [], [], []]), false),
+            (json!([{"":[]}, {"":[]}]), true),
+            (json!([{"":[]}, {"":[]}, {"":[]}]), false),
+        ] {
+            assert_eq!(
+                super::argument_guess_material(&args, policy).is_ok(),
+                admitted,
+                "{args}"
+            );
+        }
+    }
 
     #[derive(Clone)]
     struct FixedDetector;

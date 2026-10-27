@@ -33,6 +33,7 @@ impl DispatchHost for EnvelopeHost {
         tool_name: &str,
         raw_args: serde_json::Value,
         external_session_id: Option<&str>,
+        host_context: gaze_mcp_core::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
         let envelope = PiiEnvelope::new(
             &self.registry,
@@ -44,7 +45,13 @@ impl DispatchHost for EnvelopeHost {
             &self.session_id_policy,
         );
         envelope
-            .dispatch(principal, tool_name, raw_args, external_session_id)
+            .dispatch(
+                principal,
+                tool_name,
+                raw_args,
+                external_session_id,
+                host_context,
+            )
             .await
     }
 

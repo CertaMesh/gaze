@@ -307,6 +307,7 @@ async fn default_auth_denies_before_forward() {
             "mail.send",
             json!({}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect_err("auth denies");
@@ -330,6 +331,7 @@ async fn per_field_allow_restores_token_and_routes_downstream() {
             "mail.send",
             json!({"to": token, "subject": "hello"}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("dispatch");
@@ -356,6 +358,7 @@ async fn token_on_default_deny_field_is_blocked() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked response");
@@ -382,6 +385,7 @@ async fn cross_session_token_is_not_restorable() {
             "mail.send",
             json!({"to": token}),
             Some(SID_B),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked response");
@@ -404,6 +408,7 @@ async fn trap_token_on_sensitive_field_is_blocked() {
             "mail.send",
             json!({"to": "<Email_1>"}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked response");
@@ -426,6 +431,7 @@ async fn forged_session_id_is_rejected() {
             "mail.send",
             json!({"to": "hello"}),
             Some("session-1"),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect_err("bad session id");
@@ -448,6 +454,7 @@ async fn raw_pii_in_args_is_blocked_even_without_token() {
             "mail.send",
             json!({"to": RAW_EMAIL}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked response");
@@ -466,6 +473,7 @@ async fn pii_object_key_in_args_fails_closed_without_raw_path() {
             "mail.send",
             json!({RAW_EMAIL: "hello"}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect_err("PII-bearing object key fails closed");
@@ -491,6 +499,7 @@ async fn approval_required_is_structured_and_not_forwarded() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("approval response");
@@ -541,6 +550,7 @@ async fn audit_must_succeed_before_forward() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect_err("audit failure");
@@ -568,6 +578,7 @@ async fn is_error_text_structured_and_meta_are_redacted() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("dispatch");
@@ -600,6 +611,7 @@ async fn embedded_resource_resource_link_audio_and_image_are_denied() {
                 "mail.send",
                 json!({"to": token}),
                 Some(SID_A),
+                gaze_mcp_core::HostContextSelection::Absent,
             )
             .await
             .expect("blocked");
@@ -626,6 +638,7 @@ async fn result_deny_policy_blocks_successful_result() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked");
@@ -656,6 +669,7 @@ async fn response_byte_and_block_limits_block_before_return() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked");
@@ -679,6 +693,7 @@ async fn response_byte_and_block_limits_block_before_return() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked");
@@ -727,6 +742,7 @@ async fn ingress_result_deny_block_is_audited_as_blocked() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("dispatch");
@@ -755,6 +771,7 @@ async fn ingress_byte_limit_block_is_audited_as_blocked() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked");
@@ -783,6 +800,7 @@ async fn ingress_block_count_limit_is_audited_as_blocked() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked");
@@ -807,6 +825,7 @@ async fn ingress_kind_deny_block_is_audited_as_blocked() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("blocked");
@@ -830,6 +849,7 @@ async fn ingress_allowed_text_result_is_audited_as_allowed_with_processed_rule()
             "mail.send",
             json!({"to": token, "subject": "hello"}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("dispatch");
@@ -873,6 +893,7 @@ async fn downstream_json_rpc_error_data_is_redacted() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("error response");
@@ -895,6 +916,7 @@ async fn downstream_service_error_detail_is_generic_and_audit_is_clean() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("generic service error response");
@@ -1366,6 +1388,7 @@ async fn rmcp_child_process_fixture_spawns_lists_calls_and_bridge_redacts() {
             "mail.send",
             json!({"to": token}),
             Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
         )
         .await
         .expect("dispatch");

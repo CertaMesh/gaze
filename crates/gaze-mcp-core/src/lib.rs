@@ -81,3 +81,8 @@ pub use crate::tool::{
 
 mod carrier;
 pub use carrier::{CarrierDeclaration, CarrierError, CarrierPath, CarrierSegment};
+
+mod host_context;
+pub use host_context::{
+    HostContextError, HostContextPolicy, HostContextSelection, HostRecordContext,
+};
