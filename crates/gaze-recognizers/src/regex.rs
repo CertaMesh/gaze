@@ -951,10 +951,6 @@ fn constrain_owned_identifier(
     in_sql_schema: bool,
     in_sql_context: bool,
 ) {
-    #[cfg(test)]
-    if input.contains("ALTER TABLE records ADD COLUMN") {
-        eprintln!("SQL DIAGNOSTIC parent={} ctx={} schema={} cue={} span={:?}", scan.parent_scalar, in_sql_context, in_sql_schema, cue_start, scan.span);
-    }
     // Ownership establishes the field, never permission to consume its carrier syntax.
     let raw = &input[scan.span.clone()];
     let mut keep = raw.len();
