@@ -522,7 +522,8 @@ impl RegexDetector {
                                 markup,
                                 full.start(),
                                 sql_schema,
-                                !scan.parent_scalar && scalar_index.inside_sql_statement(input, full.start()),
+                                !scan.parent_scalar
+                                    && scalar_index.inside_sql_statement(input, full.start()),
                             );
                         }
                     }
@@ -913,7 +914,10 @@ fn owned_id_start(value: &str) -> bool {
     if let Some(body) = value.strip_prefix('#') {
         return body.chars().all(char::is_alphanumeric)
             && (body.chars().all(|ch| ch.is_ascii_digit())
-                || (body.len() >= 7 && body.chars().any(|ch| ch.is_ascii_alphabetic() && !ch.is_ascii_hexdigit())));
+                || (body.len() >= 7
+                    && body
+                        .chars()
+                        .any(|ch| ch.is_ascii_alphabetic() && !ch.is_ascii_hexdigit())));
     }
     let value = value.strip_prefix(['-', '@', '_']).unwrap_or(value);
     value.chars().next().is_some_and(char::is_alphanumeric)
@@ -1048,9 +1052,8 @@ fn constrain_owned_identifier(
         || (in_markup_tag && !scan.quoted_value)
         || member_path.is_match(body);
     if !scan.parent_scalar {
-        scan.rejected |=
-            code_identifier(input, scan, cue_start, paired, in_sql_context)
-                || (paired && (in_sql_schema || in_sql_context));
+        scan.rejected |= code_identifier(input, scan, cue_start, paired, in_sql_context)
+            || (paired && (in_sql_schema || in_sql_context));
     }
 }
 
@@ -1080,28 +1083,83 @@ fn code_carrier_prefix(input: &str, cue_start: usize) -> bool {
         .map_or(cue_start, |(at, _)| at);
     static CODE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     CODE.get_or_init(|| {
-        Regex::new(
-            r"(?i)(?:\b(?:pub|let(?:\s+mut)?|const|var)\s+\z)",
-        )
-        .expect("code carrier prefix")
+        Regex::new(r"(?i)(?:\b(?:pub|let(?:\s+mut)?|const|var)\s+\z)").expect("code carrier prefix")
     })
     .is_match(&input[start..cue_start])
 }
 
 fn sql_continuation(token: &str) -> bool {
-    matches!(token.to_ascii_uppercase().as_str(),
-        "AND" | "OR" | "NOT" | "WHERE" | "ORDER" | "GROUP" | "BY" | "LIMIT"
-        | "OFFSET" | "HAVING" | "JOIN" | "ON" | "SET" | "VALUES" | "RETURNING"
-        | "UNION" | "SELECT" | "FROM" | "INTO" | "AS" | "ASC" | "DESC"
-        | "INNER" | "OUTER" | "LEFT" | "RIGHT" | "FULL" | "CROSS" | "USING"
-        | "WHEN" | "THEN" | "ELSE" | "END" | "CASE" | "IS" | "IN" | "LIKE"
-        | "BETWEEN" | "EXISTS" | "WITH" | "DISTINCT" | "ALL" | "EXCEPT" | "INTERSECT"
-        | "FETCH" | "FOR" | "NULL" | "REFERENCES" | "PRIMARY" | "DEFAULT" | "UNIQUE"
-        | "CHECK" | "CONSTRAINT" | "GENERATED" | "COLLATE" | "FOREIGN")
+    matches!(
+        token.to_ascii_uppercase().as_str(),
+        "AND"
+            | "OR"
+            | "NOT"
+            | "WHERE"
+            | "ORDER"
+            | "GROUP"
+            | "BY"
+            | "LIMIT"
+            | "OFFSET"
+            | "HAVING"
+            | "JOIN"
+            | "ON"
+            | "SET"
+            | "VALUES"
+            | "RETURNING"
+            | "UNION"
+            | "SELECT"
+            | "FROM"
+            | "INTO"
+            | "AS"
+            | "ASC"
+            | "DESC"
+            | "INNER"
+            | "OUTER"
+            | "LEFT"
+            | "RIGHT"
+            | "FULL"
+            | "CROSS"
+            | "USING"
+            | "WHEN"
+            | "THEN"
+            | "ELSE"
+            | "END"
+            | "CASE"
+            | "IS"
+            | "IN"
+            | "LIKE"
+            | "BETWEEN"
+            | "EXISTS"
+            | "WITH"
+            | "DISTINCT"
+            | "ALL"
+            | "EXCEPT"
+            | "INTERSECT"
+            | "FETCH"
+            | "FOR"
+            | "NULL"
+            | "REFERENCES"
+            | "PRIMARY"
+            | "DEFAULT"
+            | "UNIQUE"
+            | "CHECK"
+            | "CONSTRAINT"
+            | "GENERATED"
+            | "COLLATE"
+            | "FOREIGN"
+    )
 }
 
-fn code_identifier(input: &str, scan: &LabelledValueScan, cue_start: usize, paired: bool, in_sql_context: bool) -> bool {
-    if scan.quoted_value && !paired { return false; }
+fn code_identifier(
+    input: &str,
+    scan: &LabelledValueScan,
+    cue_start: usize,
+    paired: bool,
+    in_sql_context: bool,
+) -> bool {
+    if scan.quoted_value && !paired {
+        return false;
+    }
     let body = &input[scan.span.clone()];
     let token = body.split_whitespace().next().unwrap_or("");
     let suffix = &input[scan.span.start + token.len()..];
@@ -1112,20 +1170,31 @@ fn code_identifier(input: &str, scan: &LabelledValueScan, cue_start: usize, pair
         Regex::new(r"\A(?:(?i:int|integer|bigint|smallint|uint|float|double|serial|bigserial|varchar|text|bool|boolean|uuid|int[248]|int16|int32|int64|uint8|uint16|uint32|uint64|uint128|float32|float64|serial8)|[iu](?:8|16|32|64|128)|f(?:16|32|64|128))\z").expect("type name")
     });
     static REFERENCE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let reference = assignment && REFERENCE.get_or_init(|| {
-        Regex::new(r"\A[a-z][a-zA-Z0-9_]*(?:_id|Id)[0-9]*\z").expect("identifier reference")
-    }).is_match(token);
-    let code_assignment = prefix.ends_with(" = ");
+    let reference = assignment
+        && REFERENCE
+            .get_or_init(|| {
+                Regex::new(r"\A[a-z][a-zA-Z0-9_]*(?:_id|Id)[0-9]*\z").expect("identifier reference")
+            })
+            .is_match(token);
+    let code_assignment = prefix.rsplit_once('=').is_some_and(|(before, after)| {
+        before.ends_with([' ', '\t']) && after.starts_with([' ', '\t'])
+    });
     static VARIABLE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let variable = code_assignment && VARIABLE.get_or_init(|| Regex::new(r"\A[a-z]+[0-9]{1,3}\z").expect("code variable")).is_match(token);
-    let parameter = in_sql_context && assignment && (token.starts_with('@') || token.starts_with(':') || token.starts_with('$'));
+    let variable = code_assignment
+        && VARIABLE
+            .get_or_init(|| Regex::new(r"\A[a-z]+[0-9]{1,3}\z").expect("code variable"))
+            .is_match(token);
+    let parameter = in_sql_context
+        && assignment
+        && (token.starts_with('@') || token.starts_with(':') || token.starts_with('$'));
     (!token.contains('-') && suffix.starts_with('('))
         || type_name.is_match(token)
         || reference
         || variable
         || parameter
         || (assignment && matches!(body, "0" | "1"))
-        || (token.chars().all(|ch| ch.is_ascii_digit()) && suffix.trim_start().starts_with("non-null"))
+        || (token.chars().all(|ch| ch.is_ascii_digit())
+            && suffix.trim_start().starts_with("non-null"))
         || (paired && code_carrier_prefix(input, cue_start))
 }
 

@@ -53,7 +53,11 @@ impl MarkupRegions {
     }
 }
 
-fn assignment_tag(text: &str, start: usize, closers: &HashMap<String, usize>) -> Option<(usize, Vec<Range<usize>>)> {
+fn assignment_tag(
+    text: &str,
+    start: usize,
+    closers: &HashMap<String, usize>,
+) -> Option<(usize, Vec<Range<usize>>)> {
     const MAX_TAG_BYTES: usize = 2048;
     let bytes = text.as_bytes();
     let limit = start.saturating_add(MAX_TAG_BYTES).min(bytes.len());
@@ -69,7 +73,7 @@ fn assignment_tag(text: &str, start: usize, closers: &HashMap<String, usize>) ->
     while at < limit && name_char(bytes[at]) {
         at += 1;
     }
-    let tag = &text[start+1..at];
+    let tag = &text[start + 1..at];
     let folded_tag = tag.to_ascii_lowercase();
     let known_tag = known_tag(&folded_tag) || tag.contains('-');
     let component = tag.as_bytes()[0].is_ascii_uppercase();
@@ -81,12 +85,16 @@ fn assignment_tag(text: &str, start: usize, closers: &HashMap<String, usize>) ->
     while at < limit {
         if bytes[at] == b'>' || bytes.get(at..at + 2) == Some(b"/>") {
             let self_closing = bytes[at] == b'/';
-            let compact_end = at > start && !bytes[at-1].is_ascii_whitespace();
+            let compact_end = at > start && !bytes[at - 1].is_ascii_whitespace();
             at += if bytes[at] == b'>' { 1 } else { 2 };
             let paired = self_closing || closers.get(&folded_tag).is_some_and(|&close| close >= at);
-            let fragment = lowercase_attributes && compact_end
-                && bytes.get(at).is_none_or(|byte| byte.is_ascii_whitespace() || *byte == b'<');
-            let established = (known_tag && (paired || html_attributes || fragment)) || (component && paired);
+            let fragment = lowercase_attributes
+                && compact_end
+                && bytes
+                    .get(at)
+                    .is_none_or(|byte| byte.is_ascii_whitespace() || *byte == b'<');
+            let established =
+                (known_tag && (paired || html_attributes || fragment)) || (component && paired);
             if at > limit || !assignment || !established {
                 return None;
             }
@@ -107,8 +115,12 @@ fn assignment_tag(text: &str, start: usize, closers: &HashMap<String, usize>) ->
         }
         let attribute_start = at;
         let attribute_char = |byte: u8| name_char(byte) || b":@.".contains(&byte);
-        if !attribute_char(bytes[at]) { return None; }
-        while at < limit && attribute_char(bytes[at]) { at += 1; }
+        if !attribute_char(bytes[at]) {
+            return None;
+        }
+        while at < limit && attribute_char(bytes[at]) {
+            at += 1;
+        }
         let attribute = &text[attribute_start..at];
         html_attributes &= html_attribute(attribute);
         lowercase_attributes &= !attribute.bytes().any(|byte| byte.is_ascii_uppercase());
@@ -137,7 +149,9 @@ fn assignment_tag(text: &str, start: usize, closers: &HashMap<String, usize>) ->
             at += 1;
         } else {
             let value_start = at;
-            if bytes[at] == b'=' { return None; }
+            if bytes[at] == b'=' {
+                return None;
+            }
             while at < limit && !bytes[at].is_ascii_whitespace() && bytes[at] != b'>' {
                 if bytes.get(at..at + 2) == Some(b"/>") {
                     break;
@@ -159,8 +173,14 @@ fn closing_tags(text: &str) -> HashMap<String, usize> {
     let mut tags = HashMap::new();
     for (start, _) in text.match_indices("</") {
         let tail = &text[start + 2..];
-        let end = tail.find(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-').unwrap_or(tail.len());
-        if end > 0 && tail[end..].trim_start_matches([' ', '\t', '\r', '\n']).starts_with('>') {
+        let end = tail
+            .find(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-')
+            .unwrap_or(tail.len());
+        if end > 0
+            && tail[end..]
+                .trim_start_matches([' ', '\t', '\r', '\n'])
+                .starts_with('>')
+        {
             tags.insert(tail[..end].to_ascii_lowercase(), start);
         }
     }
@@ -168,45 +188,270 @@ fn closing_tags(text: &str) -> HashMap<String, usize> {
 }
 
 fn known_tag(tag: &str) -> bool {
-    matches!(tag,
-        "a" | "abbr" | "address" | "area" | "article" | "aside" | "audio" | "b" | "base"
-        | "bdi" | "bdo" | "blockquote" | "body" | "br" | "button" | "canvas" | "caption"
-        | "cite" | "code" | "col" | "colgroup" | "data" | "datalist" | "dd" | "del" | "details"
-        | "dfn" | "dialog" | "div" | "dl" | "dt" | "em" | "embed" | "fieldset" | "figcaption"
-        | "figure" | "footer" | "form" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "head"
-        | "header" | "hgroup" | "hr" | "html" | "i" | "iframe" | "img" | "input" | "ins"
-        | "kbd" | "label" | "legend" | "li" | "link" | "main" | "map" | "mark" | "menu"
-        | "meta" | "meter" | "nav" | "noscript" | "object" | "ol" | "optgroup" | "option"
-        | "output" | "p" | "picture" | "pre" | "progress" | "q" | "rp" | "rt" | "ruby"
-        | "s" | "samp" | "script" | "search" | "section" | "select" | "slot" | "small"
-        | "source" | "span" | "strong" | "style" | "sub" | "summary" | "sup" | "table"
-        | "tbody" | "td" | "template" | "textarea" | "tfoot" | "th" | "thead" | "time"
-        | "title" | "tr" | "track" | "u" | "ul" | "var" | "video" | "wbr"
-        | "svg" | "g" | "path" | "circle" | "ellipse" | "line" | "polyline" | "polygon"
-        | "rect" | "text" | "tspan" | "textpath" | "defs" | "symbol" | "use" | "image"
-        | "foreignobject" | "clippath" | "mask" | "pattern" | "marker" | "lineargradient"
-        | "radialgradient" | "stop" | "filter" | "fegaussianblur" | "animate" | "set"
-        | "math" | "mi" | "mn" | "mo" | "mrow" | "mfrac" | "msqrt" | "mroot" | "msub"
-        | "msup" | "msubsup" | "munder" | "mover" | "munderover" | "mtable" | "mtr"
-        | "mtd" | "mtext" | "mspace" | "semantics" | "annotation" | "annotation-xml")
+    matches!(
+        tag,
+        "a" | "abbr"
+            | "address"
+            | "area"
+            | "article"
+            | "aside"
+            | "audio"
+            | "b"
+            | "base"
+            | "bdi"
+            | "bdo"
+            | "blockquote"
+            | "body"
+            | "br"
+            | "button"
+            | "canvas"
+            | "caption"
+            | "cite"
+            | "code"
+            | "col"
+            | "colgroup"
+            | "data"
+            | "datalist"
+            | "dd"
+            | "del"
+            | "details"
+            | "dfn"
+            | "dialog"
+            | "div"
+            | "dl"
+            | "dt"
+            | "em"
+            | "embed"
+            | "fieldset"
+            | "figcaption"
+            | "figure"
+            | "footer"
+            | "form"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "head"
+            | "header"
+            | "hgroup"
+            | "hr"
+            | "html"
+            | "i"
+            | "iframe"
+            | "img"
+            | "input"
+            | "ins"
+            | "kbd"
+            | "label"
+            | "legend"
+            | "li"
+            | "link"
+            | "main"
+            | "map"
+            | "mark"
+            | "menu"
+            | "meta"
+            | "meter"
+            | "nav"
+            | "noscript"
+            | "object"
+            | "ol"
+            | "optgroup"
+            | "option"
+            | "output"
+            | "p"
+            | "picture"
+            | "pre"
+            | "progress"
+            | "q"
+            | "rp"
+            | "rt"
+            | "ruby"
+            | "s"
+            | "samp"
+            | "script"
+            | "search"
+            | "section"
+            | "select"
+            | "slot"
+            | "small"
+            | "source"
+            | "span"
+            | "strong"
+            | "style"
+            | "sub"
+            | "summary"
+            | "sup"
+            | "table"
+            | "tbody"
+            | "td"
+            | "template"
+            | "textarea"
+            | "tfoot"
+            | "th"
+            | "thead"
+            | "time"
+            | "title"
+            | "tr"
+            | "track"
+            | "u"
+            | "ul"
+            | "var"
+            | "video"
+            | "wbr"
+            | "svg"
+            | "g"
+            | "path"
+            | "circle"
+            | "ellipse"
+            | "line"
+            | "polyline"
+            | "polygon"
+            | "rect"
+            | "text"
+            | "tspan"
+            | "textpath"
+            | "defs"
+            | "symbol"
+            | "use"
+            | "image"
+            | "foreignobject"
+            | "clippath"
+            | "mask"
+            | "pattern"
+            | "marker"
+            | "lineargradient"
+            | "radialgradient"
+            | "stop"
+            | "filter"
+            | "fegaussianblur"
+            | "animate"
+            | "set"
+            | "math"
+            | "mi"
+            | "mn"
+            | "mo"
+            | "mrow"
+            | "mfrac"
+            | "msqrt"
+            | "mroot"
+            | "msub"
+            | "msup"
+            | "msubsup"
+            | "munder"
+            | "mover"
+            | "munderover"
+            | "mtable"
+            | "mtr"
+            | "mtd"
+            | "mtext"
+            | "mspace"
+            | "semantics"
+            | "annotation"
+            | "annotation-xml"
+    )
 }
 
 fn html_attribute(attribute: &str) -> bool {
     let attribute = attribute.to_ascii_lowercase();
     attribute.starts_with([':', '@'])
-        || ["data-", "aria-", "on", "v-", "x-", "ng-", "xml:", "xmlns"].iter().any(|prefix| attribute.starts_with(prefix))
-        || matches!(attribute.as_str(),
-            "id" | "class" | "style" | "title" | "lang" | "dir" | "hidden" | "role" | "tabindex"
-            | "accesskey" | "contenteditable" | "draggable" | "spellcheck" | "translate" | "inert"
-            | "href" | "src" | "alt" | "width" | "height" | "name" | "value" | "type" | "disabled"
-            | "checked" | "selected" | "multiple" | "readonly" | "required" | "placeholder" | "for"
-            | "action" | "method" | "target" | "rel" | "download" | "content" | "charset" | "http-equiv"
-            | "media" | "sizes" | "srcset" | "loading" | "async" | "defer" | "integrity" | "crossorigin"
-            | "colspan" | "rowspan" | "scope" | "headers" | "min" | "max" | "step" | "pattern"
-            | "autocomplete" | "autofocus" | "accept" | "enctype" | "form" | "list" | "size" | "maxlength"
-            | "minlength" | "rows" | "cols" | "wrap" | "open" | "datetime" | "cite" | "start" | "reversed"
-            | "controls" | "autoplay" | "loop" | "muted" | "poster" | "preload" | "kind" | "label"
-            | "viewbox" | "fill" | "stroke" | "d" | "cx" | "cy" | "r" | "x" | "y" | "transform")
+        || ["data-", "aria-", "on", "v-", "x-", "ng-", "xml:", "xmlns"]
+            .iter()
+            .any(|prefix| attribute.starts_with(prefix))
+        || matches!(
+            attribute.as_str(),
+            "id" | "class"
+                | "style"
+                | "title"
+                | "lang"
+                | "dir"
+                | "hidden"
+                | "role"
+                | "tabindex"
+                | "accesskey"
+                | "contenteditable"
+                | "draggable"
+                | "spellcheck"
+                | "translate"
+                | "inert"
+                | "href"
+                | "src"
+                | "alt"
+                | "width"
+                | "height"
+                | "name"
+                | "value"
+                | "type"
+                | "disabled"
+                | "checked"
+                | "selected"
+                | "multiple"
+                | "readonly"
+                | "required"
+                | "placeholder"
+                | "for"
+                | "action"
+                | "method"
+                | "target"
+                | "rel"
+                | "download"
+                | "content"
+                | "charset"
+                | "http-equiv"
+                | "media"
+                | "sizes"
+                | "srcset"
+                | "loading"
+                | "async"
+                | "defer"
+                | "integrity"
+                | "crossorigin"
+                | "colspan"
+                | "rowspan"
+                | "scope"
+                | "headers"
+                | "min"
+                | "max"
+                | "step"
+                | "pattern"
+                | "autocomplete"
+                | "autofocus"
+                | "accept"
+                | "enctype"
+                | "form"
+                | "list"
+                | "size"
+                | "maxlength"
+                | "minlength"
+                | "rows"
+                | "cols"
+                | "wrap"
+                | "open"
+                | "datetime"
+                | "cite"
+                | "start"
+                | "reversed"
+                | "controls"
+                | "autoplay"
+                | "loop"
+                | "muted"
+                | "poster"
+                | "preload"
+                | "kind"
+                | "label"
+                | "viewbox"
+                | "fill"
+                | "stroke"
+                | "d"
+                | "cx"
+                | "cy"
+                | "r"
+                | "x"
+                | "y"
+                | "transform"
+        )
 }
 
 fn data_scalars(text: &str) -> Vec<Range<usize>> {

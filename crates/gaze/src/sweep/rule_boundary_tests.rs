@@ -1,7 +1,6 @@
 // Each rule gets both private IDs and public syntax on the adjacent boundary.
-fn boundary_case(input: &str, values: &[&str]) {
+fn check_boundary(pipeline: &crate::Pipeline, input: &str, values: &[&str]) {
     use crate::{CleanDocument, RawDocument, Scope, Session};
-    let pipeline = labelled_pipeline();
     let session = Session::new(Scope::Ephemeral).unwrap();
     let CleanDocument::Text(clean) = pipeline.redact(&session, RawDocument::Text(input.into())).unwrap() else { panic!("text") };
     let entries = session.snapshot_entries();
@@ -16,6 +15,8 @@ fn boundary_case(input: &str, values: &[&str]) {
 
 #[test]
 fn rule_boundary_references_and_types() {
+    let pipeline = labelled_pipeline();
+    let boundary_case = |input: &str, values: &[&str]| check_boundary(&pipeline, input, values);
     let mut count = 0;
     for label in ["customer_id", "employee_id", "person_id"] {
         for prefix in ["CID", "EID", "SID_", "UID", "INT", "U", "cid"] {
@@ -44,6 +45,8 @@ fn rule_boundary_references_and_types() {
 
 #[test]
 fn rule_boundary_sql_context_and_keywords() {
+    let pipeline = labelled_pipeline();
+    let boundary_case = |input: &str, values: &[&str]| check_boundary(&pipeline, input, values);
     let mut count = 0;
     for keyword in ["AND", "OR", "NOT", "WHERE", "ORDER", "GROUP", "BY", "LIMIT", "OFFSET", "HAVING", "JOIN", "ON", "SET", "VALUES", "RETURNING", "UNION", "NOT NULL", "PRIMARY KEY", "REFERENCES"] {
         for spelling in [keyword.to_owned(), keyword.to_lowercase()] {
@@ -72,6 +75,8 @@ fn rule_boundary_sql_context_and_keywords() {
 
 #[test]
 fn rule_boundary_markup_grammar() {
+    let pipeline = labelled_pipeline();
+    let boundary_case = |input: &str, values: &[&str]| check_boundary(&pipeline, input, values);
     let mut count = 0;
     for tag in ["a", "td", "button", "svg", "math", "custom-field"] {
         for attribute in ["href=https://example.invalid/c", "xml:lang=en", ":key=k", "href=/x?a=1", "style=color:red;", "@click=go", "v-bind.key=k", "ng-model=x", "x-bind=x"] {
@@ -81,7 +86,7 @@ fn rule_boundary_markup_grammar() {
             }
         }
         for close in ["/>", ">v</{T}>"] {
-            let input = format!("<{tag} arbitrary=C-731284 customer_id=C-731284{close}").replace("{T}",tag);
+            let input = format!("<{tag} customAttr=C-731284 customer_id=C-731284{close}").replace("{T}",tag);
             // A matching close or self-close establishes real markup even with unknown attrs.
             boundary_case(&input, &[]); count += 1;
         }
@@ -92,11 +97,25 @@ fn rule_boundary_markup_grammar() {
     for attr in ["data-x=1;", "data-x=a,b", "data-x=a:b", "data-x=a=b"] {
         boundary_case(&format!("<td {attr}\ndata-customer-id=C-731284>v</td>"), &[]); count += 1;
     }
-    assert_eq!(count, 183);
+    for tag in ["Row", "CustomerPanel"] {
+        for close in ["/>", ">value</{T}>"] {
+            boundary_case(&format!("<{tag} customer_id=C-731284{close}").replace("{T}",tag), &[]); count += 1;
+        }
+        boundary_case(&format!("run <{tag} customer_id=731284 >out"), &["731284"]); count += 1;
+    }
+    for suffix in ["", "\n", " ", "<br/>"] {
+        boundary_case(&format!("<input customer_id=C-731284>{suffix}"), &[]); count += 1;
+    }
+    boundary_case("<input\n customer_id=C-731284>", &[]); count += 1;
+    boundary_case("run <input customer_id=731284 >out", &["731284"]); count += 1;
+    boundary_case("run <input customer_id=731284>out", &["731284"]); count += 1;
+    assert_eq!(count, 196);
 }
 
 #[test]
 fn rule_boundary_starts_wrappers_and_grouping() {
+    let pipeline = labelled_pipeline();
+    let boundary_case = |input: &str, values: &[&str]| check_boundary(&pipeline, input, values);
     let mut count = 0;
     for label in ["Customer ID", "Employee ID", "Member ID"] {
         for (start,value,end) in [(": ","#731284",""),(": ","#FABLE731284",""),(" - ","C-731284",""),(" – ","731284",""),(" — ","C-731284",""),(": ","AB=12345",""),(": ","+YQ==",""),(": '","opaque+YQ==","'"),(": ","AB 12 34 56",""),(" (","731284",")"),(": [","731284","]"),(": §","C-731284","§"),(": ⟨","C-731284","⟩")] {
