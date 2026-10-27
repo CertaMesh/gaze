@@ -65,6 +65,7 @@
     "Cargo.toml",
     "README.md",
     "UPGRADE.md",
+    "anvil.yaml",
     "crates/feature-graph-probe/Cargo.toml",
     "crates/gaze-assembly/Cargo.toml",
     "crates/gaze-assembly/README.md",
@@ -76,6 +77,7 @@
     "crates/gaze-assembly/tests/fixtures/core_dictionary_terms.txt",
     "crates/gaze-audit/Cargo.toml",
     "crates/gaze-audit/README.md",
+    "crates/gaze-audit/tests/fixtures/v0_17_redaction_log.sql",
     "crates/gaze-cli/Cargo.toml",
     "crates/gaze-cli/README.md",
     "crates/gaze-cli/tests/fixtures/perf-hook-inventory.json",
@@ -922,7 +924,8 @@
     "scripts/ci/check_competitor_capture_mutations.py",
     "scripts/ci/check_past_capture_mutations.py",
     "scripts/ci/tutorial_gate.py",
-    "scripts/fetch/fetch-ner-model.sh"
+    "scripts/fetch/fetch-ner-model.sh",
+    "scripts/gate/audit-outcome-mutation-probe.py"
   ],
   "patterns": {
     "crates/*/build.rs": "Cargo build scripts",
