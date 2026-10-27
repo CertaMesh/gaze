@@ -26,8 +26,9 @@ impl<'a> ProtectionContext<'a> {
     }
 }
 
-/// Class-only failures safe to expose at an untrusted boundary.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+/// Typed failures whose Debug and Display diagnostics contain no input values.
+/// Structured field paths must follow a separate disclosure policy when serialized.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ProtectionError {
     #[error("empty primary configuration")]
@@ -42,11 +43,19 @@ pub enum ProtectionError {
     Residual,
     #[error("token provenance or reversibility rejected")]
     Provenance,
+    /// A confirmed sensitive field has no safe reversible rendering. No producer yet.
+    #[error("confirmed sensitive field cannot be transformed: {reason}")]
+    Untransformable {
+        /// Closed reason without the sensitive value.
+        reason: gaze_types::UntransformableReason,
+        /// Structural location. Diagnostics hide its segments.
+        field_path: gaze_types::FieldPath,
+    },
 }
 
 impl ProtectionError {
     /// The variant name, the stable spelling a boundary reports to its client.
-    pub fn as_str(self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Self::EmptyPrimary => "EmptyPrimary",
             Self::UnsupportedCoverage => "UnsupportedCoverage",
@@ -54,13 +63,14 @@ impl ProtectionError {
             Self::SafetyNet => "SafetyNet",
             Self::Residual => "Residual",
             Self::Provenance => "Provenance",
+            Self::Untransformable { .. } => "Untransformable",
         }
     }
 }
 
 /// Why an outbound boundary refused a text leaf: the typed [`ProtectionError`] plus the classes
-/// behind it. Safe to show a client: it carries no input bytes, only closed variants and class
-/// names from policy and net label mappings.
+/// behind it. Debug and Display hide field-path segments. Serialized paths require a
+/// separate disclosure policy; class names come from policy and net label mappings.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{error}")]
 #[non_exhaustive]

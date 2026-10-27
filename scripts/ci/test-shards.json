@@ -62,6 +62,7 @@
     "gaze-pii::prop_manifest_invariants",
     "gaze-pii::prop_resolver_invariants",
     "gaze-pii::prop_roundtrip",
+    "gaze-pii::protection_outcome_error",
     "gaze-pii::recognizer_score_admission",
     "gaze-pii::registry_extension_api",
     "gaze-pii::repro_empty_registry",
@@ -158,8 +159,8 @@
     "gaze-recognizers::secrets_opt_in",
     "gaze-recognizers::security_token",
     "gaze-recognizers::structured_cue_shapes",
-    "gaze-recognizers::tax_gov_grammar",
     "gaze-recognizers::subprocess_cancellation",
+    "gaze-recognizers::tax_gov_grammar",
     "gaze-recognizers::unicode_group_separators",
     "gaze-recognizers::url_anchored",
     "gaze-recognizers::validator_veto",
@@ -168,6 +169,7 @@
     "gaze-recognizers::windows_subprocess"
   ],
   "gates": [
+    "feature-graph-probe::bin/feature-graph-probe",
     "gaze-audit",
     "gaze-audit::ambiguity_serde",
     "gaze-audit::document_extension_serde",
@@ -207,6 +209,7 @@
     "gaze-token-bridge::track_c_chokepoint",
     "gaze-token-bridge::track_custom_whitespace_e2e",
     "gaze-types",
+    "gaze-types::field_context",
     "xtask::adversarial_class_map_override_safety",
     "xtask::adversarial_fixture_citation",
     "xtask::adversarial_no_tenant_knowledge",
@@ -220,7 +223,6 @@
     "xtask::scrub_public_text",
     "xtask::snapshot_ack",
     "xtask::tokenbridge_encrypted_index",
-    "xtask::tokenbridge_no_raw_index",
-    "feature-graph-probe::bin/feature-graph-probe"
+    "xtask::tokenbridge_no_raw_index"
   ]
 }
