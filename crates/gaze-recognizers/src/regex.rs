@@ -988,7 +988,10 @@ fn constrain_owned_identifier(
                     || groups == 4
                     || at >= 40
                     || !next.chars().next().is_some_and(char::is_alphanumeric)
-                    || sql_continuation(next.split_whitespace().next().unwrap_or(""))
+                    || sql_continuation(
+                        next.split_whitespace().next().unwrap_or(""),
+                        in_sql_context,
+                    )
                 {
                     keep = at;
                     break;
@@ -1088,7 +1091,23 @@ fn code_carrier_prefix(input: &str, cue_start: usize) -> bool {
     .is_match(&input[start..cue_start])
 }
 
-fn sql_continuation(token: &str) -> bool {
+fn sql_continuation(token: &str, in_sql_context: bool) -> bool {
+    if !in_sql_context {
+        return matches!(
+            token,
+            "NOT"
+                | "NULL"
+                | "REFERENCES"
+                | "PRIMARY"
+                | "DEFAULT"
+                | "UNIQUE"
+                | "CHECK"
+                | "CONSTRAINT"
+                | "GENERATED"
+                | "COLLATE"
+                | "FOREIGN"
+        );
+    }
     matches!(
         token.to_ascii_uppercase().as_str(),
         "AND"

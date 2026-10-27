@@ -64,7 +64,7 @@ impl ScalarBoundaryIndex {
             let start = START.get_or_init(|| {
                 let name = r#"(?:[a-z_][a-z0-9_]*|"(?:""|[^"])+"|`(?:``|[^`])+`|\[(?:\]\]|[^\]])+\])"#;
                 let table = format!(r"{name}(?:[ \t]*\.[ \t]*{name})*");
-                Regex::new(&format!(r"(?im)(?:\A|[;\r\n])[ \t]*(?:[a-z_]+[ \t]*:[ \t]*)?(?:select\b|update\s+{table}\s+set\b|insert\s+into\b|replace\s+into\b|values\s*\()|\balter\s+table\s+{table}\s+add\s+column\b")).expect("SQL statement context")
+                Regex::new(&format!(r"(?im)(?:\A|[;\r\n])[ \t]*(?:[a-z_]+[ \t]*:[ \t]*)?(?:select\b|update\s+{table}\s+set\b|insert\s+into\b|replace\s+into\b|values\s*\(|where\s+{table}\s*(?:[<>=!]|like\b|in\b))|\balter\s+table\s+{table}\s+add\s+column\b")).expect("SQL statement context")
             });
             static FROM: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
             let from = FROM.get_or_init(|| Regex::new(r"(?i)\bfrom\s+[^\s;]+").expect("SELECT source"));
