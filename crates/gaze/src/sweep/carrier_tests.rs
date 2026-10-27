@@ -716,6 +716,7 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         "customerId: (731284\n)",
         "CREATE TABLE records (customer_id (731284));",
         "let customer_id: (731284);",
+        "let customer_id: (C731284);",
     ];
     for case in cases {
         let session = Session::new(Scope::Ephemeral).unwrap();
@@ -727,4 +728,19 @@ fn code_and_sql_record_fields_never_seed_the_sweep() {
         assert!(session.snapshot_entries().is_empty(), "rejected value seeded sweep");
         assert_eq!(pipeline.restore_strict_text(&session, &clean).unwrap(), input);
     }
+    let mut checked = 0;
+    for label in ["customer_id", "employee_id", "member_id"] {
+        for dtype in ["i8", "u16", "i32", "u64", "i128", "int", "uint", "int4", "INT8", "Int32", "float32", "float64", "f64"] {
+            for (connector, suffix) in [(": ", ","), (" ", " NOT NULL,"), ("=", "")] {
+                let input = format!("{label}{connector}{dtype}{suffix}\ncopy {dtype}");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let CleanDocument::Text(clean) = pipeline.redact(&session, RawDocument::Text(input.clone())).unwrap()
+                else { panic!("text") };
+                assert_eq!(clean, input, "type or its copy changed");
+                assert!(session.snapshot_entries().is_empty());
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 117);
 }
