@@ -259,6 +259,8 @@ fn rule_boundary_starts_wrappers_and_grouping() {
     for label in ["Customer ID", "Employee ID", "Member ID"] {
         for (start, value, end) in [
             (": ", "#731284", ""),
+            (": ", "#１２３４５６", ""),
+            (": ", "#Ä123456", ""),
             (": ", "#FABLE731284", ""),
             (" - ", "C-731284", ""),
             (" – ", "731284", ""),
@@ -279,6 +281,7 @@ fn rule_boundary_starts_wrappers_and_grouping() {
             "#d3d3d3",
             "#a1b2c3d4",
             "#G123",
+            "#漢12345",
             "#1a2b3c",
             "#fff",
             "a==b",
@@ -296,7 +299,7 @@ fn rule_boundary_starts_wrappers_and_grouping() {
     count += 1;
     boundary_case("record_id(42)", &[]);
     count += 1;
-    assert_eq!(count, 74);
+    assert_eq!(count, 83);
 }
 
 #[test]
