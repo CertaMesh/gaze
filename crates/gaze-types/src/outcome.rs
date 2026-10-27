@@ -25,6 +25,52 @@ pub enum ProtectionOutcome {
     ConfirmedUntransformable(UntransformableReason),
 }
 
+/// Value-free outcome category stored separately from its reason in audit rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ProtectionOutcomeKind {
+    Protected,
+    NonSensitive,
+    PossiblySensitive,
+    ConfirmedUntransformable,
+}
+
+/// Closed audit reason, retaining the typed reason's canonical spelling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+#[non_exhaustive]
+pub enum ProtectionOutcomeReason {
+    NonSensitive(NonSensitiveReason),
+    PossiblySensitive(PossiblySensitiveReason),
+    Untransformable(UntransformableReason),
+}
+
+/// Audit outcome columns do not describe one valid protection decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("invalid protection outcome and reason pairing")]
+pub struct InvalidProtectionOutcome;
+
+impl ProtectionOutcome {
+    /// Split an outcome into the two value-free audit columns.
+    pub fn audit_parts(self) -> (ProtectionOutcomeKind, Option<ProtectionOutcomeReason>) {
+        use ProtectionOutcomeKind as Kind;
+        use ProtectionOutcomeReason as Reason;
+        match self {
+            Self::Protected => (Kind::Protected, None),
+            Self::NonSensitive(reason) => (Kind::NonSensitive, Some(Reason::NonSensitive(reason))),
+            Self::PossiblySensitive(reason) => (
+                Kind::PossiblySensitive,
+                Some(Reason::PossiblySensitive(reason)),
+            ),
+            Self::ConfirmedUntransformable(reason) => (
+                Kind::ConfirmedUntransformable,
+                Some(Reason::Untransformable(reason)),
+            ),
+        }
+    }
+}
+
 impl fmt::Display for ProtectionOutcome {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

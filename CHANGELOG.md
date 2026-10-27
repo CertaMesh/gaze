@@ -69,6 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Audit entries and SQLite rows support protection outcomes, closed reasons,
+  field path depth, and field evidence. Existing databases gain nullable columns.
+  `gaze audit query` and `export` filter by `--outcome` and `--outcome-reason`.
+  Audit paths store only depth because JSON keys can contain PII. These fields
+  have no pipeline producer yet and do not change detection output.
+
 - `gaze daemon` protocol v2 adds the `text-blocks-v1` framing profile with
   `open`, `clean_blocks`, `resync`, `restore`, and `close` operations. Block
   inventory, manifest generations, and exact request retries fail closed with
@@ -87,6 +93,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stdin and stdout contracts are unchanged.
 
 ### Changed
+
+- **Breaking:** `gaze-audit::AuditFilter` and `AuditLogRow` are now
+  `#[non_exhaustive]` and include protection outcome metadata. Construct filters
+  with `AuditFilter::default()` and assign the desired fields; obtain audit rows
+  through `SqliteLogger::query` rather than struct literals.
 
 - **Breaking:** `DetectContext.fields` changes from `&'a ()` to
   `Option<FieldContext<'a>>`; attach field context with `with_fields`.

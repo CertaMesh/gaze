@@ -9,8 +9,9 @@ pub mod perf;
 pub mod redaction_marker;
 
 pub use outcome::{
-    FieldContext, FieldEvidence, FieldPath, FieldProvenance, HintKind, JsonScalarType,
-    NonSensitiveReason, PossiblySensitiveReason, ProtectionOutcome, UntransformableReason,
+    FieldContext, FieldEvidence, FieldPath, FieldProvenance, HintKind, InvalidProtectionOutcome,
+    JsonScalarType, NonSensitiveReason, PossiblySensitiveReason, ProtectionOutcome,
+    ProtectionOutcomeKind, ProtectionOutcomeReason, UntransformableReason,
 };
 
 use std::cell::Cell;
@@ -3075,6 +3076,14 @@ pub struct RedactionEntry {
     pub class: PiiClass,
     /// Policy action applied to the span.
     pub action: Action,
+    /// Explicit protection category. None denotes legacy, unclassified audit metadata.
+    pub outcome: Option<ProtectionOutcomeKind>,
+    /// Closed reason for the explicit outcome, separate from family ambiguity.
+    pub outcome_reason: Option<ProtectionOutcomeReason>,
+    /// Number of JSON-pointer segments. Never stores keys or scalar values.
+    pub field_path_depth: Option<u32>,
+    /// Evidence establishing structured-field context, without input text.
+    pub field_evidence: Option<FieldEvidence>,
     /// Optional structured field name.
     pub field_name: Option<String>,
     /// Source document kind.
@@ -3130,6 +3139,15 @@ impl Serialize for RedactionEntry {
         use serde::ser::SerializeStruct;
 
         let mut len = 14;
+        len += [
+            self.outcome.is_some(),
+            self.outcome_reason.is_some(),
+            self.field_path_depth.is_some(),
+            self.field_evidence.is_some(),
+        ]
+        .into_iter()
+        .filter(|present| *present)
+        .count();
         if self.recognizer_id.is_some() {
             len += 1;
         }
@@ -3171,6 +3189,18 @@ impl Serialize for RedactionEntry {
         .count();
         let mut state = serializer.serialize_struct("RedactionEntry", len)?;
         state.serialize_field("source", &self.source)?;
+        if let Some(value) = self.outcome {
+            state.serialize_field("outcome", &value)?;
+        }
+        if let Some(value) = self.outcome_reason {
+            state.serialize_field("outcome_reason", &value)?;
+        }
+        if let Some(value) = self.field_path_depth {
+            state.serialize_field("field_path_depth", &value)?;
+        }
+        if let Some(value) = self.field_evidence {
+            state.serialize_field("field_evidence", &value)?;
+        }
         if let Some(recognizer_id) = &self.recognizer_id {
             state.serialize_field("recognizer_id", recognizer_id)?;
         }
@@ -3279,6 +3309,10 @@ impl RedactionEntry {
             recognizer_version_id: None,
             validator_fail_reason: None,
             labelled_value_scan_reason: None,
+            outcome: None,
+            outcome_reason: None,
+            field_path_depth: None,
+            field_evidence: None,
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,
@@ -3303,6 +3337,47 @@ impl RedactionEntry {
             restore_phase_mask: None,
             restore_trap_shape_count: None,
         }
+    }
+
+    /// Attach an explicit outcome and its reason together, without family ambiguity.
+    pub fn with_protection_outcome(mut self, outcome: ProtectionOutcome) -> Self {
+        let (kind, reason) = outcome.audit_parts();
+        self.outcome = Some(kind);
+        self.outcome_reason = reason;
+        self
+    }
+
+    /// Rebuild the typed decision, rejecting missing or mismatched reason families.
+    /// A legacy entry without either label has no explicit outcome.
+    pub fn protection_outcome(
+        &self,
+    ) -> Result<Option<ProtectionOutcome>, InvalidProtectionOutcome> {
+        use ProtectionOutcomeKind as Kind;
+        use ProtectionOutcomeReason as Reason;
+        match (self.outcome, self.outcome_reason) {
+            (None, None) => Ok(None),
+            (Some(Kind::Protected), None) => Ok(Some(ProtectionOutcome::Protected)),
+            (Some(Kind::NonSensitive), Some(Reason::NonSensitive(reason))) => {
+                Ok(Some(ProtectionOutcome::NonSensitive(reason)))
+            }
+            (Some(Kind::PossiblySensitive), Some(Reason::PossiblySensitive(reason))) => {
+                Ok(Some(ProtectionOutcome::PossiblySensitive(reason)))
+            }
+            (Some(Kind::ConfirmedUntransformable), Some(Reason::Untransformable(reason))) => {
+                Ok(Some(ProtectionOutcome::ConfirmedUntransformable(reason)))
+            }
+            _ => Err(InvalidProtectionOutcome),
+        }
+    }
+
+    /// Attach only structural depth and closed evidence. Object keys may contain PII
+    /// and never enter the audit entry, its Debug output, or its serialization.
+    pub fn with_field_provenance(mut self, provenance: &FieldProvenance) -> Self {
+        self.field_path_depth = Some(
+            u32::try_from(provenance.path.segments().len()).expect("field path depth fits u32"),
+        );
+        self.field_evidence = Some(provenance.evidence);
+        self
     }
 
     /// Attaches a validator failure reason to this metadata row.
@@ -4287,6 +4362,10 @@ mod redaction_logger_tests {
             session_id: None,
             validator_fail_reason: None,
             labelled_value_scan_reason: None,
+            outcome: None,
+            outcome_reason: None,
+            field_path_depth: None,
+            field_evidence: None,
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,

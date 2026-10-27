@@ -8,7 +8,10 @@ use gaze_audit::{
     AuditFilter, AuditLogRow, LeakSuspectRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
     SAFETY_NET_RESTRICTED_COLUMNS,
 };
-use gaze_types::{AmbiguityRecord, ValidatorFailReason};
+use gaze_types::{
+    AmbiguityRecord, FieldEvidence, ProtectionOutcomeKind, ProtectionOutcomeReason,
+    ValidatorFailReason,
+};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -25,6 +28,8 @@ pub(crate) struct Args {
     pub(crate) session_id: Option<String>,
     pub(crate) has_ambiguity: bool,
     pub(crate) ambiguity_reason: Option<String>,
+    pub(crate) outcome: Option<String>,
+    pub(crate) outcome_reason: Option<String>,
     pub(crate) collision_family: Option<String>,
     pub(crate) collision_variant: Option<String>,
     pub(crate) restore_events_only: bool,
@@ -70,7 +75,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     }
     for row in rows {
         let base = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.recognizer_id.as_deref().unwrap_or(""),
             row.recognizer_version_id.as_deref().unwrap_or(""),
@@ -124,7 +129,11 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.restore_trap_shape_count
                 .map(|count| count.to_string())
                 .unwrap_or_default(),
-            row.labelled_value_scan_reason.as_deref().unwrap_or("")
+            row.labelled_value_scan_reason.as_deref().unwrap_or(""),
+            row.outcome.as_deref().unwrap_or(""),
+            row.outcome_reason.as_deref().unwrap_or(""),
+            row.field_path_depth.map(|depth| depth.to_string()).unwrap_or_default(),
+            row.field_evidence.as_deref().unwrap_or("")
         );
         if include_ambiguity {
             writeln!(
@@ -205,46 +214,75 @@ pub(crate) fn purge(args: PurgeArgs) -> std::result::Result<(), CliError> {
     Ok(())
 }
 
+fn parse_outcome_filter<T: DeserializeOwned>(
+    value: Option<&str>,
+    flag: &str,
+    possible_values: &str,
+) -> Result<Option<String>, CliError> {
+    value
+        .map(|value| {
+            let normalized = normalize_kebab_variant(value);
+            serde_json::from_value::<T>(serde_json::Value::String(normalized.clone())).map_err(
+                |_| {
+                    CliError::PolicyConfigDetail(format!(
+                        "invalid {flag}; possible values: {possible_values}"
+                    ))
+                },
+            )?;
+            Ok(normalized)
+        })
+        .transpose()
+}
+
 fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
+    const OUTCOME_VALUES: [&str; 4] = [
+        "protected",
+        "non_sensitive",
+        "possibly_sensitive",
+        "confirmed_untransformable",
+    ];
+    const OUTCOME_REASON_VALUES: [&str; 10] = [
+        "json_key",
+        "json_literal",
+        "placeholder",
+        "label_value_shape_unclear",
+        "label_binding_unproven",
+        "other_field_repeat",
+        "json_number_no_text_only_path",
+        "encoded_carrier",
+        "no_safe_rendering",
+        "caller_value_too_short",
+    ];
     // Keep CLI flag parse rejection identical to any future TOML audit-filter
     // default surface: invalid timestamps are PolicyConfig/exit 2, never clap.
     let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
     let to_epoch_ms = parse_iso8601_epoch_ms(args.to_iso8601.as_deref())?;
-    let filter = AuditFilter {
-        class: args.class.clone(),
-        source: args.source.clone(),
-        action: args.action.clone(),
-        document_kind: args.document_kind.clone(),
-        raw_label: None,
-        field_path: None,
-        from_epoch_ms,
-        to_epoch_ms,
-        session_id: args.session_id.clone(),
-        snapshot_scheme: None,
-        snapshot_alg: None,
-        snapshot_key_version: None,
-        has_ambiguity: args.has_ambiguity.then_some(true),
-        ambiguity_reason: args
-            .ambiguity_reason
-            .as_deref()
-            .map(normalize_kebab_variant),
-        collision_family: args.collision_family.clone(),
-        collision_variant: args.collision_variant.clone(),
-        recognizer_id: None,
-        recognizer_version_id: None,
-        provenance_stage: None,
-        provenance_model_id: None,
-        provenance_model_version: None,
-        provenance_artifact_sha256: None,
-        provenance_tokenizer_sha256: None,
-        provenance_locale_resolved: None,
-        provenance_locale_match_kind: None,
-        provenance_canonical_class: None,
-        provenance_native_class: None,
-        provenance_confidence: None,
-        provenance_merged_from: None,
-        restore_events_only: args.restore_events_only,
-    };
+    let mut filter = AuditFilter::default();
+    filter.outcome = parse_outcome_filter::<ProtectionOutcomeKind>(
+        args.outcome.as_deref(),
+        "--outcome",
+        &OUTCOME_VALUES.join(", "),
+    )?;
+    filter.outcome_reason = parse_outcome_filter::<ProtectionOutcomeReason>(
+        args.outcome_reason.as_deref(),
+        "--outcome-reason",
+        &OUTCOME_REASON_VALUES.join(", "),
+    )?;
+    filter.class = args.class.clone();
+    filter.source = args.source.clone();
+    filter.action = args.action.clone();
+    filter.document_kind = args.document_kind.clone();
+    filter.from_epoch_ms = from_epoch_ms;
+    filter.to_epoch_ms = to_epoch_ms;
+    filter.session_id = args.session_id.clone();
+    filter.has_ambiguity = args.has_ambiguity.then_some(true);
+    filter.ambiguity_reason = args
+        .ambiguity_reason
+        .as_deref()
+        .map(normalize_kebab_variant);
+    filter.collision_family = args.collision_family.clone();
+    filter.collision_variant = args.collision_variant.clone();
+    filter.restore_events_only = args.restore_events_only;
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
 
@@ -253,38 +291,13 @@ fn read_safety_net_rows(
 ) -> std::result::Result<Vec<LeakSuspectRow>, CliError> {
     let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
     let to_epoch_ms = parse_iso8601_epoch_ms(args.to_iso8601.as_deref())?;
-    let filter = AuditFilter {
-        class: args.mapped_class.clone(),
-        source: None,
-        action: args.leak_kind.clone(),
-        document_kind: None,
-        raw_label: args.raw_label.clone(),
-        field_path: args.field_path.clone(),
-        from_epoch_ms,
-        to_epoch_ms,
-        session_id: None,
-        snapshot_scheme: None,
-        snapshot_alg: None,
-        snapshot_key_version: None,
-        has_ambiguity: None,
-        ambiguity_reason: None,
-        collision_family: None,
-        collision_variant: None,
-        recognizer_id: None,
-        recognizer_version_id: None,
-        provenance_stage: None,
-        provenance_model_id: None,
-        provenance_model_version: None,
-        provenance_artifact_sha256: None,
-        provenance_tokenizer_sha256: None,
-        provenance_locale_resolved: None,
-        provenance_locale_match_kind: None,
-        provenance_canonical_class: None,
-        provenance_native_class: None,
-        provenance_confidence: None,
-        provenance_merged_from: None,
-        restore_events_only: false,
-    };
+    let mut filter = AuditFilter::default();
+    filter.class = args.mapped_class.clone();
+    filter.action = args.leak_kind.clone();
+    filter.raw_label = args.raw_label.clone();
+    filter.field_path = args.field_path.clone();
+    filter.from_epoch_ms = from_epoch_ms;
+    filter.to_epoch_ms = to_epoch_ms;
     SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
 
@@ -407,6 +420,10 @@ struct JsonlRow {
     restore_phase_mask: Option<i64>,
     restore_trap_shape_count: Option<i64>,
     labelled_value_scan_reason: Option<String>,
+    outcome: Option<String>,
+    outcome_reason: Option<String>,
+    field_path_depth: Option<i64>,
+    field_evidence: Option<FieldEvidence>,
 }
 
 impl TryFrom<AuditLogRow> for JsonlRow {
@@ -414,6 +431,10 @@ impl TryFrom<AuditLogRow> for JsonlRow {
 
     fn try_from(row: AuditLogRow) -> Result<Self, Self::Error> {
         Ok(Self {
+            outcome: row.outcome,
+            outcome_reason: row.outcome_reason,
+            field_path_depth: row.field_path_depth,
+            field_evidence: parse_json_opt(row.field_evidence)?,
             source: row.source,
             recognizer_id: row.recognizer_id,
             recognizer_version_id: row.recognizer_version_id,
