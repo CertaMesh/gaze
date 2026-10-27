@@ -45,6 +45,7 @@ impl NormalizerKind {
 pub struct RegexDetector {
     regex: Regex,
     source_regex: std::sync::OnceLock<std::result::Result<Regex, regex::Error>>,
+    source_prefilter: std::sync::OnceLock<crate::source_prefilter::Necessary>,
     class: PiiClass,
     source: String,
     locales: Vec<LocaleTag>,
@@ -115,6 +116,7 @@ impl RegexDetector {
         Ok(Self {
             regex,
             source_regex: std::sync::OnceLock::new(),
+            source_prefilter: std::sync::OnceLock::new(),
             class,
             source: source.to_string(),
             locales,
@@ -343,6 +345,12 @@ impl RegexDetector {
     ) -> std::result::Result<Vec<LabelledValueScan>, gaze_types::DetectError> {
         let mut scans = self.scanned_spans_with_recovery(input, source_spans);
         if source_spans.is_some_and(|spans| spans.windows(2).any(|pair| pair[0].1 < pair[1].0)) {
+            let prefilter = self
+                .source_prefilter
+                .get_or_init(|| crate::source_prefilter::Necessary::new(self.regex.as_str()));
+            if !prefilter.could_match(input) {
+                return Ok(scans);
+            }
             let regex = self
                 .source_regex
                 .get_or_init(|| crate::source_regex::compile(self.regex.as_str()))
@@ -1123,9 +1131,11 @@ mod tests {
         let detector =
             RegexDetector::new(r"\b[0-9]{16}\b", PiiClass::custom("credit_card").unwrap()).unwrap();
         assert!(detector.source_regex.get().is_none());
+        assert!(detector.source_prefilter.get().is_none());
         let input = "word4111111111111111";
         assert!(detector.scanned_spans(input, None).unwrap().is_empty());
         assert!(detector.source_regex.get().is_none());
+        assert!(detector.source_prefilter.get().is_none());
         let spans = (0..input.len())
             .map(|at| {
                 let raw = at + if at >= 4 { 3 } else { 0 };

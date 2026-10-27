@@ -38,6 +38,7 @@ mod ner;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;
+mod source_prefilter;
 mod source_regex;
 pub mod validators;
 
@@ -204,9 +205,9 @@ mod tests {
     }
 }
 
-/// Drain test-only (compiled pattern, construction nanoseconds) work for this thread.
+/// Drain test-only (original pattern, compiled pattern, construction nanoseconds) work for this thread.
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
-pub fn take_source_regex_compilations() -> Vec<(String, u64)> {
+pub fn take_source_regex_compilations() -> Vec<(String, String, u64)> {
     source_regex::take_compilations()
 }

@@ -223,12 +223,35 @@ fn all_rulepack_regexes_preserve_captures_without_source_gaps() {
     let mut maximum = (0.0f64, String::new(), 0, 0);
     let mut comparisons = 0usize;
     let mut matching_pairs = 0usize;
+    let mut gap_comparisons = 0usize;
+    let mut gap_matches = 0usize;
+    let mut split_cue_matches = [0usize; 3];
+    let split_cues = [
+        "Steuer\u{200b}nummer: 1234567890; done.",
+        "D\u{200b}OB: 2000-01-02; done.",
+        "word\u{200b}D\u{200b}OB: 2000-01-02; done.",
+    ];
     let mut sizes = Vec::new();
     for (id, pattern) in &regexes {
         let pattern = expand(pattern, &buckets);
         let original = Regex::new(&pattern).unwrap_or_else(|error| panic!("{id}: {error}"));
         let transformed = compile(&pattern).unwrap_or_else(|error| panic!("{id}: {error}"));
         assert_eq!(original.captures_len(), transformed.captures_len(), "{id}");
+        let prefilter = crate::source_prefilter::Necessary::new(&pattern);
+        for (index, raw) in split_cues.iter().enumerate() {
+            let joined = raw.replace('\u{200b}', "");
+            let marked = raw.replace('\u{200b}', &MARKER.to_string());
+            if transformed
+                .find_iter(&marked)
+                .any(|matched| !matched.as_str().trim_matches(MARKER).is_empty())
+            {
+                split_cue_matches[index] += 1;
+                assert!(
+                    prefilter.could_match(&joined),
+                    "split cue {index} rejected by {id}"
+                );
+            }
+        }
         let original_size = regex_automata::meta::Regex::new(&pattern)
             .unwrap()
             .memory_usage();
@@ -250,9 +273,29 @@ fn all_rulepack_regexes_preserve_captures_without_source_gaps() {
                 "{id}, corpus index {index}"
             );
             comparisons += 1;
+            if input.chars().take(2).count() == 2 {
+                let mut at = input.len() / 2;
+                while !input.is_char_boundary(at) {
+                    at += 1;
+                }
+                if at > 0 && at < input.len() {
+                    let mut marked = input.to_owned();
+                    marked.insert(at, MARKER);
+                    let matched = transformed
+                        .find_iter(&marked)
+                        .any(|matched| !matched.as_str().trim_matches(MARKER).is_empty());
+                    gap_matches += usize::from(matched);
+                    assert!(
+                        !matched || prefilter.could_match(input),
+                        "necessary literal vetoed {id}, corpus index {index}"
+                    );
+                    gap_comparisons += 1;
+                }
+            }
         }
     }
     assert!(matching_pairs > 1000);
+    assert!(split_cue_matches.iter().all(|&count| count > 0));
     let report = serde_json::json!({
         "schema": "gaze-source-regex-differential-v1", "regexes": regexes.len(), "rulepack_files": rulepack_files,
         "corpus_files": corpus_files, "repository_cases": literal_cases, "fuzz_attempts": 4096,
@@ -260,6 +303,8 @@ fn all_rulepack_regexes_preserve_captures_without_source_gaps() {
         "source_inventory_sha256": format!("{:x}", inventory.finalize()),
         "corpus_sha256": format!("{:x}", inputs.finalize()), "comparisons": comparisons,
         "matching_pairs": matching_pairs, "capture_differences": 0,
+        "source_gap_prefilter_comparisons": gap_comparisons, "source_gap_matching_pairs": gap_matches,
+        "source_gap_prefilter_false_negatives": 0, "split_cue_matching_pairs": split_cue_matches,
         "compiled_memory_metric": "regex_automata::meta::Regex::memory_usage (immutable allocations, excludes per-search caches)",
         "max_compiled_memory_ratio": maximum.0, "max_ratio_regex": maximum.1,
         "max_ratio_original_bytes": maximum.2, "max_ratio_transformed_bytes": maximum.3,
@@ -271,4 +316,96 @@ fn all_rulepack_regexes_preserve_captures_without_source_gaps() {
     std::fs::create_dir_all(output.parent().unwrap()).unwrap();
     std::fs::write(&output, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     eprintln!("DIFFERENTIAL DONE: {} regexes x {} cases = {} comparisons, 0 capture differences; max compiled memory ratio {}", regexes.len(), corpus.len(), comparisons, maximum.0);
+}
+
+fn pipeline_projection(raw: &str) -> (String, Vec<(usize, usize)>) {
+    type Projection = Option<(String, Vec<(usize, usize)>)>;
+    struct Probe(std::sync::Arc<std::sync::Mutex<Projection>>);
+    impl gaze_types::Recognizer for Probe {
+        fn id(&self) -> &str {
+            "test.normalized_projection"
+        }
+        fn supported_class(&self) -> &gaze_types::PiiClass {
+            &gaze_types::PiiClass::Name
+        }
+        fn token_family(&self) -> &str {
+            "name.counter"
+        }
+        fn detect(
+            &self,
+            input: &str,
+            ctx: &gaze_types::DetectContext<'_>,
+        ) -> Result<Vec<gaze_types::Candidate>, gaze_types::DetectError> {
+            *self.0.lock().unwrap() = Some((input.to_owned(), ctx.source_spans.unwrap().to_vec()));
+            Ok(Vec::new())
+        }
+    }
+    let observed = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let pipeline = gaze::Pipeline::builder()
+        .recognizer(Probe(observed.clone()))
+        .build()
+        .unwrap();
+    let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+    pipeline
+        .clean_with_safety_net(
+            &session,
+            gaze::RawDocument::Text(raw.to_owned()),
+            &[gaze::LocaleTag::Global],
+        )
+        .unwrap();
+    let projection = observed.lock().unwrap().take().unwrap();
+    projection
+}
+
+#[test]
+fn necessary_cue_evidence_preserves_unicode_fold_and_normalization_edges() {
+    let groups: [(&str, &[&str]); 7] = [
+        ("sharp_s", &["Straße", "STRASSE", "STRAẞE"]),
+        ("turkish_i", &["İd", "ıd", "Id"]),
+        ("sigma", &["ος", "οσ", "ΟΣ"]),
+        ("kelvin", &["Konto", "Konto"]),
+        ("long_s", &["status", "ſtatus"]),
+        ("fullwidth", &["DOB", "ＤＯＢ"]),
+        ("accents", &["café", "cafe\u{301}"]),
+    ];
+    let mut rows = Vec::new();
+    for (name, cues) in groups {
+        let (mut cases, mut matches, mut split_matches) = (0, 0, 0);
+        for cue in cues {
+            let pattern = format!(r"(?i){}: [0-9]{{6}}", regex::escape(cue));
+            let unfiltered = compile(&pattern).unwrap();
+            let prefilter = crate::source_prefilter::Necessary::new(&pattern);
+            for variant in cues {
+                let mut variants = vec![(false, variant.to_string())];
+                for (at, _) in variant.char_indices().skip(1) {
+                    let mut split = variant.to_string();
+                    split.insert(at, '\u{200b}');
+                    variants.push((true, split));
+                }
+                for (split, variant) in variants {
+                    let (joined, spans) = pipeline_projection(&format!("{variant}: 123456"));
+                    let marked = View::new(&joined, Some(&spans));
+                    let input = marked
+                        .as_ref()
+                        .map_or(joined.as_str(), |view| view.text.as_str());
+                    let matched = unfiltered
+                        .find_iter(input)
+                        .any(|matched| !matched.as_str().trim_matches(MARKER).is_empty());
+                    assert!(
+                        !matched || prefilter.could_match(&joined),
+                        "{name}, cue={cue:?}, split={split}"
+                    );
+                    cases += 1;
+                    matches += usize::from(matched);
+                    split_matches += usize::from(matched && split);
+                }
+            }
+        }
+        assert!(matches > 0 && split_matches > 0, "{name}");
+        rows.push(serde_json::json!({"edge": name, "cases": cases, "unfiltered_matches": matches, "split_cue_matches": split_matches, "false_vetoes": 0}));
+    }
+    let output = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/separator-checks/source-prefilter-casefold.json");
+    std::fs::create_dir_all(output.parent().unwrap()).unwrap();
+    std::fs::write(output, serde_json::to_vec_pretty(&rows).unwrap()).unwrap();
 }

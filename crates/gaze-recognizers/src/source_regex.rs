@@ -8,7 +8,7 @@ use regex::Regex;
 use regex_syntax::ast::{parse::Parser, Ast};
 use std::ops::Range;
 
-const MARKER: char = '\u{2060}';
+pub(super) const MARKER: char = '\u{2060}';
 
 pub(super) fn compile(pattern: &str) -> Result<Regex, regex::Error> {
     #[cfg(feature = "test-support")]
@@ -46,12 +46,14 @@ pub(super) fn compile(pattern: &str) -> Result<Regex, regex::Error> {
     augment(&mut ast)?;
     let regex = Regex::new(&ast.to_string())?;
     #[cfg(feature = "test-support")]
-    COMPILED.with(|compiled| {
-        compiled.borrow_mut().push((
-            regex.as_str().to_owned(),
-            started.elapsed().as_nanos() as u64,
-        ))
-    });
+    {
+        let elapsed = started.elapsed().as_nanos() as u64;
+        COMPILED.with(|compiled| {
+            compiled
+                .borrow_mut()
+                .push((pattern.to_owned(), regex.as_str().to_owned(), elapsed))
+        });
+    }
     Ok(regex)
 }
 
@@ -119,7 +121,7 @@ impl View {
 
 #[cfg(feature = "test-support")]
 thread_local! {
-    static COMPILED: std::cell::RefCell<Vec<(String, u64)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static COMPILED: std::cell::RefCell<Vec<(String, String, u64)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[cfg(test)]
@@ -127,6 +129,6 @@ thread_local! {
 mod tests;
 
 #[cfg(feature = "test-support")]
-pub(crate) fn take_compilations() -> Vec<(String, u64)> {
+pub(crate) fn take_compilations() -> Vec<(String, String, u64)> {
     COMPILED.with(|compiled| std::mem::take(&mut *compiled.borrow_mut()))
 }

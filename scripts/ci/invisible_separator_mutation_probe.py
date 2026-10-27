@@ -27,7 +27,7 @@ def main():
     output = ROOT / "target/separator-checks/mutations"
     output.mkdir(parents=True, exist_ok=True)
 
-    def reject(name, path, before, after, test, binary="default_ignorable_boundaries", codepoint=None):
+    def reject(name, path, before, after, test, binary="default_ignorable_boundaries", codepoint=None, features=None):
         source = originals[path].decode()
         if source.count(before) != 1:
             raise SystemExit(f"{name}: expected exactly one mutation site")
@@ -37,9 +37,10 @@ def main():
         try:
             path.write_text(source.replace(before, after, 1))
             target = ["--lib"] if binary is None else ["--test", binary]
+            extra = ["--features", features] if features else []
             result = subprocess.run(
                 ["nice", "-n", "10", "cargo", "test", "-p", "gaze-recognizers",
-                 *target, test, "--", "--exact"], cwd=ROOT, env=env,
+                 *extra, *target, test, "--", "--exact"], cwd=ROOT, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             (output / f"{name}.log").write_bytes(result.stdout)
             if result.returncode != 101 or b"test result: FAILED" not in result.stdout:
@@ -67,6 +68,9 @@ def main():
                "let view = boundary_view.as_ref()?;",
                "let view = boundary_view.as_ref().filter(|_| false)?;",
                "anchored_match::tests::source_gaps_separate_name_components_without_losing_an_inner_suffix", None)
+        reject("unfiltered_gap_compilation", REGEX_SOURCE,
+               "if !prefilter.could_match(input) {", "if false && !prefilter.could_match(input) {",
+               "one_zwsp_document_records_actual_lazy_compilation_work", "source_regex_cold_work", features="test-support")
         reject("joined_run", REGEX_SOURCE, "if !self.complete_labelled_value {", "if true {",
                "regex::tests::joined_recovery_uses_source_gaps_for_bounded_captures", None)
         reject("linear_gap_search", REGEX_SOURCE,
@@ -79,7 +83,7 @@ def main():
     finally:
         for path, original in originals.items():
             path.write_bytes(original)
-    print(f"MUTATION DONE: {len(CODEPOINTS) + 7} mutations rejected; source restored")
+    print(f"MUTATION DONE: {len(CODEPOINTS) + 8} mutations rejected; source restored")
 
 
 if __name__ == "__main__":

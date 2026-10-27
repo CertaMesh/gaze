@@ -30,10 +30,11 @@ fn one_zwsp_document_records_actual_lazy_compilation_work() {
         let compiled = gaze_recognizers::take_source_regex_compilations();
         let bytes = compiled
             .iter()
-            .map(|(pattern, _)| {
-                regex_automata::meta::Regex::new(pattern)
+            .map(|(_, pattern, _)| {
+                let bytes = regex_automata::meta::Regex::new(pattern)
                     .unwrap()
-                    .memory_usage()
+                    .memory_usage();
+                bytes
             })
             .sum::<usize>();
         if name == "plain" {
@@ -45,7 +46,7 @@ fn one_zwsp_document_records_actual_lazy_compilation_work() {
                 "one gap document compiled {bytes} bytes"
             );
         }
-        rows.push(serde_json::json!({"document": name, "transformed_regexes_compiled": compiled.len(), "extra_immutable_compiled_bytes": bytes, "compile_nanoseconds": compiled.iter().map(|(_, ns)| ns).sum::<u64>()}));
+        rows.push(serde_json::json!({"document": name, "transformed_regexes_compiled": compiled.len(), "extra_immutable_compiled_bytes": bytes, "compile_nanoseconds": compiled.iter().map(|(_, _, ns)| ns).sum::<u64>()}));
     }
     let output = root.join("target/separator-checks/source-regex-cold-work.json");
     std::fs::create_dir_all(output.parent().unwrap()).unwrap();
