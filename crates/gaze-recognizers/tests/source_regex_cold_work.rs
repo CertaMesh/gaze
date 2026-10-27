@@ -31,10 +31,9 @@ fn one_zwsp_document_records_actual_lazy_compilation_work() {
         let bytes = compiled
             .iter()
             .map(|(_, pattern, _)| {
-                let bytes = regex_automata::meta::Regex::new(pattern)
+                regex_automata::meta::Regex::new(pattern)
                     .unwrap()
-                    .memory_usage();
-                bytes
+                    .memory_usage()
             })
             .sum::<usize>();
         if name == "plain" {

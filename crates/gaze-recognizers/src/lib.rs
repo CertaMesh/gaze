@@ -100,6 +100,13 @@ pub fn embedded(name: &str) -> Option<&'static str> {
     embedded_rulepacks().find_map(|(id, content)| (id == canonical).then_some(content))
 }
 
+/// Drain test-only (original pattern, compiled pattern, construction nanoseconds) work for this thread.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub fn take_source_regex_compilations() -> Vec<(String, String, u64)> {
+    source_regex::take_compilations()
+}
+
 #[cfg(test)]
 mod tests {
     use super::embedded;
@@ -203,11 +210,4 @@ mod tests {
 
         Rulepack::parse_bundled(core).expect("bundled recognizers declare locale_basis");
     }
-}
-
-/// Drain test-only (original pattern, compiled pattern, construction nanoseconds) work for this thread.
-#[cfg(feature = "test-support")]
-#[doc(hidden)]
-pub fn take_source_regex_compilations() -> Vec<(String, String, u64)> {
-    source_regex::take_compilations()
 }
