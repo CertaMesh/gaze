@@ -19,17 +19,21 @@ PACK_PATH = "crates/gaze-recognizers/embedded/secrets.toml"
 
 
 def rules(text):
-    return {rule["id"]: re.compile(rule["match"]["pattern"].replace(r"\z", r"\Z"))
+    return {rule["id"]: (re.compile(rule["match"]["pattern"].replace(r"\z", r"\Z")),
+                          re.compile(rule["context"]["reject_match_regex"].replace(r"\z", r"\Z"))
+                          if rule.get("context", {}).get("reject_match_regex") else None)
             for rule in tomllib.loads(text)["recognizers"]
             if rule["id"] in ("security_token.bare", "security_token.pem")}
 
 
-def spans(rx, text):
+def spans(spec, text):
+    rx, guard = spec
     at = 0
     while match := rx.search(text, at):
         start, end = next(match.span(g) for g in range(1, rx.groups + 1)
                           if match.group(g) is not None)
-        yield start, end
+        if guard is None or not guard.search(match[0]):
+            yield start, end
         at = max(end, at + 1)
 
 
@@ -37,6 +41,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", required=True, help="pre-change Git revision")
     parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--workspace-root", type=Path, action="append", default=[],
+                        help="additional source root; excludes build/dependency directories and binary files")
     args = parser.parse_args()
     binary = str(args.binary.resolve())
     env = {**os.environ, "GAZE_DISABLE_OS_KEYSTORE": "1"}
@@ -57,23 +63,41 @@ def main():
     before, after = rules(baseline), rules((ROOT / PACK_PATH).read_text())
     changed = []
     files = 0
-    for relative in subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0"):
-        path = ROOT / relative
-        if not relative or not path.is_file():
+    source_files = [("repository", ROOT, ROOT / relative)
+                    for relative in subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
+                    if relative]
+    for root in args.workspace_root:
+        root = root.resolve()
+        command = ["rg", "--files", "--hidden", "--no-ignore", "-0"]
+        for directory in (".git", "target", "node_modules", "vendor", ".venv", "venv", ".cache"):
+            command += ["--glob", f"!**/{directory}/**"]
+        command.append(str(root))
+        discovered = subprocess.run(command, capture_output=True, check=True).stdout.decode().split("\0")
+        source_files.extend(("workspace", root, Path(name)) for name in discovered if name)
+    seen = set()
+    for scope, root, path in source_files:
+        if path.is_symlink() or not path.is_file() or path.resolve() in seen:
+            continue
+        seen.add(path.resolve())
+        # Source audit, not generated artifacts, databases or binary corpora.
+        if path.stat().st_size > 2_000_000:
             continue
         try:
             text = path.read_text()
         except (OSError, UnicodeError):
             continue
+        if "\0" in text:
+            continue
         files += 1
-        for rid, rx in after.items():
+        for rid, spec in after.items():
             previous = set(spans(before[rid], text)) if rid in before else set()
-            for start, end in spans(rx, text):
+            for start, end in spans(spec, text):
                 if (start, end) not in previous:
                     value = text[start:end]
                     confirmed = clean(value)
                     assert any(e["raw"] == value for e in confirmed["entries"]), "Rust pipeline did not confirm whole new match"
-                    changed.append({"path": relative, "line": text.count("\n", 0, start) + 1,
+                    changed.append({"scope": scope, "path": str(path.relative_to(root)),
+                                    "line": text.count("\n", 0, start) + 1,
                                     "rule": rid, "bytes": len(value.encode())})
     sys.path.insert(0, str(ROOT / "scripts/bench"))
     import agentic_layers as api

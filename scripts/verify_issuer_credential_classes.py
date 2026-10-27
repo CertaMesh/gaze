@@ -12,8 +12,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'scripts/bench'))
-import issuer_credential_cells as cells
+sys.path.insert(0, str(ROOT / 'scripts'))
+import issuer_credential_cases as cells
 
 
 def main():
@@ -73,9 +73,11 @@ def main():
         for prefix in cells.ISSUER_PREFIXES:
             # Values are shape witnesses, never usable credentials. Mixed digits
             # make the new evidence criterion independent of prefix markers.
-            value = prefix + 'A1b2C3d4E5f6G7h8' * 6
+            value = cells.issuer_value(prefix, lambda n: ('A1b2C3d4E5f6G7h8' * (n // 16 + 1))[:n])
             for boundary in cells.IDENTIFIER_BOUNDARIES:
                 cases.append((prefix + '/' + repr(boundary), boundary + value, (value,)))
+            for framing, br in cells.framing_cases():
+                cases.append((prefix + '/' + framing, br + value + br, (value,)))
         failures += check('issuers', cases)
     if args.kind in ('residuals', 'all'):
         cases = []

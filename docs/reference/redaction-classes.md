@@ -154,6 +154,34 @@ attribution; there is no upper length rejection.
 | `sk_live_`, `rk_live_`, `sk_test_`, `rk_test_`, `whsec_` | ASCII letters, digits, underscore, hyphen | 24 |
 | `AIzaSy` | ASCII letters, digits, underscore, hyphen | 33 |
 
+Every bare arm also requires a contiguous `[A-Za-z0-9]{16,}` suffix run and
+at least one suffix digit. Format markers such as Anthropic's `api03` do not
+supply that digit. The existing candidate length floors above remain policy
+bounds, not issuer validity checks. The rulepack comments cite each shape's source.
+
+Letter-only snake, kebab, camel and uppercase word tails remain raw. A camel
+word tail containing a digit can still match. Real credentials without a digit,
+or with separators breaking every 16-character alphanumeric run, also remain raw.
+Explicit credential code fields and cue-anchored rules retain their own grammar.
+
+For a uniform independent alphanumeric body of length `n`, the probability of no
+digit is `q(n) = (52/62)^n`. Base64url bodies use `r(n) = (54/64)^n`.
+These models describe the digit condition only, not measured issuer distributions
+or the separate contiguous-run requirement.
+
+| Format | No-digit probability under the stated model |
+|---|---|
+| GitHub classic 36-character body | `q(36) = 0.00177836` |
+| Fine-grained GitHub `22_59` body | `q(81) = 0.000000649448` |
+| Stateless GitHub installation token with numeric application ID | `0`, because the application ID supplies digits |
+| OpenAI bodies containing `T3BlbkFJ` | `0`, because the fixed marker supplies a digit |
+| Other supported `sk-*` bodies at the 32-character floor | `q(32) = 0.00359396`, or `r(32)` for base64url |
+| Anthropic `api03` with 93 random base64url characters and fixed `AA` | `r(93) = 0.000000137367` |
+| Slack formats with numeric components | `0`, because those components supply digits |
+| Stripe secret/restricted keys at the 24-character floor | `q(24) = 0.0146784` |
+| Stripe webhook secret with a 32-character alphanumeric body | `q(32) = 0.00359396` |
+| Google body with 33 base64url characters after `AIzaSy` | `r(33) = 0.00367329` |
+
 [GitHub documents its token prefixes](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github)
 and [stateless installation tokens](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/).
 The JWT rule protects the full `ghs_APPID_JWT` spelling, including both dots.
@@ -178,12 +206,15 @@ private-key label differs. Supported BEGIN labels are `PRIVATE KEY`,
 `ENCRYPTED PRIVATE KEY`, and `PGP PRIVATE KEY BLOCK`. It preserves LF, CRLF,
 single/double JSON escapes, Unicode newline escapes, space-joined blocks,
 comma-separated strings, URL-encoded labels/newlines/base64, string concatenation,
-comment/blockquote prefixes, HTML breaks, shell continuations, escaped slashes,
+comment/blockquote prefixes, line-number and editor gutters, markdown bullets,
+HTML breaks and numeric newline entities, shell continuations, escaped slashes,
 OpenSSL headers and PGP headers/checksum in one restorable token.
 [RFC 7468](https://www.rfc-editor.org/rfc/rfc7468) defines PKCS#8 private-key labels.
 Tutorial prose after a BEGIN label stays raw unless it provides the required
 contiguous evidence. Public keys, certificates and placeholder bodies such as `...` or
-`<your key here>` remain raw. After a truncated private key, letters-only prose
+`<your key here>` remain raw. Long alphabetic placeholders such as
+`YourPrivateKeyGoesHere` satisfy the same base64 evidence and can be protected.
+After a truncated private key, letters-only prose
 can join the protected span until punctuation; this is a deliberate fail-closed
 tradeoff. Quotes stop a span unless they form a source-string continuation.
 

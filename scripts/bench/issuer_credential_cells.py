@@ -5,57 +5,6 @@ code/hash identifiers are counterweights, never private material.
 """
 
 
-
-# These classes are shared by the benchmark and light real-binary regressions.
-# Deliberately generate words independently of the recognizer's regex.
-ISSUER_PREFIXES = (
-    "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "sk-",
-    "sk-proj-", "sk-svcacct-", "sk-admin-", "sk-None-", "sk-ant-api03-",
-    "xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "xapp-", "xoxe-",
-    "xoxe.xoxp-", "sk_live_", "rk_live_", "sk_test_", "rk_test_", "whsec_", "AIzaSy",
-)
-IDENTIFIER_BOUNDARIES = ("_", ".", "$", "-", "/", "#", "::", " ", "(", '\"', "'")
-
-
-def identifier_cases(partition):
-    words = (("signing", "secret", "config", "endpoint", "rotation", "policy")
-             if partition == "dev" else
-             ("verify", "header", "setting", "service", "refresh", "option"))
-    for prefix in ISSUER_PREFIXES:
-        for boundary in IDENTIFIER_BOUNDARIES:
-            for length in (6, 12, 24):
-                parts = [words[i % len(words)] for i in range(length)]
-                for style, tail in (
-                    ("snake", "_".join(parts)), ("kebab", "-".join(parts)),
-                    ("camel", parts[0] + "".join(p.title() for p in parts[1:])),
-                    ("screaming", "_".join(p.upper() for p in parts)),
-                ):
-                    yield prefix, boundary, style, length, boundary + prefix + tail
-
-
-def framing_cases():
-    # Serializations from all reviewer rounds, with their syntax left in gold.
-    breaks = {
-        "lf": "\n", "crlf": "\r\n", "json": r"\n", "json_crlf": r"\r\n",
-        "nested_json": r"\\n", "nested_json_crlf": r"\\r\\n",
-        "unicode": r"\u000a", "unicode_upper": r"\u000A", "unicode_cr": r"\u000d",
-        "html": "<br>", "html_closed": "<br/>", "shell": "\\\n", "shell_crlf": "\\\r\n",
-        "concat": "\\n' +\n'", "concat_double": '\\n" + "',
-        "space": " ", "tab": "\t", "comma": '\\n", "',
-        "comma_lines": '\\n",\n    "', "url": "%0A", "url_crlf": "%0d%0a",
-        "entity_decimal": "&#10;", "entity_hex": "&#x0a;",
-    }
-    for name, newline in breaks.items():
-        for style, prefix in {"plain": "", "comment": "# ", "slash": "// ",
-                              "quote": "> ", "star": "* ", "bullet": "- "}.items():
-            yield name + "_" + style, newline + prefix
-    for name, prefix in {
-        "line_space": "1 ", "line_indent": "  12  ", "cat_n": "     2\t",
-        "grep_n": "3:", "editor_pipe": "2 | ", "compact_pipe": "2|",
-    }.items():
-        yield name, "\n" + prefix
-
-
 def records(api, partition):
     rng = api.Rng(api.PARTITION_SEEDS[partition], "issuer-credentials-v29")
     result = []
@@ -78,7 +27,11 @@ def records(api, partition):
     wrappers = (["({V})", '{"output":"{V}"}', "GH_TOKEN_{V}", "令牌{V}已隐藏", r"Bearer%20{V}"]
                 if partition == "dev" else
                 ["[{V}]", '{"result":{"value":"{V}"}}', "BUILD_{V}", "输出{V}结束", r"auth%3D{V}"])
-    breaks = dict(framing_cases())
+    breaks = {"lf": "\n", "crlf": "\r\n", "json": r"\n", "nested_json": r"\\n",
+              "unicode": r"\u000a", "html": "<br>", "shell": "\\\n",
+              "concat": "\\n' +\n'", "comment": "\n# ", "slash": "\n// ",
+              "quote": "\n> ", "star": "\n* ", "space": " ", "tab": "\t",
+              "comma": '\\n", "', "comma_lines": '\\n",\n    "', "url": "%0A"}
     for index in range(api.DOCS_PER_FAMILY):
         for prefix, width in [("ghp_", 36), ("gho_", 36), ("ghu_", 36), ("ghr_", 36),
                               ("ghs_", 36), ("github_pat_", 82), ("sk-proj-", 48),
@@ -145,7 +98,4 @@ def records(api, partition):
         for surface, placeholder in [("dots", "..."), ("instructions", "<your key here>")]:
             emit("D", "placeholder", surface, index,
                  f"-----BEGIN PRIVATE KEY-----\n{placeholder}\n-----END PRIVATE KEY-----", wrappers[1])
-    for number, (prefix, boundary, style, length, value) in enumerate(identifier_cases(partition)):
-        emit("D", "identifier_" + style, "boundary_" + str(IDENTIFIER_BOUNDARIES.index(boundary)),
-             number, value, "symbol={V}" if partition == "dev" else "name({V})")
     return result

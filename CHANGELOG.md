@@ -14,7 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Truncated private-key bodies fail closed, including DSA and PGP armour,
   nested JSON escapes, source concatenation, comments, HTML and shell framing.
   Overlong credentials and hyphen suffixes stay protected; generic `sk-`
-  keeps a leading boundary to preserve code identifiers. Public-key and certificate blocks remain unchanged. Both rules
+  keeps a leading boundary. Bare suffixes require a digit and a contiguous
+  16-character alphanumeric run to preserve word-based code identifiers.
+  Numbered gutters, markdown bullets and HTML newline entities stay protected.
+  Public-key and certificate blocks remain unchanged. Both rules
   preserve exact restoration and require no network access.
 
 - Private MCP class and dictionary labels use session-keyed HMAC identifiers,

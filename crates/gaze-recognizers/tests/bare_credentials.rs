@@ -52,23 +52,35 @@ fn assert_whole(core: &gaze_assembly::CorePipeline, raw: &str, values: &[&str]) 
     }
 }
 
+fn synthetic_suffix(size: usize) -> String {
+    format!("{}1", "A".repeat(size - 1))
+}
+
 fn prefixed_values() -> Vec<String> {
     let mut values = Vec::new();
     for prefix in ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"] {
         for n in [36, 252, 1024] {
-            values.push(format!("{prefix}{}", "A".repeat(n)));
+            values.push(format!("{prefix}{}", synthetic_suffix(n)));
         }
     }
-    values.push(format!("github_pat_{}", "A_".repeat(41)));
+    values.push(format!(
+        "github_pat_{}_{}",
+        synthetic_suffix(22),
+        synthetic_suffix(59)
+    ));
     values.push(format!(
         "ghs_000000_eyJ{}.{}.{}",
         "A".repeat(80),
         "B".repeat(300),
         "C".repeat(100)
     ));
-    values.push(format!("sk-{}", "A".repeat(48)));
-    values.push(format!("sk-proj-{}", "A_-".repeat(52)));
-    values.push(format!("sk-ant-api03-{}AA", "A_-".repeat(31)));
+    values.push(format!("sk-{}", synthetic_suffix(48)));
+    values.push(format!(
+        "sk-proj-{}_-{}",
+        synthetic_suffix(32),
+        synthetic_suffix(122)
+    ));
+    values.push(format!("sk-ant-api03-{}AA", synthetic_suffix(93)));
     for prefix in [
         "xoxa-",
         "xoxb-",
@@ -83,19 +95,23 @@ fn prefixed_values() -> Vec<String> {
             "{prefix}{}-{}-{}",
             "0".repeat(12),
             "0".repeat(12),
-            "A".repeat(32)
+            synthetic_suffix(32)
         ));
     }
     for prefix in ["sk_live_", "rk_live_", "sk_test_", "rk_test_", "whsec_"] {
         for n in [24, 99] {
-            values.push(format!("{prefix}{}", "A".repeat(n)));
+            values.push(format!("{prefix}{}", synthetic_suffix(n)));
         }
     }
     for prefix in ["sk-svcacct-", "sk-admin-", "sk-None-"] {
-        values.push(format!("{prefix}{}", "A_-".repeat(100)));
+        values.push(format!(
+            "{prefix}{}_-{}",
+            synthetic_suffix(32),
+            synthetic_suffix(266)
+        ));
     }
-    values.push(format!("AIzaSy{}", "A_-".repeat(11)));
-    values.push(format!("ghp_{}-old", "A".repeat(36)));
+    values.push(format!("AIzaSy{}", synthetic_suffix(33)));
+    values.push(format!("ghp_{}-old", synthetic_suffix(36)));
     values
 }
 
@@ -191,7 +207,7 @@ fn prose_and_public_material_remain_untouched() {
         ("xoxb-", 9),
         ("sk_live_", 23),
     ] {
-        negatives.push(format!("{prefix}{}", "A".repeat(length)));
+        negatives.push(format!("{prefix}{}", synthetic_suffix(length)));
     }
     for raw in negatives {
         assert_whole(&core, &raw, &[]);
@@ -238,7 +254,7 @@ fn issuer_boundaries_protect_framing_and_preserve_identifiers() {
             assert_whole(&core, &format!("{left}{value}{right}"), &[&value]);
         }
     }
-    let generic = format!("sk-{}", "A".repeat(64));
+    let generic = format!("sk-{}", synthetic_suffix(64));
     for prefix in ["word", "lowercase", "9"] {
         assert_whole(&core, &format!("{prefix}{generic}"), &[]);
     }
@@ -296,5 +312,89 @@ fn truncated_mismatched_and_framed_private_keys_are_whole_and_restorable() {
     for placeholder in ["...", "<your key here>", "example", "bm90LWEta2V5"] {
         let raw = format!("-----BEGIN PRIVATE KEY-----\n{placeholder}\n-----END PRIVATE KEY-----");
         assert_whole(&core, &raw, &[]);
+    }
+}
+
+#[test]
+fn word_tails_require_digit_and_contiguous_suffix_evidence() {
+    let core = core();
+    for prefix in [
+        "ghp_",
+        "gho_",
+        "ghu_",
+        "ghs_",
+        "ghr_",
+        "github_pat_",
+        "sk-",
+        "sk-proj-",
+        "sk-svcacct-",
+        "sk-admin-",
+        "sk-None-",
+        "sk-ant-api03-",
+        "xoxa-",
+        "xoxb-",
+        "xoxp-",
+        "xoxr-",
+        "xoxs-",
+        "xapp-",
+        "xoxe-",
+        "xoxe.xoxp-",
+        "sk_live_",
+        "rk_live_",
+        "sk_test_",
+        "rk_test_",
+        "whsec_",
+        "AIzaSy",
+    ] {
+        for left in ["_", ".", "$", "-", "/", "#", "::", " ", "(", "\"", "'"] {
+            for count in [6, 12, 24] {
+                for tail in [
+                    "verify_header_setting_service_".repeat(count),
+                    "verify-header-setting-service-".repeat(count),
+                    "verifyHeaderSettingService".repeat(count),
+                    "VERIFY_HEADER_SETTING_SERVICE_".repeat(count),
+                    // A digit alone is insufficient when every run is short.
+                    "verify_header1_setting_service_".repeat(count),
+                ] {
+                    assert_whole(&core, &format!("{left}{prefix}{tail}"), &[]);
+                }
+            }
+        }
+        // Letter-only bodies are an intentional recall cost. A digit-bearing
+        // camel word is the documented precision residual of structural evidence.
+        let residual = format!("{prefix}{}1", "verifyHeaderSettingService".repeat(4));
+        assert_whole(&core, &residual, &[&residual]);
+    }
+    // The digit need not be inside the qualifying alphanumeric run.
+    for value in [
+        format!("whsec_1_{}", "A".repeat(32)),
+        format!("whsec_{}_1", "A".repeat(32)),
+    ] {
+        assert_whole(&core, &value, &[&value]);
+    }
+}
+
+#[test]
+fn numbered_bulleted_and_entity_framed_private_keys_stay_whole() {
+    let core = core();
+    for framing in [
+        "\n1 ",
+        "\n  12  ",
+        "\n     2\t",
+        "\n3:",
+        "\n2 | ",
+        "\n2|",
+        "\n- ",
+        "&#10;",
+        "&#x0a;",
+        "&#x0A;",
+    ] {
+        let value = pem("PRIVATE KEY", framing);
+        assert_whole(&core, &value, &[&value]);
+    }
+    for placeholder in ["YourPrivateKeyGoesHere", "Base64EncodedKeyMaterial"] {
+        let value =
+            format!("-----BEGIN PRIVATE KEY-----\n{placeholder}\n-----END PRIVATE KEY-----");
+        assert_whole(&core, &value, &[&value]);
     }
 }
