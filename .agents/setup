@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+export CARGO_BUILD_JOBS=4
+
+step() {
+    printf '\n==> %s (%ss elapsed)\n' "$*" "$SECONDS"
+}
+
+step 'System build tools and OCR'
+packages=(build-essential pkg-config libssl-dev ca-certificates curl git python3
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-deu)
+missing=()
+for package in "${packages[@]}"; do
+    if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]]; then
+        missing+=("$package")
+    fi
+done
+if ((${#missing[@]})); then
+    sudo apt-get update -qq
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+fi
+
+step 'Pinned Rust toolchains'
+if ! command -v rustup >/dev/null; then
+    curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs |
+        sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+fi
+# Read the source-of-truth pins rather than maintaining a second Rust version.
+stable=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+nightly=$(python3 -c 'import tomllib; print(tomllib.load(open("lint/dylint/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+rustup toolchain install "$stable" --profile minimal --component rustfmt,clippy --no-self-update
+rustup toolchain install "$nightly" --profile minimal --component rustc-dev,rust-src,llvm-tools-preview --no-self-update
+
+step 'Pinned Python and locked benchmark dependencies'
+# Match CI: capture provenance admits this uv bootstrap version.
+if [[ "$(uv --version 2>/dev/null || true)" != 'uv 0.11.31'* ]]; then
+    curl --proto '=https' --tlsv1.2 -fsSL https://astral.sh/uv/0.11.31/install.sh |
+        env UV_INSTALL_DIR="$HOME/.local/bin" UV_NO_MODIFY_PATH=1 sh
+fi
+uv python install 3.13
+uv sync --project scripts/bench --python 3.13 --locked --group comparison-test
+env -u PYTHONDONTWRITEBYTECODE uv run --project scripts/bench --python 3.13 \
+    --locked --group comparison-test python -c pass
+
+step 'Prebuilt Cargo gate tools'
+# Orbs use Linux x86_64. Verify pinned archives rather than compiling CLI tools.
+install_tool() {
+    local name=$1 version=$2 url=$3 sha=$4 member=$5
+    if [[ "$("$name" --version 2>/dev/null || true)" == "$name $version"* ]]; then
+        return
+    fi
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 3 "$url" -o "$scratch/tool.tar.gz"
+    printf '%s  %s\n' "$sha" "$scratch/tool.tar.gz" | sha256sum -c -
+    tar -xzf "$scratch/tool.tar.gz" -C "$scratch" "$member"
+    install -m 755 "$scratch/$member" "$HOME/.cargo/bin/$name"
+    "$name" --version
+}
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+install_tool cargo-nextest 0.9.146 \
+    https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.146/cargo-nextest-0.9.146-x86_64-unknown-linux-gnu.tar.gz \
+    682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428 cargo-nextest
+install_tool cargo-deny 0.20.2 \
+    https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz \
+    9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f \
+    cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny
+
+step 'Debian-compatible Dylint tools (compiled only when missing)'
+# Upstream GNU binaries require glibc 2.39; Debian 12 has glibc 2.36.
+# Cargo checks its installed-package metadata before doing any build work.
+cargo +"$stable" install --locked --version 6.0.4 cargo-dylint dylint-link
+cargo dylint --version
+# dylint-link is a linker wrapper: --version is forwarded to the C compiler.
+rustup run "$nightly" dylint-link --version
+
+step 'Fetch locked Rust dependencies (no workspace build)'
+cargo fetch --locked
+# RUSTUP_TOOLCHAIN, if supplied by a caller, must not override the lint pin.
+cargo +"$nightly" fetch --locked --manifest-path lint/dylint/Cargo.toml
+
+step 'Persist tool paths for non-interactive login shells'
+touch "$HOME/.bash_profile"
+if ! grep -Fqx '# Gaze orb toolchains' "$HOME/.bash_profile"; then
+    cat >> "$HOME/.bash_profile" <<'EOF'
+
+# Gaze orb toolchains
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+export CARGO_BUILD_JOBS=4
+EOF
+fi
+
+step 'Ready; optional model bundles and full builds remain explicit'
