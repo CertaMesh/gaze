@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -107,12 +108,15 @@ class ProtectionTests(unittest.TestCase):
         outcomes.add_scored(document("ambiguous-fp"), [
             score.Span(13, 19, "custom:family:f"),
         ])
+        outcomes.add_scored(document("mixed-fp"), [
+            score.Span(0, 4, "custom:a"), score.Span(13, 19, "custom:family:f"),
+        ])
         false_positives = outcomes.result()["false_positives"]
         self.assertEqual(false_positives, {
-            "documents": 2,
+            "documents": 3,
             "documents_from_possibly_sensitive_only": 1,
-            "values": 3,
-            "possibly_sensitive_values": 1,
+            "values": 5,
+            "possibly_sensitive_values": 2,
         })
 
     def test_out_of_contract_and_neutral_bytes_are_not_counted(self):
@@ -240,6 +244,26 @@ class CommittedRecordProofTests(unittest.TestCase):
         # A scorecard that already has counters must match them too.
         expected["runs"][0][oc.OUTCOME_COUNTERS_FIELD] = {"changed": True}
         self.assertFalse(proof.exact_except_timing(card, expected))
+
+    def test_proof_detects_a_rescore_that_moves_an_existing_number(self):
+        original = record.rescore
+
+        def drifting(*args, **kwargs):
+            card = original(*args, **kwargs)
+            card["runs"][0]["metrics"]["utf8_bytes"]["leaked"] += 1
+            return card
+
+        with mock.patch.object(record, "rescore", drifting), tempfile.TemporaryDirectory() as temporary:
+            evidence = oc.prove(BENCH / "observations-v0.17.0.jsonl.gz", "v0.17.0")
+            self.assertFalse(any(
+                item["existing_fields_byte_identical"] for item in evidence["contracts"].values()
+            ))
+            target = Path(temporary) / "evidence.json"
+            self.assertEqual(oc.main([
+                str(BENCH / "observations-v0.17.0.jsonl.gz"),
+                "--release", "v0.17.0", "--write", str(target),
+            ]), 1)
+            self.assertFalse(target.exists())
 
     def test_check_mode_fails_on_stale_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
