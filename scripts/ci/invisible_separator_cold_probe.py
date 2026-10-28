@@ -24,7 +24,7 @@ def host():
             "memory_pressure": subprocess.check_output(["memory_pressure"], text=True).splitlines()[-1]}
 
 
-def once(binary, text, cwd):
+def once(binary, text, cwd, require_card):
     started = time.perf_counter_ns()
     child = subprocess.Popen([str(binary), "clean", "--locale", "en-US"],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -46,9 +46,22 @@ def once(binary, text, cwd):
     if child.returncode:
         raise RuntimeError(f"clean failed, exit {child.returncode}")
     response = json.loads(captured["stdout"])
-    if not response["entries"] or response["clean_text"] == text:
-        raise RuntimeError("sample did not perform protection")
+    email = "cedar@example.invalid"
+    card = text.split("Card: ", 1)[1].split(";", 1)[0]
+    entries = response["entries"]
+    values = {entry["raw"] for entry in entries}
+    if email not in values or values - {email, card} or (require_card and card not in values):
+        raise RuntimeError("sample did not protect the required complete values")
+    if len(entries) != len(values) or response["stats"]["detections"] != len(entries):
+        raise RuntimeError("sample emitted duplicate or inconsistent detections")
+    restored = response["clean_text"]
+    for entry in entries:
+        restored = restored.replace(entry["token"], entry["raw"])
+    if restored != text:
+        raise RuntimeError("sample manifest failed exact round trip")
     return {"milliseconds": elapsed,
+            "protected_card": card in values, "protected_email": True,
+            "manifest_substitution_round_trip": True,
             "cpu_milliseconds": (usage.ru_utime + usage.ru_stime) * 1000,
             "user_milliseconds": usage.ru_utime * 1000,
             "system_milliseconds": usage.ru_stime * 1000,
@@ -86,7 +99,7 @@ def main():
                 for side in sides:
                     completed = sum(len(rows) for kinds in samples.values() for rows in kinds.values())
                     print(f"COLD {completed + 1}/{args.rounds * 4}: {side}/{kind}", flush=True)
-                    samples[side][kind].append(once(binaries[side], text, cwd))
+                    samples[side][kind].append(once(binaries[side], text, cwd, side == "candidate" or kind == "plain"))
     summary = {side: {kind: {
         "median_ms": statistics.median(row["milliseconds"] for row in rows),
         "median_cpu_ms": statistics.median(row["cpu_milliseconds"] for row in rows),
