@@ -585,7 +585,6 @@ impl<'a> RequestSurfaces<'a> {
 #[non_exhaustive]
 pub struct CoveragePath {
     chunks: gaze_types::FieldPath,
-    rendered: std::sync::OnceLock<String>,
     prefix_hash: std::collections::hash_map::DefaultHasher,
     byte_len: usize,
 }
@@ -596,7 +595,6 @@ impl Default for CoveragePath {
             std::sync::OnceLock::new();
         Self {
             chunks: gaze_types::FieldPath::default(),
-            rendered: std::sync::OnceLock::new(),
             prefix_hash: std::hash::BuildHasher::build_hasher(
                 HASHER.get_or_init(std::collections::hash_map::RandomState::new),
             ),
@@ -616,7 +614,6 @@ impl CoveragePath {
         let byte_len = self.byte_len + chunk.len();
         Self {
             chunks: self.chunks.child(chunk),
-            rendered: std::sync::OnceLock::new(),
             prefix_hash,
             byte_len,
         }
@@ -626,9 +623,8 @@ impl CoveragePath {
     }
     /// Materialize the legacy spelling only when a trusted caller needs it.
     /// Calling this on every descendant copies shared ancestor bytes per call.
-    pub fn as_str(&self) -> &str {
-        self.rendered
-            .get_or_init(|| self.chunks.segments().concat())
+    pub fn to_legacy_string(&self) -> String {
+        self.chunks.segments().concat()
     }
     fn is_empty(&self) -> bool {
         self.byte_len == 0
@@ -916,9 +912,6 @@ mod path_storage_tests {
                 retained <= 3 * input_bytes,
                 "retained path bytes: {retained}"
             );
-            assert!(surfaces
-                .iter()
-                .all(|surface| surface.field_path.rendered.get().is_none()));
         }
     }
 
@@ -929,7 +922,7 @@ mod path_storage_tests {
         let flat = CoveragePath::from("metadata.rows[2]");
         assert_eq!(joined, flat);
         assert!(HashSet::from([joined]).contains(&flat));
-        assert_eq!(flat.as_str(), "metadata.rows[2]");
+        assert_eq!(flat.to_legacy_string(), "metadata.rows[2]");
         assert!(!format!("{flat:?}").contains("metadata"));
     }
 }

@@ -3493,7 +3493,7 @@ impl RequestResidualScan<'_, '_> {
             }
         }
         Err(ProxyError::UnsurfacedPii {
-            field_path: field_path.as_str().to_owned(),
+            field_path: field_path.to_legacy_string(),
         })
     }
 

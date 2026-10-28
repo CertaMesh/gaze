@@ -40,7 +40,8 @@ The existing residual scan still controls numeric admission.
 `PiiSurface` and `RequestSurfaces` are now `#[non_exhaustive]`. Construct a surface
 with `PiiSurface::new(path, text, syntax)` and attach parsed provenance through its
 optional `field` member. Its `field_path` is now `CoveragePath`. Convert a legacy
-string with `.into()` and call `.as_str()` only when you need the legacy spelling.
+string with `.into()` and call `.to_legacy_string()` only when you need the legacy
+spelling.
 Materializing every descendant spelling copies ancestor bytes for each call.
 Debug output hides path keys.
 

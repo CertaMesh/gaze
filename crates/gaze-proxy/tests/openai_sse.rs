@@ -43,10 +43,11 @@ fn openai_sse_surfaces_include_delta_content_and_tool_arguments() {
     );
     let adapter = OpenAiAdapter::new(Url::parse("https://api.openai.com").unwrap());
     let surfaces = adapter.sse_event_pii_surfaces(&mut event);
-    let paths: Vec<_> = surfaces
+    let rendered_paths: Vec<_> = surfaces
         .iter()
-        .map(|surface| surface.field_path.as_str())
+        .map(|surface| surface.field_path.to_legacy_string())
         .collect();
+    let paths: Vec<_> = rendered_paths.iter().map(String::as_str).collect();
 
     assert!(paths.iter().any(|path| path.ends_with(".delta.content")));
     assert!(paths
