@@ -407,6 +407,7 @@
     "docs/reference/benchmarks/gates/nym-inference-reuse/bounded-proof.json",
     "docs/reference/benchmarks/gold-gap-sample-v3.json",
     "docs/reference/benchmarks/government-id-cells.md",
+    "docs/reference/benchmarks/invisible-normalization-proof.md",
     "docs/reference/benchmarks/invisible-boundary-main-probe.json",
     "docs/reference/benchmarks/invisible-boundary-narrowed-cold-start.json",
     "docs/reference/benchmarks/invisible-boundary-narrowed-cold-work.json",

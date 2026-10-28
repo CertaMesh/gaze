@@ -12,6 +12,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE_SHA = "3fb02d70e756102c871c51471cfd76d7ce6de4bc"
+VISIBLE_IDENTITY_EXCEPTIONS = {
+    "nonbreaking-hyphen": "U+2011 approved fold to ASCII hyphen; coverage loss remains forbidden",
+}
 SPEC = importlib.util.spec_from_file_location("clean_equality", ROOT / "scripts/verify_clean_equality.py")
 EQUALITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EQUALITY)
@@ -94,7 +97,7 @@ def main():
     layouts = [(family, pan, code) for family, pan in pans() for code in ("123", "1234")]
     seps = separators()
     total = len(layouts) * len(seps)
-    rows, regressions, space_losses, visible_differences = [], [], [], []
+    rows, regressions, space_losses, visible_differences, approved_differences = [], [], [], [], []
     with tempfile.TemporaryDirectory(prefix="gaze-card-code-matrix-") as cwd:
         for family, pan, code in layouts:
             reference_mask = None
@@ -111,13 +114,15 @@ def main():
                     space_losses.append(case_id)
                 identity = before == after
                 if kind != "removed" and not identity:
-                    visible_differences.append(case_id)
+                    (approved_differences if name in VISIBLE_IDENTITY_EXCEPTIONS else visible_differences).append(case_id)
                 rows.append({"case_id": case_id, "family": family, "pan_digits": len(pan),
                              "code_digits": len(code), "separator_kind": kind, "separator": name,
                              "input_sha256": hashlib.sha256(text.encode()).hexdigest(),
                              "base_digit_coverage": main_mask, "candidate_digit_coverage": candidate_mask,
                              "base_space_digit_coverage": reference_mask,
-                             "canonical_output_equal": identity, "manifest_substitution_round_trip": True})
+                             "canonical_output_equal": identity,
+                             "visible_identity_exception": VISIBLE_IDENTITY_EXCEPTIONS.get(name),
+                             "manifest_substitution_round_trip": True})
                 if len(rows) % 10 == 0 or len(rows) == total:
                     print(f"CARD CODE MATRIX {len(rows)}/{total}", flush=True)
     gaps = []
@@ -133,7 +138,10 @@ def main():
               "binary_sha256": {side: hashlib.sha256(path.read_bytes()).hexdigest() for side, path in binaries.items()},
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "cells": total,
               "coverage_regressions": regressions, "removed_space_losses": space_losses,
-              "visible_output_differences": visible_differences, "preexisting_visible_code_gaps": gaps,
+              "visible_output_differences": visible_differences,
+              "visible_identity_exceptions": VISIBLE_IDENTITY_EXCEPTIONS,
+              "approved_visible_output_differences": approved_differences,
+              "preexisting_visible_code_gaps": gaps,
               "observations": rows}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
