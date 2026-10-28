@@ -851,15 +851,19 @@ version strings, and a `releases` array. Each release has these fields:
   captured provenance. They prevent a resumed job from accepting another
   subject at the same local paths.
 
-[`generator-v26.json`](../../docs/reference/benchmarks/history-plans/generator-v26.json)
-is the plan for generator v26. It pins v0.17.0 and v0.16.0 with their tag
+[`generator-v29.json`](../../docs/reference/benchmarks/history-plans/generator-v29.json)
+is the combined plan for structured input (v26), invisible separators (v27/v28)
+and issuer credentials (v29). It pins v0.17.0 and v0.16.0 with their tag
 revisions, policy hashes and model bundles. Copy each release policy to
 `target/history-releases/policy-<version>.toml` and check out each tag at
 `target/history-releases/<version>`. Its `binary_sha256` fields are `null`,
-so no measurement is admitted until each is pinned. Pin each from a producer
+so no measurement is admitted until each is pinned. **Step 4a (prerequisite):**
+pin each binary hash from a producer
 build of its tag with `CARGO_TARGET_DIR` unset; that build is the
 `subject_build.build` receipt. Re-resolve `benchmark_spec` after any harness
-change.
+change and assert the recomputed object equals the committed plan's spec.
+A history dry run alone does not establish that equality. The combined corpus
+is not comparable to the standalone detection branches' earlier captures.
 
 First inspect the plan without inference. Then execute only missing jobs:
 

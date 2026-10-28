@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "cbc9a1bbfc899c50b35c78e0ce1e02518b3a8f5ecfeb759ec5e6dde0b6432b25",
-    "test": "f8b9dc58de45dcc6ec8de0e911dc0d5f52682889ec912cbf4b120a03e56409bc",
+    "dev": "be910adea334a00a067ac9e14080a6325ff954068bd0913e350de8bc975cfab6",
+    "test": "ef3a457a3c1a273cd8d64f9dbb5be2010014cc40d6664f7fdff531ff9bbdb03b",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -2272,8 +2272,8 @@ class GateTests(unittest.TestCase):
 
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
-                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16"), "IBAN": (),
-                          "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped"), "CPF": ("ref_number_11",),
+                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16", "invisible_card_twin"), "IBAN": (),
+                          "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped", "invisible_tax_twin"), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})
         self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), set(agentic.CREDIT_SCOPE_BY_LABEL))

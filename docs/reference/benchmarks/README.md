@@ -2289,7 +2289,7 @@ and SKUs. Covering one is a false positive. The D counterweights carry the same
 shapes and value shapes under public order, request and invoice keys, with no
 person data. The [cell generator](../../../scripts/bench/structured_input_cells.py)
 holds the authored inputs. Every v25 document reconstructs byte-for-byte, and
-the v25 contract stays frozen. The full test partition now has 10,307 A,
+the v25 contract stays frozen. The v26 test partition has 10,307 A,
 7,612 D and 6,481 R documents.
 
 The scorecard gates these cells in bytes, like every other cell. The
@@ -2320,8 +2320,62 @@ values. Their gold appears only as refused gold bytes. The scorer gate counts
 refused gold as leaked, so refusing a payload is never a gain. The reader refuses a record from an older
 generator or a different corpus.
 
-No release has been measured on generator v26 yet. Until the past releases are
-re-run on it, compare the slice only between captures of the same corpus.
+No release has been measured on these structured-input cells yet. Until the
+past releases are re-run, compare the slice only between captures of the same
+corpus and benchmark specification.
+
+### Invisible separators and issuer credentials (generators v27–v29)
+
+These are harness inputs, not detection changes. The
+[invisible-separator generator](../../../scripts/bench/invisible_separator_cells.py)
+is copied unchanged from #870 at `c3af8c6aa592dc348f1f310a47d63ebfa5f19637`;
+the [issuer generator](../../../scripts/bench/issuer_credential_cells.py) is
+copied unchanged from #871 at `de9e8a968b94af49c982eeb4b4e226547f77b6d7`.
+Their independently seeded source values, gold, templates and counterweights
+stay unchanged. No recognizer, normalization, rule-dependent census or
+mechanism-arm evidence is included.
+
+- **v27** adds `invisible_` cells for ZWSP, WORD JOINER, SOFT HYPHEN and
+  NON-BREAKING HYPHEN in identifiers, literal-Unicode JSON and exact repeats.
+  Whole original UTF-8 values, including formatting, are gold. Benign words,
+  code, paths, small numbers and incomplete mail fragments are counterweights.
+  Format-matched invalid card, phone, IBAN, tax-placeholder and mail twins stay
+  benign; card and tax twins join the existing no-FP-rise credit guard.
+- **v28** adds `invisible_bom_`, `invisible_joined_` and `invisible_boundary_`.
+  These measure BOM-separated values, joined labelled groups and values beside
+  word-glued default-ignorable characters, plus internal formatting and repeats.
+  Leading/embedded BOM code, public build/batch references, emoji, Arabic,
+  Persian, Indic and bidi-marked text are benign counterweights. Adjacent words
+  are never part of gold.
+- **v29** adds `issuer_credentials_`: exactly 4,200 documents per partition
+  (3,440 A, 570 D, 190 R). Bare synthetic issuer credentials and complete,
+  truncated or mismatched private armour are whole-source gold across literal,
+  serialized, comment, HTML, shell and URL-encoded surfaces. Public armour,
+  placeholders, tutorials and ordinary code/hash identifiers stay benign.
+  Layer D carries no gold; every protected byte there is a false positive.
+
+The integrated corpora include v26's `structured_` cells at every later
+version. They therefore have different identities from the standalone #870
+and #871 corpora; their detection measurements cannot be relabelled as results
+for this specification. The v25 and v26 corpora and contracts reconstruct
+byte-for-byte. Frozen v27/v28 contracts and corpus pins describe the integrated
+history, not the standalone branch history.
+
+| Generator | A documents | D documents | R documents | Total per partition |
+| --- | ---: | ---: | ---: | ---: |
+| v26 | 10,307 | 7,612 | 6,481 | 24,400 |
+| v27 | 10,707 | 8,012 | 6,881 | 25,600 |
+| v28 | 16,247 | 8,262 | 12,421 | 36,930 |
+| v29 | 19,687 | 8,832 | 12,611 | 41,130 |
+
+The [v29 history plan](history-plans/generator-v29.json) covers one remeasurement
+of v0.17.0 and v0.16.0 on the combined corpus. **Step 4a remains a prerequisite:**
+build each pinned release tag and pin its binary hash before any capture.
+No historical numbers have been changed or new measurements claimed here.
+After this harness lands, #870 and #871 must merge main, retain these combined
+generator/contracts/pins, drop their redundant harness changes and standalone
+comparison notices, and certify their detection changes against the new main.
+Their rule-dependent tooling and mechanism arms remain with those PRs.
 
 ### Measured adjacency layer history
 

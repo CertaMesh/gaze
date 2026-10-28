@@ -1,22 +1,22 @@
 {
   "benchmark_spec": {
-    "id": "gaze-benchmark-v1:ff2835c9a28a52b55498084e0c3c7431bf66a9dbbbcaa01c3173bcd6d7a46a8e",
+    "id": "gaze-benchmark-v1:bb2054aa25f8039bafdf367353ea5533a9c95817f8c6ffcacfe28318240f6d35",
     "schema_version": 1,
     "inputs": {
       "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
       "generator": {
         "generator": "scripts/bench/agentic_layers.py",
-        "generator_version": 26,
+        "generator_version": 29,
         "partition": "test",
         "seed": 2026092602,
         "docs_per_family": 10,
-        "documents": 24400,
+        "documents": 41130,
         "documents_by_layer": {
-          "A": 10307,
-          "D": 7612,
-          "R": 6481
+          "A": 19687,
+          "D": 8832,
+          "R": 12611
         },
-        "corpus_sha256": "f8b9dc58de45dcc6ec8de0e911dc0d5f52682889ec912cbf4b120a03e56409bc",
+        "corpus_sha256": "ef3a457a3c1a273cd8d64f9dbb5be2010014cc40d6664f7fdff531ff9bbdb03b",
         "synthetic_only": true
       },
       "seed": 20260710,
@@ -25,10 +25,10 @@
         "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
         "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
         "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-        "generated": "11bb0105c99e61e254d31c9cf7d93e333ccfc79f2086499490fa37a95277a660"
+        "generated": "b495d72c09e1067a714251af5fc4353ca998334d56f81d5d91ffeac86b1f4d81"
       },
       "harness": {
-        "scripts/bench/agentic_layers.py": "e4d470b385c1e8a4503db24943ffdb7ebee7a57000c28397ddba9bb26ca6d28e",
+        "scripts/bench/agentic_layers.py": "955d61a54859a3c4f5b52cf6b43b47c093a3c2fea8f8f3d1c6ef1cd9a200ec80",
         "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
         "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
         "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -78,7 +78,9 @@
         "scripts/bench/government_id_cells.py": "027584c0ffd28a0fa07b266d7e640e6c15936195cfc0a24c26cfbd261697d6f8",
         "scripts/bench/iban_trailing_word_enumeration.py": "83ba3d356cd7e4ee129e834b9cae60d97e73d428698cc497191f8ba1dc6081ee",
         "scripts/bench/inference_reuse_proof.py": "cfed22114bfc72f53b84ee92ec2244a6f71ec1ff3f2cf62f56ec5cf561616e59",
+        "scripts/bench/invisible_separator_cells.py": "8d223314377bb78c4a93ef1da6a3928db2d64996bf413e842db49294351a7e83",
         "scripts/bench/ip_adjacent_gain.py": "5bd80284889be703cbbce018cbf35d74010a6eacc9b195c36398ebc41d8fd006",
+        "scripts/bench/issuer_credential_cells.py": "869cb0809040c4b3d3d8d7fe797dc909ec5c252cf509b1516e11f4260e7af398",
         "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",
         "scripts/bench/known_record_arm.py": "3aa74c2e8993e02298b23f65e52d2a1e7bf441f6513381e463fb035c1f568ab0",
         "scripts/bench/known_record_attribution.py": "cb78d5a19331af88289aed957921be58011e6f288c110a4d6e2bb768502d3faf",
@@ -328,19 +330,19 @@
           "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
         },
         "A": {
-          "documents": 10307,
-          "document_ids_sha256": "080eacfbd5bd8f1fbef30f356f54ca3739c87e04a111d586a228ea2f2e1c576f",
-          "descriptors_sha256": "e03bbe08abf70cfc27039c5ade6463c2f963ccba769a9781b90c1dd9e56953c0"
+          "documents": 19687,
+          "document_ids_sha256": "8d5e75019f70101b9be59ebeb964dc1b0230c3e431129520ff2e9414fde3fdea",
+          "descriptors_sha256": "dce824b05aa3762f9f2ca3da471ff02684f51833d1cf1b33e49a92d52752277e"
         },
         "D": {
-          "documents": 7612,
-          "document_ids_sha256": "56b939dde353d0af03993d6fbaebdabd9180b771d39cfd27eef36b2c58f9534e",
-          "descriptors_sha256": "34861b67b2599dc5d8f698a229799205ecc35c3be6fe16a8093c5d2b2fb3b8cb"
+          "documents": 8832,
+          "document_ids_sha256": "a1cba57ee2d9d42dd87f4648fcd33ea5d58fb6438c38d8a32bdd2b3179581c4f",
+          "descriptors_sha256": "48bf717dca13d84f141f0fab8115c08805d9f6c330d30bdcfea18ec778a42509"
         },
         "R": {
-          "documents": 6481,
-          "document_ids_sha256": "d0514b7b8a0b2917a73b761c907e846cf154e9763354223ba44e273e6494f7ce",
-          "descriptors_sha256": "dc327f3706144d988b47b3d21a0ee5eead7d251344a2c007b02d9e3ed0ea5e85"
+          "documents": 12611,
+          "document_ids_sha256": "a2e45d1d80752ea6f40719e67bbe52828003138bbcaf2f12741f42b69208a8b3",
+          "descriptors_sha256": "b5b576b7d15f7f3683bdb97d4210457779e39c123eb63af60d995f5dc2ac54a1"
         }
       }
     }
