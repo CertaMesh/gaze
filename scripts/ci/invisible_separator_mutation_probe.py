@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 21
+    total = len(set(args.probe)) or len(CODEPOINTS) + 22
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -86,6 +86,10 @@ def main():
                "scans.extend(boundaries);",
                "merge_recovered_scans(&mut scans, &[], boundaries, false, || {});",
                "hard_boundary_value_survives_enclosing_joined_validator_failure", "validators")
+        reject("hard_boundary_empty_candidate", REGEX_SOURCE,
+               "boundaries.retain(|scan| !scan.span.is_empty());",
+               "boundaries.retain(|_| true);",
+               "hard_boundary_marker_only_captures_do_not_hide_real_values", "legacy_source_boundaries")
         reject("luhn_enclosing_union", VETO_SOURCE,
                "cards.contains(&candidate.span)", "!cards.is_empty()",
                "hard_boundary_value_survives_enclosing_joined_validator_failure", "validators")

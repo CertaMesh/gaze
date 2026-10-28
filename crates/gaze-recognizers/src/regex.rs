@@ -416,6 +416,9 @@ impl RegexDetector {
                             .or_insert(scan.span.start);
                     }
                 }
+                // A marker-only capture has no value in the joined text, just as in
+                // the transformed view. Never emit its empty mapped candidate.
+                boundaries.retain(|scan| !scan.span.is_empty());
                 // A valid hard-boundary value must not absorb a neighbouring digit just
                 // because a consuming atom can skip that boundary in the joined view.
                 scans.retain(|scan| {
