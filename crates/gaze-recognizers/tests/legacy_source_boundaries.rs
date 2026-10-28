@@ -132,9 +132,25 @@ fn hard_boundary_marker_only_captures_do_not_hide_real_values() {
         .build()
         .unwrap();
     for sep in [
-        '\u{ad}', '\u{34f}', '\u{61c}', '\u{115f}', '\u{17b4}', '\u{180e}', '\u{200b}',
-        '\u{200c}', '\u{200d}', '\u{202a}', '\u{2060}', '\u{3164}', '\u{fe0f}', '\u{feff}',
-        '\u{ffa0}', '\u{fff0}', '\u{1bca0}', '\u{1d173}', '\u{e0067}',
+        '\u{ad}',
+        '\u{34f}',
+        '\u{61c}',
+        '\u{115f}',
+        '\u{17b4}',
+        '\u{180e}',
+        '\u{200b}',
+        '\u{200c}',
+        '\u{200d}',
+        '\u{202a}',
+        '\u{2060}',
+        '\u{3164}',
+        '\u{fe0f}',
+        '\u{feff}',
+        '\u{ffa0}',
+        '\u{fff0}',
+        '\u{1bca0}',
+        '\u{1d173}',
+        '\u{e0067}',
     ] {
         let empty = format!("field: \"{sep}{sep}\"");
         let value = format!("cedar{sep}birch");
