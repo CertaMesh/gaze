@@ -1,0 +1,445 @@
+{
+  "schema": "gaze-invisible-process-cold-v1",
+  "rounds": 7,
+  "base_sha": "3b3808c66a528a308b293b5d6bfd1e4924a637c1",
+  "candidate_sha": "01747b79af9e12ef368ab890b9af82bd1f8e3db9",
+  "binary_sha256": {
+    "base": "c883d2d96cd2d91355e3561102558e797cb96440957a88031735a0fe313a07b5",
+    "candidate": "fdce70afe53c9b6536bfb835791c4529cccba86bc05204b392ef6f295709e51a"
+  },
+  "script_sha256": "a70d021c95cb0edc8d62dea3b27d534a7606cbf368b5a4241106a62632e7882b",
+  "inputs_sha256": {
+    "plain": "f04a9766fa8ff90cb431fada25d5970b04e6d9967783376e5ea15cd3deceedc3",
+    "zwsp": "c0a98f238be4620de77c5627580dbeb0cd45232de4afb4ce579f32393c337c08"
+  },
+  "host_before": {
+    "load_average": [
+      3.580078125,
+      3.76708984375,
+      4.201171875
+    ],
+    "cpu_count": 18,
+    "memory_pressure": "System-wide memory free percentage: 83%"
+  },
+  "host_after": {
+    "load_average": [
+      3.41650390625,
+      3.724609375,
+      4.1806640625
+    ],
+    "cpu_count": 18,
+    "memory_pressure": "System-wide memory free percentage: 83%"
+  },
+  "summary": {
+    "base": {
+      "plain": {
+        "median_ms": 160.654083,
+        "median_cpu_ms": 158.04299999999998,
+        "min_cpu_ms": 155.26100000000002,
+        "max_cpu_ms": 162.239,
+        "min_ms": 157.969541,
+        "max_ms": 1028.237709,
+        "peak_rss_min_bytes": 39763968,
+        "peak_rss_max_bytes": 41746432,
+        "detections": [
+          2
+        ]
+      },
+      "zwsp": {
+        "median_ms": 158.61075,
+        "median_cpu_ms": 156.02799999999996,
+        "min_cpu_ms": 155.087,
+        "max_cpu_ms": 162.45000000000002,
+        "min_ms": 157.44825,
+        "max_ms": 165.100084,
+        "peak_rss_min_bytes": 40058880,
+        "peak_rss_max_bytes": 40304640,
+        "detections": [
+          1
+        ]
+      }
+    },
+    "candidate": {
+      "plain": {
+        "median_ms": 160.801292,
+        "median_cpu_ms": 158.49399999999997,
+        "min_cpu_ms": 157.88699999999997,
+        "max_cpu_ms": 167.15999999999997,
+        "min_ms": 160.267667,
+        "max_ms": 858.898292,
+        "peak_rss_min_bytes": 39829504,
+        "peak_rss_max_bytes": 40337408,
+        "detections": [
+          2
+        ]
+      },
+      "zwsp": {
+        "median_ms": 206.392166,
+        "median_cpu_ms": 203.79199999999997,
+        "min_cpu_ms": 200.527,
+        "max_cpu_ms": 206.134,
+        "min_ms": 203.056084,
+        "max_ms": 208.961291,
+        "peak_rss_min_bytes": 52477952,
+        "peak_rss_max_bytes": 52756480,
+        "detections": [
+          2
+        ]
+      }
+    }
+  },
+  "samples": {
+    "base": {
+      "plain": [
+        {
+          "milliseconds": 1028.237709,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 162.239,
+          "user_milliseconds": 152.515,
+          "system_milliseconds": 9.724,
+          "peak_rss_bytes": 39763968,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 163.045875,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 160.29699999999997,
+          "user_milliseconds": 155.59199999999998,
+          "system_milliseconds": 4.705,
+          "peak_rss_bytes": 41746432,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 157.969541,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 155.26100000000002,
+          "user_milliseconds": 150.284,
+          "system_milliseconds": 4.976999999999999,
+          "peak_rss_bytes": 39993344,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 163.403833,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 160.70499999999998,
+          "user_milliseconds": 155.529,
+          "system_milliseconds": 5.176,
+          "peak_rss_bytes": 40878080,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 158.560625,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 155.971,
+          "user_milliseconds": 151.245,
+          "system_milliseconds": 4.726,
+          "peak_rss_bytes": 39878656,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 160.654083,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 158.04299999999998,
+          "user_milliseconds": 153.001,
+          "system_milliseconds": 5.042,
+          "peak_rss_bytes": 39895040,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 159.937375,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 157.393,
+          "user_milliseconds": 152.419,
+          "system_milliseconds": 4.974,
+          "peak_rss_bytes": 39780352,
+          "detections": 2,
+          "exit_code": 0
+        }
+      ],
+      "zwsp": [
+        {
+          "milliseconds": 160.073417,
+          "protected_card": false,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 157.48199999999997,
+          "user_milliseconds": 152.62499999999997,
+          "system_milliseconds": 4.857,
+          "peak_rss_bytes": 40058880,
+          "detections": 1,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 159.245458,
+          "protected_card": false,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 156.59799999999998,
+          "user_milliseconds": 151.888,
+          "system_milliseconds": 4.71,
+          "peak_rss_bytes": 40304640,
+          "detections": 1,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 165.100084,
+          "protected_card": false,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 162.45000000000002,
+          "user_milliseconds": 157.529,
+          "system_milliseconds": 4.921,
+          "peak_rss_bytes": 40288256,
+          "detections": 1,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 158.3055,
+          "protected_card": false,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 155.80699999999996,
+          "user_milliseconds": 150.93099999999998,
+          "system_milliseconds": 4.876,
+          "peak_rss_bytes": 40173568,
+          "detections": 1,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 158.61075,
+          "protected_card": false,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 156.02799999999996,
+          "user_milliseconds": 151.37699999999998,
+          "system_milliseconds": 4.651,
+          "peak_rss_bytes": 40091648,
+          "detections": 1,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 158.362167,
+          "protected_card": false,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 155.754,
+          "user_milliseconds": 150.726,
+          "system_milliseconds": 5.028,
+          "peak_rss_bytes": 40304640,
+          "detections": 1,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 157.44825,
+          "protected_card": false,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 155.087,
+          "user_milliseconds": 149.949,
+          "system_milliseconds": 5.137999999999999,
+          "peak_rss_bytes": 40222720,
+          "detections": 1,
+          "exit_code": 0
+        }
+      ]
+    },
+    "candidate": {
+      "plain": [
+        {
+          "milliseconds": 858.898292,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 167.15999999999997,
+          "user_milliseconds": 157.25799999999998,
+          "system_milliseconds": 9.902,
+          "peak_rss_bytes": 40304640,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 160.322084,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 157.888,
+          "user_milliseconds": 152.828,
+          "system_milliseconds": 5.06,
+          "peak_rss_bytes": 40124416,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 160.267667,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 157.88699999999997,
+          "user_milliseconds": 153.56599999999997,
+          "system_milliseconds": 4.321000000000001,
+          "peak_rss_bytes": 40239104,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 161.229375,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 158.87599999999998,
+          "user_milliseconds": 154.393,
+          "system_milliseconds": 4.483,
+          "peak_rss_bytes": 39829504,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 160.642958,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 158.23999999999998,
+          "user_milliseconds": 153.145,
+          "system_milliseconds": 5.095,
+          "peak_rss_bytes": 40337408,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 163.296167,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 160.70499999999998,
+          "user_milliseconds": 155.723,
+          "system_milliseconds": 4.981999999999999,
+          "peak_rss_bytes": 39829504,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 160.801292,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 158.49399999999997,
+          "user_milliseconds": 153.17799999999997,
+          "system_milliseconds": 5.316,
+          "peak_rss_bytes": 40206336,
+          "detections": 2,
+          "exit_code": 0
+        }
+      ],
+      "zwsp": [
+        {
+          "milliseconds": 208.961291,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 206.134,
+          "user_milliseconds": 200.209,
+          "system_milliseconds": 5.925,
+          "peak_rss_bytes": 52756480,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 207.117459,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 204.45799999999997,
+          "user_milliseconds": 199.10999999999999,
+          "system_milliseconds": 5.348,
+          "peak_rss_bytes": 52477952,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 205.959416,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 203.289,
+          "user_milliseconds": 196.81199999999998,
+          "system_milliseconds": 6.477,
+          "peak_rss_bytes": 52690944,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 206.05625,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 203.21999999999997,
+          "user_milliseconds": 197.72099999999998,
+          "system_milliseconds": 5.499,
+          "peak_rss_bytes": 52690944,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 206.392166,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 203.79199999999997,
+          "user_milliseconds": 197.968,
+          "system_milliseconds": 5.823999999999999,
+          "peak_rss_bytes": 52477952,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 208.652375,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 205.864,
+          "user_milliseconds": 199.988,
+          "system_milliseconds": 5.876,
+          "peak_rss_bytes": 52658176,
+          "detections": 2,
+          "exit_code": 0
+        },
+        {
+          "milliseconds": 203.056084,
+          "protected_card": true,
+          "protected_email": true,
+          "manifest_substitution_round_trip": true,
+          "cpu_milliseconds": 200.527,
+          "user_milliseconds": 194.88899999999998,
+          "system_milliseconds": 5.638,
+          "peak_rss_bytes": 52740096,
+          "detections": 2,
+          "exit_code": 0
+        }
+      ]
+    }
+  },
+  "load_wait_seconds": 6.624963134527206e-06,
+  "busy_host": false,
+  "measurement": "fresh process to exit; loader, original regex compilation, detection and output; warm OS page cache; shared host",
+  "interpretation": "descriptive cold samples; ZWSP base may leak where candidate protects, so detection work differs"
+}

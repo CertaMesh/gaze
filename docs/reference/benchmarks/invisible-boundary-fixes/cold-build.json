@@ -1,0 +1,11 @@
+{
+  "schema": "gaze-cold-build-v1",
+  "base_sha": "3b3808c66a528a308b293b5d6bfd1e4924a637c1",
+  "candidate_sha": "01747b79af9e12ef368ab890b9af82bd1f8e3db9",
+  "features": "gaze-cli default",
+  "timing_capture_started": false,
+  "binary_sha256": {
+    "base": "c883d2d96cd2d91355e3561102558e797cb96440957a88031735a0fe313a07b5",
+    "candidate": "fdce70afe53c9b6536bfb835791c4529cccba86bc05204b392ef6f295709e51a"
+  }
+}

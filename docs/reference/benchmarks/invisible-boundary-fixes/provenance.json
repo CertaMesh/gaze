@@ -44,6 +44,38 @@
     "empty-boundary-regression.json": {
       "file_sha256": "414c251cc531b2c4a25e39a30584d267a30ef04e5ec04bdd1bf97b1fb873d7b8",
       "json_sha256": "414c251cc531b2c4a25e39a30584d267a30ef04e5ec04bdd1bf97b1fb873d7b8"
+    },
+    "cold-build.json": {
+      "file_sha256": "9e093c2d176097ef356582c5a9f9ad0bd0e9c77ff0e5f22bef09cd54ba908886",
+      "json_sha256": "9e093c2d176097ef356582c5a9f9ad0bd0e9c77ff0e5f22bef09cd54ba908886"
+    },
+    "cold-current-main.json": {
+      "file_sha256": "77f4806a9df8901ea2bbfbf3235639b4a57f62d992cc11f39a38d8d0180fa58f",
+      "json_sha256": "77f4806a9df8901ea2bbfbf3235639b4a57f62d992cc11f39a38d8d0180fa58f"
+    },
+    "gates.json": {
+      "file_sha256": "e7b91e6676a59646c4992cc878a916e7dc62f5bdad4dd48e4e33a04f55249518",
+      "json_sha256": "e7b91e6676a59646c4992cc878a916e7dc62f5bdad4dd48e4e33a04f55249518"
+    },
+    "pr-ritual.json": {
+      "file_sha256": "cc0be970c1f87010d43058340a9c623b342b657961a67ae22240ba4849305404",
+      "json_sha256": "cc0be970c1f87010d43058340a9c623b342b657961a67ae22240ba4849305404"
+    },
+    "main-advisories.json": {
+      "file_sha256": "0df406a745e3205ec0b4fc74b30002b8eae9e7f91d509911d1dd440258f04f74",
+      "json_sha256": "0df406a745e3205ec0b4fc74b30002b8eae9e7f91d509911d1dd440258f04f74"
+    },
+    "merge-focus.json": {
+      "file_sha256": "397f9bf1df14afb4bfb8259bddb96b2ad7271b6907060dcf88f6f6473e38d41d",
+      "json_sha256": "397f9bf1df14afb4bfb8259bddb96b2ad7271b6907060dcf88f6f6473e38d41d"
     }
+  },
+  "supplemental_source_sha": "5b90e12ff748fa001fe7de4610e45509141aff46",
+  "supplemental_production_git_objects": {
+    "crates": "bac1542691df7eab602ad643ffc9961227289ff7",
+    "Cargo.toml": "e172bc817ba68affff1f0550faa9af9f7e42741a",
+    "Cargo.lock": "d229f0155f4ccaf04e267cb4bb164f05c8a28cfc",
+    ".cargo": "a858e206dfbe9996dc77b95974b3614810c3e200",
+    "rust-toolchain.toml": "4f0430eac96d545bcfaa0df23ce475faf4aee96a"
   }
 }

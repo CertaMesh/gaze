@@ -1,0 +1,97 @@
+{
+  "schema": "gaze-invisible-gates-v1",
+  "note": "Component passes retain their actual measured source. The first two enclosing checks later failed; only the listed exit-zero components are accepted. The post-rewrite check passed in full.",
+  "parent_normalizer": {
+    "source_sha": "c51eb4610c34c0eea86f2e82acc93d599143dcc3",
+    "enclosing_check_status": "failed",
+    "receipt_sha256": "c15c6a32e3bd9a77743fd9031fb41b2e7b0b5871ee160df33a95cede83473098",
+    "passing_components": [
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/verify_normalize_merge.py",
+        "exit_code": 0,
+        "log_sha256": "45bd5b6256e5a024b1001c816e3fd41b41427275bba895f97a873f04241d6ac0",
+        "tail": "   Compiling proc-macro2 v1.0.106\n   Compiling unicode-ident v1.0.24\n   Compiling libc v0.2.186\n   Compiling serde_core v1.0.228\n   Compiling quote v1.0.45\n   Compiling syn v2.0.117\n   Compiling memchr v2.8.0\n   Compiling cpufeatures v0.2.17\n   Compiling serde v1.0.228\n   Compiling digest v0.10.7\n   Compiling thiserror-impl v1.0.69\n   Compiling serde_derive v1.0.228\n   Compiling keccak v0.1.6\n   Compiling aho-corasick v1.1.4\n   Compiling regex-automata v0.4.14\n   Compiling sha3 v0.10.9\n   Compiling thiserror v1.0.69\n   Compiling serde_json v1.0.149\n   Compiling gaze-types v0.17.0 (<worktree>/crates/gaze-types)\n   Compiling regex v1.12.3\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.60s\n     Running tests/normalize_merge_parents.rs (target/debug/deps/normalize_merge_parents-aedb26ae1cddb208)\n\nrunning 1 test\nNORMALIZE 65536/1112064\nNORMALIZE 131072/1112064\nNORMALIZE 196608/1112064\nNORMALIZE 262144/1112064\nNORMALIZE 327680/1112064\nNORMALIZE 393216/1112064\nNORMALIZE 458752/1112064\nNORMALIZE 524288/1112064\nNORMALIZE 589824/1112064\nNORMALIZE 655360/1112064\nNORMALIZE 720896/1112064\nNORMALIZE 786432/1112064\nNORMALIZE 851968/1112064\nNORMALIZE 917504/1112064\nNORMALIZE 983040/1112064\nNORMALIZE 1048576/1112064\nNORMALIZE MERGE: 1112064 branch scalars; 1107889 unchanged main scalars; exact text and provenance\ntest both_parent_normalizers_preserve_all_scalar_and_source_mappings ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.40s\n"
+      }
+    ]
+  },
+  "affected_suite_and_mutations": {
+    "source_sha": "1af30df8bb78f82de54118a05b49c164787cdc20",
+    "enclosing_check_status": "failed",
+    "receipt_sha256": "9db46914b2c1a3a46a8c28bc3c398bbe961eff85594cf3e24ee162a597f0cb56",
+    "passing_components": [
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo fmt --all -- --check",
+        "exit_code": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "tail": ""
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --test validators validator_classes_keep_gap_neighbours_outside_valid_values -- --nocapture",
+        "exit_code": 0,
+        "log_sha256": "9096f35705e2019a3b5a0c2be0d92accadd76b16cfec81ea31b283fb6bcb3c8c",
+        "tail": "   Compiling gaze-types v0.17.0 (<worktree>/crates/gaze-types)\n   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n   Compiling gaze-assembly v0.17.0 (<worktree>/crates/gaze-assembly)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.42s\n     Running tests/validators.rs (target/debug/deps/validators-daa3bbb096836901)\n\nrunning 1 test\nVALIDATORS 1/19\nVALIDATORS 2/19\nVALIDATORS 3/19\nVALIDATORS 4/19\nVALIDATORS 5/19\nVALIDATORS 6/19\nVALIDATORS 7/19\nVALIDATORS 8/19\nVALIDATORS 9/19\nVALIDATORS 10/19\nVALIDATORS 11/19\nVALIDATORS 12/19\nVALIDATORS 13/19\nVALIDATORS 14/19\nVALIDATORS 15/19\nVALIDATORS 16/19\nVALIDATORS 17/19\nVALIDATORS 18/19\nVALIDATORS 19/19\ntest validator_classes_keep_gap_neighbours_outside_valid_values ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.32s\n"
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_mutation_probe.py",
+        "exit_code": 0,
+        "log_sha256": "ca3ba7d5ad148857e1fd52d15e9dc4578d6ce5a79c1836361b773615fc03da8e",
+        "tail": "MUTATION 20/41: nb_hyphen\nMUTATION 20/41: nb_hyphen rejected\nMUTATION 21/41: source_boundaries\nMUTATION 21/41: source_boundaries rejected\nMUTATION 22/41: hard_boundary\nMUTATION 22/41: hard_boundary rejected\nMUTATION 23/41: hard_boundary_containment\nMUTATION 23/41: hard_boundary_containment rejected\nMUTATION 24/41: hard_boundary_empty_candidate\nMUTATION 24/41: hard_boundary_empty_candidate rejected\nMUTATION 25/41: luhn_enclosing_union\nMUTATION 25/41: luhn_enclosing_union rejected\nMUTATION 26/41: luhn_union_preference\nMUTATION 26/41: luhn_union_preference rejected\nMUTATION 27/41: recorded_card_layout\nMUTATION 27/41: recorded_card_layout rejected\nMUTATION 28/41: recorded_code_total_length\nMUTATION 28/41: recorded_code_total_length rejected\nMUTATION 29/41: card_window_source_gaps\nMUTATION 29/41: card_window_source_gaps rejected\nMUTATION 30/41: hard_boundary_preference\nMUTATION 30/41: hard_boundary_preference rejected\nMUTATION 31/41: adopter_ignorable_literal\nMUTATION 31/41: adopter_ignorable_literal rejected\nMUTATION 32/41: adopter_edge_literal\nMUTATION 32/41: adopter_edge_literal rejected\nMUTATION 33/41: adopter_prefilter\nMUTATION 33/41: adopter_prefilter rejected\nMUTATION 34/41: inner_gap_skip\nMUTATION 34/41: inner_gap_skip rejected\nMUTATION 35/41: anchored_name_components\nMUTATION 35/41: anchored_name_components rejected\nMUTATION 36/41: unfiltered_gap_compilation\nMUTATION 36/41: unfiltered_gap_compilation rejected\nMUTATION 37/41: legacy_context\nMUTATION 37/41: legacy_context rejected\nMUTATION 38/41: folded_peer_context\nMUTATION 38/41: folded_peer_context rejected\nMUTATION 39/41: joined_run\nMUTATION 39/41: joined_run rejected\nMUTATION 40/41: linear_gap_search\nMUTATION 40/41: linear_gap_search rejected\nMUTATION 41/41: linear_containment_search\nMUTATION 41/41: linear_containment_search rejected\nMUTATION DONE: 41 mutations rejected; source restored"
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-types -p gaze-pii -p gaze-recognizers --all-features -- --nocapture",
+        "exit_code": 0,
+        "log_sha256": "c0b94397d66d41f114216bd657e183b6f94dcfa290af55410b4b355c7a7e4faf",
+        "tail": "   = note: available fields are: `recognizer_id`, `recognizer_version_id`, `outcome`, `outcome_reason`, `field_path_depth` ... and 26 others\n\nerror: aborting due to 2 previous errors\n\nSome errors have detailed explanations: E0560, E0639.\nFor more information about an error, try `rustc --explain E0560`.\ntest crates/gaze/src/pipeline.rs - pipeline::Pipeline (line 290) - compile ... ok\ntest crates/gaze/src/redaction_log.rs - redaction_log::_ (line 14) - compile fail ... ok\nerror[E0599]: no method named `tokenize` found for struct `CommittedSessionSnapshot` in the current scope\n    --> crates/gaze/src/session.rs:435:10\n     |\n 435 | snapshot.tokenize(&PiiClass::Name, \"Another Synthetic Name\")?;\n     |          ^^^^^^^^\n     |\nhelp: there is a method `tokens` with a similar name, but with different arguments\n    --> crates/gaze/src/session.rs:1720:5\n     |\n1720 |     pub fn tokens(&self) -> Vec<String> {\n     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0599`.\ntest crates/gaze/src/session.rs - session::CommittedSessionSnapshot (line 427) - compile fail ... ok\ntest crates/gaze/src/registry.rs - registry (line 8) ... ok\ntest crates/gaze/src/session.rs - session::Session::export_with_extension (line 962) ... ok\ntest crates/gaze/src/session.rs - session::Session (line 488) ... ok\n\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.59s\n\n   Doc-tests gaze_recognizers\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   Doc-tests gaze_types\n\nrunning 3 tests\ntest crates/gaze-types/src/lib.rs - CleanDocument (line 3830) ... ok\ntest crates/gaze-types/src/lib.rs - RedactionLogger (line 3511) ... ok\ntest crates/gaze-types/src/lib.rs - PiiClass (line 123) ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.19s\n"
+      }
+    ]
+  },
+  "post_rewrite": {
+    "source_sha": "22857900ad78cef14e1fc3d3505b5725c1f5b305",
+    "enclosing_check_status": "passed",
+    "receipt_sha256": "0f14673183a982e4a2dcece5d608ad05510fceab0c49f904b5e42bc5d08f163f",
+    "passing_components": [
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo fmt --all -- --check",
+        "exit_code": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "tail": ""
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --lib regex::tests:: -- --nocapture",
+        "exit_code": 0,
+        "log_sha256": "d0da8f0965dcecce5e2b2d3a2878f7400230247ef29d3defaa9045e83c0f67c4",
+        "tail": "REGEX 61/100: 46312 clean cases per pattern\nREGEX 62/100: 46312 clean cases per pattern\nREGEX 63/100: 46312 clean cases per pattern\nREGEX 64/100: 46312 clean cases per pattern\nREGEX 65/100: 46312 clean cases per pattern\nREGEX 66/100: 46312 clean cases per pattern\nREGEX 67/100: 46312 clean cases per pattern\nREGEX 68/100: 46312 clean cases per pattern\nREGEX 69/100: 46312 clean cases per pattern\nREGEX 70/100: 46312 clean cases per pattern\nREGEX 71/100: 46312 clean cases per pattern\nREGEX 72/100: 46312 clean cases per pattern\nREGEX 73/100: 46312 clean cases per pattern\nREGEX 74/100: 46312 clean cases per pattern\nREGEX 75/100: 46312 clean cases per pattern\nREGEX 76/100: 46312 clean cases per pattern\nREGEX 77/100: 46312 clean cases per pattern\nREGEX 78/100: 46312 clean cases per pattern\nREGEX 79/100: 46312 clean cases per pattern\nREGEX 80/100: 46312 clean cases per pattern\nREGEX 81/100: 46312 clean cases per pattern\nREGEX 82/100: 46312 clean cases per pattern\nREGEX 83/100: 46312 clean cases per pattern\nREGEX 84/100: 46312 clean cases per pattern\nREGEX 85/100: 46312 clean cases per pattern\nREGEX 86/100: 46312 clean cases per pattern\nREGEX 87/100: 46312 clean cases per pattern\nREGEX 88/100: 46312 clean cases per pattern\nREGEX 89/100: 46312 clean cases per pattern\nREGEX 90/100: 46312 clean cases per pattern\nREGEX 91/100: 46312 clean cases per pattern\nREGEX 92/100: 46312 clean cases per pattern\nREGEX 93/100: 46312 clean cases per pattern\nREGEX 94/100: 46312 clean cases per pattern\nREGEX 95/100: 46312 clean cases per pattern\nREGEX 96/100: 46312 clean cases per pattern\nREGEX 97/100: 46312 clean cases per pattern\nREGEX 98/100: 46312 clean cases per pattern\nREGEX 99/100: 46312 clean cases per pattern\nREGEX 100/100: 46312 clean cases per pattern\nDIFFERENTIAL DONE: 100 regexes x 46312 cases = 4631200 comparisons, 0 capture differences; max compiled memory ratio 4.4998191354675345\ntest source_regex::tests::all_rulepack_regexes_preserve_captures_without_source_gaps ... ok\n\ntest result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 36.18s\n"
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --test validators hard_boundary_ -- --nocapture",
+        "exit_code": 0,
+        "log_sha256": "489da99d7ec5a4d4d0061e9d8a422517cd5803e637fff15d7e33d5d41749cf84",
+        "tail": "   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s\n     Running tests/validators.rs (target/debug/deps/validators-daa3bbb096836901)\n\nrunning 5 tests\ntest hard_boundary_and_joined_valid_candidates_emit_one_token ... ok\ntest hard_boundary_value_survives_enclosing_joined_validator_failure ... ok\ntest hard_boundary_preserves_recorded_card_and_verification_code ... ok\ntest hard_boundary_preserves_overlapping_valid_card_windows ... ok\nRECORDED CARD CODES 1/4197 separators, 44 layouts each\nRECORDED CARD CODES 257/4197 separators, 44 layouts each\nRECORDED CARD CODES 513/4197 separators, 44 layouts each\nRECORDED CARD CODES 769/4197 separators, 44 layouts each\nRECORDED CARD CODES 1025/4197 separators, 44 layouts each\nRECORDED CARD CODES 1281/4197 separators, 44 layouts each\nRECORDED CARD CODES 1537/4197 separators, 44 layouts each\nRECORDED CARD CODES 1793/4197 separators, 44 layouts each\nRECORDED CARD CODES 2049/4197 separators, 44 layouts each\nRECORDED CARD CODES 2305/4197 separators, 44 layouts each\nRECORDED CARD CODES 2561/4197 separators, 44 layouts each\nRECORDED CARD CODES 2817/4197 separators, 44 layouts each\nRECORDED CARD CODES 3073/4197 separators, 44 layouts each\nRECORDED CARD CODES 3329/4197 separators, 44 layouts each\nRECORDED CARD CODES 3585/4197 separators, 44 layouts each\nRECORDED CARD CODES 3841/4197 separators, 44 layouts each\nRECORDED CARD CODES 4097/4197 separators, 44 layouts each\nRECORDED CARD CODES 4197/4197 separators, 44 layouts each\ntest hard_boundary_recorded_codes_preserve_all_lengths_and_separators ... ok\n\ntest result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 33.80s\n"
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --test legacy_source_boundaries",
+        "exit_code": 0,
+        "log_sha256": "f9e9b7ba7fbfbb2e868b9e73abc0cb6df44dab1390f404e242bd30c400218c01",
+        "tail": "   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s\n     Running tests/legacy_source_boundaries.rs (target/debug/deps/legacy_source_boundaries-aa015159914c1959)\n\nrunning 4 tests\ntest legacy_regex_detectors_keep_glued_and_internal_source_boundaries ... ok\ntest hard_boundary_marker_only_captures_do_not_hide_real_values ... ok\ntest adopter_ignorable_edge_literals_match_without_interior_gaps ... ok\ntest adopter_ignorable_literals_and_class_members_keep_matching ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s\n"
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/regex_site_gate.py",
+        "exit_code": 0,
+        "log_sha256": "c5744165985cab16e21b0b2f9a6da895e304524ead0ec8f5e0ba7648c74a1a5f",
+        "tail": "REGEX SITE GATE 0/13: source_boundaries, hard_boundary, hard_boundary_containment, hard_boundary_empty_candidate, luhn_union_preference, recorded_card_layout, recorded_code_total_length, hard_boundary_preference, adopter_edge_literal, unfiltered_gap_compilation, joined_run, linear_gap_search, linear_containment_search\nMUTATION 1/13: source_boundaries\nMUTATION 1/13: source_boundaries rejected\nMUTATION 2/13: hard_boundary\nMUTATION 2/13: hard_boundary rejected\nMUTATION 3/13: hard_boundary_containment\nMUTATION 3/13: hard_boundary_containment rejected\nMUTATION 4/13: hard_boundary_empty_candidate\nMUTATION 4/13: hard_boundary_empty_candidate rejected\nMUTATION 5/13: luhn_union_preference\nMUTATION 5/13: luhn_union_preference rejected\nMUTATION 6/13: recorded_card_layout\nMUTATION 6/13: recorded_card_layout rejected\nMUTATION 7/13: recorded_code_total_length\nMUTATION 7/13: recorded_code_total_length rejected\nMUTATION 8/13: hard_boundary_preference\nMUTATION 8/13: hard_boundary_preference rejected\nMUTATION 9/13: adopter_edge_literal\nMUTATION 9/13: adopter_edge_literal rejected\nMUTATION 10/13: unfiltered_gap_compilation\nMUTATION 10/13: unfiltered_gap_compilation rejected\nMUTATION 11/13: joined_run\nMUTATION 11/13: joined_run rejected\nMUTATION 12/13: linear_gap_search\nMUTATION 12/13: linear_gap_search rejected\nMUTATION 13/13: linear_containment_search\nMUTATION 13/13: linear_containment_search rejected\nMUTATION DONE: 13 mutations rejected; source restored"
+      },
+      {
+        "command": "env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings",
+        "exit_code": 0,
+        "log_sha256": "720a13c67d17272cd6e62e193b8fd7dff37ef69c27c9577304cca7897e218c2d",
+        "tail": "    Checking gaze-mcp-bridge v0.17.0 (<worktree>/crates/gaze-mcp-bridge)\n    Checking ureq-proto v0.6.0\n    Checking utf8-zero v0.8.1\n    Checking ureq v3.3.0\n   Compiling signal-hook v0.3.18\n    Checking predicates-core v1.0.10\n    Checking dirs-sys-next v0.1.2\n   Compiling assert_cmd v2.2.1\n    Checking gaze-document v0.17.0 (<worktree>/crates/gaze-document)\n    Checking termtree v0.5.1\n    Checking difflib v0.4.0\n    Checking predicates-tree v1.0.13\n    Checking predicates v3.1.4\n    Checking directories-next v2.0.0\n    Checking gaze-model-setup v0.17.0 (<worktree>/crates/gaze-model-setup)\n    Checking bstr v1.12.1\n   Compiling encoding_rs v0.8.42\n   Compiling multiversion_no_op v1.0.0\n    Checking simdutf8 v0.1.5\n    Checking arraydeque v0.5.1\n    Checking unicode-width v0.2.2\n    Checking annotate-snippets v0.12.17\n    Checking granit-parser v2.0.0\n    Checking deunicode v1.6.2\n    Checking encoding_rs_io v0.1.8\n    Checking fake v5.1.0\n    Checking serde-saphyr v2.0.0\n    Checking safe_arch v0.7.4\n    Checking wide v0.7.33\n    Checking num-rational v0.4.2\n    Checking approx v0.5.1\n    Checking ttf-parser v0.25.1\n    Checking simba v0.9.1\n    Checking owned_ttf_parser v0.25.1\n    Checking num-iter v0.1.45\n    Checking ab_glyph_rasterizer v0.1.10\n    Checking ab_glyph v0.2.32\n    Checking num v0.4.3\n    Checking nalgebra v0.34.2\n    Checking rand_distr v0.5.1\n    Checking xtask v0.0.1 (<worktree>/crates/xtask)\n    Checking imageproc v0.26.2\n    Checking gaze-cli v0.17.0 (<worktree>/crates/gaze-cli)\n    Checking feature-graph-probe v0.0.0 (<worktree>/crates/feature-graph-probe)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 49s"
+      }
+    ],
+    "assessment_at_capture": {
+      "current": true,
+      "passing_and_current": true,
+      "stale_reasons": [],
+      "reused_from": null
+    }
+  }
+}
