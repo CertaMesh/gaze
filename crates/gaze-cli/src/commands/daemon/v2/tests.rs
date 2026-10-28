@@ -1584,3 +1584,29 @@ fn global_manifest_budget_refuses_inside_a_block_before_mapping_allocation() {
     d.v2.limits.global_manifest_bytes = Limits::default().global_manifest_bytes;
     assert_eq!(send(&mut d, request)["op"], "clean_blocks");
 }
+
+#[test]
+fn untransformable_failure_reports_the_closed_reason() {
+    let d = daemon();
+    let error = gaze::Error::Protection(gaze::ProtectionError::Untransformable {
+        reason: gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath,
+        field_path: gaze_types::FieldPath::new(["synthetic-key@example.invalid".into()]),
+    });
+    let failure = protection_failure(&d.pipeline, error);
+    let raw = d.v2.error(failure, None);
+    let body: Value = serde_json::from_str(raw.get()).unwrap();
+    assert_eq!(body["error"], "Untransformable");
+    assert_eq!(body["reason"], "json_number_no_text_only_path");
+    assert_eq!(
+        body["detail"],
+        "confirmed sensitive field cannot be transformed"
+    );
+    assert!(!raw.get().contains("synthetic-key"));
+    let other = protection_failure(
+        &d.pipeline,
+        gaze::Error::Protection(gaze::ProtectionError::Residual),
+    );
+    let body: Value = serde_json::from_str(d.v2.error(other, None).get()).unwrap();
+    assert_eq!(body["error"], "Pipeline");
+    assert!(body.get("reason").is_none());
+}

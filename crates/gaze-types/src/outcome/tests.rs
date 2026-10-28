@@ -84,6 +84,7 @@ fn every_outcome_reason_has_stable_value_free_serialization_and_diagnostics() {
     ] {
         round_trip(reason, &format!("\"{wire}\""));
         assert_eq!(reason.to_string(), wire);
+        assert_eq!(reason.as_str(), wire);
         assert_eq!(format!("{reason:?}"), debug);
         let outcome = ProtectionOutcome::ConfirmedUntransformable(reason);
         round_trip(

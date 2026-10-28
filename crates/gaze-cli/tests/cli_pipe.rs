@@ -1834,6 +1834,55 @@ fn s2_audit_invalid_iso8601_is_policy_config_for_query_and_export() {
     }
 }
 
+fn clean_with_outcomes_table(table: &str) -> std::process::Output {
+    let (dir, base) = write_minimal_policy();
+    let path = dir.path().join("outcomes.toml");
+    fs::write(
+        &path,
+        format!("{table}\n{}", fs::read_to_string(base).unwrap()),
+    )
+    .unwrap();
+    clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Email alice@example.com about order 4711",
+    )
+}
+
+#[test]
+fn outcomes_policy_parses_without_changing_clean_output() {
+    let baseline = clean_with_outcomes_table("");
+    assert_eq!(baseline.status.code(), Some(0));
+    let token = Regex::new(r"<[^>]+>").unwrap();
+    for value in ["protect", "refuse", "pass_audited"] {
+        let out =
+            clean_with_outcomes_table(&format!("[outcomes]\npossibly_sensitive = \"{value}\"\n"));
+        assert_eq!(out.status.code(), Some(0), "{value}");
+        let stdout: Value = serde_json::from_slice(&out.stdout).unwrap();
+        let expected: Value = serde_json::from_slice(&baseline.stdout).unwrap();
+        // Session tokens are random per run; the clean text shape must match.
+        let shape = |v: &Value| {
+            token
+                .replace_all(v["clean_text"].as_str().unwrap(), "<T>")
+                .into_owned()
+        };
+        assert_eq!(shape(&stdout), shape(&expected), "{value}");
+        assert!(!shape(&stdout).contains("alice@example.com"));
+    }
+}
+
+#[test]
+fn outcomes_policy_rejects_unknown_values_and_untransformable_knob() {
+    for table in [
+        "[outcomes]\npossibly_sensitive = \"pass\"\n",
+        "[outcomes]\nconfirmed_untransformable = \"pass_audited\"\n",
+    ] {
+        let out = clean_with_outcomes_table(table);
+        assert_eq!(out.status.code(), Some(2), "{table}");
+        assert!(out.stdout.is_empty());
+        assert_policy_config_envelope(&out.stderr);
+    }
+}
+
 #[test]
 fn s1_policy_audit_defaults_are_not_supported() {
     let dir = tempdir().unwrap();

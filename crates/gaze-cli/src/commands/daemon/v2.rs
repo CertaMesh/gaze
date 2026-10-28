@@ -317,6 +317,8 @@ enum Failure {
     RestoreFailed,
     ContextInvalid,
     Protection(&'static str),
+    /// Confirmed sensitive value with no safe rendering; carries the closed reason.
+    Untransformable(&'static str),
 }
 
 impl Failure {
@@ -336,6 +338,7 @@ impl Failure {
             Self::RestoreFailed => "RestoreFailed",
             Self::ContextInvalid => "PolicyConfig",
             Self::Protection(variant) => variant,
+            Self::Untransformable(_) => "Untransformable",
         }
     }
     fn detail(self) -> &'static str {
@@ -343,7 +346,14 @@ impl Failure {
             Self::CacheConflict => "cache state conflict",
             Self::CacheCapacity => "complete request exceeds capacity",
             Self::CacheConvergence => "complete request did not stabilize",
+            Self::Untransformable(_) => "confirmed sensitive field cannot be transformed",
             _ => "daemon request failed closed",
+        }
+    }
+    fn reason(self) -> Option<&'static str> {
+        match self {
+            Self::Untransformable(reason) => Some(reason),
+            _ => None,
         }
     }
 }
@@ -389,6 +399,8 @@ impl Registry {
             error: &'static str,
             detail: &'static str,
             #[serde(skip_serializing_if = "Option::is_none")]
+            reason: Option<&'static str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
             current: Option<Current<'a>>,
         }
         let current = request.and_then(|r| {
@@ -405,6 +417,7 @@ impl Registry {
             request_seq: request.and_then(|r| r.counter("request_seq").ok()),
             error: failure.variant(),
             detail: failure.detail(),
+            reason: failure.reason(),
             current,
         })
         .expect("value-free error serializes")
@@ -1200,12 +1213,10 @@ fn protection_failure(pipeline: &gaze::Pipeline, error: gaze::Error) -> Failure 
     if matches!(error, gaze::Error::SessionCapacity) {
         return Failure::CacheCapacity;
     }
-    let cli = if pipeline.safety_net_count() > 0 {
-        map_safety_net_pipeline_error(error)
-    } else {
-        CliError::Pipeline
-    };
-    Failure::Protection(DaemonError::Cli(cli).variant())
+    match map_clean_error(pipeline, error) {
+        CliError::Untransformable { reason } => Failure::Untransformable(reason.as_str()),
+        cli => Failure::Protection(DaemonError::Cli(cli).variant()),
+    }
 }
 
 fn inventory(r: &Object, live: &Live, resync: bool, limits: Limits) -> Result<Vec<RawBlock>> {

@@ -51,14 +51,14 @@ pub use gaze_types::redaction_marker::{
 pub use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CodecAuditRow, CodecCapabilitySet, CollisionMembership,
     DerivedFamilyAction, DocumentExtension, DocumentExtensionBuilder, DocumentExtensionError,
-    EmittedTokenSpan, EmptyCustomClassName, ExtractionDensityPolicy, FallbackReason, LeakKind,
-    LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect, LocaleBasis, LosingCandidate,
-    Manifest, OpenAiPrivateLabel, RecordMatchKind, RedactionLogError, RedactionLogger,
-    RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext,
-    SafetyNetError, SafetyNetPiiClass, SafetyNetRefusalReason, SafetyTier, TextOrigin,
-    NER_RECOGNIZER_ID, RESERVED_BUNDLED_FAMILIES, RESTORE_PHASE_FRESH_PII_SCAN,
-    RESTORE_PHASE_MANIFEST_BYPASS_SCAN, RESTORE_PHASE_MANIFEST_LOOKUP,
-    RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+    EmittedTokenSpan, EmptyCustomClassName, ExtractionDensityPolicy, FallbackReason, FieldPath,
+    LeakKind, LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect, LocaleBasis,
+    LosingCandidate, Manifest, OpenAiPrivateLabel, RecordMatchKind, RedactionLogError,
+    RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
+    SafetyNetContext, SafetyNetError, SafetyNetPiiClass, SafetyNetRefusalReason, SafetyTier,
+    TextOrigin, UntransformableReason, NER_RECOGNIZER_ID, RESERVED_BUNDLED_FAMILIES,
+    RESTORE_PHASE_FRESH_PII_SCAN, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
+    RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
 };
 pub use house_number::{StreetNumberOrder, HOUSE_NUMBER_RECOGNIZER_ID};
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
@@ -69,10 +69,10 @@ pub use pipeline::{
     SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, TraceContribution, TraceSettlement,
 };
 pub use policy::{
-    validate_ner_locale, DetectorKind, DetectorSpec, DobJudgePolicy, NerPolicy, Policy,
-    PolicyError, ProxyPolicy, RuleSpec, RulepackPolicy, SafetyNetBackendsPolicy,
-    SafetyNetPolicyBackend, SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD,
-    DEFAULT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
+    validate_ner_locale, DetectorKind, DetectorSpec, DobJudgePolicy, NerPolicy, OutcomesPolicy,
+    Policy, PolicyError, PossiblySensitiveDisposition, ProxyPolicy, RuleSpec, RulepackPolicy,
+    SafetyNetBackendsPolicy, SafetyNetPolicyBackend, SessionPolicy, SessionScope,
+    DEFAULT_NER_THRESHOLD, DEFAULT_POLICY_SCHEMA_VERSION, SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 pub use registry::{

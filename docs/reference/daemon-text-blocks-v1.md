@@ -127,7 +127,9 @@ epochs reveal no newer session metadata. No error contains text, context, block
 IDs, hashes, token mappings, or partial output.
 
 New error variants are `BlockMissing`, `HashMismatch`, `CacheConflict`,
-`RequestConflict`, `CacheCapacity`, and `CacheConvergence`. Validation and
+`RequestConflict`, `CacheCapacity`, and `CacheConvergence`. `Untransformable`
+adds a closed `reason`, such as `json_number_no_text_only_path`, and never the
+value or its field path. Validation and
 capacity failures consume no sequence and publish no staged manifest or inventory.
 After refusal, correct the request using a new request ID at the unconsumed
 sequence. After an uncertain clean, retry the exact frame first. If its receipt
