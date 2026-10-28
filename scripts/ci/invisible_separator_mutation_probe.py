@@ -114,7 +114,7 @@ def main():
                "hard_boundary_preserves_overlapping_valid_card_windows", "validators")
         reject("hard_boundary_preference", REGEX_SOURCE,
                "let valid = !scan.rejected", "let valid = false && !scan.rejected",
-               "gap_neighbours_never_hide_validated_values", "invisible_separators")
+               "hard_boundary_preserves_recorded_card_and_verification_code", "validators")
         reject("adopter_ignorable_literal", SOURCE_REGEX,
                "normalize_literals(&mut ast, true)?;", "",
                "adopter_ignorable_literals_and_class_members_keep_matching", "legacy_source_boundaries")

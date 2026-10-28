@@ -967,6 +967,25 @@ fn hard_boundary_preserves_recorded_card_and_verification_code() {
     assert_eq!(session.snapshot_entries().len(), 1);
     assert_eq!(session.snapshot_entries()[0].raw, raw);
     assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+
+    // Recording keeps a failing joined value, so only the hard-boundary preference
+    // stops it absorbing a glued digit that is no verification code. The digit is
+    // recorded as its own failing candidate.
+    let raw = "4111111111111111\u{200b}9";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = clean_text(&pipeline, &session, raw);
+    assert_eq!(
+        gaze::token_shape::pattern().replace_all(&clean, "\0"),
+        "\0\u{200b}\0"
+    );
+    let mut raws: Vec<_> = session
+        .snapshot_entries()
+        .into_iter()
+        .map(|entry| entry.raw)
+        .collect();
+    raws.sort();
+    assert_eq!(raws, ["4111111111111111", "9"]);
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
 }
 
 #[test]
