@@ -256,7 +256,7 @@ fn preservation_policy_keeps_original_formatting_and_emits_no_tokens() {
 }
 
 #[test]
-fn gap_neighbours_do_not_hide_or_extend_validated_values() {
+fn gap_neighbours_never_hide_validated_values() {
     for sep in [
         '\u{ad}',
         '\u{34f}',
@@ -287,11 +287,58 @@ fn gap_neighbours_do_not_hide_or_extend_validated_values() {
             ("ip ", "192.168.10.20"),
         ] {
             for prefix in [cue.to_owned(), format!("{cue}9{sep}")] {
-                assert_exact_token(&prefix, value, &format!("{sep}9 ok"));
+                assert_value_protected(&prefix, value, &format!("{sep}9"), " ok");
             }
         }
-        assert_exact_token("Phone: ", "+44 7700 900123", &format!("{sep}2024 ok"));
+        assert_value_protected("Phone: ", "+44 7700 900123", &format!("{sep}2024"), " ok");
     }
+}
+
+/// The value is one exact token. A glued neighbour joins it only when the joined value
+/// validates by itself: those are over-redacted FP bytes, never a raw value byte.
+fn assert_value_protected(prefix: &str, value: &str, glued: &str, suffix: &str) {
+    let input = format!("{prefix}{value}{glued}{suffix}");
+    let locales = if value.starts_with("+49") {
+        vec![LocaleTag::DeDe, LocaleTag::Global]
+    } else {
+        vec![LocaleTag::EnUs, LocaleTag::Global]
+    };
+    let de_pipeline;
+    let selected = if value.starts_with("+49") {
+        de_pipeline = support::pipeline_for(
+            &locales,
+            &["core", "locale-de"],
+            vec![RuleSpec::Default {
+                action: Action::Tokenize,
+            }],
+            true,
+        );
+        &de_pipeline
+    } else {
+        pipeline()
+    };
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = support::clean(selected, &session, &input, &locales);
+    let observed = (
+        gaze::token_shape::pattern()
+            .replace_all(&clean, "\0")
+            .into_owned(),
+        session
+            .snapshot_entries()
+            .into_iter()
+            .map(|entry| entry.raw)
+            .collect::<Vec<_>>(),
+    );
+    let alone = (format!("{prefix}\0{glued}{suffix}"), vec![value.to_owned()]);
+    let joined = (
+        format!("{prefix}\0{suffix}"),
+        vec![format!("{value}{glued}")],
+    );
+    assert!(
+        observed == alone || observed == joined,
+        "{input:?}: {observed:?}"
+    );
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
 }
 
 #[test]
@@ -320,5 +367,50 @@ fn split_digit_runs_record_known_bare_postal_false_positives() {
             .iter()
             .all(|entry| entry.class == gaze::PiiClass::custom("postal_code").unwrap()));
         assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+    }
+}
+
+#[test]
+fn valid_joined_values_never_ship_split_remainders_raw() {
+    let de = support::pipeline_for(
+        &[LocaleTag::DeDe, LocaleTag::Global],
+        &["core", "locale-de"],
+        vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }],
+        true,
+    );
+    let de_locales = [LocaleTag::DeDe, LocaleTag::Global];
+    let en_locales = [LocaleTag::EnUs, LocaleTag::Global];
+    for sep in ['\u{200b}', '\u{200c}', '\u{200d}', '\u{2060}', '\u{ad}'] {
+        for (selected, locales, cue, value) in [
+            (&de, &de_locales, "Ref: Tel. ", "+49 89 12345678"),
+            (&de, &de_locales, "Tel. ", "+49 30 12345678"),
+            (&de, &de_locales, "Tel. ", "030 12345678"),
+            (pipeline(), &en_locales, "Tel ", "+39 06 1234 5678"),
+            (pipeline(), &en_locales, "Tel ", "+1 202 555 0100"),
+            (pipeline(), &en_locales, "IP ", "192.168.10.20"),
+        ] {
+            for (split, _) in value.char_indices().skip(1) {
+                let raw = format!("{}{sep}{}", &value[..split], &value[split..]);
+                let input = format!("{cue}{raw} ok");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let clean = support::clean(selected, &session, &input, locales);
+                let blank = gaze::token_shape::pattern().replace_all(&clean, "\0");
+                let middle = blank
+                    .strip_prefix(cue)
+                    .and_then(|rest| rest.strip_suffix(" ok"))
+                    .unwrap_or_else(|| panic!("{input:?}: {blank:?}"));
+                // Only tokens and the separator layout may remain: no value byte.
+                assert!(
+                    middle.contains('\0')
+                        && middle
+                            .chars()
+                            .all(|ch| ch == '\0' || ch == sep || ch == ' '),
+                    "{input:?}: {blank:?}"
+                );
+                assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+            }
+        }
     }
 }

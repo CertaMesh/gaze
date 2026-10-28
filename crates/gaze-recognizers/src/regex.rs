@@ -394,7 +394,13 @@ impl RegexDetector {
                 source_spans,
                 crate::source_regex::MARKER,
             ) {
-                let mut boundaries = self.scanned_spans_in_view(&view.text, None, None);
+                // A marker-only capture has no value in the joined text, just as in
+                // the transformed view. Drop it before it can mark a valid boundary.
+                let mut boundaries: Vec<_> = self
+                    .scanned_spans_in_view(&view.text, None, None)
+                    .into_iter()
+                    .filter(|scan| !view.joined(scan.span.clone()).is_empty())
+                    .collect();
                 let mut starts = std::collections::BTreeMap::<usize, usize>::new();
                 let mut ends = std::collections::BTreeMap::<usize, usize>::new();
                 for scan in &mut boundaries {
@@ -416,12 +422,16 @@ impl RegexDetector {
                             .or_insert(scan.span.start);
                     }
                 }
-                // A marker-only capture has no value in the joined text, just as in
-                // the transformed view. Never emit its empty mapped candidate.
-                boundaries.retain(|scan| !scan.span.is_empty());
                 // A valid hard-boundary value must not absorb a neighbouring digit just
                 // because a consuming atom can skip that boundary in the joined view.
+                // A joined value that validates by itself stays: dropping it would ship
+                // its remainder raw, and over-redacting a glued digit beats a leak.
                 scans.retain(|scan| {
+                    let joined_valid = !scan.rejected
+                        && self.validator_kind != Some(ValidatorKind::EmailRfc)
+                        && self
+                            .validator_kind
+                            .is_some_and(|kind| kind.validates(&input[scan.span.clone()]));
                     let preserves_card_union = self.validator_kind == Some(ValidatorKind::Luhn)
                         && (ValidatorKind::Luhn.validates(&input[scan.span.clone()])
                             || gaze_types::payment_card::scan_card_run(
@@ -445,7 +455,8 @@ impl RegexDetector {
                             matches!(suffix.len(), 3 | 4)
                                 && suffix.bytes().all(|ch| ch.is_ascii_digit())
                         });
-                    preserves_card_union
+                    joined_valid
+                        || preserves_card_union
                         || preserves_recorded_card_layout
                         || (starts
                             .get(&scan.span.start)

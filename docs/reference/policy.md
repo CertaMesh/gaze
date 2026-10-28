@@ -1027,6 +1027,16 @@ Common idioms:
 - TOML literal strings (`'...'`) avoid double-escaping backslashes —
   prefer them over basic strings (`"..."`) for regex patterns.
 
+#### Invisible characters in a pattern match zero or more
+
+Gaze removes default-ignorable characters, such as U+200B ZERO WIDTH SPACE,
+U+2060 WORD JOINER and U+00AD SOFT HYPHEN, before matching, then maps each match
+back to the original bytes. So that adopter patterns keep working, an ignorable
+literal in a pattern matches **zero or more** ignorables, and so does a class
+that names one. For example, `ID\x{200B}\d{6}\b` matches `ID` + ZERO WIDTH
+SPACE + `123456`, and also plain `ID123456`. Do not rely on an invisible
+character to narrow a match; use a visible cue instead.
+
 #### Pitfall: `\b` next to non-word characters (currency symbols, punctuation)
 
 `\b` requires a word/non-word transition. A boundary beside `€`, `$`, `£` or

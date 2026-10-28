@@ -839,12 +839,35 @@ fn validator_classes_keep_gap_neighbours_outside_valid_values() {
                 let raw = format!("{prefix}{value}{sep}9");
                 let session = Session::new(Scope::Ephemeral).unwrap();
                 let clean = clean_text(&pipeline, &session, &raw);
-                assert_eq!(
-                    gaze::token_shape::pattern().replace_all(&clean, "\0"),
-                    format!("{prefix}\0{sep}9"),
-                    "{kind:?}, {raw:?}"
+                // A joined value that validates absorbs the glued digit (FP bytes);
+                // otherwise the hard-boundary value stays alone. Never a raw value byte.
+                // With a glued prefix, whether `{value}9` is a candidate depends on the
+                // pattern (`\b\d+` starts at the prefix; `\+` cannot), so both are fine.
+                let joins =
+                    |joined: String| kind != ValidatorKind::EmailRfc && kind.validates(&joined);
+                let alone = (format!("{prefix}\0{sep}9"), value.clone());
+                let suffix = (format!("{prefix}\0"), format!("{value}{sep}9"));
+                let allowed = if !prefix.is_empty() && joins(format!("9{value}9")) {
+                    vec![("\0".to_owned(), raw.clone())]
+                } else if joins(format!("{value}9")) {
+                    if prefix.is_empty() {
+                        vec![suffix]
+                    } else {
+                        vec![suffix, alone]
+                    }
+                } else {
+                    vec![alone]
+                };
+                let observed = (
+                    gaze::token_shape::pattern()
+                        .replace_all(&clean, "\0")
+                        .into_owned(),
+                    session.snapshot_entries()[0].raw.clone(),
                 );
-                assert_eq!(session.snapshot_entries()[0].raw, value);
+                assert!(
+                    allowed.contains(&observed),
+                    "{kind:?}, {raw:?}: {observed:?}"
+                );
                 assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
             }
         }
@@ -859,14 +882,13 @@ fn hard_boundary_and_joined_valid_candidates_emit_one_token() {
     let raw = "192.0.2.1\u{200b}9";
     let session = Session::new(Scope::Ephemeral).unwrap();
     let clean = clean_text(&pipeline, &session, raw);
+    // The joined value validates, so it wins: the glued `9` is over-redacted
+    // rather than the shorter value leaving part of the address raw.
     assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 1);
-    assert_eq!(
-        gaze::token_shape::pattern().replace_all(&clean, "\0"),
-        "\0\u{200b}9"
-    );
+    assert_eq!(gaze::token_shape::pattern().replace_all(&clean, "\0"), "\0");
     let entries = session.snapshot_entries();
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].raw, "192.0.2.1");
+    assert_eq!(entries[0].raw, raw);
     assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
 }
 

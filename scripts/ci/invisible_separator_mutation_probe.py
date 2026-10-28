@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 22
+    total = len(set(args.probe)) or len(CODEPOINTS) + 24
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -79,20 +79,26 @@ def main():
                "let additional = self.scanned_spans_in_view(input, source_spans, None);",
                "mixed_outer_and_inner_separators_keep_complete_values_protected", codepoint=0x200B)
         reject("hard_boundary", REGEX_SOURCE,
-               "let mut boundaries = self.scanned_spans_in_view(&view.text, None, None);",
-               "let mut boundaries = Vec::<LabelledValueScan>::new();",
-               "gap_neighbours_do_not_hide_or_extend_validated_values", "invisible_separators")
+               "                    .scanned_spans_in_view(&view.text, None, None)\n",
+               "                    .scanned_spans_in_view(&view.text, None, None)\n                    .into_iter()\n                    .filter(|_| false)\n                    .collect::<Vec<_>>()\n",
+               "gap_neighbours_never_hide_validated_values", "invisible_separators")
         reject("hard_boundary_containment", REGEX_SOURCE,
                "scans.extend(boundaries);",
                "merge_recovered_scans(&mut scans, &[], boundaries, false, || {});",
                "hard_boundary_value_survives_enclosing_joined_validator_failure", "validators")
         reject("hard_boundary_empty_candidate", REGEX_SOURCE,
-               "boundaries.retain(|scan| !scan.span.is_empty());",
-               "boundaries.retain(|_| true);",
+               ".filter(|scan| !view.joined(scan.span.clone()).is_empty())",
+               ".filter(|_| true)",
                "hard_boundary_marker_only_captures_do_not_hide_real_values", "legacy_source_boundaries")
         reject("luhn_enclosing_union", VETO_SOURCE,
                "cards.contains(&candidate.span)", "!cards.is_empty()",
                "hard_boundary_value_survives_enclosing_joined_validator_failure", "validators")
+        reject("valid_joined_value_kept", REGEX_SOURCE,
+               "                    joined_valid\n", "                    false && joined_valid\n",
+               "valid_joined_values_never_ship_split_remainders_raw", "invisible_separators")
+        reject("valid_joined_value_one_token", REGEX_SOURCE,
+               "                    joined_valid\n", "                    false && joined_valid\n",
+               "hard_boundary_and_joined_valid_candidates_emit_one_token", "validators")
         reject("luhn_union_preference", REGEX_SOURCE,
                "                    preserves_card_union\n", "                    false && preserves_card_union\n",
                "hard_boundary_preserves_overlapping_valid_card_windows", "validators")
@@ -108,7 +114,7 @@ def main():
                "hard_boundary_preserves_overlapping_valid_card_windows", "validators")
         reject("hard_boundary_preference", REGEX_SOURCE,
                "let valid = !scan.rejected", "let valid = false && !scan.rejected",
-               "gap_neighbours_do_not_hide_or_extend_validated_values", "invisible_separators")
+               "gap_neighbours_never_hide_validated_values", "invisible_separators")
         reject("adopter_ignorable_literal", SOURCE_REGEX,
                "normalize_literals(&mut ast, true)?;", "",
                "adopter_ignorable_literals_and_class_members_keep_matching", "legacy_source_boundaries")
