@@ -70,7 +70,7 @@ PROBES = [
     ("pem-prefix-space", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"[:;|│┃→!%\-]", PREFIX_TEST),
     ("pem-prefix-percent", "security_token.pem", r"→!%\-]", r"→!\-]", PREFIX_TEST),
     ("pem-prefix-dash-run-guard", "security_token.pem", "-{1,4}", "-+", PREFIX_TEST),
-    ("pem-prefix-quote-guard", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"""[\x20\t:;|│┃→!%"\-]""", "prose_and_public_material_remain_untouched"),
+    ("pem-prefix-quote-guard", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"""[\x20\t:;|│┃→!%"\-]""", PREFIX_TEST),
     ("pem-short-last-line", "security_token.pem", "{1,31}", r"{1,31}\b\B", PREFIX_TEST),
     ("pem-ended-alternative", "security_token.pem", "-----END", r"\b\B-----END", PREFIX_TEST),
     ("pem-prefixed-line-end", "security_token.pem", "(?mR:$)|", "|", "prose_and_public_material_remain_untouched"),

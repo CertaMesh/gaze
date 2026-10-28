@@ -588,6 +588,9 @@ fn tool_diff_and_gutter_prefixed_private_keys_stay_whole() {
     let truncated = key[..4].join("\n");
     let raw = format!("{truncated}\n-----END CERTIFICATE----- sha256: {SHA}");
     assert_whole(&core, &raw, &[&truncated]);
+    // Nor is a quote the end of a prefix before a quoted hash.
+    let raw = format!("{truncated}\n\"{SHA}\"");
+    assert_whole(&core, &raw, &[&truncated]);
 }
 
 #[test]
