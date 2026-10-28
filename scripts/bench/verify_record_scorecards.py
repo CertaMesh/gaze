@@ -20,6 +20,7 @@ from typing import Sequence
 
 import bench_json
 import gaze_bench_score as score
+import outcome_counters
 import scorecard_record as record
 
 
@@ -39,6 +40,10 @@ def without_timing(value: object) -> object:
 
 
 def exact_except_timing(actual: dict, expected: dict) -> bool:
+    # Scorecards committed before the outcome counters existed lack them; every
+    # other field must still come back byte for byte.
+    if not outcome_counters.has_outcome_counters(expected):
+        actual = outcome_counters.strip_outcome_counters(actual)
     return (
         json.dumps(without_timing(actual), indent=2, ensure_ascii=False) + "\n"
         == json.dumps(without_timing(expected), indent=2, ensure_ascii=False) + "\n"
@@ -115,7 +120,13 @@ def verify_capture(record_path: Path, v1_path: Path, v2_path: Path, v2_contract:
         expected = committed[name]
         result[f"{name}_commit_matches"] = replay["gaze"]["revision"] == expected["gaze"]["revision"]
         result[f"{name}_dataset_matches"] = _dataset_identity(replay) == _dataset_identity(expected)
-        result[f"{name}_runs_match"] = _runs(replay, skipped) == _runs(expected, skipped)
+        absent = (
+            set() if outcome_counters.has_outcome_counters(expected)
+            else {outcome_counters.OUTCOME_COUNTERS_FIELD}
+        )
+        result[f"{name}_runs_match"] = (
+            _runs(replay, skipped | absent) == _runs(expected, skipped | absent)
+        )
         for field in skipped:
             ignored[field][name] = [run.get(field) for run in replay["runs"]] != [
                 run.get(field) for run in expected["runs"]

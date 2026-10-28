@@ -35,6 +35,19 @@ READABLE_SCORECARD_SCHEMA_VERSIONS = frozenset({3, SCORECARD_SCHEMA_VERSION})
 DEFAULT_SAMPLE_SEED = 20_260_710
 SAMPLING_STRATEGY = "deterministic-stratified-language-region-v1"
 PIPELINE_FAILURE_STAGES = frozenset({"clean", "post_policy_scan"})
+# Bench wire codes for the refusals the `[outcomes]` policy contract defines.
+# Each untransformable code carries the closed `UntransformableReason` spelling.
+UNTRANSFORMABLE_REASONS = (
+    "json_number_no_text_only_path",
+    "encoded_carrier",
+    "no_safe_rendering",
+    "caller_value_too_short",
+)
+UNTRANSFORMABLE_CODE_PREFIX = "untransformable_"
+UNTRANSFORMABLE_CODES = frozenset(
+    UNTRANSFORMABLE_CODE_PREFIX + reason for reason in UNTRANSFORMABLE_REASONS
+)
+POSSIBLY_SENSITIVE_REFUSED_CODE = "possibly_sensitive_refused"
 PIPELINE_FAILURE_REASONS = frozenset(
     {
         "invalid_regex",
@@ -74,7 +87,7 @@ PIPELINE_FAILURE_REASONS = frozenset(
         "unsupported_structured_value_variant",
         "unsupported_policy_action_variant",
     }
-)
+) | UNTRANSFORMABLE_CODES | {POSSIBLY_SENSITIVE_REFUSED_CODE}
 
 # These are direct or account-linked identifiers. The remaining observed
 # labels (date, time, age, gender, sex, title, amount, and currency) are still
@@ -2441,6 +2454,10 @@ def run_config(
         str, defaultdict[str, RecallAccumulator]
     ] = defaultdict(lambda: defaultdict(RecallAccumulator))
     contract = ContractAccumulator()
+    # Imported here: outcome_counters builds on this module's helpers.
+    import outcome_counters
+
+    outcomes = outcome_counters.OutcomeAccumulator()
     scored_document_ids: list[str] = []
     failed_closed_documents: list[dict[str, str]] = []
     success_timing: defaultdict[str, list[float]] = defaultdict(list)
@@ -2542,10 +2559,12 @@ def run_config(
                         "stage": str(response["pipeline_error_stage"]),
                     }
                 )
+                outcomes.add_refused(document, str(response["pipeline_error_code"]))
                 continue
             scored_document_ids.append(document.uid)
             predictions = final_trace_predictions(document, response)
             overall.add(document, predictions)
+            outcomes.add_scored(document, predictions)
             per_language[document.language].add(document, predictions)
             if document.negative_category is not None:
                 per_negative_category[document.negative_category].add(
@@ -2708,6 +2727,7 @@ def run_config(
             "warmup_count": warmup_count,
             "discarded_warmup_samples": discarded_warmup_samples,
         },
+        outcome_counters.OUTCOME_COUNTERS_FIELD: outcomes.result(),
     }
 
     process.check_deadline()
