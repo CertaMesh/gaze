@@ -934,20 +934,24 @@ outcome in the audit log. No recognizer produces this outcome yet, so the
 setting does not change output in this release.
 
 A confirmed sensitive value with no safe reversible rendering always refuses in
-`gaze clean`, the daemon, the proxy and MCP, and has no key here. A
+`gaze clean`, the daemon, the proxy and `gaze mcp serve`, and has no key here. A
 `confirmed_untransformable` key, any other key, or another value fails at load.
-The CLI reports that refusal as `Untransformable` with exit code 8. Every
-surface reports only the closed reason, never the value or its field path:
+The CLI reports that refusal as `Untransformable` with exit code 8. These
+surfaces report only the closed reason, never the value or its field path:
 
 | Surface | Refusal shape |
 |---|---|
 | CLI | stderr `{"error":"Untransformable","exit":8,"reason":"<reason>"}` |
 | Daemon | `"error":"Untransformable"` plus `"reason":"<reason>"` |
 | Proxy | HTTP 422 with `refusal.error = "Untransformable"` and `refusal.reason` |
-| MCP | Tool error with text blocks `untransformable`, then `<reason>` |
+| `gaze mcp serve` | Tool error with text blocks `untransformable`, then `<reason>` |
 
 Reasons: `json_number_no_text_only_path`, `encoded_carrier`,
 `no_safe_rendering`, `caller_value_too_short`.
+
+`gaze-mcp-bridge` does not use this shape yet. It still fails closed, but
+reports any redaction failure, including this refusal, as the generic backend
+failure `bridge redaction failure` without the reason.
 
 ### `[safety_net]` and `[safety_net.nym]`
 

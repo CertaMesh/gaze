@@ -83,10 +83,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Policies accept an `[outcomes]` table with `possibly_sensitive = "protect"`
   (default), `"refuse"` or `"pass_audited"`. No recognizer produces that
   outcome yet, so output is unchanged. Untransformable refusals now have one
-  value-free shape on every surface: CLI exit code 8 with stderr
+  value-free shape: CLI exit code 8 with stderr
   `{"error":"Untransformable","exit":8,"reason":...}`, daemon errors with
-  `reason`, proxy refusals with `refusal.reason`, and MCP tool errors with the
-  text blocks `untransformable` and the reason. Field paths stay out because keys can be PII.
+  `reason`, proxy refusals with `refusal.reason`, and `gaze mcp serve` tool
+  errors with the text blocks `untransformable` and the reason. Field paths stay
+  out because keys can be PII. `gaze-mcp-bridge` still fails closed with its
+  generic `bridge redaction failure` and does not report the reason yet.
   `gaze` re-exports `FieldPath` and `UntransformableReason`.
 
 - Audit entries and SQLite rows support protection outcomes, closed reasons,
