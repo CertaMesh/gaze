@@ -919,6 +919,36 @@ state codes and military post offices written beside it; see
 A policy without it, or with `enabled = false`, grows nothing. `enabled` is
 required and no other key is accepted.
 
+### `[outcomes]` (optional)
+
+<!-- policy-fragment -->
+```toml
+[outcomes]
+possibly_sensitive = "protect"
+```
+
+Chooses what happens to a value that evidence marks as possibly sensitive
+without proving it: `protect` (default) substitutes it like a confirmed match,
+`refuse` fails closed, and `pass_audited` leaves it in place and records the
+outcome in the audit log. No recognizer produces this outcome yet, so the
+setting does not change output in this release.
+
+A confirmed sensitive value with no safe reversible rendering always refuses in
+`gaze clean`, the daemon, the proxy and MCP, and has no key here. A
+`confirmed_untransformable` key, any other key, or another value fails at load.
+The CLI reports that refusal as `Untransformable` with exit code 8. Every
+surface reports only the closed reason, never the value or its field path:
+
+| Surface | Refusal shape |
+|---|---|
+| CLI | stderr `{"error":"Untransformable","exit":8,"reason":"<reason>"}` |
+| Daemon | `"error":"Untransformable"` plus `"reason":"<reason>"` |
+| Proxy | HTTP 422 with `refusal.error = "Untransformable"` and `refusal.reason` |
+| MCP | Tool error with text blocks `untransformable`, then `<reason>` |
+
+Reasons: `json_number_no_text_only_path`, `encoded_carrier`,
+`no_safe_rendering`, `caller_value_too_short`.
+
 ### `[safety_net]` and `[safety_net.nym]`
 
 `backend = "nym"` activates the opt-in Nym-small safety net for CLI commands

@@ -71,6 +71,11 @@ pub(crate) enum CliError {
     McpDetail(String),
     #[cfg(feature = "proxy")]
     ProxyDetail(String),
+    /// A confirmed sensitive value has no safe reversible rendering, so nothing was written.
+    /// Exit code 8 is the public contract. Only the closed reason reaches stderr.
+    Untransformable {
+        reason: gaze_types::UntransformableReason,
+    },
 }
 
 impl CliError {
@@ -106,6 +111,7 @@ impl CliError {
             Self::McpDetail(_) => 6,
             #[cfg(feature = "proxy")]
             Self::ProxyDetail(_) => 7,
+            Self::Untransformable { .. } => 8,
         }
     }
 
@@ -143,6 +149,7 @@ impl CliError {
             Self::McpDetail(_) => "Mcp",
             #[cfg(feature = "proxy")]
             Self::ProxyDetail(_) => "Proxy",
+            Self::Untransformable { .. } => "Untransformable",
         }
     }
 
@@ -230,6 +237,7 @@ impl CliError {
                     token
                 )
             }
+            Self::Untransformable { reason } => eprintln!("{}", untransformable_line(*reason)),
             Self::SafetyNetFailure { variant } => eprintln!(
                 r#"{{"error":"{}","exit":{},"variant":"{}"}}"#,
                 self.variant_name(),
@@ -289,6 +297,16 @@ impl CliError {
     }
 }
 
+fn untransformable_line(reason: gaze_types::UntransformableReason) -> String {
+    let error = CliError::Untransformable { reason };
+    format!(
+        r#"{{"error":"{}","exit":{},"reason":"{}"}}"#,
+        error.variant_name(),
+        error.exit_code(),
+        reason.as_str()
+    )
+}
+
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RestoreMode {
     Strict,
@@ -299,4 +317,31 @@ pub(crate) enum RestoreMode {
 pub(crate) struct RestoreWarning {
     pub(crate) variant: String,
     pub(crate) token: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gaze_types::UntransformableReason;
+
+    #[test]
+    fn untransformable_is_exit_eight_with_only_the_closed_reason() {
+        for reason in [
+            UntransformableReason::JsonNumberNoTextOnlyPath,
+            UntransformableReason::EncodedCarrier,
+            UntransformableReason::NoSafeRendering,
+            UntransformableReason::CallerValueTooShort,
+        ] {
+            assert_eq!(CliError::Untransformable { reason }.exit_code(), 8);
+            let line = untransformable_line(reason);
+            assert_eq!(
+                line,
+                format!(
+                    r#"{{"error":"Untransformable","exit":8,"reason":"{}"}}"#,
+                    reason.as_str()
+                )
+            );
+            serde_json::from_str::<serde_json::Value>(&line).expect("stderr line is JSON");
+        }
+    }
 }

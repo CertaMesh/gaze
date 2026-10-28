@@ -3027,8 +3027,9 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
 
 /// The client-facing and logged shape of a protection refusal: the typed `ProtectionError`
 /// variant, the fallback reason, and the suspect classes. Never any request text.
+/// Value-free refusal body. Field paths stay out: object keys can themselves be PII.
 fn refusal_json(refusal: &BoundaryRefusal) -> Value {
-    serde_json::json!({
+    let mut body = serde_json::json!({
         "error": refusal.error.as_str(),
         "fallback_reason": refusal.fallback_reason.map(|reason| reason.as_str()),
         "suspect_classes": refusal
@@ -3036,7 +3037,11 @@ fn refusal_json(refusal: &BoundaryRefusal) -> Value {
             .iter()
             .map(gaze::PiiClass::to_canonical_str)
             .collect::<Vec<_>>(),
-    })
+    });
+    if let gaze::ProtectionError::Untransformable { reason, .. } = &refusal.error {
+        body["reason"] = Value::from(reason.as_str());
+    }
+    body
 }
 
 /// A refusal is an adopter-visible decision, so it goes to the proxy log (stderr) as one line.
@@ -4748,6 +4753,47 @@ mod tests {
         ) -> Vec<crate::PiiSurface<'a>> {
             self.anthropic.sse_event_pii_surfaces(event)
         }
+    }
+
+    fn untransformable_refusal() -> BoundaryRefusal {
+        gaze::ProtectionError::Untransformable {
+            reason: gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath,
+            field_path: gaze_types::FieldPath::new(["synthetic-key@example.invalid".into()]),
+        }
+        .into()
+    }
+
+    async fn json_body(response: Response) -> (StatusCode, Value) {
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("synthetic-key"));
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn untransformable_refusal_reports_closed_reason_on_both_profiles() {
+        let (status, body) = json_body(proxy_error_response(ProxyError::Refused {
+            refusal: untransformable_refusal(),
+        }))
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body["error"], "Refused");
+        assert_eq!(body["refusal"]["error"], "Untransformable");
+        assert_eq!(body["refusal"]["reason"], "json_number_no_text_only_path");
+
+        let direct = ProxyErrorCode::ProtectionRefused
+            .error(ProxyErrorPhase::RequestTransform)
+            .with_refusal(untransformable_refusal());
+        let (status, body) = json_body(direct_error_response(direct)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body["error"]["refusal"]["error"], "Untransformable");
+        assert_eq!(
+            body["error"]["refusal"]["reason"],
+            "json_number_no_text_only_path"
+        );
+
+        let residual = refusal_json(&gaze::ProtectionError::Residual.into());
+        assert!(residual.get("reason").is_none());
     }
 
     #[tokio::test]

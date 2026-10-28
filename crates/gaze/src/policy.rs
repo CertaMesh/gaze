@@ -63,6 +63,8 @@ pub struct Policy {
     pub locale: Option<Vec<LocaleTag>>,
     /// Safety-net selection and settings from `[safety_net]`.
     pub safety_net: SafetyNetBackendsPolicy,
+    /// Typed protection-outcome dispositions from `[outcomes]`.
+    pub outcomes: OutcomesPolicy,
     /// Declared policy schema version (e.g. `"0.1.0"`).
     ///
     /// Populated from policy.toml's top-level `schema_version` field. Loader
@@ -87,6 +89,7 @@ impl Default for Policy {
             rulepacks: RulepackPolicy::default(),
             locale: None,
             safety_net: SafetyNetBackendsPolicy::default(),
+            outcomes: OutcomesPolicy::default(),
             schema_version: DEFAULT_POLICY_SCHEMA_VERSION.to_string(),
         }
     }
@@ -98,6 +101,33 @@ impl Default for Policy {
 pub struct ProxyPolicy {
     #[serde(default)]
     pub anthropic_betas: Vec<String>,
+}
+
+/// `[outcomes]`: what happens to typed protection outcomes.
+///
+/// Confirmed-untransformable outcomes are deliberately absent: every enforcing boundary
+/// refuses them, so the table rejects a `confirmed_untransformable` key.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct OutcomesPolicy {
+    /// Disposition for a possibly sensitive value. No recognizer produces one yet.
+    #[serde(default)]
+    pub possibly_sensitive: PossiblySensitiveDisposition,
+}
+
+/// `[outcomes] possibly_sensitive`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum PossiblySensitiveDisposition {
+    /// Substitute the value reversibly, like a confirmed match.
+    #[default]
+    Protect,
+    /// Fail closed with an untransformable-style refusal.
+    Refuse,
+    /// Leave the value in place and record the outcome in the audit log.
+    PassAudited,
 }
 
 /// `[safety_net.*]` tables.
@@ -380,6 +410,8 @@ struct RawPolicy {
     policy: Option<RawPolicyTables>,
     #[serde(default)]
     safety_net: Option<RawSafetyNetTables>,
+    #[serde(default)]
+    outcomes: OutcomesPolicy,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -603,6 +635,7 @@ impl TryFrom<RawPolicy> for Policy {
             rulepacks,
             locale,
             safety_net,
+            outcomes: raw.outcomes,
             schema_version,
         })
     }
@@ -1196,6 +1229,38 @@ action = "tokenize"
         let raw: RawPolicy = toml::from_str(&format!("{NYM_POLICY_BASE}\n{table}"))
             .map_err(PolicyError::TomlParse)?;
         Policy::try_from(raw)
+    }
+
+    #[test]
+    fn outcomes_default_to_protect_and_reject_unknown_keys() {
+        let protect = PossiblySensitiveDisposition::Protect;
+        assert_eq!(nym_policy("").unwrap().outcomes.possibly_sensitive, protect);
+        assert_eq!(
+            nym_policy("[outcomes]\n")
+                .unwrap()
+                .outcomes
+                .possibly_sensitive,
+            protect
+        );
+        for (value, expected) in [
+            ("protect", protect),
+            ("refuse", PossiblySensitiveDisposition::Refuse),
+            ("pass_audited", PossiblySensitiveDisposition::PassAudited),
+        ] {
+            let policy = nym_policy(&format!("[outcomes]\npossibly_sensitive = \"{value}\"\n"));
+            assert_eq!(policy.unwrap().outcomes.possibly_sensitive, expected);
+        }
+        for table in [
+            "[outcomes]\npossibly_sensitive = \"pass\"\n",
+            "[outcomes]\npossibly_sensitive = \"Protect\"\n",
+            "[outcomes]\npossibly_sensitive = true\n",
+            "[outcomes]\nconfirmed_untransformable = \"pass_audited\"\n",
+        ] {
+            assert!(
+                matches!(nym_policy(table), Err(PolicyError::TomlParse(_))),
+                "{table}"
+            );
+        }
     }
 
     #[test]

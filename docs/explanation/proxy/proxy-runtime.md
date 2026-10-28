@@ -132,7 +132,10 @@ A refusal carries its reason, never the text:
 
 - `error`: the `ProtectionError` variant: `Residual` (a net flagged raw bytes
   that could not be protected), `SafetyNet` (a net failed to run), `Primary`,
-  `Provenance`, `UnsupportedCoverage` or `EmptyPrimary`.
+  `Provenance`, `UnsupportedCoverage`, `EmptyPrimary` or `Untransformable` (a
+  confirmed sensitive value with no safe reversible rendering).
+- `reason`: present only for `Untransformable`, a closed spelling such as
+  `json_number_no_text_only_path`. Field paths stay out because keys can be PII.
 - `fallback_reason`: set when step 2 refused: `residual_suspect` (a later scan
   flagged something new), `overlap_conflict`, `validator_veto` or
   `anchor_missing`. It is `null` when admission refused.

@@ -83,6 +83,19 @@ pub enum DispatchError {
     ResponseSerialization(#[source] serde_json::Error),
 }
 
+impl DispatchError {
+    /// The closed reason when protection refused an untransformable value. Never carries the
+    /// value or its field path, so transports can report it to the client.
+    pub fn untransformable_reason(&self) -> Option<&'static str> {
+        match self {
+            Self::Protection(gaze::ProtectionError::Untransformable { reason, .. }) => {
+                Some(reason.as_str())
+            }
+            _ => None,
+        }
+    }
+}
+
 /// The chokepoint runtime. Borrows references to every collaborator so the
 /// dispatcher itself is free of allocation per dispatch.
 ///
