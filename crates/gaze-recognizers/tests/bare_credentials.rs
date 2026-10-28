@@ -583,6 +583,10 @@ fn tool_diff_and_gutter_prefixed_private_keys_stay_whole() {
             &armour(&second, "EC PRIVATE KEY"),
         ],
     );
+    // Without an END line, a foreign armour line is not a prefix to cross.
+    let truncated = key[..4].join("\n");
+    let raw = format!("{truncated}\n-----END CERTIFICATE----- sha256: {SHA}");
+    assert_whole(&core, &raw, &[&truncated]);
 }
 
 #[test]
