@@ -1443,6 +1443,32 @@ python3 scripts/bench/render_benchmark_doc.py --check
 This runs in CI on every pull request. It is stdlib-only and needs no corpus, no
 model, and no network.
 
+### Outcome counters
+
+`scripts/bench/outcome_counters.py report` derives one counter block per run
+from the same observation record as the contract scorecard. The block is a
+separate report and never changes the scorecard. The byte score excludes
+refused documents, so read it together with `blocked_operations` and
+`usable_content.lost_to_refusal_bytes`. The block keeps apart what the byte
+score folds together:
+
+| Counter | Meaning |
+| --- | --- |
+| `blocked_operations.documents` | Documents the pipeline refused, by kind: `untransformable`, `possibly_sensitive` (the `[outcomes]` `refuse` disposition), `fail_closed` (any other pipeline error) |
+| `untransformable_refused.by_reason` | Untransformable refusals per closed reason (`json_number_no_text_only_path`, `encoded_carrier`, `no_safe_rendering`, `caller_value_too_short`) |
+| `fp_refusals.documents` | Refused documents that carry no scored gold |
+| `protection.confirmed` | Protected values with a concrete class: `values`, `gold_values` (touch scored gold), `false_positive_values` (protect at least one non-gold byte, so an over-extended value counts in both) |
+| `protection.possibly_sensitive` | The same for ambiguous values (family tokens `custom:family:<name>`), plus `dispositions.protect_values` (values) / `dispositions.refuse_documents` (documents) |
+| `false_positives` | `documents` with any false-positive byte (equal to `metrics.documents_with_false_positives`), affected `values`, and how many of each come only from possibly-sensitive protection (judged by each value's own non-gold bytes) |
+| `usable_content` | Non-PII bytes, how many stay readable, and how many are lost to false positives and to refusals (`retained_ratio`) |
+
+A `pass_audited` value stays raw and leaves only an audit row, which the bench
+response does not carry, so it is not counted. Out-of-contract and neutral
+bytes are excluded exactly as in the byte score.
+[`outcome-counters-v0.17.0.json`](outcome-counters-v0.17.0.json) pins the
+v0.17.0 counters under v1-v4, plus the generated A/D/R layers, and proves the record still rescores to its
+committed scorecards byte for byte; see [`scripts/bench/README.md`](../../../scripts/bench/README.md#outcome-counters).
+
 ### The runner's other outputs
 
 Beyond `scorecard-v4.json`, `run_no_opf_benchmark.py` writes a Markdown summary,

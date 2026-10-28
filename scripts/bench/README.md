@@ -69,6 +69,40 @@ Planning estimates on a modern laptop are roughly 2–10 minutes for the default
 Thermals, CPU runtime, and filesystem cache state can move those estimates
 substantially; A6 records the authoritative observed runtime.
 
+## Outcome counters
+
+`outcome_counters.py report` derives a sidecar report from an observation
+record under one contract: refused operations by kind and reason, refusals of
+documents without scored gold, confirmed versus possibly-sensitive
+(`custom:family:<name>`) protection, false positives by document and by value,
+and how much non-PII content stays usable. Scorecards are untouched, so every
+existing number stays byte-identical: certification binds a capture to its
+replay byte for byte, and `gaze_bench_score.py` is digest-pinned by the
+published competitor rows. The field table is in the
+[benchmark reference](../../docs/reference/benchmarks/README.md#outcome-counters).
+
+```bash
+uv run --project scripts/bench python scripts/bench/outcome_counters.py report \
+  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
+  --output target/bench-data/no-opf/full/outcome-counters-v4.json
+```
+
+The bench wire codes for refusals are `untransformable_<reason>` and
+`possibly_sensitive_refused`. The scorer's closed `pipeline_error_code` set
+admits them together with the first emitter, which changes detection and so
+comes with a measured benchmark that re-pins the competitor rows.
+
+Prove the committed v0.17.0 record still rescores to its committed v1-v4
+scorecards and pin its run and A/D/R layer counters (CI runs the same check in
+`test_outcome_counters.py`):
+
+```bash
+uv run --project scripts/bench python scripts/bench/outcome_counters.py prove \
+  docs/reference/benchmarks/observations-v0.17.0.jsonl.gz \
+  --release v0.17.0 --check docs/reference/benchmarks/outcome-counters-v0.17.0.json
+```
+
 ## Scored-label contracts
 
 A scored-label contract says which corpus labels count as gold PII. Without
