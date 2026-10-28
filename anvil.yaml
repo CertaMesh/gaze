@@ -48,6 +48,16 @@ roles:
       - UV_PUBLISH_TOKEN
 
 checks:
+  invisible-cold-build:
+    description: Build pinned current main and candidate without running the timing harness
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    identity_env: [GAZE_COLD_BASE_WORKTREE]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/invisible_separator_cold_build.py, scripts/ci/invisible_separator_release.py, scripts/ci/card_code_matrix.py, scripts/verify_clean_equality.py, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V]
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_cold_build.py
   invisible-clippy-preferences:
     description: Recheck regex preference behaviour and every regex mutation before clippy
     expensive: true

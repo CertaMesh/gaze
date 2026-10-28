@@ -943,6 +943,7 @@
     "scripts/ci/check_competitor_capture_mutations.py",
     "scripts/ci/check_past_capture_mutations.py",
     "scripts/ci/invisible_separator_release.py",
+    "scripts/ci/invisible_separator_cold_build.py",
     "scripts/ci/probe_card_window_gaps.py",
     "scripts/ci/probe_phone_fixtures.py",
     "scripts/ci/probe_field_geometry.py",
