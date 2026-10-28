@@ -412,6 +412,13 @@ fn numbered_bulleted_and_entity_framed_private_keys_stay_whole() {
         "&#10;",
         "&#x0a;",
         "&#x0A;",
+        "&#xA;",
+        "&#xa;",
+        "&#x000A;",
+        "&#010;",
+        "&#13;&#10;",
+        "&#xD;&#xA;",
+        "&NewLine;",
     ] {
         let value = pem("PRIVATE KEY", framing);
         assert_whole(&core, &value, &[&value]);
@@ -488,7 +495,35 @@ fn literal_armour_headers_accept_free_text_and_extension_names() {
             }
         }
     }
-    // Serialized headers must stop at markup, quote and escape boundaries.
+    let body = "bm90LWEta2V5c3ludGhldGlj";
+    for value in [
+        format!("-----BEGIN RSA PRIVATE KEY-----\n  Proc-Type: 4,ENCRYPTED\n  DEK-Info: AES-128-CBC,00FF\n\n  {body}\n  {body}\n  -----END RSA PRIVATE KEY-----"),
+        format!("-----BEGIN PGP PRIVATE KEY BLOCK-----\n    Version: x\n\n    {body}\n    -----END PGP PRIVATE KEY BLOCK-----"),
+        format!("-----BEGIN PGP PRIVATE KEY BLOCK-----\n Version: x\n\n{body}\n-----END PGP PRIVATE KEY BLOCK-----"),
+        format!("-----BEGIN PGP PRIVATE KEY BLOCK-----\r\r\nVersion: x\r\r\n\r\r\n{body}\r\r\n-----END PGP PRIVATE KEY BLOCK-----"),
+        format!(r"-----BEGIN PGP PRIVATE KEY BLOCK-----\u000d\u000aVersion: x\u000d\u000a\u000d\u000a{body}\u000d\u000a-----END PGP PRIVATE KEY BLOCK-----"),
+    ] {
+        for raw in [
+            value.clone(),
+            format!("key: |\n  {value}\n"),
+            format!("    {value}"),
+        ] {
+            assert_whole(&core, &raw, &[&value]);
+        }
+    }
+    // JSON escapes other than newlines stay inside serialized header values.
+    for header in [
+        r"Comment: J\u00fcrgen",
+        r#"Comment: \"work\""#,
+        r"Comment: C:\\keys",
+        r"Comment: a\/b\tc",
+    ] {
+        let value = format!(
+            r"-----BEGIN PGP PRIVATE KEY BLOCK-----\n{header}\n\n{body}\n-----END PGP PRIVATE KEY BLOCK-----"
+        );
+        assert_whole(&core, &format!(r#"{{"k": "{value}"}}"#), &[&value]);
+    }
+    // Raw quotes, markup and invalid escapes in a serialized header keep the WHOLE key raw.
     for newline in [r"\n", r"\r\n", "<br>"] {
         for header in [
             "Comment: <synthetic>",
