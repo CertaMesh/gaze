@@ -228,6 +228,7 @@ fn prose_and_public_material_remain_untouched() {
         // A generic line prefix needs 32 base64 units and cannot end on a quote.
         format!("BEGIN = \"-----BEGIN PRIVATE KEY-----\"\nHASH = \"{SHA}\""),
         format!("-----BEGIN PRIVATE KEY-----\nHASH = \"{SHA}\""),
+        format!("-----BEGIN PRIVATE KEY-----\nsha256 {SHA} is the checksum of the empty file\n"),
         "docs/a.md:3:-----BEGIN PRIVATE KEY-----\ndocs/a.md:4:Paste the key body here, 2026 edition.".into(),
         "-----BEGIN PRIVATE KEY-----\nNote: see the internationalization guide, chapter 12.".into(),
         prefixed_lines(&long_pem("PUBLIC KEY", &[]), "\n", |_| "-".into()),
