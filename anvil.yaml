@@ -48,6 +48,16 @@ roles:
       - UV_PUBLISH_TOKEN
 
 checks:
+  invisible-phone-fixtures:
+    description: Compare phone fixture preconditions on pinned main and pre-merge sources
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    identity_env: [GAZE_PHONE_PRE_MERGE_WORKTREE, GAZE_PHONE_MAIN_WORKTREE]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/probe_phone_fixtures.py, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V]
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/probe_phone_fixtures.py
   invisible-focus:
     description: Adopter edge and overlap regressions before complete separator verification
     expensive: true

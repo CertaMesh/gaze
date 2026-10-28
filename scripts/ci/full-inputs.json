@@ -941,6 +941,7 @@
     "scripts/ci/check_past_capture_mutations.py",
     "scripts/ci/invisible_separator_release.py",
     "scripts/ci/probe_card_window_gaps.py",
+    "scripts/ci/probe_phone_fixtures.py",
     "scripts/ci/tutorial_gate.py",
     "scripts/ci/verify_normalize_merge.py",
     "scripts/fetch/fetch-ner-model.sh",
