@@ -295,6 +295,17 @@ class SliceReaderTests(unittest.TestCase):
         self.assertEqual(a["usable_documents"], 239)
         self.assertEqual(result["A"]["shapes"]["gemini_function_call"]["usable_documents"], 29)
 
+    def test_a_covered_timestamp_decoy_is_a_value_not_syntax(self):
+        target = next(r for r in self.positives if any(d.label.endswith("timestamp") for d in r.decoys))
+        decoy = next(d for d in target.decoys if d.label.endswith("timestamp"))
+        # The timestamp's own colons are value bytes, not JSON or CSV syntax.
+        self.assertIn(b":", target.text.encode("utf-8")[decoy.start:decoy.end])
+        result = self._measure(lambda r: [(g.start, g.end) for g in r.gold]
+                               + ([(decoy.start, decoy.end)] if r is target else []))
+        a = result["A"]["totals"]
+        self.assertEqual((a["false_positive_values"], a["false_positive_bytes"]), (1, decoy.end - decoy.start))
+        self.assertEqual(a["structural_bytes_covered"], 0)
+
     def test_syntax_byte_coverage_alone_makes_a_payload_unusable(self):
         target = self.positives[0]
         self.assertFalse(target.surface.endswith("numeric_label"))

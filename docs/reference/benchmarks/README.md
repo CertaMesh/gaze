@@ -2332,8 +2332,8 @@ comes from #870 at `c3af8c6aa592dc348f1f310a47d63ebfa5f19637`;
 the [issuer generator](../../../scripts/bench/issuer_credential_cells.py) is
 copied unchanged from #871 at `de9e8a968b94af49c982eeb4b4e226547f77b6d7`.
 One source correction is necessary: only the new v28 `invisible_boundary_`
-dev phone values use the NANPA fictional range `+1 206 555-0100` through
-`+1 206 555-0199`, instead of area code 202. The original range repeats an
+dev phone values use area code 206 with the NANPA fictional 555-01xx line
+range, instead of area code 202. The original range repeats an
 older test-partition value, failing the unchanged global disjointness test.
 The seed, random draws, suffixes, templates, offsets and counterweights stay
 unchanged; only these dev phone source values and their gold change. All test
