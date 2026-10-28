@@ -223,11 +223,16 @@ class, or sets them to `"ignore"`. Unknown unmapped keys, paths without leaves,
 arrays, nulls and duplicate JSON keys fail closed; errors contain paths, never values.
 
 Values are trimmed and whitespace runs (including NBSP) collapse to one space.
-Restore preserves source bytes. Individually skip values with fewer than three
-letters or digit-only values shorter than four digits; valid registry-length,
-mod-97-passing IBANs are exempt. `Context::record_value_rejections` lists safe
-paths and typed refusal reasons, never values. Off-by-default accepted groups
-are inert and absent from this list. Clean warns per refused path.
+Restore preserves source bytes. Values containing letters require at least
+three letters. Values without letters require at least four numeric characters.
+A value below this floor refuses the whole call in clean,
+daemon v1 and v2, and embedded MCP host context. Valid registry-length,
+mod-97-passing IBANs are exempt. The refusal reports only
+`caller_value_too_short`, with no value or field path. Clean exits with code 8
+and empty stdout, even when the short value does not occur in the input.
+`Context::record_value_rejections` retains typed refusal metadata for Rust
+observers. Owner-side `gaze eval` warns with the closed reason and continues
+measuring. Off-by-default accepted groups are inert and absent from this list.
 
 Common single names (`Will`, `Grace`, `May`, `Mark`) from the
 [versioned dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)

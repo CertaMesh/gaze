@@ -39,9 +39,12 @@ record name elsewhere with a name-position cue. Unlisted names such as `Maren`
 match changed case by default; same-case exact copies need opt-in or another
 detector. Default Nym has no person label, so model corroboration uses NER.
 
-Unsafe short values are skipped individually. Inspect Rust
-`record_value_rejections` for paths and typed reasons; accepted values in disabled
-groups are inert and absent from this list. A valid IBAN is accepted even when
+Unsafe short values refuse the whole call with the closed reason
+`caller_value_too_short`. This applies to clean, daemon v1 and v2, and embedded
+MCP host context. Owner-side eval continues measuring with a value-free warning.
+Rust observers can inspect `record_value_rejections` for typed reasons.
+Accepted values in disabled groups are inert and absent from this list.
+A valid IBAN is accepted even when
 its country code supplies its only two letters. Ordinary document detectors
 still run for disabled groups.
 

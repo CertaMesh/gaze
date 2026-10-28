@@ -141,6 +141,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let (resolved, policy) = prepare_clean_pipeline(
         &options,
         Some(Arc::clone(&counter) as Arc<dyn RedactionLogger>),
+        ContextEnforcement::Enforce,
     )?;
     if resolved.policy.session.scope == SessionScope::Ephemeral {
         return Err(CliError::PolicyConfigDetail(
@@ -240,10 +241,23 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     write_stdout_exact(&stdout)
 }
 
+pub(crate) enum ContextEnforcement {
+    Enforce,
+    Observe,
+}
+
+pub(crate) fn enforce_context_transformable(context: &TypedContext) -> Result<(), CliError> {
+    match context.untransformable_reason() {
+        Some(reason) => Err(CliError::Untransformable { reason }),
+        None => Ok(()),
+    }
+}
+
 /// Assemble the same policy, context, overrides, and safety nets for both verbs.
 pub(crate) fn prepare_clean_pipeline(
     options: &CleanOptions<'_>,
     logger: Option<Arc<dyn RedactionLogger>>,
+    context_enforcement: ContextEnforcement,
 ) -> Result<
     (
         crate::pipeline::build::ResolvedPipeline,
@@ -263,11 +277,13 @@ pub(crate) fn prepare_clean_pipeline(
         .transpose()
         .map_err(map_context_error)?;
     if let Some(context) = &context {
-        for rejection in &context.record_value_rejections {
-            eprintln!(
-                "warning: record value at {} skipped: unsafe short match",
-                rejection.path
-            );
+        match context_enforcement {
+            ContextEnforcement::Enforce => enforce_context_transformable(context)?,
+            ContextEnforcement::Observe => {
+                if let Some(reason) = context.untransformable_reason() {
+                    eprintln!("warning: {reason}");
+                }
+            }
         }
     }
     let mut resolved = resolve_pipeline(

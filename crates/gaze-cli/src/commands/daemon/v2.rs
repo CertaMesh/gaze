@@ -762,6 +762,9 @@ impl Daemon {
                 .map(|raw| {
                     let context = TypedContext::from_json_str(raw.get())
                         .map_err(|_| Failure::ContextInvalid)?;
+                    if let Some(reason) = context.untransformable_reason() {
+                        return Err(Failure::Untransformable(reason.as_str()));
+                    }
                     let pipeline = gaze_assembly::pipeline_with_context(
                         &self.pipeline,
                         &self.policy,

@@ -86,6 +86,9 @@ impl Default for HostContextPolicy {
 /// Value-free context failures; no underlying diagnostic or source chain escapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum HostContextError {
+    /// Caller confirmed sensitivity but the record matcher cannot safely match it.
+    #[error("{0}")]
+    Untransformable(gaze::UntransformableReason),
     /// Shared context parser rejected the original JSON.
     #[error("invalid host context")]
     Invalid,
@@ -106,8 +109,11 @@ pub(crate) fn parse(
     match selection {
         HostContextSelection::Absent => Ok(None),
         HostContextSelection::Present(raw) => gaze::Context::from_json_str(&raw.0.raw)
-            .map(Some)
-            .map_err(|_| HostContextError::Invalid),
+            .map_err(|_| HostContextError::Invalid)
+            .and_then(|context| match context.untransformable_reason() {
+                Some(reason) => Err(HostContextError::Untransformable(reason)),
+                None => Ok(Some(context)),
+            }),
     }
 }
 

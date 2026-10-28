@@ -23,10 +23,10 @@ use crate::pipeline::build::{
     map_policy_error, policy_warnings, resolve_pipeline, validate_ner_threshold,
 };
 use crate::pipeline::run::{
-    clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string, map_clean_error,
-    map_context_error, maybe_register_safety_net, policy_nym_was_overridden, safety_net_policy,
-    validate_safety_net_tolerant_gate, wire_ordered_entries, CleanOptions,
-    CORE_EXTENDED_DEPRECATION,
+    clean_overrides_from_options, enforce_context_transformable, enforce_safety_net_mode,
+    entry_class_to_string, map_clean_error, map_context_error, maybe_register_safety_net,
+    policy_nym_was_overridden, safety_net_policy, validate_safety_net_tolerant_gate,
+    wire_ordered_entries, CleanOptions, CORE_EXTENDED_DEPRECATION,
 };
 use crate::restore::session::restore_pass2_validate;
 use gaze::{
@@ -365,6 +365,7 @@ impl Daemon {
             .0
             .map(|raw| {
                 let context = TypedContext::from_json_str(raw.get()).map_err(map_context_error)?;
+                enforce_context_transformable(&context)?;
                 let pipeline = gaze_assembly::pipeline_with_context(
                     &self.pipeline,
                     &self.policy,

@@ -88,6 +88,9 @@ impl DispatchError {
     /// value or its field path, so transports can report it to the client.
     pub fn untransformable_reason(&self) -> Option<&'static str> {
         match self {
+            Self::HostContext(crate::HostContextError::Untransformable(reason)) => {
+                Some(reason.as_str())
+            }
             Self::Protection(gaze::ProtectionError::Untransformable { reason, .. }) => {
                 Some(reason.as_str())
             }

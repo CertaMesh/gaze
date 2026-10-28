@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::PiiClass;
-use gaze_types::{RecordMatchKind, ValidatorKind};
+use gaze_types::{RecordMatchKind, UntransformableReason, ValidatorKind};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -141,6 +141,18 @@ pub enum ContextError {
 }
 
 impl Context {
+    /// Closed refusal reason for privacy-enforcing consumers. Observers may
+    /// retain the rejection metadata and continue measuring instead.
+    pub fn untransformable_reason(&self) -> Option<UntransformableReason> {
+        self.record_value_rejections
+            .first()
+            .map(|rejection| match rejection.reason {
+                RecordValueRejectionReason::UnsafeShortMatch => {
+                    UntransformableReason::CallerValueTooShort
+                }
+            })
+    }
+
     pub fn load(path: &Path) -> Result<Self, ContextError> {
         let mut raw = String::new();
         fs::File::open(path)
