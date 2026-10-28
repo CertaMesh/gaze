@@ -61,10 +61,13 @@ def main():
                         help="run only this named xtask gate; may be repeated")
     parser.add_argument("--matrix-tail", action="store_true",
                         help="complete a resource-paused full matrix with fresh workspace suites")
+    parser.add_argument("--merge-focus", action="store_true", help="verify the outcomes-policy main merge and separator boundaries")
     parser.add_argument("--dry-run", action="store_true", help="validate and print the command plan")
     args = parser.parse_args()
     if args.matrix_tail and (args.gate or args.xtask_only):
         parser.error("matrix tail cannot be combined with gate selection")
+    if args.merge_focus and (args.matrix_tail or args.gate or args.xtask_only):
+        parser.error("merge focus cannot be combined with other selections")
     if os.environ.get("CARGO_TARGET_DIR"):
         raise RuntimeError("use cwd-relative Cargo targets")
     environment = dict(os.environ, CARGO_BUILD_JOBS="2", CARGO_PROFILE_DEV_DEBUG="0",
@@ -87,6 +90,24 @@ def main():
         commands = [(name, command) for name, command in commands if name in args.gate]
     output = (OUTPUT.with_name("pr-ritual-selected") if args.gate else
               OUTPUT.with_name("pr-ritual-xtask") if args.xtask_only else OUTPUT)
+    if args.merge_focus:
+        def tested(*arguments):
+            return ["python3", "scripts/anvil/test_nonempty.py", "cargo", "test", "--locked", *arguments]
+        commands = [
+            ("fmt", ["cargo", "fmt", "--all", "--", "--check"]),
+            ("types-outcomes", tested("-p", "gaze-types", "--all-features", "--lib", "outcome::")),
+            ("policy-outcomes", tested("-p", "gaze-pii", "--all-features", "--lib", "outcomes_")),
+            ("wire-closed-reasons", tested("-p", "gaze-mcp-core", "-p", "gaze-mcp-rmcp", "-p", "gaze-proxy", "--all-features", "--lib", "untransformable")),
+            ("cli-closed-reasons", tested("-p", "gaze-cli", "--all-features", "--bin", "gaze", "untransformable")),
+            ("cli-error-bytes", tested("-p", "gaze-cli", "--all-features", "--bin", "gaze", "stderr_line_keeps_existing_error_bytes")),
+            ("cli-outcomes-policy", tested("-p", "gaze-cli", "--all-features", "--test", "cli_pipe", "outcomes_policy_")),
+            ("field-geometry", tested("-p", "gaze-recognizers", "--all-features", "--test", "explicit_fields")),
+            ("legacy-source-boundaries", tested("-p", "gaze-recognizers", "--all-features", "--test", "legacy_source_boundaries")),
+            ("hard-boundary-preference", tested("-p", "gaze-recognizers", "--all-features", "--test", "validators", "hard_boundary_")),
+            ("regex-differential", tested("-p", "gaze-recognizers", "--all-features", "--lib", "regex::tests::")),
+            ("validator-neighbours", tested("-p", "gaze-recognizers", "--all-features", "--test", "validators", "validator_classes_keep_gap_neighbours_outside_valid_values")),
+        ]
+        output = OUTPUT.with_name("merge-focus")
     prefix = None
     if args.matrix_tail:
         prior_dir = OUTPUT.with_name("pr-ritual-selected")
