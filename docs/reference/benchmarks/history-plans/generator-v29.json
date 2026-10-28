@@ -371,7 +371,7 @@
       ],
       "subject": {
         "revision": "8a19d8c64a007a990ab5efc8a22d33f08bbe9f11",
-        "binary_sha256": null,
+        "binary_sha256": "3a6eaf2d9039f858636cfca3a9f5911889ef215c1a03e5d0329cc843ac6362ad",
         "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
         "model_bundles": [
           {
@@ -423,7 +423,7 @@
       ],
       "subject": {
         "revision": "5a7dac0fa198f20a628ed6b7fa2b5c9d41a91eb0",
-        "binary_sha256": null,
+        "binary_sha256": "afe7a2000945126cd08363c3dcc5203c1a7a1e89d121bb6c743d98ac0356e2b4",
         "policy_sha256": "65cd6aa588ce6923f9e2156699893fcffb9a870967d9a0db5018deaa0c22c8cc",
         "model_bundles": [
           {
