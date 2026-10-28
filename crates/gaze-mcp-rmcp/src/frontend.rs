@@ -374,6 +374,13 @@ fn tier_for_principal(principal: &Principal) -> ToolTier {
 }
 
 fn dispatch_error_to_tool_result(err: DispatchError) -> CallToolResult {
+    // Closed code, then the closed reason; the field path stays out because keys can be PII.
+    if let Some(reason) = err.untransformable_reason() {
+        return CallToolResult::error(vec![
+            ContentBlock::text("untransformable"),
+            ContentBlock::text(reason),
+        ]);
+    }
     match err {
         DispatchError::HostContext(_) => {
             CallToolResult::error(vec![ContentBlock::text("host-context-rejected")])
@@ -485,6 +492,26 @@ mod tests {
         let text = &result.content[0].as_text().unwrap().text;
         assert_eq!(text, "manifest-persistence-failed");
     }
+    #[test]
+    fn untransformable_returns_closed_reason_without_field_path() {
+        let err = DispatchError::Protection(gaze::ProtectionError::Untransformable {
+            reason: gaze::UntransformableReason::EncodedCarrier,
+            field_path: gaze::FieldPath::new(["synthetic-key@example.invalid".into()]),
+        });
+        let result = dispatch_error_to_tool_result(err);
+        assert_eq!(result.is_error, Some(true));
+        let texts: Vec<_> = result
+            .content
+            .iter()
+            .map(|block| block.as_text().unwrap().text.as_str())
+            .collect();
+        assert_eq!(texts, ["untransformable", "encoded_carrier"]);
+        let other = dispatch_error_to_tool_result(DispatchError::Protection(
+            gaze::ProtectionError::Residual,
+        ));
+        assert_eq!(other.content[0].as_text().unwrap().text, "redaction-failed");
+    }
+
     #[test]
     fn resource_limit_returns_stable_error_class() {
         let result = dispatch_error_to_tool_result(DispatchError::ResourceLimit);

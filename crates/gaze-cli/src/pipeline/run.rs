@@ -167,13 +167,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
             &dictionaries,
             policy,
         )
-        .map_err(|err| {
-            if pipeline.safety_net_count() > 0 {
-                map_safety_net_pipeline_error(err)
-            } else {
-                CliError::Pipeline
-            }
-        })?;
+        .map_err(|err| map_clean_error(&pipeline, err))?;
     counter
         .log_safety_net_report(&leak_report, &session, DocumentKind::Text)
         .map_err(|_| CliError::Pipeline)?;
@@ -555,7 +549,20 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
     Ok(())
 }
 
+/// Clean-path failures: the exit-8 refusal always surfaces, safety-net variants only with an
+/// installed net, and every other failure stays the value-free `Pipeline` error.
+pub(crate) fn map_clean_error(pipeline: &gaze::Pipeline, err: gaze::Error) -> CliError {
+    if pipeline.safety_net_count() > 0 {
+        map_safety_net_pipeline_error(err)
+    } else {
+        crate::pipeline::build::untransformable_error(&err).unwrap_or(CliError::Pipeline)
+    }
+}
+
 pub(crate) fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
+    if let Some(refusal) = crate::pipeline::build::untransformable_error(&err) {
+        return refusal;
+    }
     match err {
         gaze::Error::SafetyNet(err) => map_safety_net_error(err),
         _ => CliError::Pipeline,
