@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
+# No background services or user authentication are required. Check the cached
+# toolchain without allowing rustup to install anything on wake.
+stable=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+rustup run "$stable" rustc --version
+uv --version
