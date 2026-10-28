@@ -10,7 +10,9 @@ per byte, and check that the payload still parses (`structured_slice.py`).
 Layer A carries the labelled positives. Layer D carries the same shapes with
 a public key in place of the person label, so every inserted value is a
 decoy. Gold is the raw document bytes of the value, including inside
-JSON-escaped strings. Every value is synthetic; emails use reserved domains.
+JSON-escaped strings: the `escaped` ID shape carries `\\/` and `\\u2013`, so its
+gold is the escaped form (doubled inside an escaped JSON string, decoded in
+CSV). Every value is synthetic; emails use reserved domains.
 """
 from types import ModuleType
 
@@ -28,7 +30,9 @@ SHAPES = (
     "ndjson",
     "numeric_label",
 )
-VALUE_SHAPES = ("numeric", "uuid", "grouped")
+VALUE_SHAPES = ("numeric", "uuid", "grouped", "escaped")
+# Shapes whose ID sits inside a JSON string that is itself JSON-escaped.
+DOUBLE_ESCAPED = ("anthropic_tool_result", "openai_tool_call")
 BENIGN_FAMILY = "structured_benign"
 DECOY_KINDS = ("unlabelled_number", "amount", "timestamp", "benign_id")
 KEYS = {
@@ -103,6 +107,17 @@ def _benign_id(rng, shape: str) -> str:
     return "SKU-" + rng.digits(6)
 
 
+def _escaped(rng, partition: str, shape: str) -> str:
+    """`SYN/<lead>dddd–ddd` as written in the document: JSON escapes it as `\\/` and
+    `\\u2013`, an escaped JSON string doubles each backslash, CSV keeps it decoded."""
+    lead = "6" if partition == "dev" else "8"
+    head, tail = lead + rng.digits(4), rng.digits(3)
+    if shape == "csv":
+        return f"SYN/{head}\u2013{tail}"
+    escaped = f"SYN\\/{head}\\u2013{tail}"
+    return escaped.replace("\\", "\\\\") if shape in DOUBLE_ESCAPED else escaped
+
+
 def _decoys(api: ModuleType, rng, shape: str) -> dict:
     decoy = api.DECOY_PREFIX
     return {
@@ -136,6 +151,8 @@ def records(api: ModuleType, partition: str) -> list:
 
     def identifier(rng, shape, index):
         value_shape = "numeric" if shape == "numeric_label" else VALUE_SHAPES[index % len(VALUE_SHAPES)]
+        if value_shape == "escaped":
+            return _escaped(rng, partition, shape)
         return record_ids.value(rng, partition, value_shape)
 
     for family, label in record_ids.LABELS.items():

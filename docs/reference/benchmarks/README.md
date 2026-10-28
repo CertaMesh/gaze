@@ -2250,10 +2250,12 @@ positives and 90 D counterweights per partition, in nine shapes:
 - A JSON number under a labelled key.
 
 Each positive puts a customer, employee or person-record ID under a labelled
-field. The ID is numeric, a UUID or grouped. The API body also carries a given
-name, a surname and an email on a reserved domain. Gold is the raw document
-bytes of each value, including inside escaped strings. Every NDJSON repeat is
-gold.
+field. The ID is numeric, a UUID, grouped, or written with JSON escapes
+(`SYN\/86910\u2013276`). The API body also carries a given name, a surname and
+an email on a reserved domain. Gold is the raw document bytes of each value,
+including inside escaped strings: an escaped ID is gold in its escaped form,
+with each backslash doubled inside an escaped JSON string. Every NDJSON repeat
+is gold. A person-labelled CSV column header owns the values in its column.
 
 The values beside the ID are recorded decoys: unlabelled numbers (some six
 digits long, the numeric ID's own shape), amounts, timestamps, tool-call IDs
@@ -2281,10 +2283,15 @@ Per layer and shape, it reports:
 - False positives counted three ways: documents, values out of the decoys, and
   bytes.
 - JSON or CSV syntax bytes covered.
-- Usable documents: not refused, no decoy touched, no syntax byte covered.
+- Type-changed documents: a protected value in a JSON number position. A token
+  is a string, so the payload no longer has the type it had.
+- Usable documents: not refused, no non-gold byte covered (decoy, key or tool
+  name, enum string, quote, backslash or other syntax) and no type change.
+- Refused gold bytes, next to leaked gold bytes.
 
-Refused documents are counted apart and excluded from bytes and values.
-Refusing a payload is not a gain. The reader refuses a record from an older
+Refused documents are counted apart and excluded from the other bytes and
+values. Their gold appears only as refused gold bytes. The scorer gate counts
+refused gold as leaked, so refusing a payload is never a gain. The reader refuses a record from an older
 generator or a different corpus.
 
 No release has been measured on generator v26 yet. Until the past releases are

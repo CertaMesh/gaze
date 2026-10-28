@@ -4,8 +4,11 @@
 The scorecard already gates these cells in bytes. This reader adds the
 counts bytes cannot show: false positives by document and by value, gold
 values protected whole, refusals kept apart from protection, and whether
-each payload stays usable (not refused, no decoy value touched, no JSON or
-CSV syntax byte covered). Refused documents count only as refusals; zero
+each payload stays usable. A usable payload is not refused, has no non-gold
+byte covered (decoy, key or tool name, enum string, quote, backslash or other
+syntax) and changes no JSON type: a token for a value in a JSON number
+position is a string, so the payload no longer has the type it had. Refused
+documents count only as refusals, with their gold bytes reported apart; zero
 leaks by refusing is not a gain.
 """
 
@@ -29,10 +32,11 @@ FIRST_GENERATOR_VERSION = 26
 # Bytes that carry JSON, NDJSON or CSV syntax when they lie outside every value.
 STRUCTURAL = frozenset(b'{}[],:"\\\n')
 COUNTS = (
-    "documents", "refused_documents", "gold_bytes", "leaked_gold_bytes",
+    "documents", "refused_documents", "gold_bytes", "leaked_gold_bytes", "refused_gold_bytes",
     "gold_values", "gold_values_protected", "gold_values_partial", "gold_values_refused",
     "false_positive_bytes", "false_positive_documents", "decoy_values",
-    "false_positive_values", "structural_bytes_covered", "usable_documents",
+    "false_positive_values", "structural_bytes_covered", "type_changed_documents",
+    "usable_documents",
 )
 
 
@@ -52,6 +56,11 @@ def structural_offsets(record: agentic.Record) -> list[int]:
     return [i for i, byte in enumerate(encoded) if byte in STRUCTURAL and not inside[i]]
 
 
+def number_position(encoded: bytes, start: int) -> bool:
+    """A bare JSON value: no opening quote, straight after the key's colon."""
+    return encoded[start - 1:start] == b":"
+
+
 def _empty() -> dict:
     return {**dict.fromkeys(COUNTS, 0), "false_positive_values_by_kind": {}}
 
@@ -60,16 +69,18 @@ def _add(row: dict, record: agentic.Record, protected, refused: bool) -> None:
     row["documents"] += 1
     row["gold_values"] += len(record.gold)
     row["decoy_values"] += len(record.decoys)
+    gold = score.merge_intervals([(g.start, g.end) for g in record.gold])
     if refused:
         row["refused_documents"] += 1
         row["gold_values_refused"] += len(record.gold)
+        row["refused_gold_bytes"] += score.interval_length(gold)
         return
     protected = score.merge_intervals(protected)
-    gold = score.merge_intervals([(g.start, g.end) for g in record.gold])
     row["gold_bytes"] += score.interval_length(gold)
     row["leaked_gold_bytes"] += score.interval_length(score.subtract_intervals(gold, protected))
-    row["false_positive_bytes"] += score.interval_length(score.subtract_intervals(protected, gold))
-    row["false_positive_documents"] += int(bool(score.subtract_intervals(protected, gold)))
+    outside_gold = score.interval_length(score.subtract_intervals(protected, gold))
+    row["false_positive_bytes"] += outside_gold
+    row["false_positive_documents"] += int(bool(outside_gold))
     for span in record.gold:
         covered = _covered(span.start, span.end, protected)
         if covered == span.end - span.start:
@@ -83,7 +94,11 @@ def _add(row: dict, record: agentic.Record, protected, refused: bool) -> None:
         kinds[kind] = kinds.get(kind, 0) + count
     structural = sum(_covered(i, i + 1, protected) for i in structural_offsets(record))
     row["structural_bytes_covered"] += structural
-    row["usable_documents"] += int(not touched and not structural)
+    encoded = record.text.encode("utf-8")
+    type_changed = any(number_position(encoded, g.start) and _covered(g.start, g.end, protected)
+                       for g in record.gold)
+    row["type_changed_documents"] += int(type_changed)
+    row["usable_documents"] += int(not outside_gold and not type_changed)
 
 
 def measure(slice_rows: list[agentic.Record], observations: dict) -> dict:
@@ -134,18 +149,20 @@ def report(record_path: Path, *, config: str | None = None) -> dict:
 
 
 def markdown(value: dict) -> str:
-    lines = [f"Config `{value['config']}`. Refused documents are counted apart and excluded from bytes and values.", "",
+    lines = [f"Config `{value['config']}`. Refused documents are counted apart and excluded from the other "
+             "bytes and values; their gold is shown as refused gold bytes, which the scorer gate counts as leaked.", "",
              "| Layer | Shape | Docs | Refused | Gold values whole / partial | Leaked gold bytes "
-             "| FP docs | FP values / decoys | FP bytes | Syntax bytes covered | Usable docs |",
-             "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
+             "| Refused gold bytes | FP docs | FP values / decoys | FP bytes | Syntax bytes covered "
+             "| Type changed | Usable docs |",
+             "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
     for layer, block in value["layers"].items():
         for shape, row in (*block["shapes"].items(), ("**total**", block["totals"])):
             lines.append(
                 f"| {layer} | {shape} | {row['documents']} | {row['refused_documents']} | "
                 f"{row['gold_values_protected']}/{row['gold_values']} / {row['gold_values_partial']} | "
-                f"{row['leaked_gold_bytes']} | {row['false_positive_documents']} | "
+                f"{row['leaked_gold_bytes']} | {row['refused_gold_bytes']} | {row['false_positive_documents']} | "
                 f"{row['false_positive_values']}/{row['decoy_values']} | {row['false_positive_bytes']} | "
-                f"{row['structural_bytes_covered']} | {row['usable_documents']} |")
+                f"{row['structural_bytes_covered']} | {row['type_changed_documents']} | {row['usable_documents']} |")
     return "\n".join(lines) + "\n"
 
 

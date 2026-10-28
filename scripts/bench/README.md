@@ -325,8 +325,11 @@ v0.17 GLiNER mechanism records, with their hashes pinned in the report.
 `structured_slice.py` reads one value-free record and reports the generator
 v26 `structured_*` cells per layer and shape. It counts false positives by
 document, by decoy value and by byte, and counts gold values protected whole.
-It also counts covered JSON/CSV syntax bytes and usable payloads. Refusals are
-kept apart. The command needs no capture, model or binary:
+It also counts covered JSON/CSV syntax bytes, JSON type changes and usable
+payloads. A usable payload is not refused, has no non-gold byte covered and
+changes no JSON type. Refusals are kept apart, with a refused gold bytes
+column beside leaked; the scorer gate counts refused gold as leaked. The
+command needs no capture, model or binary:
 
 ```bash
 uv run --project scripts/bench python scripts/bench/structured_slice.py \

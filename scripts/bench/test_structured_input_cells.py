@@ -24,7 +24,30 @@ def _rows(partition="test"):
     return cells.records(api, partition)
 
 
+def _decoded(shape, raw):
+    """The value a parser reads from the raw gold bytes."""
+    if shape == "csv":
+        return raw
+    depth = 2 if shape in cells.DOUBLE_ESCAPED else 1
+    for _ in range(depth):
+        raw = json.loads(f'"{raw}"')
+    return raw
+
+
+def _leaves(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _leaves(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _leaves(item)
+    else:
+        yield value
+
+
 class GeneratedPayloadTests(unittest.TestCase):
+    KEYS = {k for family in cells.KEYS["test"].values() for k in family}
+
     def test_every_family_and_shape_is_generated_deterministically(self):
         for partition in api.PARTITIONS:
             rows = _rows(partition)
@@ -56,7 +79,7 @@ class GeneratedPayloadTests(unittest.TestCase):
     def test_payloads_parse_and_gold_is_the_field_value(self):
         for row in _rows():
             shape = row.surface.removeprefix(cells.SURFACE_PREFIX)
-            ids = [g.value for g in row.gold if g.label.endswith("_ID")]
+            ids = [_decoded(shape, g.value) for g in row.gold if g.label.endswith("_ID")]
             if shape == "csv":
                 table = list(csv.reader(io.StringIO(row.text)))
                 self.assertEqual(len(table), 3)
@@ -66,34 +89,24 @@ class GeneratedPayloadTests(unittest.TestCase):
                 lines = [json.loads(line) for line in row.text.splitlines()]
                 self.assertEqual(len(lines), 3)
                 if ids:
-                    self.assertEqual(len(ids), 3)
+                    self.assertEqual(ids, [line[next(k for k in line if k in self.KEYS)] for line in lines])
                 continue
             payload = json.loads(row.text)
             if shape == "anthropic_tool_result":
                 payload = json.loads(payload["content"])
             if shape == "openai_tool_call":
                 payload = json.loads(payload["tool_calls"][0]["function"]["arguments"])
-            flat = json.dumps(payload)
+            values = [str(v) for v in _leaves(payload)]
             for value in ids:
-                self.assertIn(value, flat)
+                self.assertIn(value, values)
             if shape == "numeric_label" and ids:
                 self.assertEqual([v for v in payload.values() if isinstance(v, int) and str(v) == ids[0]], [int(ids[0])])
 
     def test_every_digit_bearing_value_is_gold_or_a_recorded_decoy(self):
-        def leaves(value):
-            if isinstance(value, dict):
-                for item in value.values():
-                    yield from leaves(item)
-            elif isinstance(value, list):
-                for item in value:
-                    yield from leaves(item)
-            else:
-                yield value
-
         checked = 0
         for row in _rows():
             shape = row.surface.removeprefix(cells.SURFACE_PREFIX)
-            recorded = {s.value for s in (*row.gold, *row.decoys)}
+            recorded = {_decoded(shape, s.value) for s in (*row.gold, *row.decoys)}
             if shape == "csv":
                 values = [cell for line in csv.reader(io.StringIO(row.text)) for cell in line]
             else:
@@ -104,7 +117,7 @@ class GeneratedPayloadTests(unittest.TestCase):
                         payloads.append(json.loads(payload["content"]))
                     if shape == "openai_tool_call":
                         payloads.append(json.loads(payload["tool_calls"][0]["function"]["arguments"]))
-                values = [v for p in payloads for v in leaves(p) if not str(v).startswith(("{", "["))]
+                values = [v for p in payloads for v in _leaves(p) if not str(v).startswith(("{", "["))]
             numbers = {float(r) for r in recorded if r.replace(".", "", 1).isdigit()}
             for value in values:
                 if any(ch.isdigit() for ch in str(value)):
@@ -129,6 +142,26 @@ class GeneratedPayloadTests(unittest.TestCase):
             gold = next(g for g in row.gold if g.label.endswith("_ID"))
             self.assertEqual(encoded[gold.start - 2:gold.start], b'\\"')
             self.assertEqual(encoded[gold.end:gold.end + 2], b'\\"')
+
+    def test_escaped_ids_keep_the_escaped_bytes_as_gold(self):
+        seen = set()
+        for row in _rows():
+            shape = row.surface.removeprefix(cells.SURFACE_PREFIX)
+            # Layer A records the ID as gold, layer D as a benign decoy.
+            for span in (*row.gold, *row.decoys):
+                if not span.value.startswith(("SYN/", "SYN\\")):
+                    continue
+                decoded = _decoded(shape, span.value)
+                self.assertRegex(decoded, r"^SYN/[68]\d{4}\u2013\d{3}$")
+                expected = {"csv": decoded}.get(shape, decoded.replace("/", "\\/").replace("\u2013", "\\u2013"))
+                if shape in cells.DOUBLE_ESCAPED:
+                    expected = expected.replace("\\", "\\\\")
+                self.assertEqual(span.value, expected, row.uid)
+                self.assertEqual(span in row.gold, row.layer == "A", row.uid)
+                seen.add((row.layer, shape))
+        escaped = set(cells.SHAPES) - {"numeric_label"}
+        self.assertEqual({shape for layer, shape in seen if layer == "A"}, escaped)
+        self.assertEqual({shape for layer, shape in seen if layer == "D"}, escaped)
 
     def test_partitions_share_no_value_or_key(self):
         values = [{g.value for r in _rows(p) for g in r.gold} for p in api.PARTITIONS]
@@ -164,7 +197,7 @@ class SliceReaderTests(unittest.TestCase):
     def _measure(self, protect, refused=False):
         return reader.measure(self.rows, {r.uid: (protect(r), refused) for r in self.rows})
 
-    def test_exact_gold_protection_leaks_nothing_and_keeps_every_payload_usable(self):
+    def test_exact_gold_protection_keeps_string_payloads_usable_and_changes_number_types(self):
         result = self._measure(lambda r: [(g.start, g.end) for g in r.gold])
         a, d = result["A"]["totals"], result["D"]["totals"]
         self.assertEqual(a["documents"], 270)
@@ -172,8 +205,35 @@ class SliceReaderTests(unittest.TestCase):
         self.assertEqual(a["leaked_gold_bytes"], 0)
         self.assertEqual(a["gold_values_protected"], a["gold_values"])
         self.assertEqual((a["false_positive_documents"], a["false_positive_values"], a["false_positive_bytes"]), (0, 0, 0))
-        self.assertEqual(a["usable_documents"], 270)
+        # A token is a string: in place of a JSON number it changes the payload's type.
+        numeric = result["A"]["shapes"]["numeric_label"]
+        self.assertEqual((numeric["type_changed_documents"], numeric["usable_documents"]), (30, 0))
+        self.assertEqual(a["type_changed_documents"], 30)
+        self.assertEqual(a["usable_documents"], 240)
+        for shape, row in result["A"]["shapes"].items():
+            if shape != "numeric_label":
+                self.assertEqual((row["type_changed_documents"], row["usable_documents"]), (0, 30), shape)
         self.assertEqual(d["usable_documents"], 90)
+
+    def test_refusing_a_number_payload_is_a_refusal_not_a_type_change(self):
+        rows = [r for r in self.rows if r.surface.endswith("numeric_label")]
+        result = reader.measure(rows, {r.uid: ([], True) for r in rows})["A"]["totals"]
+        self.assertEqual((result["refused_documents"], result["type_changed_documents"], result["usable_documents"]),
+                         (30, 0, 0))
+        self.assertEqual(result["refused_gold_bytes"], sum(g.end - g.start for r in rows if r.layer == "A" for g in r.gold))
+        self.assertGreater(result["refused_gold_bytes"], 0)
+
+    def test_covering_a_key_name_makes_a_payload_unusable(self):
+        target = next(r for r in self.positives if r.surface.endswith("gemini_function_call"))
+        encoded = target.text.encode("utf-8")
+        key = encoded.index(b'"', encoded.index(b'"args":{') + len(b'"args":{')) + 1
+        result = self._measure(lambda r: [(g.start, g.end) for g in r.gold]
+                               + ([(key, key + 3)] if r is target else []))
+        a = result["A"]["totals"]
+        # No decoy and no syntax byte: only the key name's bytes are covered.
+        self.assertEqual((a["false_positive_values"], a["structural_bytes_covered"], a["false_positive_bytes"]), (0, 0, 3))
+        self.assertEqual(a["usable_documents"], 239)
+        self.assertEqual(result["A"]["shapes"]["gemini_function_call"]["usable_documents"], 29)
 
     def test_no_protection_leaks_every_gold_byte(self):
         a = self._measure(lambda r: [])["A"]["totals"]
@@ -198,18 +258,29 @@ class SliceReaderTests(unittest.TestCase):
         a = result["A"]["totals"]
         self.assertEqual((a["false_positive_values"], a["false_positive_documents"], a["false_positive_bytes"]), (1, 1, 1))
         self.assertEqual(a["false_positive_values_by_kind"], {decoy.label: 1})
-        self.assertEqual(a["usable_documents"], 269)
+        self.assertEqual(a["usable_documents"], 239)
         self.assertEqual(result["A"]["shapes"]["gemini_function_call"]["usable_documents"], 29)
 
     def test_syntax_byte_coverage_alone_makes_a_payload_unusable(self):
         target = self.positives[0]
+        self.assertFalse(target.surface.endswith("numeric_label"))
         gold = target.gold[0]
         # Gold plus its closing quote: no decoy touched, one syntax byte covered.
         result = self._measure(lambda r: [(g.start, g.end) for g in r.gold]
                                + ([(gold.end, gold.end + 1)] if r is target else []))
         a = result["A"]["totals"]
         self.assertEqual((a["false_positive_values"], a["structural_bytes_covered"]), (0, 1))
-        self.assertEqual(a["usable_documents"], 269)
+        self.assertEqual(a["usable_documents"], 239)
+
+    def test_covering_the_backslash_before_escaped_gold_counts_both_syntax_bytes(self):
+        target = next(r for r in self.positives if r.surface.endswith("anthropic_tool_result"))
+        gold = next(g for g in target.gold if g.label.endswith("_ID"))
+        self.assertEqual(target.text.encode("utf-8")[gold.start - 2:gold.start], b'\\"')
+        result = self._measure(lambda r: [(g.start, g.end) for g in r.gold]
+                               + ([(gold.start - 2, gold.start)] if r is target else []))
+        shape = result["A"]["shapes"]["anthropic_tool_result"]
+        self.assertEqual((shape["structural_bytes_covered"], shape["false_positive_bytes"]), (2, 2))
+        self.assertEqual(shape["usable_documents"], 29)
 
     def test_partial_gold_and_refusals_are_counted_apart(self):
         partial = self._measure(lambda r: [(g.start, g.start + 1) for g in r.gold])["A"]["totals"]
@@ -219,6 +290,8 @@ class SliceReaderTests(unittest.TestCase):
         self.assertEqual(refused["refused_documents"], 270)
         self.assertEqual(refused["gold_values_refused"], refused["gold_values"])
         self.assertEqual((refused["gold_bytes"], refused["leaked_gold_bytes"], refused["usable_documents"]), (0, 0, 0))
+        exposed = self._measure(lambda r: [])["A"]["totals"]
+        self.assertEqual(refused["refused_gold_bytes"], exposed["gold_bytes"])
 
     def test_missing_observation_and_older_generator_fail_closed(self):
         with self.assertRaises(records.RecordError):
@@ -232,8 +305,17 @@ class SliceReaderTests(unittest.TestCase):
                       "gold": [[g.start, g.end, g.label] for g in r.gold]} for r in self.rows]
         header["documents"] = documents
         reader._check_inventory(header, self.rows)
+        documents[0]["utf8_bytes"] += 1
+        with self.assertRaisesRegex(records.RecordError, "inventory"):
+            reader._check_inventory(header, self.rows)
+        documents[0]["utf8_bytes"] -= 1
         documents[0]["gold"] = []
         with self.assertRaisesRegex(records.RecordError, "inventory"):
+            reader._check_inventory(header, self.rows)
+        documents[0]["gold"] = [[g.start, g.end, g.label] for g in self.rows[0].gold]
+        reader._check_inventory(header, self.rows)
+        header["scorecard"]["layers"]["generator"] = {**manifest, "corpus_sha256": "0" * 64}
+        with self.assertRaisesRegex(records.RecordError, "different generated corpus"):
             reader._check_inventory(header, self.rows)
 
     def test_markdown_lists_every_shape_and_both_layers(self):
@@ -241,6 +323,8 @@ class SliceReaderTests(unittest.TestCase):
         for shape in cells.SHAPES:
             self.assertEqual(text.count(f"| {shape} |"), 2)
         self.assertEqual(text.count("**total**"), 2)
+        self.assertIn("| Refused gold bytes |", text)
+        self.assertIn("| Type changed |", text)
 
 
 if __name__ == "__main__":
