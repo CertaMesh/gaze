@@ -18,6 +18,7 @@ fn primary_occurrences_retain_distinct_original_evidence_and_ownership() {
             &[crate::LocaleTag::Global],
             &DictionaryBundle::default(),
             None,
+            None,
         )
         .unwrap();
     assert_eq!(clean.manifest.records().len(), 2);

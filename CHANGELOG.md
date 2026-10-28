@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Proxy adapters return `RequestSurfaces` and attach parsed scalar provenance to
+  string leaves. The Anthropic codec and MCP also pass field context to detection.
+  This adds metadata only. No production recognizer consumes the field context.
+- `FieldPath` shares ancestor storage. `segments()` returns borrowed segment
+  references. Proxy `CoveragePath` materializes its legacy spelling on demand.
+  Numeric leaves remain under existing admission rules without an unused inventory.
+  See UPGRADE.md for custom-adapter migration steps.
+
+
 ### Security
 
 - Private MCP class and dictionary labels use session-keyed HMAC identifiers,

@@ -871,6 +871,7 @@ mod tests {
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
                 None,
+                None,
             )
             .unwrap();
         (session, clean)
@@ -1169,6 +1170,7 @@ mod tests {
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
+                None,
                 None,
             )
             .unwrap();

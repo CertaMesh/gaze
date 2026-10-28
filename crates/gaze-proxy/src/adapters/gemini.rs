@@ -5,8 +5,8 @@ use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{
-    walk_all_strings, AdapterContract, PiiSurface, ProviderAdapter, SseEvent, SseStreamKey,
-    SseStreamSurface, SurfaceSyntax,
+    walk_all_scalars, AdapterContract, PiiSurface, ProviderAdapter, RequestSurfaces, SseEvent,
+    SseStreamKey, SseStreamSurface, SurfacePath, SurfaceSyntax,
 };
 
 /// Canonicalizes a protobuf-JSON field name to its lowerCamelCase spelling.
@@ -71,12 +71,12 @@ impl ProviderAdapter for GeminiAdapter {
         &self.upstream
     }
 
-    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>> {
+    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> RequestSurfaces<'a> {
         collect_gemini_surfaces(body, true)
     }
 
     fn response_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>> {
-        collect_gemini_surfaces(body, false)
+        collect_gemini_surfaces(body, false).strings
     }
 
     fn sse_event_pii_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<PiiSurface<'a>> {
@@ -119,20 +119,21 @@ impl ProviderAdapter for GeminiAdapter {
 /// `inlineData.data` is base64 payload. Substituting a token in any of them would silently break
 /// the request rather than protect it, so PII there is caught by the outbound residual re-scan and
 /// fails closed.
-fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_>> {
-    collect_gemini_stream_surfaces(body, request, false)
+fn collect_gemini_surfaces(body: &mut Value, request: bool) -> RequestSurfaces<'_> {
+    let strings = collect_gemini_stream_surfaces(body, request, false)
         .into_iter()
         .map(|fragment| fragment.surface)
-        .collect()
+        .collect();
+    RequestSurfaces { strings }
 }
 
 /// [`collect_gemini_surfaces`], keying each response candidate's text fragments by the
 /// candidate when `streamed`.
-fn collect_gemini_stream_surfaces(
-    body: &mut Value,
+fn collect_gemini_stream_surfaces<'a>(
+    body: &'a mut Value,
     request: bool,
     streamed: bool,
-) -> Vec<SseStreamSurface<'_>> {
+) -> Vec<SseStreamSurface<'a>> {
     let mut surfaces = Vec::new();
     if let Value::Object(root) = body {
         if request {
@@ -143,7 +144,7 @@ fn collect_gemini_stream_surfaces(
                             for (index, content) in contents.iter_mut().enumerate() {
                                 collect_content(
                                     &mut surfaces,
-                                    format!("{key}[{index}]"),
+                                    SurfacePath::root(key).index(index),
                                     content,
                                     None,
                                 );
@@ -151,18 +152,18 @@ fn collect_gemini_stream_surfaces(
                         }
                     }
                     "systemInstruction" => {
-                        collect_content(&mut surfaces, key.clone(), value, None);
+                        collect_content(&mut surfaces, SurfacePath::root(key), value, None);
                     }
                     // Tool and schema declarations: names, descriptions, and enum members are
                     // all read by the model.
                     "tools" | "toolConfig" => {
-                        walk_complete(&mut surfaces, key.clone(), value);
+                        walk_complete(&mut surfaces, SurfacePath::root(key), value);
                     }
                     // Covers `stopSequences`, which is matched against generated text. Numeric
                     // members of this subtree are untouched here and are classified by the
                     // outbound residual re-scan's non-carrier declaration instead.
                     "generationConfig" => {
-                        walk_complete(&mut surfaces, key.clone(), value);
+                        walk_complete(&mut surfaces, SurfacePath::root(key), value);
                     }
                     _ => {}
                 }
@@ -181,7 +182,9 @@ fn collect_gemini_stream_surfaces(
                     if let Some(content) = candidate.get_mut("content") {
                         collect_content(
                             &mut surfaces,
-                            format!("candidates[{index}].content"),
+                            SurfacePath::root("candidates")
+                                .index(index)
+                                .member("content"),
                             content,
                             stream,
                         );
@@ -195,11 +198,11 @@ fn collect_gemini_stream_surfaces(
 
 fn walk_complete<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
-    prefix: String,
+    prefix: SurfacePath,
     value: &'a mut Value,
 ) {
-    let mut complete = Vec::new();
-    walk_all_strings(&mut complete, prefix, value);
+    let mut complete = RequestSurfaces::default();
+    walk_all_scalars(&mut complete, prefix, value);
     surfaces.extend(complete.into_iter().map(SseStreamSurface::complete));
 }
 
@@ -207,7 +210,7 @@ fn walk_complete<'a>(
 /// candidate's answer stream, or of its thought stream for a thought summary.
 fn collect_content<'a>(
     surfaces: &mut Vec<SseStreamSurface<'a>>,
-    prefix: String,
+    prefix: SurfacePath,
     value: &'a mut Value,
     stream: Option<Option<u64>>,
 ) {
@@ -220,7 +223,7 @@ fn collect_content<'a>(
     else {
         return;
     };
-    let parts_prefix = format!("{prefix}.{parts_key}");
+    let parts_prefix = prefix.member(parts_key);
     for (index, part) in parts.iter_mut().enumerate() {
         let Value::Object(part) = part else {
             continue;
@@ -233,7 +236,7 @@ fn collect_content<'a>(
                 (SurfaceSyntax::ModelOutput, "text")
             };
         for (key, value) in part {
-            let part_prefix = format!("{parts_prefix}[{index}].{key}");
+            let part_prefix = parts_prefix.index(index).member(key);
             match canonical_field_name(key).as_ref() {
                 "text" => {
                     if let Value::String(text) = value {
@@ -241,11 +244,7 @@ fn collect_content<'a>(
                             stream: stream.map(|index| {
                                 SseStreamKey::new(format!("candidates.{text_stream}"), [index])
                             }),
-                            surface: PiiSurface {
-                                field_path: part_prefix,
-                                text,
-                                syntax: text_syntax,
-                            },
+                            surface: part_prefix.surface(text, text_syntax),
                         });
                     }
                 }
@@ -254,7 +253,7 @@ fn collect_content<'a>(
                         .as_object_mut()
                         .and_then(|call| call.iter_mut().find(|(key, _)| *key == "args"))
                     {
-                        walk_complete(surfaces, format!("{part_prefix}.{args_key}"), args);
+                        walk_complete(surfaces, part_prefix.member(args_key), args);
                     }
                 }
                 "functionResponse" => {
@@ -262,7 +261,7 @@ fn collect_content<'a>(
                         .as_object_mut()
                         .and_then(|call| call.iter_mut().find(|(key, _)| *key == "response"))
                     {
-                        walk_complete(surfaces, format!("{part_prefix}.{response_key}"), response);
+                        walk_complete(surfaces, part_prefix.member(response_key), response);
                     }
                 }
                 _ => {}

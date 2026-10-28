@@ -372,6 +372,15 @@ pub trait RequestPseudonymizer {
     /// Protects one complete decoded logical value against the staged transaction.
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode>;
 
+    /// Protects a decoded scalar with its validated structural location.
+    fn protect_field(
+        &mut self,
+        input: &str,
+        _field: &gaze_types::FieldProvenance,
+    ) -> Result<String, CodecErrorCode> {
+        self.protect(input)
+    }
+
     /// Collects deterministic request sources without publishing protected output.
     /// Implementations without a dedicated pass retain full protection and may refuse early.
     fn discover_rule_sources(&mut self, input: &str) -> Result<(), CodecErrorCode> {
@@ -550,6 +559,17 @@ impl<'a> RequestTransformContext<'a> {
         }
         self.pseudonymizer
             .protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
+    }
+
+    pub(crate) fn protect_field(
+        &mut self,
+        input: &str,
+        field: &gaze_types::FieldProvenance,
+    ) -> Result<String, CodecErrorCode> {
+        if self.verifying_rules || self.discovering_rules {
+            return self.protect(input);
+        }
+        self.pseudonymizer.protect_field(input, field)
     }
 
     /// Runs an isolated mutation probe that may neither reuse nor publish prefix-cache state.

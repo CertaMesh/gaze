@@ -19,10 +19,11 @@ fn gemini_walks_text_function_call_and_function_response() {
         }]
     });
     let surfaces = adapter.request_pii_surfaces(&mut body);
-    let paths: Vec<_> = surfaces
+    let rendered_paths: Vec<_> = surfaces
         .iter()
-        .map(|surface| surface.field_path.as_str())
+        .map(|surface| surface.field_path.to_legacy_string())
         .collect();
+    let paths: Vec<_> = rendered_paths.iter().map(String::as_str).collect();
 
     assert!(paths.contains(&"systemInstruction.parts[0].text"));
     assert!(paths.contains(&"contents[0].parts[0].text"));

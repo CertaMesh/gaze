@@ -100,3 +100,7 @@ pub use session::{
 pub use spelling::SourceSpelling;
 pub use sweep::ManifestSweepError;
 pub use types::{CleanDocument, RawDocument, Value};
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod test_support;

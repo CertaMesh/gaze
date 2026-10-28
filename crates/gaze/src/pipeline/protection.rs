@@ -6,6 +6,7 @@ use super::*;
 pub struct ProtectionContext<'a> {
     locale_chain: &'a [crate::LocaleTag],
     dictionaries: &'a DictionaryBundle,
+    field: Option<gaze_types::FieldContext<'a>>,
 }
 
 impl<'a> ProtectionContext<'a> {
@@ -16,7 +17,22 @@ impl<'a> ProtectionContext<'a> {
         Self {
             locale_chain,
             dictionaries,
+            field: None,
         }
+    }
+    /// Attach the validated scalar location for this complete input leaf.
+    pub fn with_field(mut self, field: &'a gaze_types::FieldProvenance) -> Self {
+        self.field = Some(gaze_types::FieldContext::WholeInput(field));
+        self
+    }
+    /// Attach a fragment's location without claiming the complete scalar value.
+    pub fn with_field_fragment(
+        mut self,
+        field: &'a gaze_types::FieldProvenance,
+        offset: usize,
+    ) -> Self {
+        self.field = Some(gaze_types::FieldContext::Fragment { field, offset });
+        self
     }
     pub fn locale_chain(self) -> &'a [crate::LocaleTag] {
         self.locale_chain
@@ -387,7 +403,11 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
     ) -> std::result::Result<String, BoundaryRefusal> {
         let mut target = ProtectionTarget::Live(session);
-        self.resolve_boundary_text_target(&mut target, text, locale_chain, dictionaries)
+        self.resolve_boundary_text_target(
+            &mut target,
+            text,
+            ProtectionContext::strict(locale_chain, dictionaries),
+        )
     }
 
     /// [`Self::resolve_boundary_text`] against staged transaction state; commits nothing.
@@ -398,25 +418,39 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
     ) -> std::result::Result<String, BoundaryRefusal> {
+        self.resolve_boundary_text_transaction_in_context(
+            transaction,
+            text,
+            ProtectionContext::strict(locale_chain, dictionaries),
+        )
+    }
+
+    /// Protect a staged leaf with its validated structured-field evidence.
+    pub fn resolve_boundary_text_transaction_in_context(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        text: &str,
+        context: ProtectionContext<'_>,
+    ) -> std::result::Result<String, BoundaryRefusal> {
         let mut target = ProtectionTarget::Staged(transaction);
-        self.resolve_boundary_text_target(&mut target, text, locale_chain, dictionaries)
+        self.resolve_boundary_text_target(&mut target, text, context)
     }
 
     fn resolve_boundary_text_target(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
         text: &str,
-        locale_chain: &[crate::LocaleTag],
-        dictionaries: &DictionaryBundle,
+        context: ProtectionContext<'_>,
     ) -> std::result::Result<String, BoundaryRefusal> {
         let mut report = LeakReport::default();
         self.clean_text_target(
             target,
             text,
-            locale_chain,
-            dictionaries,
+            context.locale_chain,
+            context.dictionaries,
             BOUNDARY_DECISION,
             &mut report,
+            context.field,
         )
         .map(|clean| clean.text)
         .map_err(|error| BoundaryRefusal::from_resolve_error(error, &report))
@@ -496,11 +530,32 @@ impl Pipeline {
         let mut expected = String::with_capacity(input.len());
         let mut spans = Ledger::default();
         let mut cursor = 0;
+        // Owned tokens split the leaf, so each gap is only part of the scalar.
+        let split = !ranges.is_empty();
+        let gap_context = |offset: usize| {
+            if !split {
+                return context;
+            }
+            let field = match context.field {
+                Some(gaze_types::FieldContext::WholeInput(field)) => {
+                    Some(gaze_types::FieldContext::Fragment { field, offset })
+                }
+                Some(gaze_types::FieldContext::Fragment {
+                    field,
+                    offset: base,
+                }) => Some(gaze_types::FieldContext::Fragment {
+                    field,
+                    offset: base + offset,
+                }),
+                other => other,
+            };
+            ProtectionContext { field, ..context }
+        };
         for range in ranges {
             self.protect_gap(
                 transaction,
                 &input[cursor..range.start],
-                context,
+                gap_context(cursor),
                 &mut clean,
                 &mut expected,
                 &mut spans,
@@ -523,7 +578,7 @@ impl Pipeline {
         self.protect_gap(
             transaction,
             &input[cursor..],
-            context,
+            gap_context(cursor),
             &mut clean,
             &mut expected,
             &mut spans,
@@ -712,6 +767,7 @@ impl Pipeline {
                 context.locale_chain,
                 context.dictionaries,
                 None,
+                context.field,
             )
             .map_err(|_| ProtectionError::Primary)?;
         clean.push_str(&result.text);

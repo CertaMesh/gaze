@@ -420,7 +420,7 @@ impl<'a> AdapterContract<'a> {
 /// that says nothing about its coverage does not compile:
 ///
 /// ```compile_fail,E0046
-/// use gaze_proxy::{PiiSurface, ProviderAdapter, SseEvent};
+/// use gaze_proxy::{PiiSurface, RequestSurfaces, ProviderAdapter, SseEvent};
 /// use http::Method;
 /// use serde_json::Value;
 /// use url::Url;
@@ -432,7 +432,7 @@ impl<'a> AdapterContract<'a> {
 ///     fn name(&self) -> &'static str { "silent" }
 ///     fn matches_path(&self, _: &Method, _: &str) -> bool { false }
 ///     fn upstream_base(&self) -> &Url { &self.0 }
-///     fn request_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
+///     fn request_pii_surfaces<'a>(&self, _: &'a mut Value) -> RequestSurfaces<'a> { RequestSurfaces::default() }
 ///     fn response_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
 ///     fn sse_event_pii_surfaces<'a>(&self, _: &'a mut SseEvent) -> Vec<PiiSurface<'a>> { Vec::new() }
 /// }
@@ -442,7 +442,7 @@ impl<'a> AdapterContract<'a> {
 /// re-scans the whole outbound request body and refuses it if anything is left unprotected:
 ///
 /// ```
-/// use gaze_proxy::{AdapterContract, PiiSurface, ProviderAdapter, SseEvent};
+/// use gaze_proxy::{AdapterContract, PiiSurface, RequestSurfaces, ProviderAdapter, SseEvent};
 /// use http::Method;
 /// use serde_json::Value;
 /// use url::Url;
@@ -455,7 +455,7 @@ impl<'a> AdapterContract<'a> {
 ///     fn name(&self) -> &'static str { "declared" }
 ///     fn matches_path(&self, _: &Method, _: &str) -> bool { false }
 ///     fn upstream_base(&self) -> &Url { &self.0 }
-///     fn request_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
+///     fn request_pii_surfaces<'a>(&self, _: &'a mut Value) -> RequestSurfaces<'a> { RequestSurfaces::default() }
 ///     fn response_pii_surfaces<'a>(&self, _: &'a mut Value) -> Vec<PiiSurface<'a>> { Vec::new() }
 ///     fn sse_event_pii_surfaces<'a>(&self, _: &'a mut SseEvent) -> Vec<PiiSurface<'a>> { Vec::new() }
 /// }
@@ -469,7 +469,7 @@ pub trait ProviderAdapter: Send + Sync + 'static {
     fn name(&self) -> &'static str;
     fn matches_path(&self, method: &Method, path: &str) -> bool;
     fn upstream_base(&self) -> &Url;
-    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>>;
+    fn request_pii_surfaces<'a>(&self, body: &'a mut Value) -> RequestSurfaces<'a>;
     fn response_pii_surfaces<'a>(&self, body: &'a mut Value) -> Vec<PiiSurface<'a>>;
     fn sse_event_pii_surfaces<'a>(&self, event: &'a mut SseEvent) -> Vec<PiiSurface<'a>>;
 
@@ -517,10 +517,214 @@ pub enum SurfaceSyntax {
     ModelOutput,
 }
 
+#[non_exhaustive]
 pub struct PiiSurface<'a> {
-    pub field_path: String,
+    pub field_path: CoveragePath,
+    /// Validated scalar location. Debug/Display of the path hide user-authored keys.
+    pub field: Option<gaze_types::FieldProvenance>,
     pub text: &'a mut String,
     pub syntax: SurfaceSyntax,
+}
+
+impl<'a> PiiSurface<'a> {
+    /// Construct a surface without structured evidence (for custom adapters).
+    pub fn new(
+        field_path: impl Into<CoveragePath>,
+        text: &'a mut String,
+        syntax: SurfaceSyntax,
+    ) -> Self {
+        Self {
+            field_path: field_path.into(),
+            field: None,
+            text,
+            syntax,
+        }
+    }
+}
+
+/// Request string rewrite targets. Numeric leaves remain untouched; numeric
+/// admission is still proved by the residual scan. No unused number inventory is retained.
+#[derive(Default)]
+#[non_exhaustive]
+pub struct RequestSurfaces<'a> {
+    pub strings: Vec<PiiSurface<'a>>,
+}
+
+impl<'a> From<Vec<PiiSurface<'a>>> for RequestSurfaces<'a> {
+    fn from(strings: Vec<PiiSurface<'a>>) -> Self {
+        Self { strings }
+    }
+}
+
+impl<'a> IntoIterator for RequestSurfaces<'a> {
+    type Item = PiiSurface<'a>;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.strings.into_iter()
+    }
+}
+
+impl<'a> RequestSurfaces<'a> {
+    pub fn iter(&self) -> std::slice::Iter<'_, PiiSurface<'a>> {
+        self.strings.iter()
+    }
+    pub fn len(&self) -> usize {
+        self.strings.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.strings.is_empty()
+    }
+    pub(crate) fn push(&mut self, surface: PiiSurface<'a>) {
+        self.strings.push(surface);
+    }
+}
+
+/// A legacy coverage spelling with shared ancestor storage. Debug hides keys.
+/// Equality and hashing do not materialize the spelling.
+#[derive(Clone)]
+#[non_exhaustive]
+pub struct CoveragePath {
+    chunks: gaze_types::FieldPath,
+    prefix_hash: std::collections::hash_map::DefaultHasher,
+    byte_len: usize,
+}
+
+impl Default for CoveragePath {
+    fn default() -> Self {
+        static HASHER: std::sync::OnceLock<std::collections::hash_map::RandomState> =
+            std::sync::OnceLock::new();
+        Self {
+            chunks: gaze_types::FieldPath::default(),
+            prefix_hash: std::hash::BuildHasher::build_hasher(
+                HASHER.get_or_init(std::collections::hash_map::RandomState::new),
+            ),
+            byte_len: 0,
+        }
+    }
+}
+
+impl CoveragePath {
+    fn append(&self, chunk: String) -> Self {
+        let mut prefix_hash = self.prefix_hash.clone();
+        // Extend the ancestor's keyed hash state, visiting only new bytes. Writing
+        // bytes individually keeps flat and segmented spellings equivalent.
+        for byte in chunk.bytes() {
+            std::hash::Hasher::write_u8(&mut prefix_hash, byte);
+        }
+        let byte_len = self.byte_len + chunk.len();
+        Self {
+            chunks: self.chunks.child(chunk),
+            prefix_hash,
+            byte_len,
+        }
+    }
+    fn fingerprint(&self) -> u64 {
+        std::hash::Hasher::finish(&self.prefix_hash)
+    }
+    /// Materialize the legacy spelling only when a trusted caller needs it.
+    /// Calling this on every descendant copies shared ancestor bytes per call.
+    pub fn to_legacy_string(&self) -> String {
+        self.chunks.segments().concat()
+    }
+    fn is_empty(&self) -> bool {
+        self.byte_len == 0
+    }
+    pub(crate) fn member(&self, key: &str) -> Self {
+        self.append(if self.is_empty() {
+            key.to_owned()
+        } else {
+            format!(".{key}")
+        })
+    }
+    pub(crate) fn index(&self, index: usize) -> Self {
+        self.append(format!("[{index}]"))
+    }
+}
+
+impl From<String> for CoveragePath {
+    fn from(value: String) -> Self {
+        Self::default().append(value)
+    }
+}
+impl From<&str> for CoveragePath {
+    fn from(value: &str) -> Self {
+        value.to_owned().into()
+    }
+}
+impl PartialEq for CoveragePath {
+    fn eq(&self, other: &Self) -> bool {
+        if self.byte_len != other.byte_len || self.fingerprint() != other.fingerprint() {
+            return false;
+        }
+        let left = self.chunks.segments();
+        let right = other.chunks.segments();
+        if left
+            .iter()
+            .map(|s| s.len())
+            .eq(right.iter().map(|s| s.len()))
+        {
+            return left == right;
+        }
+        left.iter()
+            .flat_map(|chunk| chunk.bytes())
+            .eq(right.iter().flat_map(|chunk| chunk.bytes()))
+    }
+}
+impl Eq for CoveragePath {}
+impl std::hash::Hash for CoveragePath {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.fingerprint());
+        state.write_usize(self.byte_len);
+    }
+}
+impl std::fmt::Debug for CoveragePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoveragePath").finish_non_exhaustive()
+    }
+}
+
+/// Keeps coverage spelling separate from unescaped JSON-pointer segments.
+#[derive(Clone)]
+pub(crate) struct SurfacePath {
+    coverage: CoveragePath,
+    segments: gaze_types::FieldPath,
+}
+
+impl SurfacePath {
+    pub(crate) fn root(key: &str) -> Self {
+        Self {
+            coverage: key.into(),
+            segments: gaze_types::FieldPath::new([key.to_owned()]),
+        }
+    }
+    pub(crate) fn member(&self, key: &str) -> Self {
+        Self {
+            coverage: self.coverage.member(key),
+            segments: self.segments.child(key.to_owned()),
+        }
+    }
+    pub(crate) fn index(&self, index: usize) -> Self {
+        Self {
+            coverage: self.coverage.index(index),
+            segments: self.segments.child(index.to_string()),
+        }
+    }
+    fn provenance(&self, kind: gaze_types::JsonScalarType) -> gaze_types::FieldProvenance {
+        gaze_types::FieldProvenance::new(
+            self.segments.clone(),
+            kind,
+            gaze_types::FieldEvidence::ValidatedParse,
+        )
+    }
+    pub(crate) fn surface<'a>(self, text: &'a mut String, syntax: SurfaceSyntax) -> PiiSurface<'a> {
+        let field = Some(self.provenance(gaze_types::JsonScalarType::String));
+        PiiSurface {
+            field_path: self.coverage,
+            field,
+            text,
+            syntax,
+        }
+    }
 }
 
 /// A logical SSE value, including any missing identity fields that make joining ambiguous.
@@ -609,46 +813,33 @@ impl SseEvent {
 }
 
 pub(crate) fn push_string<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    field_path: impl Into<String>,
+    surfaces: &mut RequestSurfaces<'a>,
+    path: SurfacePath,
     value: &'a mut Value,
     syntax: SurfaceSyntax,
 ) {
     if let Value::String(text) = value {
-        surfaces.push(PiiSurface {
-            field_path: field_path.into(),
-            text,
-            syntax,
-        });
+        surfaces.push(path.surface(text, syntax));
     }
 }
 
-/// Surfaces every string under `value`. Each one is a decoded JSON string, so its syntax is
-/// [`SurfaceSyntax::Text`]: re-serializing the body escapes it.
-pub(crate) fn walk_all_strings<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: String,
+/// Walk decoded string leaves. Numbers are not rewrite targets or retained metadata.
+pub(crate) fn walk_all_scalars<'a>(
+    surfaces: &mut RequestSurfaces<'a>,
+    path: SurfacePath,
     value: &'a mut Value,
 ) {
     match value {
-        Value::String(text) => surfaces.push(PiiSurface {
-            field_path: prefix,
-            text,
-            syntax: SurfaceSyntax::Text,
-        }),
+        Value::String(text) => surfaces.push(path.surface(text, SurfaceSyntax::Text)),
+
         Value::Array(items) => {
             for (index, item) in items.iter_mut().enumerate() {
-                walk_all_strings(surfaces, format!("{prefix}[{index}]"), item);
+                walk_all_scalars(surfaces, path.index(index), item);
             }
         }
         Value::Object(map) => {
             for (key, child) in map {
-                let path = if prefix.is_empty() {
-                    key.clone()
-                } else {
-                    format!("{prefix}.{key}")
-                };
-                walk_all_strings(surfaces, path, child);
+                walk_all_scalars(surfaces, path.member(key), child);
             }
         }
         Value::Null | Value::Bool(_) | Value::Number(_) => {}
@@ -656,42 +847,31 @@ pub(crate) fn walk_all_strings<'a>(
 }
 
 pub(crate) fn push_text_blocks<'a>(
-    surfaces: &mut Vec<PiiSurface<'a>>,
-    prefix: &str,
+    surfaces: &mut RequestSurfaces<'a>,
+    path: &SurfacePath,
     value: &'a mut Value,
     syntax: SurfaceSyntax,
 ) {
     match value {
-        Value::String(text) => surfaces.push(PiiSurface {
-            field_path: prefix.to_string(),
-            text,
-            syntax,
-        }),
+        Value::String(text) => surfaces.push(path.clone().surface(text, syntax)),
         Value::Array(items) => {
             for (index, item) in items.iter_mut().enumerate() {
+                let path = path.index(index);
                 match item {
-                    Value::String(text) => surfaces.push(PiiSurface {
-                        field_path: format!("{prefix}[{index}]"),
-                        text,
-                        syntax,
-                    }),
+                    Value::String(text) => surfaces.push(path.surface(text, syntax)),
                     Value::Object(map) => {
                         if matches!(map.get("type"), Some(Value::String(kind))
                             if kind == "text" || kind == "input_text" || kind == "output_text")
                         {
                             if let Some(Value::String(text)) = map.get_mut("text") {
-                                surfaces.push(PiiSurface {
-                                    field_path: format!("{prefix}[{index}].text"),
-                                    text,
-                                    syntax,
-                                });
+                                surfaces.push(path.member("text").surface(text, syntax));
                             }
                         } else if matches!(map.get("type"), Some(Value::String(kind)) if kind == "message")
                         {
                             if let Some(content) = map.get_mut("content") {
                                 push_text_blocks(
                                     surfaces,
-                                    &format!("{prefix}[{index}].content"),
+                                    &path.member("content"),
                                     content,
                                     syntax,
                                 );
@@ -703,5 +883,46 @@ pub(crate) fn push_text_blocks<'a>(
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod path_storage_tests {
+    use super::*;
+    use crate::adapters::OpenAiAdapter;
+
+    #[test]
+    fn field_provenance_wide_legacy_paths_retain_linear_bytes() {
+        let adapter = OpenAiAdapter::new(url::Url::parse("http://127.0.0.1:1").unwrap());
+        for leaf in [serde_json::json!(0), serde_json::json!("x")] {
+            let key = "k".repeat(1024 * 1024);
+            let mut body = serde_json::json!({"metadata": {key: vec![leaf.clone(); 2000]}});
+            let input_bytes = serde_json::to_vec(&body).unwrap().len();
+            let surfaces = adapter.request_pii_surfaces(&mut body);
+            assert_eq!(surfaces.len(), if leaf.is_number() { 0 } else { 2000 });
+            let retained =
+                gaze::test_support::retained_path_bytes(surfaces.iter().flat_map(|surface| {
+                    [
+                        &surface.field.as_ref().unwrap().path,
+                        &surface.field_path.chunks,
+                    ]
+                }));
+            // Two spellings, one allocation per unique key plus small per-leaf indices.
+            assert!(
+                retained <= 3 * input_bytes,
+                "retained path bytes: {retained}"
+            );
+        }
+    }
+
+    #[test]
+    fn coverage_equality_and_hash_ignore_chunk_boundaries() {
+        use std::collections::HashSet;
+        let joined = CoveragePath::from("metadata").member("rows").index(2);
+        let flat = CoveragePath::from("metadata.rows[2]");
+        assert_eq!(joined, flat);
+        assert!(HashSet::from([joined]).contains(&flat));
+        assert_eq!(flat.to_legacy_string(), "metadata.rows[2]");
+        assert!(!format!("{flat:?}").contains("metadata"));
     }
 }
