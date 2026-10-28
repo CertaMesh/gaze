@@ -2309,8 +2309,8 @@ Per layer and shape, it reports:
 - False positives counted three ways: documents, values out of the decoys, and
   bytes.
 - JSON or CSV syntax bytes covered.
-- Type-changed documents: a protected value in a JSON number position. A token
-  is a string, so the payload no longer has the type it had.
+- Type-changed documents: a protected gold or decoy value in a JSON number
+  position. A token is a string, so the payload no longer has the type it had.
 - Usable documents: not refused, no non-gold byte covered (decoy, key or tool
   name, enum string, quote, backslash or other syntax) and no type change.
 - Refused gold bytes, next to leaked gold bytes.

@@ -6,10 +6,10 @@ counts bytes cannot show: false positives by document and by value, gold
 values protected whole, refusals kept apart from protection, and whether
 each payload stays usable. A usable payload is not refused, has no non-gold
 byte covered (decoy, key or tool name, enum string, quote, backslash or other
-syntax) and changes no JSON type: a token for a value in a JSON number
-position is a string, so the payload no longer has the type it had. Refused
-documents count only as refusals, with their gold bytes reported apart; zero
-leaks by refusing is not a gain.
+syntax) and changes no JSON type: a token for a gold or decoy value in a JSON
+number position is a string, so the payload no longer has the type it had.
+Refused documents count only as refusals, with their gold bytes reported
+apart; zero leaks by refusing is not a gain.
 """
 
 from __future__ import annotations
@@ -95,8 +95,9 @@ def _add(row: dict, record: agentic.Record, protected, refused: bool) -> None:
     structural = sum(_covered(i, i + 1, protected) for i in structural_offsets(record))
     row["structural_bytes_covered"] += structural
     encoded = record.text.encode("utf-8")
-    type_changed = any(number_position(encoded, g.start) and _covered(g.start, g.end, protected)
-                       for g in record.gold)
+    # Gold and decoys both: a covered numeric decoy (a public ID, a limit) changes the type too.
+    type_changed = any(number_position(encoded, v.start) and _covered(v.start, v.end, protected)
+                       for v in (*record.gold, *record.decoys))
     row["type_changed_documents"] += int(type_changed)
     row["usable_documents"] += int(not outside_gold and not type_changed)
 

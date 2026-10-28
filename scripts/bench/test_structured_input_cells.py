@@ -223,6 +223,40 @@ class SliceReaderTests(unittest.TestCase):
         self.assertEqual(result["refused_gold_bytes"], sum(g.end - g.start for r in rows if r.layer == "A" for g in r.gold))
         self.assertGreater(result["refused_gold_bytes"], 0)
 
+    def _numeric_decoy(self, layer, label):
+        for r in self.rows:
+            encoded = r.text.encode("utf-8")
+            for d in r.decoys:
+                if r.layer == layer and d.label == label and reader.number_position(encoded, d.start):
+                    return r, d
+        raise AssertionError(f"no numeric {label} decoy in layer {layer}")
+
+    def _cover_one_decoy(self, target, decoy):
+        # Numeric gold stays uncovered so the one decoy is the only type change.
+        return self._measure(lambda r: [(g.start, g.end) for g in r.gold if not reader.number_position(
+            r.text.encode("utf-8"), g.start)] + ([(decoy.start, decoy.end)] if r is target else []))
+
+    def test_covering_a_numeric_public_id_decoy_changes_the_type(self):
+        target, decoy = self._numeric_decoy("D", "benign_id")
+        self.assertTrue(target.text.encode("utf-8")[decoy.start:decoy.end].isdigit())
+        d = self._cover_one_decoy(target, decoy)["D"]["totals"]
+        self.assertEqual((d["false_positive_values"], d["type_changed_documents"], d["usable_documents"]), (1, 1, 89))
+
+    def test_covering_a_numeric_limit_decoy_changes_the_type(self):
+        target, decoy = self._numeric_decoy("A", "unlabelled_number")
+        self.assertFalse(target.surface.endswith("numeric_label"))
+        a = self._cover_one_decoy(target, decoy)["A"]["totals"]
+        self.assertEqual((a["false_positive_values"], a["type_changed_documents"], a["usable_documents"]), (1, 1, 269))
+
+    def test_covering_a_csv_number_is_not_a_json_type_change(self):
+        target = next(r for r in self.rows if r.surface.endswith("csv")
+                      and any(r.text.encode("utf-8")[d.start:d.end].isdigit() for d in r.decoys))
+        decoy = next(d for d in target.decoys if target.text.encode("utf-8")[d.start:d.end].isdigit())
+        result = self._measure(lambda r: [(g.start, g.end) for g in r.gold]
+                               + ([(decoy.start, decoy.end)] if r is target else []))
+        row = result[target.layer]["shapes"]["csv"]
+        self.assertEqual((row["false_positive_values"], row["type_changed_documents"]), (1, 0))
+
     def test_covering_a_key_name_makes_a_payload_unusable(self):
         target = next(r for r in self.positives if r.surface.endswith("gemini_function_call"))
         encoded = target.text.encode("utf-8")
