@@ -91,7 +91,9 @@ def main():
                            'Comment: "work"', 'Comment: synthetic\\path']:
                 value = (f'-----BEGIN PGP PRIVATE KEY BLOCK-----{newline}{header}{newline}{newline}'
                          f'bm90LWEta2V5c3ludGhldGlj{newline}-----END PGP PRIVATE KEY BLOCK-----')
-                cases.append((repr(newline) + '/' + header, value, ()))
+                # `<`/`>` are header text now; the other three keep the key raw.
+                whole = (value,) if header == 'Comment: <synthetic>' else ()
+                cases.append((repr(newline) + '/' + header, value, whole))
         for label in ['PRIVATE KEY', 'RSA PRIVATE KEY', 'PGP PRIVATE KEY BLOCK',
                       'PUBLIC KEY', 'CERTIFICATE']:
             for join in ['", "', "', '", '",\n    "']:
