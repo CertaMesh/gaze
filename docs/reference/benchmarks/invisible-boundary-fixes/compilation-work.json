@@ -1,0 +1,21 @@
+{
+  "cases": [
+    {
+      "compile_nanoseconds": 0,
+      "document": "plain",
+      "extra_immutable_compiled_bytes": 0,
+      "transformed_regexes_compiled": 0
+    },
+    {
+      "compile_nanoseconds": 15344293,
+      "document": "zwsp",
+      "extra_immutable_compiled_bytes": 4036216,
+      "transformed_regexes_compiled": 11
+    }
+  ],
+  "locale": "en-US",
+  "rulepacks": [
+    "core"
+  ],
+  "schema": "gaze-source-regex-cold-work-v1"
+}

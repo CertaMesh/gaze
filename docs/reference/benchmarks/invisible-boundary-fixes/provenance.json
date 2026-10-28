@@ -1,0 +1,37 @@
+{
+  "schema": "gaze-invisible-boundary-evidence-v1",
+  "measured_source_sha": "9e87f4df7bef7b23db1824c8224d2fe78dc37bb3",
+  "production_git_objects": {
+    "crates": "ddd45f126269ee60b5abc41a8779c194120826bb",
+    "Cargo.toml": "e172bc817ba68affff1f0550faa9af9f7e42741a",
+    "Cargo.lock": "d229f0155f4ccaf04e267cb4bb164f05c8a28cfc",
+    ".cargo": "a858e206dfbe9996dc77b95974b3614810c3e200",
+    "rust-toolchain.toml": "4f0430eac96d545bcfaa0df23ce475faf4aee96a"
+  },
+  "records": {
+    "release-build.json": {
+      "file_sha256": "6f5da34db56fb6fae4b62256b41b389a91b589ccd94fb4764f0c409bc09bfe7c",
+      "json_sha256": "6f5da34db56fb6fae4b62256b41b389a91b589ccd94fb4764f0c409bc09bfe7c"
+    },
+    "card-code-matrix.json.gz": {
+      "file_sha256": "7e55c9f371fb47f2641af0e2748bcd65ac7f1bc586292cfbc851a35edf3df6ce",
+      "json_sha256": "cb8f85c51fb75ad8f0ca63dd39e5df3ecbaea1d98dca6a8bb4c636beaceea387"
+    },
+    "card-code-reuse.json": {
+      "file_sha256": "8a00544c8334cdea565ddde630512f13d1d40af37c714642abbf33ded849bec0",
+      "json_sha256": "8a00544c8334cdea565ddde630512f13d1d40af37c714642abbf33ded849bec0"
+    },
+    "main-gap-probe.json": {
+      "file_sha256": "a9a40c13204901e903b3f07f284cc88f5de39832a2c351c873040ab5fb67ec0d",
+      "json_sha256": "a9a40c13204901e903b3f07f284cc88f5de39832a2c351c873040ab5fb67ec0d"
+    },
+    "clean-equality.json": {
+      "file_sha256": "4f3cb5e0f293875af8bb1a62aa2b01d8c0a174cddcf0d94d9f53225c1f63fdd9",
+      "json_sha256": "4f3cb5e0f293875af8bb1a62aa2b01d8c0a174cddcf0d94d9f53225c1f63fdd9"
+    },
+    "compilation-work.json": {
+      "file_sha256": "b6916430e47bd0a4daaf9c205eb1a763b5f206b05f6e7cda7105e7ce96925aae",
+      "json_sha256": "b6916430e47bd0a4daaf9c205eb1a763b5f206b05f6e7cda7105e7ce96925aae"
+    }
+  }
+}

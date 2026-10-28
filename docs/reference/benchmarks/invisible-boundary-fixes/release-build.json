@@ -1,0 +1,9 @@
+{
+  "base_sha": "3fb02d70e756102c871c51471cfd76d7ce6de4bc",
+  "candidate_sha": "9e87f4df7bef7b23db1824c8224d2fe78dc37bb3",
+  "features": "gaze-cli default",
+  "binary_sha256": {
+    "base": "5c38c4a4b33ab204f985ed75956045860fad59e6fb84ce1004fad84dd3dcafa5",
+    "candidate": "9a1e0c6743b5d7f10cdfb38b0b58de8a22000a10f9003d8b178b89116a860932"
+  }
+}

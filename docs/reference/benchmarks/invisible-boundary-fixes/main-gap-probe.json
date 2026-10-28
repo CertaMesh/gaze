@@ -1,0 +1,103 @@
+{
+  "schema": "gaze-card-window-gap-probe-v1",
+  "base_sha": "3fb02d70e756102c871c51471cfd76d7ce6de4bc",
+  "candidate_sha": "9e87f4df7bef7b23db1824c8224d2fe78dc37bb3",
+  "features": "gaze-cli default",
+  "binary_sha256": {
+    "base": "5c38c4a4b33ab204f985ed75956045860fad59e6fb84ce1004fad84dd3dcafa5",
+    "candidate": "9a1e0c6743b5d7f10cdfb38b0b58de8a22000a10f9003d8b178b89116a860932"
+  },
+  "script_sha256": "480858a347f902e17777ca1339a182125ed8b2006269691981148a2ee5f66b92",
+  "observations": [
+    {
+      "case_id": "visible-space-union",
+      "side": "base",
+      "input_sha256": "0c0bc6217fe03db06c9ed397f490a36cee88d790b3ed0e33440fdf7dd80c5c6d",
+      "full_union_protected": true,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "visible-space-union",
+      "side": "candidate",
+      "input_sha256": "0c0bc6217fe03db06c9ed397f490a36cee88d790b3ed0e33440fdf7dd80c5c6d",
+      "full_union_protected": true,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "leading-zwj-union",
+      "side": "base",
+      "input_sha256": "623f3973fe69a97358397d6102535c805241ce6b2dfcba16aa7a0314177f5faf",
+      "full_union_protected": true,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "leading-zwj-union",
+      "side": "candidate",
+      "input_sha256": "623f3973fe69a97358397d6102535c805241ce6b2dfcba16aa7a0314177f5faf",
+      "full_union_protected": true,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "two-zwj-gaps",
+      "side": "base",
+      "input_sha256": "c8306ae105872bdde90ed0782159316f5f394a26f4e480ac4236369d1f849c52",
+      "full_union_protected": false,
+      "detections": 2,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "two-zwj-gaps",
+      "side": "candidate",
+      "input_sha256": "c8306ae105872bdde90ed0782159316f5f394a26f4e480ac4236369d1f849c52",
+      "full_union_protected": true,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "two-zwnj-gaps",
+      "side": "base",
+      "input_sha256": "42086c440c8184f58b44e1d47e2659e1786354ae80f2c0c9e6d58f95bf82664a",
+      "full_union_protected": false,
+      "detections": 2,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "two-zwnj-gaps",
+      "side": "candidate",
+      "input_sha256": "42086c440c8184f58b44e1d47e2659e1786354ae80f2c0c9e6d58f95bf82664a",
+      "full_union_protected": true,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "two-zwsp-gaps",
+      "side": "base",
+      "input_sha256": "3ec90d5fd85fe40e78f5ea1a480a9ad6252ef6fe9eda51020289f207ba238a27",
+      "full_union_protected": false,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    },
+    {
+      "case_id": "two-zwsp-gaps",
+      "side": "candidate",
+      "input_sha256": "3ec90d5fd85fe40e78f5ea1a480a9ad6252ef6fe9eda51020289f207ba238a27",
+      "full_union_protected": true,
+      "detections": 1,
+      "manifest_substitution_round_trip": true,
+      "exit_code": 0
+    }
+  ]
+}
