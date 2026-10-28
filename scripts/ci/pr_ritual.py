@@ -22,14 +22,34 @@ def now():
 
 def resources():
     free = shutil.disk_usage(ROOT).free
-    size = int(subprocess.check_output(["du", "-sk", str(ROOT / "target")], stderr=subprocess.DEVNULL,
-                                       text=True).split()[0]) * 1024
+    measured = subprocess.run(["du", "-sk", str(ROOT / "target")], capture_output=True,
+                              text=True)
+    # Cargo may remove temporary files while du walks them; its total remains usable.
+    fields = measured.stdout.split()
+    if measured.returncode not in (0, 1) or not fields or not fields[0].isdigit():
+        raise RuntimeError(f"cannot measure target size: {measured.stderr.strip()}")
+    size = int(fields[0]) * 1024
     return size, free
 
 
 def safe_tail(path):
     value = "\n".join(path.read_text(errors="replace").splitlines()[-45:])
     return value.replace(str(ROOT), "<worktree>").replace(str(Path.home()), "<home>")
+
+
+def stop_child(child):
+    try:
+        os.killpg(child.pid, signal.SIGINT)
+    except ProcessLookupError:
+        pass
+    try:
+        return child.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return child.wait()
 
 
 def main():
@@ -72,22 +92,22 @@ def main():
                                      stderr=subprocess.STDOUT, start_new_session=True)
             next_resource = time.monotonic()
             next_progress = time.monotonic() + 30
-            while child.poll() is None:
-                if time.monotonic() >= next_resource:
-                    size, free = resources()
-                    next_resource = time.monotonic() + 5
-                    if size >= 13.5 * GIB or free < 102 * GIB:
-                        resource_stop = "stopped early to preserve target/disk headroom"
-                        try:
-                            os.killpg(child.pid, signal.SIGINT)
-                        except ProcessLookupError:
-                            pass
-                        break
-                if time.monotonic() >= next_progress:
-                    print(f"PR RITUAL {index}/{len(commands)} active: target {size/GIB:.2f}/15 GiB; disk {free/GIB:.2f}/100 GiB", flush=True)
-                    next_progress = time.monotonic() + 30
-                time.sleep(1)
-            code = child.wait()
+            try:
+                while child.poll() is None:
+                    if time.monotonic() >= next_resource:
+                        size, free = resources()
+                        next_resource = time.monotonic() + 5
+                        if size >= 13.5 * GIB or free < 102 * GIB:
+                            resource_stop = "stopped early to preserve target/disk headroom"
+                            break
+                    if time.monotonic() >= next_progress:
+                        print(f"PR RITUAL {index}/{len(commands)} active: target {size/GIB:.2f}/15 GiB; disk {free/GIB:.2f}/100 GiB", flush=True)
+                        next_progress = time.monotonic() + 30
+                    time.sleep(1)
+            except BaseException as error:
+                resource_stop = f"monitor failed: {type(error).__name__}: {error}"
+            finally:
+                code = stop_child(child) if child.poll() is None else child.wait()
         entry = {"name": name, "command": command, "started_at": started, "finished_at": now(),
                  "exit_code": code, "log_sha256": hashlib.sha256(log.read_bytes()).hexdigest(), "tail": safe_tail(log)}
         if resource_stop:
