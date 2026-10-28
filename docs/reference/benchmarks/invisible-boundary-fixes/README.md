@@ -42,3 +42,9 @@ This evidence covers compatibility and separator behavior. Full-corpus scored-la
 `phone-fixtures.json` records direct `gaze-types` probes on pre-merge `9e87f4df` and main `3b3808c6`. Both reject the Ofcom mobile fixture under `E164Phone`, accept it under `PhoneNumber`, and accept the tested BNetzA and NANPA fictional fixtures under `E164Phone`. The validator matrix therefore uses the BNetzA fixture for its E164 variant. This corrects the test input without changing validation behavior.
 
 Pre-merge, main and integrated `c09fbf43` all pin `phonenumber 0.3.9+9.0.21` with the same checksum and build metadata `9.0.21`. No separate phone-metadata crate appears in their lockfiles. The E164 helper source hashes also match. Reproduce the two runtime probes with `scripts/ci/probe_phone_fixtures.py` through the `invisible-phone-fixtures` Anvil check and pinned review worktrees.
+
+## Empty hard-boundary captures
+
+The unchanged explicit-field normalization contract passes on exact main `3b3808c6`. A quoted value containing only removed characters exposed a branch regression: the hard-boundary scan matched its marker, then mapped that capture to an empty normalized span. The existing recovery guard correctly refused the invalid candidate.
+
+The fix discards empty mapped hard-boundary spans, matching the transformed-view contract. The recovery guard stays unchanged. `field-geometry-main.json` records the main probe. `empty-boundary-regression.json` records the focused failure before the fix, the passing test after it, and the mutation that re-admits the empty candidate. The focused test covers 19 ignorable classes, invisible-only fields and real neighbouring values with strict restore.

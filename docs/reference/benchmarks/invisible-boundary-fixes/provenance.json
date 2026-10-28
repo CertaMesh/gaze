@@ -36,6 +36,14 @@
     "phone-fixtures.json": {
       "file_sha256": "73cfdde24be90c2d41fd940702127c5efd393a570f7d7dde8e9ceb6d93c737b1",
       "json_sha256": "73cfdde24be90c2d41fd940702127c5efd393a570f7d7dde8e9ceb6d93c737b1"
+    },
+    "field-geometry-main.json": {
+      "file_sha256": "7132669be44ab936f9b450fdf8f037b051e8284f70d21ceb62f101696b541761",
+      "json_sha256": "7132669be44ab936f9b450fdf8f037b051e8284f70d21ceb62f101696b541761"
+    },
+    "empty-boundary-regression.json": {
+      "file_sha256": "414c251cc531b2c4a25e39a30584d267a30ef04e5ec04bdd1bf97b1fb873d7b8",
+      "json_sha256": "414c251cc531b2c4a25e39a30584d267a30ef04e5ec04bdd1bf97b1fb873d7b8"
     }
   }
 }
