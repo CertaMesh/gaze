@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   references. Proxy `CoveragePath` materializes its legacy spelling on demand.
   Numeric leaves remain under existing admission rules without an unused inventory.
   See UPGRADE.md for custom-adapter migration steps.
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.3.0; existing fixture detections remain identical while private-key and
+  issuer-credential coverage expands.
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.2.0. Its existing fixture detections remain unchanged.
 
 
 ### Security
@@ -116,14 +121,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stdin and stdout contracts are unchanged.
 
 ### Changed
-
-- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
-  0.3.0; existing fixture detections remain identical while private-key and
-  issuer-credential coverage expands.
-
-
-- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
-  0.2.0. Its existing fixture detections remain unchanged.
 
 - **Breaking:** `gaze-audit::AuditFilter` and `AuditLogRow` are now
   `#[non_exhaustive]` and include protection outcome metadata. Construct filters
