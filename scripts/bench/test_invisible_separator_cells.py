@@ -51,7 +51,7 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
                  "f8b9dc58de45dcc6ec8de0e911dc0d5f52682889ec912cbf4b120a03e56409bc"),
             27: ("a1b00d3d8281b54feabe1c04c9a490738bc415d9f9b94b75ae9eb1b1c172e4e1",
                  "dbee6dc0184c49df384b9f2949b29af81e58c14ae1db0043df8aadc8f1c41a81"),
-            28: ("f2ff1af191e2e692d532ef2343a809507f98693ddf7fd39f4a578a865742b0a7",
+            28: ("ad447042cd7403b599b217c40b77851f8c07dc59c99d19bddd7a21586ca55c99",
                  "db979087d95fce766e649ba0f4bc701a62b4c6b2e3975767348e163e942e8b9f"),
         }
         root = Path(__file__).resolve().parents[2]
@@ -72,8 +72,8 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
         self.assertFalse({span.value for row in dev for span in row.gold}
                          & {span.value for row in test for span in row.gold})
 
-    def test_source_cells_stay_byte_identical(self):
-        pins = {"dev": "d541b0f3c4a19e79c6dbb39c75c3b78aefce3f287aac5b399fa036eb334ddf23",
+    def test_imported_cells_and_dev_phone_correction_are_pinned(self):
+        pins = {"dev": "d0ddf954642df5e32612286d9efd418447ee7ca7831754adf258cfb9b06e4f0d",
                 "test": "c16e596db95282e23fd72c02f4d04aab1de8da0afd94e532462311a56605f22f"}
         for partition, digest in pins.items():
             rows = cells.records(agentic, partition)

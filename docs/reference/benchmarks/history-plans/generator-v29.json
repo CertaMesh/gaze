@@ -1,6 +1,6 @@
 {
   "benchmark_spec": {
-    "id": "gaze-benchmark-v1:bb2054aa25f8039bafdf367353ea5533a9c95817f8c6ffcacfe28318240f6d35",
+    "id": "gaze-benchmark-v1:c08ec9fa383503068b634fe263c17d88a04cffb9d6852d776a12cb0276909a1b",
     "schema_version": 1,
     "inputs": {
       "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -78,7 +78,7 @@
         "scripts/bench/government_id_cells.py": "027584c0ffd28a0fa07b266d7e640e6c15936195cfc0a24c26cfbd261697d6f8",
         "scripts/bench/iban_trailing_word_enumeration.py": "83ba3d356cd7e4ee129e834b9cae60d97e73d428698cc497191f8ba1dc6081ee",
         "scripts/bench/inference_reuse_proof.py": "cfed22114bfc72f53b84ee92ec2244a6f71ec1ff3f2cf62f56ec5cf561616e59",
-        "scripts/bench/invisible_separator_cells.py": "8d223314377bb78c4a93ef1da6a3928db2d64996bf413e842db49294351a7e83",
+        "scripts/bench/invisible_separator_cells.py": "de0f9160f7317d2f88c35ed09b55b52703a3808bc7e72a9bd6f69d8e0f4a9505",
         "scripts/bench/ip_adjacent_gain.py": "5bd80284889be703cbbce018cbf35d74010a6eacc9b195c36398ebc41d8fd006",
         "scripts/bench/issuer_credential_cells.py": "869cb0809040c4b3d3d8d7fe797dc909ec5c252cf509b1516e11f4260e7af398",
         "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",

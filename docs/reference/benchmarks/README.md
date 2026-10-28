@@ -2328,12 +2328,18 @@ corpus and benchmark specification.
 
 These are harness inputs, not detection changes. The
 [invisible-separator generator](../../../scripts/bench/invisible_separator_cells.py)
-is copied unchanged from #870 at `c3af8c6aa592dc348f1f310a47d63ebfa5f19637`;
+comes from #870 at `c3af8c6aa592dc348f1f310a47d63ebfa5f19637`;
 the [issuer generator](../../../scripts/bench/issuer_credential_cells.py) is
 copied unchanged from #871 at `de9e8a968b94af49c982eeb4b4e226547f77b6d7`.
-Their independently seeded source values, gold, templates and counterweights
-stay unchanged. No recognizer, normalization, rule-dependent census or
-mechanism-arm evidence is included.
+One source correction is necessary: only the new v28 `invisible_boundary_`
+dev phone values use the NANPA fictional range `+1 206 555-0100` through
+`+1 206 555-0199`, instead of area code 202. The original range repeats an
+older test-partition value, failing the unchanged global disjointness test.
+The seed, random draws, suffixes, templates, offsets and counterweights stay
+unchanged; only these dev phone source values and their gold change. All test
+records, v25/v26/v27 records and the exact issuer corpus remain byte-identical.
+No recognizer, normalization, rule-dependent census or mechanism-arm evidence
+is included.
 
 - **v27** adds `invisible_` cells for ZWSP, WORD JOINER, SOFT HYPHEN and
   NON-BREAKING HYPHEN in identifiers, literal-Unicode JSON and exact repeats.
@@ -2373,7 +2379,7 @@ of v0.17.0 and v0.16.0 on the combined corpus. **Step 4a remains a prerequisite:
 build each pinned release tag and pin its binary hash before any capture.
 No historical numbers have been changed or new measurements claimed here.
 After this harness lands, #870 and #871 must merge main, retain these combined
-generator/contracts/pins, drop their redundant harness changes and standalone
+generators/contracts/pins (including the dev phone correction), drop their redundant harness changes and standalone
 comparison notices, and certify their detection changes against the new main.
 Their rule-dependent tooling and mechanism arms remain with those PRs.
 

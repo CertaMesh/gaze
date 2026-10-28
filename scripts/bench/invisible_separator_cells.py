@@ -116,7 +116,8 @@ def records(api, partition):
             ("IBAN", api._iban_gb(boundary_rng) if partition == "dev" else api._iban_nl(boundary_rng), 6),
             ("ETHADDRESS", "0x" + "".join(boundary_rng.choice("0123456789abcdef") for _ in range(40)), 14),
             ("EMAIL", ("elm" if partition == "dev" else "birch") + boundary_rng.digits(6) + "@example.invalid", 3),
-            ("TELEPHONENUM", ("+120255501" if partition == "dev" else "+121255501") + f"{boundary_rng.below(100):02d}", 5),
+            # Keep the dev fiction range separate from older test phone cells.
+            ("TELEPHONENUM", ("+120655501" if partition == "dev" else "+121255501") + f"{boundary_rng.below(100):02d}", 5),
         )
         before, after = ("item", "paid") if partition == "dev" else ("entry", "ready")
         for name, separator in controls.items():
