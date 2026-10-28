@@ -1,6 +1,6 @@
 {
   "benchmark_spec": {
-    "id": "gaze-benchmark-v1:303c7377ec94952e9403a27d3208a7fa798f58e5a6f9bce7bd0538a09152bff3",
+    "id": "gaze-benchmark-v1:ff2835c9a28a52b55498084e0c3c7431bf66a9dbbbcaa01c3173bcd6d7a46a8e",
     "schema_version": 1,
     "inputs": {
       "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -143,7 +143,7 @@
         "scripts/bench/scorecard_record.py": "5a740fe0f0b222fd1d4a56c8b403c4e920e957ee6e955ce488bef4e0b9dee8ce",
         "scripts/bench/stage_timing.py": "1dcf159e2e7f125087a3d1393e6a266733b971da9aad81433239701a84821ac0",
         "scripts/bench/structured_input_cells.py": "64b14edbf3902f9e89660b16ee6d2a9f28ad7ee8fa809b32e7e3b282ca79c468",
-        "scripts/bench/structured_slice.py": "25de0a94e9147e11fa080b608d0aa4af3172f58f8aa9e1c2283178d5d3a0a190",
+        "scripts/bench/structured_slice.py": "1d8cbcc57a8f35d88b7d57a73ff3c9256ab1cf90fe98a8f1a5e3f0329d98e394",
         "scripts/bench/subject_build.py": "1bee4cf83a4ad73004bb503da60726e62c621ba4a5065386ca9ad9c2fa634ae5",
         "scripts/bench/tagged_gaze.py": "a2ab9a6cf199247fdb5b02ac4e55881be71d1535f884de33a45b2ecec856130e",
         "scripts/bench/transformers-runner.py": "63c7a867a69d4f00f943980b0300202ccf1085113ade0c153242762f37a302b0",
