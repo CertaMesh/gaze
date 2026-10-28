@@ -4,7 +4,7 @@
 //! activate detection or change policy. A hint alone cannot justify protection or a
 //! non-sensitive classification.
 
-use std::{fmt, ops::Range};
+use std::{fmt, ops::Range, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -153,34 +153,95 @@ impl UntransformableReason {
 /// path locates the root. Serialization preserves segments for trusted consumers;
 /// do not expose serialized paths at untrusted boundaries without a separate policy.
 /// Keys can themselves contain PII, so Debug and Display hide every segment.
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Clone, Default)]
 #[non_exhaustive]
-pub struct FieldPath(Vec<String>);
+pub struct FieldPath(Option<Arc<FieldPathNode>>);
+
+struct FieldPathNode {
+    parent: FieldPath,
+    segment: String,
+    depth: usize,
+}
 
 impl FieldPath {
     /// Build a path from unescaped JSON-pointer segments, never scalar values.
     pub fn new(segments: impl IntoIterator<Item = String>) -> Self {
-        Self(segments.into_iter().collect())
+        segments
+            .into_iter()
+            .fold(Self::default(), |path, segment| path.child(segment))
     }
 
-    /// Borrow the unescaped segments for trusted structural matching.
-    pub fn segments(&self) -> &[String] {
-        &self.0
+    /// Extend a path, sharing all ancestor storage with the parent.
+    pub fn child(&self, segment: String) -> Self {
+        Self(Some(Arc::new(FieldPathNode {
+            parent: self.clone(),
+            segment,
+            depth: self.len() + 1,
+        })))
+    }
+
+    fn len(&self) -> usize {
+        self.0.as_ref().map_or(0, |node| node.depth)
+    }
+
+    /// Borrow unescaped segments in root-to-leaf order for trusted matching.
+    /// Only references are materialized; ancestor key bytes are never copied.
+    pub fn segments(&self) -> Vec<&str> {
+        let mut segments = Vec::with_capacity(self.len());
+        let mut current = self.0.as_deref();
+        while let Some(node) = current {
+            segments.push(node.segment.as_str());
+            current = node.parent.0.as_deref();
+        }
+        segments.reverse();
+        segments
+    }
+}
+
+// Release an unshared tail iteratively. Caller-built paths can exceed parser depth limits.
+impl Drop for FieldPath {
+    fn drop(&mut self) {
+        let mut tail = self.0.take();
+        while let Some(node) = tail {
+            match Arc::try_unwrap(node) {
+                Ok(mut node) => tail = node.parent.0.take(),
+                Err(_) => break,
+            }
+        }
+    }
+}
+
+impl PartialEq for FieldPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.segments() == other.segments()
+    }
+}
+
+impl Eq for FieldPath {}
+
+impl Serialize for FieldPath {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.segments())
+    }
+}
+
+impl<'de> Deserialize<'de> for FieldPath {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Vec::<String>::deserialize(deserializer).map(Self::new)
     }
 }
 
 impl fmt::Debug for FieldPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FieldPath")
-            .field("segment_count", &self.0.len())
+            .field("segment_count", &self.len())
             .finish_non_exhaustive()
     }
 }
 
 impl fmt::Display for FieldPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "field path ({} segments)", self.0.len())
+        write!(f, "field path ({} segments)", self.len())
     }
 }
 
@@ -253,15 +314,24 @@ impl FieldProvenance {
     }
 }
 
-/// Borrowed field context in the coordinates of the current detection input.
+/// Borrowed evidence locating complete scalars or fragments inside them.
 ///
-/// Span ranges are half-open UTF-8 byte offsets. Producers must supply valid ranges
-/// for this input, and translate them when constructing a normalized view.
+/// Span ranges are half-open UTF-8 byte offsets in the current detection input.
+/// Producers must supply valid ranges and translate them for normalized views.
+/// Fragment offsets instead refer to the original leaf, before normalization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FieldContext<'a> {
     /// The complete detection input is one scalar field.
     WholeInput(&'a FieldProvenance),
+    /// The detection input is a fragment inside a scalar, starting at `offset`
+    /// UTF-8 bytes in the original leaf. It cannot establish a whole-value match.
+    Fragment {
+        /// The original scalar's provenance.
+        field: &'a FieldProvenance,
+        /// Original leaf byte offset, before normalization.
+        offset: usize,
+    },
     /// Each range identifies a scalar field inside the detection input.
     Spans(&'a [(Range<usize>, FieldProvenance)]),
 }

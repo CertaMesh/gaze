@@ -76,6 +76,10 @@ class LaneSelection(unittest.TestCase):
                                     'include!(concat!(env!("OUT_DIR"), "/generated.rs"));',
                                     Path('.')))
 
+    def test_shared_field_observer_selects_both_consumers(self):
+        plan = self.plan('crates/gaze/src/test_support.rs')
+        self.assertTrue({'gaze-pii', 'gaze-proxy', 'gaze-mcp-core'}.issubset(plan['packages']))
+
     def test_documentation_only_is_lightweight(self):
         plan = self.plan('CODE_OF_CONDUCT.md', 'LICENSE-MIT')
         self.assertEqual(plan['packages'], [])

@@ -29,6 +29,40 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: update proxy adapters and field-path readers
+
+Custom `ProviderAdapter::request_pii_surfaces` implementations now return
+`RequestSurfaces<'a>` instead of `Vec<PiiSurface<'a>>`. Convert an existing vector
+with `RequestSurfaces::from(strings)`. Iteration yields all stored string targets.
+Numbers are not rewrite targets and have no retained inventory in this version.
+The existing residual scan still controls numeric admission.
+
+`PiiSurface` and `RequestSurfaces` are now `#[non_exhaustive]`. Construct a surface
+with `PiiSurface::new(path, text, syntax)` and attach parsed provenance through its
+optional `field` member. Its `field_path` is now `CoveragePath`. Convert a legacy
+string with `.into()` and call `.to_legacy_string()` only when you need the legacy
+spelling.
+Materializing every descendant spelling copies ancestor bytes for each call.
+Debug output hides path keys.
+
+`FieldPath::segments()` now returns `Vec<&str>` instead of `&[String]`. Replace
+`.segments().iter().map(String::as_str)` with `.segments().into_iter()`.
+`FieldPath::child(segment)` shares its ancestors. JSON serialization still uses
+an array of unescaped segments.
+
+`ProtectionContext::with_field` attaches a complete scalar location.
+`with_field_fragment(field, offset)` instead marks a fragment at a byte offset in
+the original leaf. `FieldContext::Fragment` cannot establish a whole-value match.
+When owned tokens split a `with_field` leaf, `protect_text_transaction` passes
+each gap between them as a `Fragment` at that gap's leaf offset.
+`Pipeline::resolve_boundary_text_transaction_in_context` accepts this context for
+strict boundary protection. Recognizers must handle absent context and translate
+fragment offsets through their normalized source spans.
+
+These APIs carry provenance only. They do not enable structured-field detection
+or change restore, audit, or admission policy.
+
+
 ### Action required: construct audit filters from defaults
 
 `gaze-audit::AuditFilter` and `AuditLogRow` are now `#[non_exhaustive]`.

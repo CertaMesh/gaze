@@ -220,3 +220,12 @@ fn audit_accessor_accepts_only_matching_outcome_reason_pairs() {
         }
     }
 }
+
+#[test]
+fn field_path_children_borrow_ancestors_and_drop_deep_paths_safely() {
+    let parent = FieldPath::new(["k".repeat(1024 * 1024)]);
+    let child = parent.child("0".into());
+    assert_eq!(parent.segments()[0].as_ptr(), child.segments()[0].as_ptr());
+    assert_eq!(child, FieldPath::new(["k".repeat(1024 * 1024), "0".into()]));
+    drop(FieldPath::new((0..100_000).map(|_| String::new())));
+}
