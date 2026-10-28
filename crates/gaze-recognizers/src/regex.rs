@@ -447,12 +447,12 @@ impl RegexDetector {
                         });
                     preserves_card_union
                         || preserves_recorded_card_layout
-                        || (!starts
+                        || (starts
                             .get(&scan.span.start)
-                            .is_some_and(|&end| end < scan.span.end)
-                            && !ends
+                            .is_none_or(|&end| end >= scan.span.end)
+                            && ends
                                 .get(&scan.span.end)
-                                .is_some_and(|&start| start > scan.span.start))
+                                .is_none_or(|&start| start <= scan.span.start))
                 });
                 // Keep boundary candidates even inside a joined candidate: that larger
                 // candidate may subsequently fail its validator at the registry boundary.

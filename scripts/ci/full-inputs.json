@@ -946,6 +946,7 @@
     "scripts/ci/probe_card_window_gaps.py",
     "scripts/ci/probe_phone_fixtures.py",
     "scripts/ci/probe_field_geometry.py",
+    "scripts/ci/regex_site_gate.py",
     "scripts/ci/tutorial_gate.py",
     "scripts/ci/verify_normalize_merge.py",
     "scripts/fetch/fetch-ner-model.sh",

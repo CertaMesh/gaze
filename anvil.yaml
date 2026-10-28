@@ -48,6 +48,20 @@ roles:
       - UV_PUBLISH_TOKEN
 
 checks:
+  invisible-clippy-preferences:
+    description: Recheck regex preference behaviour and every regex mutation before clippy
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/invisible_separator_mutation_probe.py, scripts/ci/regex_site_gate.py, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V]
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo fmt --all -- --check
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --lib regex::tests:: -- --nocapture
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --test validators hard_boundary_ -- --nocapture
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --test legacy_source_boundaries
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/regex_site_gate.py
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
   invisible-finish:
     description: Recheck mutations and the affected suite before final clippy
     expensive: true
