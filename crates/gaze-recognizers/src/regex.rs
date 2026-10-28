@@ -428,16 +428,20 @@ impl RegexDetector {
                             )
                             .cards
                             .contains(&scan.span));
-                    // A cued 19-digit layout may include the card's CVV. The recorded
-                    // span stays whole even when only its card prefix passes Luhn.
+                    // A recorded card capture may include a verification code. Preserve
+                    // that matched suffix after a validated card, regardless of PAN length.
                     let preserves_recorded_card_layout = self.validator_kind
                         == Some(ValidatorKind::Luhn)
                         && self.validator_on_fail == ValidatorOnFail::Record
-                        && input[scan.span.clone()]
-                            .bytes()
-                            .filter(u8::is_ascii_digit)
-                            .count()
-                            == 19;
+                        && starts.get(&scan.span.start).is_some_and(|&end| {
+                            if end >= scan.span.end {
+                                return false;
+                            }
+                            let suffix = input[end..scan.span.end]
+                                .trim_matches(|ch: char| ch.is_whitespace() || ch == '-');
+                            matches!(suffix.len(), 3 | 4)
+                                && suffix.bytes().all(|ch| ch.is_ascii_digit())
+                        });
                     preserves_card_union
                         || preserves_recorded_card_layout
                         || (!starts
