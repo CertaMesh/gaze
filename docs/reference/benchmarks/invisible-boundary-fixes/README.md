@@ -36,3 +36,9 @@ These gaps remain within the frozen scope. A cell has a gap if main leaves at le
 The harnesses are `scripts/ci/card_code_matrix.py`, `scripts/ci/probe_card_window_gaps.py`, and `scripts/verify_clean_equality.py`. Input generators and hash-pinned equality inputs are committed. The shared normalizer's composition argument is in [Normalization compatibility](../invisible-normalization-proof.md).
 
 This evidence covers compatibility and separator behavior. Full-corpus scored-label v2 and v1 benchmark certification remains required before merging the detection change.
+
+## Phone validator fixture preconditions
+
+`phone-fixtures.json` records direct `gaze-types` probes on pre-merge `9e87f4df` and main `3b3808c6`. Both reject the Ofcom mobile fixture under `E164Phone`, accept it under `PhoneNumber`, and accept the tested BNetzA and NANPA fictional fixtures under `E164Phone`. The validator matrix therefore uses the BNetzA fixture for its E164 variant. This corrects the test input without changing validation behavior.
+
+Pre-merge, main and integrated `c09fbf43` all pin `phonenumber 0.3.9+9.0.21` with the same checksum and build metadata `9.0.21`. No separate phone-metadata crate appears in their lockfiles. The E164 helper source hashes also match. Reproduce the two runtime probes with `scripts/ci/probe_phone_fixtures.py` through the `invisible-phone-fixtures` Anvil check and pinned review worktrees.

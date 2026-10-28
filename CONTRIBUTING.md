@@ -281,6 +281,7 @@ Test and benchmark fixtures that contain phone numbers MUST use synthetic, non-r
 - Other locales: synthesize a non-reachable shape (e.g. exchange code `0` or out-of-band country code) and add a fixture comment noting the synthetic origin.
 
 Reserved fixtures avoid leaking reachable numbers into telemetry, CI logs or
-crate metadata. `E164Phone` accepts NANPA and Ofcom reservations, so positive
-tests still exercise validation. DE/US national-phone tests use fictional
-numbers too.
+crate metadata. `E164Phone` uses parser metadata, which can reject reserved UK
+mobile numbers. Use a validated NANPA or BNetzA fixture for its positive tests.
+`PhoneNumber` also accepts the reserved Ofcom mobile range. DE/US national-phone
+tests use fictional numbers too.

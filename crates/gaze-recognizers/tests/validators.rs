@@ -791,7 +791,9 @@ fn validator_classes_keep_gap_neighbours_outside_valid_values() {
     ];
     #[cfg(feature = "phone-parser")]
     for (kind, value) in [
-        (ValidatorKind::E164Phone, "+44 7700 900123"),
+        // E164Phone uses parser metadata without PhoneNumber's UK-reservation fallback.
+        // This BNetzA drama number validates on both pinned parents.
+        (ValidatorKind::E164Phone, "+49 171 3920000"),
         (
             ValidatorKind::E164PhoneNational(gaze_types::Region::De),
             "+49 171 3920000",

@@ -32,6 +32,10 @@
     "compilation-work.json": {
       "file_sha256": "b6916430e47bd0a4daaf9c205eb1a763b5f206b05f6e7cda7105e7ce96925aae",
       "json_sha256": "b6916430e47bd0a4daaf9c205eb1a763b5f206b05f6e7cda7105e7ce96925aae"
+    },
+    "phone-fixtures.json": {
+      "file_sha256": "73cfdde24be90c2d41fd940702127c5efd393a570f7d7dde8e9ceb6d93c737b1",
+      "json_sha256": "73cfdde24be90c2d41fd940702127c5efd393a570f7d7dde8e9ceb6d93c737b1"
     }
   }
 }

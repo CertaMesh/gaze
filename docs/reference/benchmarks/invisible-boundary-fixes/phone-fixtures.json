@@ -1,0 +1,113 @@
+{
+  "schema": "gaze-phone-fixture-precondition-v1",
+  "heads": {
+    "pre_merge": {
+      "sha": "9e87f4df7bef7b23db1824c8224d2fe78dc37bb3",
+      "phone_packages": [
+        {
+          "name": "phonenumber",
+          "version": "0.3.9+9.0.21",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "9114f9c1683dd09c5f4fa024c89fdad783eaae21d3d52dd23ddaaffa29ffb168",
+          "dependencies": [
+            "either",
+            "fnv",
+            "nom",
+            "once_cell",
+            "postcard",
+            "quick-xml",
+            "regex",
+            "regex-cache",
+            "serde",
+            "serde_derive",
+            "strum",
+            "thiserror 2.0.18"
+          ]
+        }
+      ],
+      "version_build_metadata": {
+        "phonenumber": "9.0.21"
+      },
+      "separate_phone_metadata_packages": [],
+      "e164_helper_sha256": "05f65f1ea39e5a7af7ca03570c77919882f041130ce61520875541350904d4ae"
+    },
+    "main": {
+      "sha": "3b3808c66a528a308b293b5d6bfd1e4924a637c1",
+      "phone_packages": [
+        {
+          "name": "phonenumber",
+          "version": "0.3.9+9.0.21",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "9114f9c1683dd09c5f4fa024c89fdad783eaae21d3d52dd23ddaaffa29ffb168",
+          "dependencies": [
+            "either",
+            "fnv",
+            "nom",
+            "once_cell",
+            "postcard",
+            "quick-xml",
+            "regex",
+            "regex-cache",
+            "serde",
+            "serde_derive",
+            "strum",
+            "thiserror 2.0.18"
+          ]
+        }
+      ],
+      "version_build_metadata": {
+        "phonenumber": "9.0.21"
+      },
+      "separate_phone_metadata_packages": [],
+      "e164_helper_sha256": "05f65f1ea39e5a7af7ca03570c77919882f041130ce61520875541350904d4ae"
+    },
+    "integrated": {
+      "sha": "c09fbf4345b6a34029d63ba425d2aa62879e382c",
+      "phone_packages": [
+        {
+          "name": "phonenumber",
+          "version": "0.3.9+9.0.21",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "checksum": "9114f9c1683dd09c5f4fa024c89fdad783eaae21d3d52dd23ddaaffa29ffb168",
+          "dependencies": [
+            "either",
+            "fnv",
+            "nom",
+            "once_cell",
+            "postcard",
+            "quick-xml",
+            "regex",
+            "regex-cache",
+            "serde",
+            "serde_derive",
+            "strum",
+            "thiserror 2.0.18"
+          ]
+        }
+      ],
+      "version_build_metadata": {
+        "phonenumber": "9.0.21"
+      },
+      "separate_phone_metadata_packages": [],
+      "e164_helper_sha256": "05f65f1ea39e5a7af7ca03570c77919882f041130ce61520875541350904d4ae"
+    }
+  },
+  "probe_sha256": "759512ffed435505ba9d7a7db1d88ef22b8300dfe56dc6c4aa9d52ae3b9ca8c6",
+  "results": {
+    "pre_merge": {
+      "de_e164": true,
+      "uk_compact_e164": false,
+      "uk_e164": false,
+      "uk_phone_number": true,
+      "us_e164": true
+    },
+    "main": {
+      "de_e164": true,
+      "uk_compact_e164": false,
+      "uk_e164": false,
+      "uk_phone_number": true,
+      "us_e164": true
+    }
+  },
+  "same_results": true
+}

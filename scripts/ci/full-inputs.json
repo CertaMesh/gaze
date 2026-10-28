@@ -413,6 +413,7 @@
     "docs/reference/benchmarks/invisible-boundary-fixes/clean-equality.json",
     "docs/reference/benchmarks/invisible-boundary-fixes/compilation-work.json",
     "docs/reference/benchmarks/invisible-boundary-fixes/main-gap-probe.json",
+    "docs/reference/benchmarks/invisible-boundary-fixes/phone-fixtures.json",
     "docs/reference/benchmarks/invisible-boundary-fixes/provenance.json",
     "docs/reference/benchmarks/invisible-boundary-fixes/release-build.json",
     "docs/reference/benchmarks/invisible-normalization-proof.md",
