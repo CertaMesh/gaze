@@ -19,10 +19,11 @@ fn anthropic_walks_text_tool_use_and_tool_result_but_skips_image_source() {
         }]
     });
     let surfaces = adapter.request_pii_surfaces(&mut body);
-    let paths: Vec<_> = surfaces
+    let rendered_paths: Vec<_> = surfaces
         .iter()
-        .map(|surface| surface.field_path.as_str())
+        .map(|surface| surface.field_path.to_legacy_string())
         .collect();
+    let paths: Vec<_> = rendered_paths.iter().map(String::as_str).collect();
 
     assert!(paths.contains(&"system[0].text"));
     assert!(paths.contains(&"messages[0].content[0].text"));

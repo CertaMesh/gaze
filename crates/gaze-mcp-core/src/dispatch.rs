@@ -752,7 +752,13 @@ fn protect_json(
             )
             .map_err(|refusal| refusal.error)?;
     }
-    let output = protect_json_leaves(pipeline, transaction, context, value)?;
+    let output = protect_json_leaves(
+        pipeline,
+        transaction,
+        context,
+        value,
+        &gaze_types::FieldPath::default(),
+    )?;
     verify_json_rule_coverage(pipeline, transaction, &output)?;
     for token in transaction
         .tokens()
@@ -808,6 +814,7 @@ fn protect_json_leaves(
     transaction: &mut gaze::SessionTransaction<'_>,
     context: gaze::ProtectionContext<'_>,
     value: &serde_json::Value,
+    path: &gaze_types::FieldPath,
 ) -> Result<serde_json::Value, DispatchError> {
     use serde_json::Value as JsonValue;
     match value {
@@ -817,7 +824,13 @@ fn protect_json_leaves(
                 text,
                 rule_coverage::MAX_OPERATION_EXPANDED_BYTES,
             )?;
-            let primary = pipeline.protect_text_transaction(transaction, text, context)?;
+            let field = gaze_types::FieldProvenance::new(
+                path.clone(),
+                gaze_types::JsonScalarType::String,
+                gaze_types::FieldEvidence::ValidatedParse,
+            );
+            let primary =
+                pipeline.protect_text_transaction(transaction, text, context.with_field(&field))?;
             let protected =
                 rule_coverage::cover_rule_repeats(pipeline, transaction, text, &primary)?;
             if rule_coverage::expand_owned_bounded(
@@ -840,16 +853,20 @@ fn protect_json_leaves(
         }
         JsonValue::Array(values) => values
             .iter()
-            .map(|value| protect_json_leaves(pipeline, transaction, context, value))
+            .enumerate()
+            .map(|(index, value)| {
+                let child = path.child(index.to_string());
+                protect_json_leaves(pipeline, transaction, context, value, &child)
+            })
             .collect::<Result<Vec<_>, _>>()
             .map(JsonValue::Array),
         JsonValue::Object(values) => values
             .iter()
             .map(|(key, value)| {
-                Ok((
-                    key.clone(),
-                    protect_json_leaves(pipeline, transaction, context, value)?,
-                ))
+                Ok((key.clone(), {
+                    let child = path.child(key.clone());
+                    protect_json_leaves(pipeline, transaction, context, value, &child)?
+                }))
             })
             .collect::<Result<serde_json::Map<_, _>, _>>()
             .map(JsonValue::Object),
@@ -900,6 +917,138 @@ pub fn _debug_call_handle(handle: CallHandle) -> Ulid {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn field_provenance_mcp_reaches_detect_context() {
+        let observer = gaze::test_support::FieldObserver::default();
+        let pipeline = observer.pipeline();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let payload = serde_json::json!({"customer_id":"probe-mcp", "a.b[0]/~":[{"":"probe-mcp-index"}], "count":17, "enabled":true, "missing":null});
+        let mut transaction = session.begin_transaction();
+        let protected = protect_json(
+            &pipeline,
+            &mut transaction,
+            gaze::ProtectionContext::strict(
+                &[gaze::LocaleTag::EnUs, gaze::LocaleTag::Global],
+                &gaze_types::DictionaryBundle::default(),
+            ),
+            &payload,
+        )
+        .unwrap();
+        assert_eq!(protected, payload);
+        observer.assert_field("probe-mcp", &["customer_id"]);
+        observer.assert_field("probe-mcp-index", &["a.b[0]/~", "0", ""]);
+        let root = serde_json::json!("probe-mcp-root");
+        assert_eq!(
+            protect_json(
+                &pipeline,
+                &mut transaction,
+                gaze::ProtectionContext::strict(
+                    &[gaze::LocaleTag::Global],
+                    &gaze_types::DictionaryBundle::default()
+                ),
+                &root
+            )
+            .unwrap(),
+            root
+        );
+        observer.assert_field("probe-mcp-root", &[]);
+        assert!(session.tokens().is_empty());
+    }
+
+    #[test]
+    fn field_provenance_mcp_owned_token_gaps_are_fragments() {
+        let observer = gaze::test_support::FieldObserver::default();
+        let pipeline = observer.pipeline();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let token = transaction
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        let payload = serde_json::json!({"note": format!("before {token} after")});
+        let protected = protect_json(
+            &pipeline,
+            &mut transaction,
+            gaze::ProtectionContext::strict(
+                &[gaze::LocaleTag::Global],
+                &gaze_types::DictionaryBundle::default(),
+            ),
+            &payload,
+        )
+        .unwrap();
+        assert_eq!(protected, payload);
+        observer.assert_fragment("before ", 0);
+        observer.assert_fragment(" after", 7 + token.len());
+    }
+
+    #[test]
+    fn field_provenance_wide_mcp_paths_retain_linear_bytes() {
+        let observer = gaze::test_support::FieldObserver::default();
+        let pipeline = observer.pipeline();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let key = "k".repeat(1024 * 1024);
+        let payload = serde_json::json!({key: vec!["x"; 2000]});
+        let bytes = serde_json::to_vec(&payload).unwrap().len();
+        let mut transaction = session.begin_transaction();
+        let protected = protect_json(
+            &pipeline,
+            &mut transaction,
+            gaze::ProtectionContext::strict(
+                &[gaze::LocaleTag::Global],
+                &gaze_types::DictionaryBundle::default(),
+            ),
+            &payload,
+        )
+        .unwrap();
+        assert_eq!(protected, payload);
+        let retained = observer.retained_path_bytes();
+        assert!(
+            retained >= 1024 * 1024,
+            "the observer must retain the tested paths"
+        );
+        assert!(retained <= 2 * bytes, "retained path bytes: {retained}");
+    }
+
+    #[test]
+    fn field_provenance_mcp_observer_preserves_output_manifest_and_audit() {
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let observer = gaze::test_support::FieldObserver::default();
+        let payload =
+            serde_json::json!({"contact": {"email": "alice@example.invalid"}, "count": 17});
+        let run = |observe: bool| {
+            let audit = gaze::test_support::AuditCapture::default();
+            let builder = if observe {
+                observer.builder()
+            } else {
+                gaze::Pipeline::builder()
+            };
+            let pipeline = builder
+                .detector(gaze_recognizers::RegexDetector::emails().unwrap())
+                .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+                .rule(DefaultRule::new(Action::Preserve))
+                .redaction_logger(audit.clone())
+                .build()
+                .unwrap();
+            let mut transaction = session.begin_transaction();
+            let result = protect_json(
+                &pipeline,
+                &mut transaction,
+                gaze::ProtectionContext::strict(
+                    &[gaze::LocaleTag::Global],
+                    &gaze_types::DictionaryBundle::default(),
+                ),
+                &payload,
+            )
+            .unwrap();
+            let rows = audit.rows_without_clock();
+            assert!(!rows.is_empty());
+            let manifest = transaction.manifest_payload_for_tests().unwrap();
+            assert_eq!(manifest["entries"].as_array().unwrap().len(), 1);
+            (serde_json::to_vec(&result).unwrap(), manifest, rows)
+        };
+        assert_eq!(run(false), run(true));
+        observer.assert_field("alice@example.invalid", &["contact", "email"]);
+    }
+
     use super::*;
     use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, RawDocument};
     use serde_json::json;

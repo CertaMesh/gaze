@@ -47,8 +47,12 @@ Adapters implement `ProviderAdapter`:
   where the proxy re-scans the whole outbound request body after redaction and
   refuses the request if anything is left unprotected.
 - `matches_path(method, path)` claims provider-native endpoints.
-- `request_pii_surfaces(body)` returns mutable text leaves to redact before
-  forwarding upstream.
+- `request_pii_surfaces(body)` returns `RequestSurfaces`, containing mutable
+  string leaves and their optional parsed field provenance. Numbers are not
+  rewrite targets. The outbound residual scan still controls numeric admission.
+  Paths share ancestor storage, and no production recognizer consumes the field
+  context yet. Token-separated fragments carry `FieldContext::Fragment` with
+  their original leaf byte offsets, rather than a complete-scalar claim.
 - `response_pii_surfaces(body)` returns mutable text leaves to restore on the
   owner-visible response.
 - `sse_event_pii_surfaces(event)` handles provider-native event payloads.
@@ -272,3 +276,12 @@ before continuing. Stop is signal-only: `SIGTERM`, bounded wait, optional
 
 The proxy exposes `/_gaze_proxy/healthz` for local health inspection. The path is
 reserved outside all adapter-matched provider routes.
+
+## Manual field-provenance mutation evidence
+
+`scripts/gate/field-provenance-mutation-probe.py` temporarily removes provenance
+from each producer and requires its observer test to fail. Run it from a clean,
+committed Anvil worktree under the `workspace-build` lock. It restores each file
+before continuing. This script is manual evidence, not an Anvil or CI gate.
+The named `field-provenance` check runs producer, retained-storage, and equality
+regressions. Its heavy commands use two build jobs.
