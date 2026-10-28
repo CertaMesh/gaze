@@ -37,8 +37,8 @@ impl ProviderAdapter for OldStyleAdapter {
         &self.upstream
     }
 
-    fn request_pii_surfaces<'a>(&self, _body: &'a mut Value) -> Vec<PiiSurface<'a>> {
-        Vec::new()
+    fn request_pii_surfaces<'a>(&self, _body: &'a mut Value) -> gaze_proxy::RequestSurfaces<'a> {
+        Default::default()
     }
 
     fn response_pii_surfaces<'a>(&self, _body: &'a mut Value) -> Vec<PiiSurface<'a>> {

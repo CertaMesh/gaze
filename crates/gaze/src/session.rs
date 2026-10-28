@@ -1007,10 +1007,7 @@ impl Session {
         self.export_payload(Some(extension))
     }
 
-    fn export_payload(&self, document: Option<DocumentExtension>) -> Result<SensitiveSnapshot> {
-        if matches!(&self.identity.scope, Scope::Ephemeral) {
-            return Err(Error::ExportForbidden);
-        }
+    fn snapshot_payload(&self, document: Option<DocumentExtension>) -> SnapshotPayload {
         let state = self.state_snapshot();
 
         // If the host clock is before the Unix epoch, preserve compatibility by
@@ -1057,7 +1054,7 @@ impl Session {
             .expect("session identifier key lock poisoned")
             .as_ref()
             .map(|key| SnapshotOpaqueKey(*key.secret.expose_secret()));
-        let payload = SnapshotPayload {
+        SnapshotPayload {
             opaque_identifier_key,
             scope: snapshot_scope(&self.identity.scope),
             session_hex: self.session_hex(),
@@ -1065,7 +1062,14 @@ impl Session {
             next_by_class,
             issued_at,
             document,
-        };
+        }
+    }
+
+    fn export_payload(&self, document: Option<DocumentExtension>) -> Result<SensitiveSnapshot> {
+        if matches!(&self.identity.scope, Scope::Ephemeral) {
+            return Err(Error::ExportForbidden);
+        }
+        let payload = self.snapshot_payload(document);
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
         let version = if payload.opaque_identifier_key.is_some() {
             SNAPSHOT_VERSION_V8
@@ -1506,6 +1510,25 @@ impl<'session> SessionTransaction<'session> {
     /// Staged mappings in the same total order as [`Session::snapshot_entries`].
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
         snapshot_entries_from_state(&self.staged)
+    }
+
+    /// Semantic export payload for fixture equality, excluding issue time.
+    /// Contains owner values. Available only to test-support consumers.
+    /// The opaque-identifier secret is reduced to a presence flag so this hatch
+    /// never exports key material.
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn manifest_payload_for_tests(&self) -> Result<serde_json::Value> {
+        let frozen = Session {
+            identity: Arc::clone(&self.identity),
+            state: RwLock::new(Arc::new(self.staged.clone())),
+        };
+        let mut payload = frozen.snapshot_payload(None);
+        payload.issued_at = 0;
+        let has_key = payload.opaque_identifier_key.take().is_some();
+        let mut value = serde_json::to_value(payload).map_err(Error::SnapshotDecode)?;
+        value["has_opaque_identifier_key"] = serde_json::Value::Bool(has_key);
+        Ok(value)
     }
 
     pub fn restore_strict(&self, token: &str) -> Result<String> {
