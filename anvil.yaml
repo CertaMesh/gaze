@@ -57,6 +57,7 @@ checks:
     toolchain: [rustc -Vv, cargo -V]
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo fmt --all -- --check
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --all-features --test validators validator_classes_keep_gap_neighbours_outside_valid_values -- --nocapture
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_mutation_probe.py
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-types -p gaze-pii -p gaze-recognizers --all-features -- --nocapture
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo clippy --workspace --all-features --all-targets -- -D warnings
