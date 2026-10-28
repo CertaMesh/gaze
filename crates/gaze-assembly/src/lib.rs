@@ -238,7 +238,8 @@ pub fn pipeline_with_context(
     .build()?;
     Ok(resident
         .clone()
-        .with_recognizer_registry(detection.registry().clone()))
+        .with_recognizer_registry(detection.registry().clone())
+        .with_caller_fields(detection.caller_fields().clone()))
 }
 
 /// Assemble a request-local policy after translating private context identifiers.
@@ -327,7 +328,10 @@ fn build_pipeline_builder_inner(
         }
     }
 
-    Ok(builder.into_inner())
+    // Caller-declared fields are located per document; no recognizer consumes them yet.
+    Ok(builder
+        .into_inner()
+        .caller_fields(gaze::CallerFields::from_map(&context.fields)))
 }
 
 /// Collision-family fallback classes (`custom:family:<name>`) that an active
