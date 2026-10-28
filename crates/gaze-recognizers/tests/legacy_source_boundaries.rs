@@ -109,3 +109,51 @@ fn adopter_ignorable_edge_literals_match_without_interior_gaps() {
         }
     }
 }
+
+#[test]
+fn hard_boundary_marker_only_captures_do_not_hide_real_values() {
+    let detector = RegexDetector::with_rulepack_fields(
+        r#"field: "([^"]+)""#,
+        gaze::PiiClass::custom("reference").unwrap(),
+        "reference.field",
+        vec![LocaleTag::Global],
+        0.9,
+        50,
+        "reference",
+        Some(vec![1]),
+        Vec::new(),
+        None,
+        None,
+    )
+    .unwrap();
+    let pipeline = Pipeline::builder()
+        .detector(detector)
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .unwrap();
+    for sep in [
+        '\u{ad}', '\u{34f}', '\u{61c}', '\u{115f}', '\u{17b4}', '\u{180e}', '\u{200b}',
+        '\u{200c}', '\u{200d}', '\u{202a}', '\u{2060}', '\u{3164}', '\u{fe0f}', '\u{feff}',
+        '\u{ffa0}', '\u{fff0}', '\u{1bca0}', '\u{1d173}', '\u{e0067}',
+    ] {
+        let empty = format!("field: \"{sep}{sep}\"");
+        let value = format!("cedar{sep}birch");
+        for tail in [String::new(), format!("; field: \"{value}\"")] {
+            let raw = format!("{empty}{tail}");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = support::clean(&pipeline, &session, &raw, &[LocaleTag::Global]);
+            if tail.is_empty() {
+                assert_eq!(clean, raw);
+                assert!(session.snapshot_entries().is_empty());
+            } else {
+                assert_eq!(
+                    gaze::token_shape::pattern().replace_all(&clean, "\0"),
+                    format!("{empty}; field: \"\0\"")
+                );
+                assert_eq!(session.snapshot_entries().len(), 1);
+                assert_eq!(session.snapshot_entries()[0].raw, value);
+            }
+            assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+        }
+    }
+}
