@@ -118,7 +118,7 @@ fn generated_documents_round_trip_compact_and_pretty() {
         let choice = next() % if depth > 4 { 5 } else { 7 };
         match choice {
             0 => Value::Null,
-            1 => Value::Bool(next() % 2 == 0),
+            1 => Value::Bool(next().is_multiple_of(2)),
             2 => json!((next() % 2_000_000) as i64 - 1_000_000),
             3 => json!(f64::from((next() % 10_000) as u32) / 7.0),
             4 => {
