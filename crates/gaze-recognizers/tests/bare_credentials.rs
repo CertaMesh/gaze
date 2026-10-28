@@ -507,6 +507,12 @@ fn tool_diff_and_gutter_prefixed_private_keys_stay_whole() {
                 raw
             };
             assert_whole(&core, &raw, &[&armour(&raw, "PRIVATE KEY")]);
+            // Short lines before END: a prefix must not eat the END dashes.
+            let mut short = key.clone();
+            short[2].truncate(24);
+            short[3].truncate(24);
+            let raw = prefixed_lines(&short, newline, prefix);
+            assert_whole(&core, &raw, &[&armour(&raw, "PRIVATE KEY")]);
         }
     }
     let rsa = long_pem(
