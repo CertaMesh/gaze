@@ -1852,6 +1852,7 @@ fn clean_with_outcomes_table(table: &str) -> std::process::Output {
 fn outcomes_policy_parses_without_changing_clean_output() {
     let baseline = clean_with_outcomes_table("");
     assert_eq!(baseline.status.code(), Some(0));
+    let token = Regex::new(r"<[^>]+>").unwrap();
     for value in ["protect", "refuse", "pass_audited"] {
         let out =
             clean_with_outcomes_table(&format!("[outcomes]\npossibly_sensitive = \"{value}\"\n"));
@@ -1860,8 +1861,7 @@ fn outcomes_policy_parses_without_changing_clean_output() {
         let expected: Value = serde_json::from_slice(&baseline.stdout).unwrap();
         // Session tokens are random per run; the clean text shape must match.
         let shape = |v: &Value| {
-            Regex::new(r"<[^>]+>")
-                .unwrap()
+            token
                 .replace_all(v["clean_text"].as_str().unwrap(), "<T>")
                 .into_owned()
         };
