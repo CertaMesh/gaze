@@ -135,6 +135,18 @@ pub enum UntransformableReason {
     CallerValueTooShort,
 }
 
+impl UntransformableReason {
+    /// The canonical snake-case spelling boundaries report to clients.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::JsonNumberNoTextOnlyPath => "json_number_no_text_only_path",
+            Self::EncodedCarrier => "encoded_carrier",
+            Self::NoSafeRendering => "no_safe_rendering",
+            Self::CallerValueTooShort => "caller_value_too_short",
+        }
+    }
+}
+
 /// JSON-pointer segments locating a field, without its scalar value.
 ///
 /// Segments are unescaped object keys or array indices in decimal form. The empty

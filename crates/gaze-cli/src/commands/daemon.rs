@@ -23,10 +23,10 @@ use crate::pipeline::build::{
     map_policy_error, policy_warnings, resolve_pipeline, validate_ner_threshold,
 };
 use crate::pipeline::run::{
-    clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
-    map_context_error, map_safety_net_pipeline_error, maybe_register_safety_net,
-    policy_nym_was_overridden, safety_net_policy, validate_safety_net_tolerant_gate,
-    wire_ordered_entries, CleanOptions, CORE_EXTENDED_DEPRECATION,
+    clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string, map_clean_error,
+    map_context_error, maybe_register_safety_net, policy_nym_was_overridden, safety_net_policy,
+    validate_safety_net_tolerant_gate, wire_ordered_entries, CleanOptions,
+    CORE_EXTENDED_DEPRECATION,
 };
 use crate::restore::session::restore_pass2_validate;
 use gaze::{
@@ -350,11 +350,7 @@ impl Daemon {
         };
         match result {
             Ok(response) => response,
-            Err((_, error)) => DaemonResponse::error_versioned(
-                version,
-                error.variant(),
-                error.detail().unwrap_or("daemon request failed closed"),
-            ),
+            Err((_, error)) => DaemonResponse::failure(version, &error),
         }
     }
 
@@ -413,12 +409,10 @@ impl Daemon {
                 policy,
             )
             .map_err(|err| {
-                let cli_error = if pipeline.safety_net_count() > 0 {
-                    map_safety_net_pipeline_error(err)
-                } else {
-                    CliError::Pipeline
-                };
-                (session_id.clone(), DaemonError::Cli(cli_error))
+                (
+                    session_id.clone(),
+                    DaemonError::Cli(map_clean_error(pipeline, err)),
+                )
             })?;
         self.logger
             .log_safety_net_report(&leak_report, session, DocumentKind::Text)
@@ -954,6 +948,9 @@ enum DaemonResponse {
         session_id: Option<String>,
         error: &'static str,
         detail: String,
+        /// Closed refusal reason; only `Untransformable` sets it.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<&'static str>,
     },
 }
 
@@ -963,6 +960,19 @@ impl DaemonResponse {
             "FrameTooLarge",
             format!("daemon frame exceeds {limit} bytes"),
         )
+    }
+
+    fn failure(version: Option<u32>, error: &DaemonError) -> Self {
+        Self::Error {
+            version,
+            session_id: None,
+            error: error.variant(),
+            detail: error
+                .detail()
+                .unwrap_or("daemon request failed closed")
+                .into(),
+            reason: error.reason(),
+        }
     }
 
     fn error(error: &'static str, detail: impl Into<String>) -> Self {
@@ -979,6 +989,7 @@ impl DaemonResponse {
             session_id: None,
             error,
             detail: detail.into(),
+            reason: None,
         }
     }
 }
@@ -1022,6 +1033,7 @@ impl DaemonError {
                 CliError::PolicyOpen | CliError::PolicyOpenDetail(_) => "PolicyOpen",
                 CliError::Pipeline => "Pipeline",
                 CliError::Io => "Io",
+                CliError::Untransformable { .. } => "Untransformable",
                 _ => "CliError",
             },
             Self::Invariant => "PipelineInvariant",
@@ -1034,11 +1046,21 @@ impl DaemonError {
         }
     }
 
+    fn reason(&self) -> Option<&'static str> {
+        match self {
+            Self::Cli(CliError::Untransformable { reason }) => Some(reason.as_str()),
+            _ => None,
+        }
+    }
+
     fn detail(&self) -> Option<&str> {
         match self {
             Self::Cli(CliError::SafetyNetConfigDetail(detail))
             | Self::Cli(CliError::PolicyConfigDetail(detail))
             | Self::Cli(CliError::PolicyOpenDetail(detail)) => Some(detail.as_str()),
+            Self::Cli(CliError::Untransformable { .. }) => {
+                Some("confirmed sensitive field cannot be transformed")
+            }
             Self::Cli(_) => Some("gaze daemon request failed closed"),
             Self::Invariant => Some("unexpected non-text clean document"),
             Self::ProtocolInvalid => Some("invalid daemon request"),
@@ -1074,6 +1096,26 @@ mod residual_wire_tests {
             DAEMON_CLEAN_MAX_BYTES.checked_mul(16).unwrap()
         );
         assert_eq!(daemon_frame_max_bytes(), 160 * 1024 * 1024);
+    }
+
+    #[test]
+    fn untransformable_daemon_error_carries_only_the_closed_reason() {
+        let mut wire = Vec::new();
+        let error = DaemonError::Cli(CliError::Untransformable {
+            reason: gaze_types::UntransformableReason::CallerValueTooShort,
+        });
+        write_json_line(&mut wire, &DaemonResponse::failure(Some(1), &error)).unwrap();
+        assert_eq!(
+            String::from_utf8(wire).unwrap(),
+            "{\"version\":1,\"session_id\":null,\"error\":\"Untransformable\",\"detail\":\"confirmed sensitive field cannot be transformed\",\"reason\":\"caller_value_too_short\"}\n"
+        );
+        let mut wire = Vec::new();
+        write_json_line(
+            &mut wire,
+            &DaemonResponse::failure(Some(1), &DaemonError::Cli(CliError::Pipeline)),
+        )
+        .unwrap();
+        assert!(!String::from_utf8(wire).unwrap().contains("reason"));
     }
 
     #[test]

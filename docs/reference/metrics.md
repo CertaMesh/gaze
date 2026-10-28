@@ -692,6 +692,7 @@ error: `{"error":"<Variant>","exit":<N>, ...}`.
 | `5` | Document subcommand error (feature `document` only). | `Document` | Closed |
 | `6` | MCP subcommand error (feature `mcp` only). | `Mcp` | Closed |
 | `7` | Proxy subcommand error (feature `proxy` only). | `Proxy` | Closed |
+| `8` | A confirmed sensitive value has no safe reversible rendering, so nothing was written. Stderr adds the closed `reason`, never the value or field path. | `Untransformable` | Stable |
 
 > Adopter contract. Exit code is the primary CI / agent signal; the
 > stderr JSON line is the structured detail. `CliError` is private to

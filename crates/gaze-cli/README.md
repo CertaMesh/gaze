@@ -412,6 +412,7 @@ Exit codes are defined by `CliError` in [`src/error.rs`](src/error.rs).
 | `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, `SafetyNetConfig` (missing backend command/checkpoint or safety-net flags supplied without the matching feature), or `SafetyNetArtifactMissing` (Axis-1 fail-closed when a backend's pinned artifact is absent, including a missing `SHA256SUMS`). |
 | `3` | `UnknownToken`, `InvalidSignature`, `InvalidBlobVersion`, `BlobExpired`, `Pipeline`, sanitized panic path, and `SafetyNetFailure` variants: `Unavailable`, `WeightsMissing`, `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`, `InvalidOutput`, `SuspectedLeak` (strict mode only). |
 | `4` | `Io`, `PolicyOpen`, `SessionFile` (missing, existing, unreadable, or non-session `--session-out` / `--session-file` path). |
+| `8` | `Untransformable`: a confirmed sensitive value has no safe reversible rendering, so nothing was written. Stderr carries only the closed `reason`. |
 
 Safety-net summary: exit `3` means the safety net (or strict mode) closed
 the door; exit `0` with no `leak_report.stats.suspect_count` means a clean
@@ -428,7 +429,7 @@ Stderr is JSON with the error variant and exit code, for example:
 pseudonym emitted by Gaze, not raw PII.
 
 Full exit-code catalog (including `5` document, `6` mcp, `7` proxy feature
-codes) and the stability guarantee for each variant:
+codes, and `8` untransformable refusals) and the stability guarantee for each variant:
 [`docs/reference/metrics.md`](../../docs/reference/metrics.md#8-cli-exit-codes-gaze-cli).
 
 ## Policy path

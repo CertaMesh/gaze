@@ -71,6 +71,11 @@ pub(crate) enum CliError {
     McpDetail(String),
     #[cfg(feature = "proxy")]
     ProxyDetail(String),
+    /// A confirmed sensitive value has no safe reversible rendering, so nothing was written.
+    /// Exit code 8 is the public contract. Only the closed reason reaches stderr.
+    Untransformable {
+        reason: gaze_types::UntransformableReason,
+    },
 }
 
 impl CliError {
@@ -106,6 +111,7 @@ impl CliError {
             Self::McpDetail(_) => 6,
             #[cfg(feature = "proxy")]
             Self::ProxyDetail(_) => 7,
+            Self::Untransformable { .. } => 8,
         }
     }
 
@@ -143,18 +149,24 @@ impl CliError {
             Self::McpDetail(_) => "Mcp",
             #[cfg(feature = "proxy")]
             Self::ProxyDetail(_) => "Proxy",
+            Self::Untransformable { .. } => "Untransformable",
         }
     }
 
     pub(crate) fn emit_stderr(&self) {
+        eprintln!("{}", self.stderr_line());
+    }
+
+    /// The exact stderr line `emit_stderr` prints, split out so tests pin the real emitter.
+    fn stderr_line(&self) -> String {
         match self {
-            Self::EvalSchemaLine { line } => eprintln!(
+            Self::EvalSchemaLine { line } => format!(
                 r#"{{"error":"{}","exit":{},"line":{}}}"#,
                 self.variant_name(),
                 self.exit_code(),
                 line
             ),
-            Self::EvalSchemaLocation { line, column } => eprintln!(
+            Self::EvalSchemaLocation { line, column } => format!(
                 r#"{{"error":"{}","exit":{},"line":{},"column":{}}}"#,
                 self.variant_name(),
                 self.exit_code(),
@@ -166,7 +178,7 @@ impl CliError {
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
                 let supported = serde_json::to_string(supported)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"found":{},"supported":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -182,7 +194,7 @@ impl CliError {
             | Self::SafetyNetUsageDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"detail":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -193,7 +205,7 @@ impl CliError {
             Self::IndexNerModelMissing(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"detail":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -203,7 +215,7 @@ impl CliError {
             Self::SetupDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"detail":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -213,7 +225,7 @@ impl CliError {
             Self::AuditPurgeIso8601 { input } => {
                 let input = serde_json::to_string(input)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"input":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -223,14 +235,15 @@ impl CliError {
             Self::UnknownToken { token } => {
                 let token = serde_json::to_string(token)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"token":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
                     token
                 )
             }
-            Self::SafetyNetFailure { variant } => eprintln!(
+            Self::Untransformable { reason } => untransformable_line(*reason),
+            Self::SafetyNetFailure { variant } => format!(
                 r#"{{"error":"{}","exit":{},"variant":"{}"}}"#,
                 self.variant_name(),
                 self.exit_code(),
@@ -239,7 +252,7 @@ impl CliError {
             Self::SafetyNetArtifactMissing { backend, path } => {
                 let path = serde_json::to_string(path)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"backend":"{}","path":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -251,7 +264,7 @@ impl CliError {
             Self::DocumentDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"detail":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -262,7 +275,7 @@ impl CliError {
             Self::McpDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"detail":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
@@ -273,20 +286,30 @@ impl CliError {
             Self::ProxyDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-                eprintln!(
+                format!(
                     r#"{{"error":"{}","exit":{},"detail":{}}}"#,
                     self.variant_name(),
                     self.exit_code(),
                     detail
                 )
             }
-            _ => eprintln!(
+            _ => format!(
                 r#"{{"error":"{}","exit":{}}}"#,
                 self.variant_name(),
                 self.exit_code()
             ),
         }
     }
+}
+
+fn untransformable_line(reason: gaze_types::UntransformableReason) -> String {
+    let error = CliError::Untransformable { reason };
+    format!(
+        r#"{{"error":"{}","exit":{},"reason":"{}"}}"#,
+        error.variant_name(),
+        error.exit_code(),
+        reason.as_str()
+    )
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -299,4 +322,66 @@ pub(crate) enum RestoreMode {
 pub(crate) struct RestoreWarning {
     pub(crate) variant: String,
     pub(crate) token: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gaze_types::UntransformableReason;
+
+    #[test]
+    fn untransformable_is_exit_eight_with_only_the_closed_reason() {
+        for reason in [
+            UntransformableReason::JsonNumberNoTextOnlyPath,
+            UntransformableReason::EncodedCarrier,
+            UntransformableReason::NoSafeRendering,
+            UntransformableReason::CallerValueTooShort,
+        ] {
+            let error = CliError::Untransformable { reason };
+            assert_eq!(error.exit_code(), 8);
+            // The real emitter, so dropping its Untransformable arm (catch-all prints no
+            // reason) fails here.
+            let line = error.stderr_line();
+            assert_eq!(
+                line,
+                format!(
+                    r#"{{"error":"Untransformable","exit":8,"reason":"{}"}}"#,
+                    reason.as_str()
+                )
+            );
+            serde_json::from_str::<serde_json::Value>(&line).expect("stderr line is JSON");
+        }
+    }
+
+    #[test]
+    fn stderr_line_keeps_existing_error_bytes() {
+        let cases = [
+            (CliError::Pipeline, r#"{"error":"Pipeline","exit":3}"#),
+            (
+                CliError::PolicyConfig,
+                r#"{"error":"PolicyConfig","exit":2}"#,
+            ),
+            (
+                CliError::PolicyConfigDetail("bad \"key\"".to_string()),
+                r#"{"error":"PolicyConfig","exit":2,"detail":"bad \"key\""}"#,
+            ),
+            (
+                CliError::EvalSchemaLocation { line: 3, column: 7 },
+                r#"{"error":"EvalSchema","exit":1,"line":3,"column":7}"#,
+            ),
+            (
+                CliError::UnknownToken {
+                    token: "<Email_1>".to_string(),
+                },
+                r#"{"error":"UnknownToken","exit":3,"token":"<Email_1>"}"#,
+            ),
+            (
+                CliError::SafetyNetFailure { variant: "Timeout" },
+                r#"{"error":"SafetyNet","exit":3,"variant":"Timeout"}"#,
+            ),
+        ];
+        for (error, expected) in cases {
+            assert_eq!(error.stderr_line(), expected);
+        }
+    }
 }
