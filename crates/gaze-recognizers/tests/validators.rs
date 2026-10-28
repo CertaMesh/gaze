@@ -921,6 +921,8 @@ fn hard_boundary_preserves_overlapping_valid_card_windows() {
         for raw in [
             "0\u{200b}4111 1111 1111 1111",
             "0\u{200b}4111 1111 1111 1111\u{200b}003",
+            // Both 16-digit windows pass Luhn; their 20-digit union does not.
+            "4111 1111 1111 1038 \u{200b}7262",
         ] {
             let session = Session::new(Scope::Ephemeral).unwrap();
             let clean = clean_text(&pipeline, &session, raw);
