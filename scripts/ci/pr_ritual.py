@@ -59,7 +59,12 @@ def main():
                         help="run the thirteen xtask gates with a separate evidence record")
     parser.add_argument("--gate", action="append", default=[],
                         help="run only this named xtask gate; may be repeated")
+    parser.add_argument("--matrix-tail", action="store_true",
+                        help="complete a resource-paused full matrix with fresh workspace suites")
+    parser.add_argument("--dry-run", action="store_true", help="validate and print the command plan")
     args = parser.parse_args()
+    if args.matrix_tail and (args.gate or args.xtask_only):
+        parser.error("matrix tail cannot be combined with gate selection")
     if os.environ.get("CARGO_TARGET_DIR"):
         raise RuntimeError("use cwd-relative Cargo targets")
     environment = dict(os.environ, CARGO_BUILD_JOBS="2", CARGO_PROFILE_DEV_DEBUG="0",
@@ -82,11 +87,69 @@ def main():
         commands = [(name, command) for name, command in commands if name in args.gate]
     output = (OUTPUT.with_name("pr-ritual-selected") if args.gate else
               OUTPUT.with_name("pr-ritual-xtask") if args.xtask_only else OUTPUT)
+    prefix = None
+    if args.matrix_tail:
+        prior_dir = OUTPUT.with_name("pr-ritual-selected")
+        prior = json.loads((prior_dir / "summary.json").read_text())
+        stopped = prior["commands"][-1]
+        if stopped["name"] != "ci-feature-matrix" or not stopped.get("resource_stop"):
+            raise RuntimeError("matrix tail requires an actual resource-paused matrix")
+        if stopped["command"] != ["cargo", "run", "--locked", "-p", "xtask", "--", "ci-feature-matrix"]:
+            raise RuntimeError("prefix must come from the full, unfiltered matrix")
+        source_path = "crates/xtask/src/ci_feature_matrix.rs"
+        source = (ROOT / source_path).read_bytes()
+        measured_source = subprocess.check_output(
+            ["git", "show", f"{prior['source_sha']}:{source_path}"], cwd=ROOT)
+        if source != measured_source:
+            raise RuntimeError("matrix definition changed after the prefix measurement")
+        changes = subprocess.check_output(
+            ["git", "diff", "--name-only", prior["source_sha"], "--"], cwd=ROOT,
+            text=True).splitlines()
+        if set(changes) - {"scripts/ci/pr_ritual.py"}:
+            raise RuntimeError("matrix execution inputs changed; rerun its prefix")
+        log_bytes = (prior_dir / "02-ci-feature-matrix.log").read_bytes()
+        log_text = log_bytes.decode(errors="replace")
+        labels = [line.removeprefix("ci_feature_matrix: running ")
+                  for line in log_text.splitlines()
+                  if line.startswith("ci_feature_matrix: running ")]
+        if labels[-1] != "cargo test --workspace --all-features":
+            raise RuntimeError("matrix stopped before the two final workspace suites")
+        if "ci_feature_matrix: command failed:" in log_text:
+            raise RuntimeError("a failed matrix command cannot be reused")
+        if not re.search(r'args: &\["test", "--workspace", "--all-features"\],\s*},\s*DEFAULT_WORKSPACE_SUITE,\s*\];', source.decode()):
+            raise RuntimeError("review the changed matrix tail definition")
+        prefix = {"source_sha": prior["source_sha"],
+                  "matrix_source_sha256": hashlib.sha256(source).hexdigest(),
+                  "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
+                  "observed_steps": labels, "interrupted_step": labels[-1],
+                  "proof": "The unchanged matrix returns on the first nonzero child; reaching the interrupted step proves preceding steps passed. Neither final workspace suite is credited until rerun."}
+        # Use the matrix's own environment whitelist and fixed build settings.
+        whitelist = source.decode().split("for var in [", 1)[1].split("] {", 1)[0]
+        names = re.findall(r'"([A-Z_]+)"', whitelist)
+        if len(names) < 10:
+            raise RuntimeError("review the changed matrix environment recipe")
+        environment = {name: environment[name] for name in names if name in environment}
+        environment.update(GAZE_DISABLE_OS_KEYSTORE="1", CARGO_BUILD_JOBS="2",
+                           CARGO_INCREMENTAL="0", CARGO_PROFILE_DEV_DEBUG="0",
+                           CARGO_PROFILE_TEST_DEBUG="0")
+        environment.setdefault("CARGO_HOME", str(ROOT / "target/ci-feature-matrix-cargo-home"))
+        commands = [
+            ("matrix-all-features", ["python3", "scripts/anvil/test_nonempty.py", "cargo",
+                                     "test", "--workspace", "--all-features"]),
+            ("matrix-default", ["python3", "scripts/anvil/test_nonempty.py", "cargo", "run", "--locked", "-p", "xtask", "--",
+                                "ci-feature-matrix", "--partition", "ci-default"]),
+        ]
+        output = OUTPUT.with_name("pr-ritual-matrix-tail")
+    if args.dry_run:
+        print(json.dumps({"commands": commands, "matrix_prefix": prefix}, indent=2))
+        return 0
     output.mkdir(parents=True, exist_ok=True)
     report = {"schema": "gaze-pr-ritual-v1", "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "started_at": now(),
               "environment": {key: environment[key] for key in ("CARGO_BUILD_JOBS", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG", "CARGO_INCREMENTAL", "RUSTUP_TOOLCHAIN", "GAZE_DISABLE_OS_KEYSTORE")},
               "commands": [], "planned_commands": len(commands), "completed": False}
+    if prefix is not None:
+        report["matrix_prefix"] = prefix
 
     def save():
         temporary = output / "summary.json.tmp"
@@ -132,6 +195,17 @@ def main():
         print(f"PR RITUAL {index}/{len(commands)}: {name} exit={code}\n{entry['tail']}", flush=True)
         if code or resource_stop:
             return code or 1
+        if args.matrix_tail and index == 1:
+            cleanup_log = output / "cleanup-between-suites.log"
+            with cleanup_log.open("wb") as stream:
+                cleaned = subprocess.run(["cargo", "clean", "--profile", "dev"], cwd=ROOT,
+                                         env=environment, stdout=stream, stderr=subprocess.STDOUT)
+            report["between_suites_cleanup"] = {
+                "exit_code": cleaned.returncode, "tail": safe_tail(cleanup_log),
+                "log_sha256": hashlib.sha256(cleanup_log.read_bytes()).hexdigest()}
+            save()
+            if cleaned.returncode:
+                return cleaned.returncode
     report["completed"] = True
     report["finished_at"] = now()
     save()
