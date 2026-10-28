@@ -9,9 +9,10 @@
     "v1": {
       "committed_scorecard": "scorecard-v0.17.0.json.gz",
       "committed_scorecard_sha256": "48038f42f665fc41d45aab2c3b12c65eaa23854d055c99b49308b8c553a59f75",
-      "existing_fields_byte_identical": true,
-      "outcome_counters": {
-        "policy-file": {
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
           "attempted_documents": 2910,
           "blocked_operations": {
             "documents": 0,
@@ -63,14 +64,15 @@
             "retained_ratio": 0.9673951997181274
           }
         }
-      }
+      ]
     },
     "v2": {
       "committed_scorecard": "scorecard-v0.17.0-scored-labels-v2.json.gz",
       "committed_scorecard_sha256": "41fe2764e982c7f7cd9637b4c273c5bc4083b104d8af9ed3db24a0fbbcac1765",
-      "existing_fields_byte_identical": true,
-      "outcome_counters": {
-        "policy-file": {
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
           "attempted_documents": 2910,
           "blocked_operations": {
             "documents": 0,
@@ -122,14 +124,15 @@
             "retained_ratio": 0.9674150442969087
           }
         }
-      }
+      ]
     },
     "v3": {
       "committed_scorecard": "scorecard-v0.17.0-scored-labels-v3.json.gz",
       "committed_scorecard_sha256": "cdfec65479d0db7f0e00018b12dd86c8c2b30ac1e855f50afe8525a010590802",
-      "existing_fields_byte_identical": true,
-      "outcome_counters": {
-        "policy-file": {
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
           "attempted_documents": 2910,
           "blocked_operations": {
             "documents": 0,
@@ -181,14 +184,15 @@
             "retained_ratio": 0.9674150442969087
           }
         }
-      }
+      ]
     },
     "v4": {
       "committed_scorecard": "scorecard-v0.17.0-scored-labels-v4.json.gz",
       "committed_scorecard_sha256": "7944d60a003fd8e5d6ace066003b7a6ad291b1c644ed19dd24469bd33aaa285f",
-      "existing_fields_byte_identical": true,
-      "outcome_counters": {
-        "policy-file": {
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
           "attempted_documents": 2910,
           "blocked_operations": {
             "documents": 0,
@@ -240,7 +244,7 @@
             "retained_ratio": 0.9673951997181274
           }
         }
-      }
+      ]
     }
   }
 }

@@ -1,7 +1,8 @@
-"""Per-run protection outcome counters for benchmark scorecards.
+"""Per-run protection outcome counters, reported beside benchmark scorecards.
 
-The counters sit beside the existing metrics and never change them. They
-separate four things the byte score folds together:
+The counters are a sidecar derived from an observation record, so no existing
+scorecard number changes. They separate four things the byte score folds
+together:
 
 - refused operations (untransformable values, refused possibly-sensitive
   values, and every other fail-closed document), and refusals of documents
@@ -12,11 +13,10 @@ separate four things the byte score folds together:
 - how much non-PII content stays usable, counting bytes lost to false
   positives and to refusals separately, so a refusal never reads as a gain.
 
-Prove that a committed release record still rescores to its committed
-scorecards with only the counters added:
-
-    python scripts/bench/outcome_counters.py \
-      docs/reference/benchmarks/observations-v0.17.0.jsonl.gz \
+    python scripts/bench/outcome_counters.py report RECORD \\
+      --scored-labels docs/reference/benchmarks/scored-labels-v4.json --output counters-v4.json
+    python scripts/bench/outcome_counters.py prove \\
+      docs/reference/benchmarks/observations-v0.17.0.jsonl.gz \\
       --release v0.17.0 --check docs/reference/benchmarks/outcome-counters-v0.17.0.json
 """
 from __future__ import annotations
@@ -31,12 +31,22 @@ from pathlib import Path
 
 import gaze_bench_score as score
 
-OUTCOME_COUNTERS_FIELD = "outcome_counters"
-
-UNTRANSFORMABLE_REASONS = score.UNTRANSFORMABLE_REASONS
-UNTRANSFORMABLE_CODE_PREFIX = score.UNTRANSFORMABLE_CODE_PREFIX
-UNTRANSFORMABLE_CODES = score.UNTRANSFORMABLE_CODES
-POSSIBLY_SENSITIVE_REFUSED_CODE = score.POSSIBLY_SENSITIVE_REFUSED_CODE
+# Bench wire codes for the refusals the `[outcomes]` policy contract defines.
+# Each untransformable code carries the closed `UntransformableReason` spelling.
+# The scorer's closed `PIPELINE_FAILURE_REASONS` admits them together with the
+# first emitter: `gaze_bench_score.py` is digest-pinned by published competitor
+# rows, so it changes only with a measured benchmark that re-pins them.
+UNTRANSFORMABLE_REASONS = (
+    "json_number_no_text_only_path",
+    "encoded_carrier",
+    "no_safe_rendering",
+    "caller_value_too_short",
+)
+UNTRANSFORMABLE_CODE_PREFIX = "untransformable_"
+UNTRANSFORMABLE_CODES = frozenset(
+    UNTRANSFORMABLE_CODE_PREFIX + reason for reason in UNTRANSFORMABLE_REASONS
+)
+POSSIBLY_SENSITIVE_REFUSED_CODE = "possibly_sensitive_refused"
 
 # A precedence tie or a missing mandatory anchor emits one family-level token:
 # the value is protected, but which identifier it is stays unproven.
@@ -183,35 +193,66 @@ def _non_pii_bytes(
     )
 
 
-def has_outcome_counters(card: Mapping[str, object]) -> bool:
-    runs = card.get("runs")
-    return isinstance(runs, list) and any(
-        isinstance(run, dict) and OUTCOME_COUNTERS_FIELD in run for run in runs
-    )
+def group_counters(
+    documents: Sequence[score.Document], responses: Mapping[str, Mapping[str, object]]
+) -> dict[str, object]:
+    """Counters for one run from contract-applied documents and their responses."""
+    outcomes = OutcomeAccumulator()
+    for document in documents:
+        response = responses[document.uid]
+        if "pipeline_error_code" in response:
+            outcomes.add_refused(document, str(response["pipeline_error_code"]))
+        else:
+            outcomes.add_scored(document, score.final_trace_predictions(document, response))
+    return outcomes.result()
 
 
-def strip_outcome_counters(card: Mapping[str, object]) -> dict[str, object]:
-    """Drop the counters from every run, for comparison with older scorecards."""
-    def runs(items: object) -> object:
-        if not isinstance(items, list):
-            return items
-        return [
-            {key: value for key, value in run.items() if key != OUTCOME_COUNTERS_FIELD}
-            if isinstance(run, dict) else run
-            for run in items
-        ]
+REPORT_SCHEMA = "gaze-outcome-counters/v1"
 
-    stripped = dict(card)
-    if "runs" in stripped:
-        stripped["runs"] = runs(stripped["runs"])
-    layers = stripped.get("layers")
-    if isinstance(layers, dict):
-        stripped["layers"] = {
-            name: {**layer, "runs": runs(layer["runs"])}
-            if isinstance(layer, dict) and "runs" in layer else layer
-            for name, layer in layers.items()
+
+def report(
+    record_path: Path,
+    contract: score.ScoredLabelContract,
+    layer_contract: score.ScoredLabelContract | None = None,
+) -> dict[str, object]:
+    """Counters for every run in an observation record, under one contract.
+
+    A sidecar to the contract scorecard from the same record. Scorecards stay
+    untouched: certification binds a capture byte-for-byte to its replay, and
+    `gaze_bench_score.py` is digest-pinned by the published competitor rows.
+    """
+    import scorecard_record as record
+
+    header, observations = record._read(record_path)
+    card = header["scorecard"]
+    documents = {row["id"]: record._document_from_row(row) for row in header["documents"]}
+    groups: dict[tuple[str, str], list[Mapping[str, object]]] = {}
+    for row in observations:
+        groups.setdefault((row["layer"], row["config"]), []).append(row)
+
+    def counters(layer: str, config: str, selected: score.ScoredLabelContract) -> dict[str, object]:
+        group = groups[(layer, config)]
+        scored = score.apply_scored_label_contract(
+            [documents[row["document_id"]] for row in group], selected
+        )
+        return {"config": config, **group_counters(
+            scored, {row["document_id"]: row["response"] for row in group}
+        )}
+
+    result: dict[str, object] = {
+        "schema": REPORT_SCHEMA,
+        "observation_record": {"file": record_path.name, "sha256": score.sha256_file(record_path)},
+        "scored_label_contract": {"id": contract.contract_id, "version": contract.version},
+        "runs": [counters("C", run["config"], contract) for run in card.get("runs", [])],
+    }
+    if "layers" in card:
+        layer_contract = layer_contract or record._contract_from_row(header.get("layer_contract"))
+        result["layers"] = {
+            layer: [counters(layer, run["config"], layer_contract)
+                    for run in card["layers"][layer]["runs"]]
+            for layer in ("A", "D", "R")
         }
-    return stripped
+    return result
 
 
 # Contracts the proof replays, with the committed scorecard each must return.
@@ -224,15 +265,19 @@ PROOF_CONTRACTS = (
 PROOF_SCHEMA = "gaze-outcome-counters-proof/v1"
 
 
-def _card_bytes(card: Mapping[str, object]) -> bytes:
-    return json.dumps(card, indent=2).encode("utf-8") + b"\n"
+def _load_contract(bench: Path, contract_file: str | None) -> score.ScoredLabelContract:
+    if contract_file is None:
+        return score.SCORED_LABEL_CONTRACT_V1
+    return score.load_scored_label_contract(
+        bench / contract_file, display_path=f"docs/reference/benchmarks/{contract_file}"
+    )
 
 
 def prove(record_path: Path, release: str) -> dict[str, object]:
-    """Rescore a committed release record under every contract.
+    """Rescore a committed release record and count its outcomes per contract.
 
-    Every pre-existing scorecard field must come back byte for byte; only the
-    outcome counters are new.
+    Every committed scorecard must still come back byte for byte, so adding the
+    counters changed no existing number.
     """
     import bench_json
     import scorecard_record as record
@@ -240,25 +285,16 @@ def prove(record_path: Path, release: str) -> dict[str, object]:
     bench = record_path.parent
     contracts: dict[str, object] = {}
     for name, contract_file, suffix in PROOF_CONTRACTS:
-        contract = (
-            score.SCORED_LABEL_CONTRACT_V1 if contract_file is None
-            else score.load_scored_label_contract(
-                bench / contract_file,
-                display_path=f"docs/reference/benchmarks/{contract_file}",
-            )
-        )
+        contract = _load_contract(bench, contract_file)
         card = record.rescore(record_path, contract)
         committed_path = bench / f"scorecard-{release}{suffix}.json.gz"
         committed = bench_json.read_content(committed_path)
-        if has_outcome_counters(json.loads(committed)):
-            raise ValueError(f"{committed_path.name} already carries outcome counters")
+        replayed = json.dumps(card, indent=2).encode("utf-8") + b"\n"
         contracts[name] = {
             "committed_scorecard": committed_path.name,
             "committed_scorecard_sha256": hashlib.sha256(committed).hexdigest(),
-            "existing_fields_byte_identical": _card_bytes(strip_outcome_counters(card)) == committed,
-            "outcome_counters": {
-                run["config"]: run[OUTCOME_COUNTERS_FIELD] for run in card["runs"]
-            },
+            "scorecard_byte_identical": replayed == committed,
+            "outcome_counters": report(record_path, contract)["runs"],
         }
     return {
         "schema": PROOF_SCHEMA,
@@ -272,27 +308,42 @@ def prove(record_path: Path, release: str) -> dict[str, object]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("record", type=Path)
-    parser.add_argument("--release", required=True)
-    mode = parser.add_mutually_exclusive_group(required=True)
+    commands = parser.add_subparsers(dest="command", required=True)
+    counted = commands.add_parser("report", help="write the counters for one contract")
+    counted.add_argument("record", type=Path)
+    counted.add_argument("--scored-labels", type=Path)
+    counted.add_argument("--output", type=Path, required=True)
+    proved = commands.add_parser("prove", help="pin or check the committed-record proof")
+    proved.add_argument("record", type=Path)
+    proved.add_argument("--release", required=True)
+    mode = proved.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", type=Path)
     mode.add_argument("--check", type=Path)
     args = parser.parse_args(argv)
+
+    if args.command == "report":
+        contract = (
+            score.load_scored_label_contract(args.scored_labels)
+            if args.scored_labels else score.SCORED_LABEL_CONTRACT_V1
+        )
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report(args.record, contract), indent=2) + "\n",
+                               encoding="utf-8")
+        return 0
+
     evidence = prove(args.record, args.release)
-    identical = all(
-        item["existing_fields_byte_identical"] for item in evidence["contracts"].values()
-    )
+    identical = all(item["scorecard_byte_identical"] for item in evidence["contracts"].values())
     rendered = json.dumps(evidence, indent=2) + "\n"
     if args.write is not None:
         if not identical:
-            print("ERROR: rescore changed an existing scorecard field", file=sys.stderr)
+            print("ERROR: rescore no longer returns a committed scorecard", file=sys.stderr)
             return 1
         args.write.write_text(rendered, encoding="utf-8")
         return 0
     if not identical or args.check.read_text(encoding="utf-8") != rendered:
         print(f"ERROR: {args.check} does not match a fresh rescore", file=sys.stderr)
         return 1
-    print(f"{args.check}: existing fields byte-identical under "
+    print(f"{args.check}: committed scorecards byte-identical under "
           f"{', '.join(evidence['contracts'])}; outcome counters match")
     return 0
 

@@ -1445,10 +1445,11 @@ model, and no network.
 
 ### Outcome counters
 
-Every run also carries `runs[].outcome_counters`. The block sits beside the
-byte score and never changes it: a record scored before and after the counters
-existed gives the same values for every other field. The counters keep apart
-what the byte score folds together, so a refusal can never pass for a gain.
+`scripts/bench/outcome_counters.py report` derives one counter block per run
+from the same observation record as the contract scorecard. The block is a
+separate report and never changes the scorecard, so a refusal can never pass
+for a gain in the byte score. It keeps apart what the byte score folds
+together:
 
 | Counter | Meaning |
 | --- | --- |
@@ -1463,9 +1464,9 @@ what the byte score folds together, so a refusal can never pass for a gain.
 A `pass_audited` value stays raw and leaves only an audit row, which the bench
 response does not carry, so it is not counted. Out-of-contract and neutral
 bytes are excluded exactly as in the byte score.
-[`outcome-counters-v0.17.0.json`](outcome-counters-v0.17.0.json) proves the
-v0.17.0 record rescores to its committed v1-v4 scorecards with only this block
-added; see [`scripts/bench/README.md`](../../../scripts/bench/README.md#outcome-counters).
+[`outcome-counters-v0.17.0.json`](outcome-counters-v0.17.0.json) pins the
+v0.17.0 counters under v1-v4 and proves the record still rescores to its
+committed scorecards byte for byte; see [`scripts/bench/README.md`](../../../scripts/bench/README.md#outcome-counters).
 
 ### The runner's other outputs
 

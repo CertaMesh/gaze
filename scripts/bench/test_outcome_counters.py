@@ -1,5 +1,6 @@
 """Outcome counters: every path counted, existing scorecard fields untouched."""
 
+import gzip
 import json
 import sys
 import tempfile
@@ -13,11 +14,11 @@ import bench_json
 import gaze_bench_score as score
 import outcome_counters as oc
 import scorecard_record as record
-import verify_record_scorecards as proof
 
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCH = ROOT / "docs/reference/benchmarks"
+RECORD = BENCH / "observations-v0.17.0.jsonl.gz"
 TEXT = "Call 4111 at Berlin office now"  # ASCII, so byte and char offsets agree.
 GOLD = score.Span(5, 9, "ACCOUNTNUM")  # "4111"
 
@@ -71,13 +72,13 @@ class RefusalTests(unittest.TestCase):
         )
         self.assertEqual(outcomes.result()["fp_refusals"], {"documents": 2})
 
-    def test_refusal_codes_are_closed_pipeline_failure_reasons(self):
-        doc = document()
-        for code in sorted(oc.UNTRANSFORMABLE_CODES | {oc.POSSIBLY_SENSITIVE_REFUSED_CODE}):
-            with self.subTest(code=code):
-                score.validate_response(doc, refused(code))
-        with self.assertRaises(score.ResponseValidationError):
-            score.validate_response(doc, refused("untransformable_unknown_reason"))
+    def test_refusal_codes_do_not_collide_with_existing_pipeline_failures(self):
+        self.assertFalse(
+            (oc.UNTRANSFORMABLE_CODES | {oc.POSSIBLY_SENSITIVE_REFUSED_CODE})
+            & score.PIPELINE_FAILURE_REASONS
+        )
+        for reason in score.PIPELINE_FAILURE_REASONS:
+            self.assertEqual(oc.refusal_kind(reason), "fail_closed")
 
 
 class ProtectionTests(unittest.TestCase):
@@ -162,88 +163,110 @@ class UsableContentTests(unittest.TestCase):
         self.assertEqual(usable["retained_ratio"], 0.5)
 
 
-class RunConfigTests(unittest.TestCase):
-    def test_replayed_run_carries_counters_beside_unchanged_metrics(self):
-        # One real recorded success plus two synthetic refusals of other documents.
-        header, observations = record._read(BENCH / "observations-v0.17.0.jsonl.gz")
-        rows = {row["id"]: row for row in header["documents"]}
-        observed = next(row for row in observations
-                        if row["layer"] == "C" and row["response"]["final_protection_trace"])
-        kept = record._document_from_row(rows[observed["document_id"]])
-        responses = {kept.uid: {
-            **observed["response"],
-            "timing": {"clean_ms": 0.0, "restore_ms": 0.0, "post_policy_scan_ms": None},
-        }}
-        refused_documents = [document("refused-benign", spans=()), document("refused-gold")]
-        responses["refused-benign"] = {
-            **refused("untransformable_json_number_no_text_only_path"), "fixture_id": "refused-benign",
-        }
-        responses["refused-gold"] = {
-            **refused(oc.POSSIBLY_SENSITIVE_REFUSED_CODE), "fixture_id": "refused-gold",
-        }
-        run = score.run_config(
-            Path("."), Path("."), "replay", [kept, *refused_documents], Path("."),
-            None, None, None, 0.5, Path("."), replay_responses=responses,
-        )
-        counters = run[oc.OUTCOME_COUNTERS_FIELD]
-        self.assertEqual(list(run)[-1], oc.OUTCOME_COUNTERS_FIELD)
-        self.assertEqual(counters["attempted_documents"], 3)
-        self.assertEqual(counters["blocked_operations"]["by_kind"],
-                         {"untransformable": 1, "possibly_sensitive": 1, "fail_closed": 0})
+def refused_record_copy(target):
+    """The v0.17.0 record with one gold and one benign document refused."""
+    with gzip.open(RECORD, "rt", encoding="utf-8") as stream:
+        rows = [json.loads(line) for line in stream]
+    spans = {row["id"]: row["gold"] for row in rows[0]["documents"]}
+    chosen = {}
+    for row in rows[1:]:
+        kind = "gold" if spans[row["document_id"]] else "benign"
+        if row["layer"] == "C" and kind not in chosen:
+            chosen[kind] = row["document_id"]
+            row["response"] = {
+                "fixture_id": row["document_id"], "pipeline_error_stage": "clean",
+                "pipeline_error_code": (
+                    "untransformable_encoded_carrier" if kind == "gold"
+                    else oc.POSSIBLY_SENSITIVE_REFUSED_CODE
+                ),
+                "refused": True, "fallback_redact": False,
+            }
+    with gzip.open(target, "wt", encoding="utf-8") as stream:
+        for row in rows:
+            stream.write(json.dumps(row) + "\n")
+    return chosen
+
+
+def assert_partition(test, counters, run):
+    """The counters partition the same predictions the byte score uses."""
+    protection = counters["protection"]
+    metrics = run["metrics"]
+    test.assertEqual(
+        protection["confirmed"]["values"] + protection["possibly_sensitive"]["values"],
+        metrics["prediction_spans"]["total"],
+    )
+    test.assertEqual(
+        protection["confirmed"]["gold_values"] + protection["possibly_sensitive"]["gold_values"],
+        metrics["prediction_spans"]["overlapped_gold"],
+    )
+    test.assertEqual(counters["false_positives"]["documents"],
+                     metrics["documents_with_false_positives"])
+    test.assertEqual(counters["usable_content"]["lost_to_false_positive_bytes"],
+                     metrics["utf8_bytes"]["false_positive"])
+    test.assertEqual(counters["attempted_documents"],
+                     run["pipeline_availability"]["attempted_documents"])
+    test.assertEqual(counters["blocked_operations"]["documents"],
+                     run["pipeline_availability"]["failed_closed_documents"])
+
+
+class RecordReportTests(unittest.TestCase):
+    def test_recorded_refusals_reach_the_counters(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / RECORD.name
+            chosen = refused_record_copy(path)
+            self.assertEqual(set(chosen), {"gold", "benign"})
+            counted = oc.report(path, score.SCORED_LABEL_CONTRACT_V1)
+            card = record.rescore(path, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+        (counters,) = counted["runs"]
+        (run,) = card["runs"]
+        self.assertEqual(counters["config"], run["config"])
+        self.assertEqual(counters["blocked_operations"], {
+            "documents": 2,
+            "by_kind": {"untransformable": 1, "possibly_sensitive": 1, "fail_closed": 0},
+        })
+        self.assertEqual(counters["untransformable_refused"]["by_reason"]["encoded_carrier"], 1)
         self.assertEqual(counters["fp_refusals"], {"documents": 1})
         self.assertEqual(counters["protection"]["possibly_sensitive"]["dispositions"]["refuse"], 1)
-        protection = counters["protection"]
-        self.assertEqual(
-            protection["confirmed"]["values"] + protection["possibly_sensitive"]["values"],
-            run["metrics"]["prediction_spans"]["total"],
-        )
-        self.assertEqual(run["failed_closed_population"]["reason_counts"], {
-            "possibly_sensitive_refused": 1,
-            "untransformable_json_number_no_text_only_path": 1,
-        })
-        self.assertEqual(counters["usable_content"]["lost_to_refusal_bytes"], 2 * len(TEXT) - 4)
+        self.assertGreater(counters["usable_content"]["lost_to_refusal_bytes"], 0)
+        assert_partition(self, counters, run)
+
+    def test_generated_layers_are_counted_under_the_layer_contract(self):
+        source = BENCH / "observations-v0.15.1-agentic.jsonl.gz"
+        contract = score.load_scored_label_contract(BENCH / "scored-labels-v2.json")
+        counted = oc.report(source, contract)
+        card = record.rescore(source, contract, max_workers=1)
+        self.assertEqual(set(counted["layers"]), {"A", "D", "R"})
+        for layer in ("A", "D", "R"):
+            for counters, run in zip(counted["layers"][layer], card["layers"][layer]["runs"], strict=True):
+                with self.subTest(layer=layer, config=run["config"]):
+                    self.assertEqual(counters["config"], run["config"])
+                    assert_partition(self, counters, run)
+
+    def test_report_cli_writes_the_counters(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "counters.json"
+            self.assertEqual(oc.main(["report", str(RECORD), "--output", str(output)]), 0)
+            written = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(written, oc.report(RECORD, score.SCORED_LABEL_CONTRACT_V1))
+        self.assertEqual(written["schema"], oc.REPORT_SCHEMA)
 
 
 class CommittedRecordProofTests(unittest.TestCase):
-    def test_v0170_record_rescores_with_only_the_counters_added(self):
+    def test_v0170_scorecards_are_unchanged_and_counters_pinned(self):
         evidence_path = BENCH / "outcome-counters-v0.17.0.json"
-        evidence = oc.prove(BENCH / "observations-v0.17.0.jsonl.gz", "v0.17.0")
+        evidence = oc.prove(RECORD, "v0.17.0")
         self.assertEqual(json.dumps(evidence, indent=2) + "\n",
                          evidence_path.read_text(encoding="utf-8"))
         self.assertEqual(set(evidence["contracts"]), {"v1", "v2", "v3", "v4"})
         for name, item in evidence["contracts"].items():
             with self.subTest(contract=name):
-                self.assertTrue(item["existing_fields_byte_identical"])
+                self.assertTrue(item["scorecard_byte_identical"])
                 committed = bench_json.load(BENCH / item["committed_scorecard"])
                 (run,) = committed["runs"]
-                counters = item["outcome_counters"][run["config"]]
-                metrics = run["metrics"]
-                # The counters partition the same predictions the byte score uses.
-                protection = counters["protection"]
-                self.assertEqual(
-                    protection["confirmed"]["values"] + protection["possibly_sensitive"]["values"],
-                    metrics["prediction_spans"]["total"],
-                )
-                self.assertEqual(
-                    protection["confirmed"]["gold_values"]
-                    + protection["possibly_sensitive"]["gold_values"],
-                    metrics["prediction_spans"]["overlapped_gold"],
-                )
-                self.assertEqual(counters["false_positives"]["documents"],
-                                 metrics["documents_with_false_positives"])
-                self.assertEqual(counters["usable_content"]["lost_to_false_positive_bytes"],
-                                 metrics["utf8_bytes"]["false_positive"])
+                (counters,) = item["outcome_counters"]
+                self.assertEqual(counters["config"], run["config"])
+                assert_partition(self, counters, run)
                 self.assertEqual(counters["blocked_operations"]["documents"], 0)
-
-    def test_proof_refuses_a_changed_existing_field(self):
-        card = {"runs": [{"config": "c", "metrics": {"x": 1}, oc.OUTCOME_COUNTERS_FIELD: {}}]}
-        expected = {"runs": [{"config": "c", "metrics": {"x": 2}}]}
-        self.assertFalse(proof.exact_except_timing(card, expected))
-        expected["runs"][0]["metrics"]["x"] = 1
-        self.assertTrue(proof.exact_except_timing(card, expected))
-        # A scorecard that already has counters must match them too.
-        expected["runs"][0][oc.OUTCOME_COUNTERS_FIELD] = {"changed": True}
-        self.assertFalse(proof.exact_except_timing(card, expected))
 
     def test_proof_detects_a_rescore_that_moves_an_existing_number(self):
         original = record.rescore
@@ -254,14 +277,13 @@ class CommittedRecordProofTests(unittest.TestCase):
             return card
 
         with mock.patch.object(record, "rescore", drifting), tempfile.TemporaryDirectory() as temporary:
-            evidence = oc.prove(BENCH / "observations-v0.17.0.jsonl.gz", "v0.17.0")
+            evidence = oc.prove(RECORD, "v0.17.0")
             self.assertFalse(any(
-                item["existing_fields_byte_identical"] for item in evidence["contracts"].values()
+                item["scorecard_byte_identical"] for item in evidence["contracts"].values()
             ))
             target = Path(temporary) / "evidence.json"
             self.assertEqual(oc.main([
-                str(BENCH / "observations-v0.17.0.jsonl.gz"),
-                "--release", "v0.17.0", "--write", str(target),
+                "prove", str(RECORD), "--release", "v0.17.0", "--write", str(target),
             ]), 1)
             self.assertFalse(target.exists())
 
@@ -270,8 +292,7 @@ class CommittedRecordProofTests(unittest.TestCase):
             stale = Path(temporary) / "evidence.json"
             stale.write_text("{}\n", encoding="utf-8")
             self.assertEqual(oc.main([
-                str(BENCH / "observations-v0.17.0.jsonl.gz"),
-                "--release", "v0.17.0", "--check", str(stale),
+                "prove", str(RECORD), "--release", "v0.17.0", "--check", str(stale),
             ]), 1)
 
 
