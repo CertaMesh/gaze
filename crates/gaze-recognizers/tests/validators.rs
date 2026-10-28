@@ -947,7 +947,7 @@ fn hard_boundary_preserves_recorded_card_and_verification_code() {
 fn hard_boundary_recorded_codes_preserve_all_lengths_and_separators() {
     let class = PiiClass::custom("credit_card").unwrap();
     let detector = RegexDetector::with_rulepack_fields(
-        r"Card: (\d(?:[\s-]?\d){12,22})\b",
+        r"Card: (\d(?:[\s-]*\d){12,22})\b",
         class.clone(),
         "recorded.card",
         vec![gaze::LocaleTag::Global],
