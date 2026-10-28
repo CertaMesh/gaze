@@ -56,8 +56,8 @@ checks:
     toolchain: [rustc -Vv, cargo -V]
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --test legacy_source_boundaries
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --test validators hard_boundary_
-      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_mutation_probe.py --probe hard_boundary_containment --probe adopter_edge_literal --probe luhn_enclosing_union --probe luhn_union_preference --probe recorded_card_layout --probe card_window_source_gaps
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo test -p gaze-recognizers --test validators hard_boundary_ -- --nocapture
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_mutation_probe.py --probe hard_boundary_containment --probe adopter_edge_literal --probe luhn_enclosing_union --probe luhn_union_preference --probe recorded_card_layout --probe recorded_code_total_length --probe card_window_source_gaps
   invisible-separators:
     description: Unicode separator round trips, mapping mutations and affected-crate tests
     expensive: true
@@ -76,10 +76,20 @@ checks:
     reusable: false
     locks: [workspace-build]
     identity_env: [GAZE_CLEAN_BASE_WORKTREE]
-    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/invisible_separator_release.py, scripts/ci/probe_card_window_gaps.py, scripts/verify_clean_equality.py, scripts/verification/clean-equality-inputs-v1.json, anvil.yaml]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/invisible_separator_release.py, scripts/ci/probe_card_window_gaps.py, scripts/ci/card_code_matrix.py, scripts/verify_clean_equality.py, scripts/verification/clean-equality-inputs-v1.json, anvil.yaml]
     toolchain: [rustc -Vv, cargo -V]
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_release.py
+  invisible-card-codes:
+    description: Build exact main and candidate and verify scoped card/code coverage
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    identity_env: [GAZE_CLEAN_BASE_WORKTREE]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/invisible_separator_release.py, scripts/ci/probe_card_window_gaps.py, scripts/ci/card_code_matrix.py, scripts/verify_clean_equality.py, scripts/verification/clean-equality-inputs-v1.json, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V]
+    commands:
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_release.py --card-codes-only
   fmt:
     reusable: true
     inputs: &rust-inputs [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, .github/workflows, anvil.yaml]

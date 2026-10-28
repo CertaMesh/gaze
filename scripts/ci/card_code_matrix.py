@@ -37,7 +37,7 @@ def separators():
                (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C, 0x200D,
                 0x200E, 0x200F, 0x202A, 0x2060, 0x2067, 0x2069, 0x3164, 0xFE0F,
                 0xFEFF, 0xFFA0, 0xFFF0, 0x1BCA0, 0x1D173, 0xE0067)]
-    return visible + removed + [("removed", "mixed-ignorable-run", "\u200b\u2060\u00ad")]
+    return visible + [("no-gap", "no-gap", "")] + removed + [("removed", "mixed-ignorable-run", "\u200b\u2060\u00ad")]
 
 
 def observe(binary, text, cwd):
@@ -86,8 +86,11 @@ def main():
     args = parser.parse_args()
     binaries = {"base": args.base_bin.resolve(strict=True), "candidate": args.candidate_bin.resolve(strict=True)}
     baseline_build = json.loads((ROOT / "target/separator-checks/release-build.json").read_text())
-    if baseline_build["base_sha"] != BASE_SHA or hashlib.sha256(binaries["base"].read_bytes()).hexdigest() != baseline_build["binary_sha256"]["base"]:
+    if baseline_build["base_sha"] != BASE_SHA:
         raise RuntimeError("matrix base differs from the fresh pinned-main build")
+    for side, binary in binaries.items():
+        if hashlib.sha256(binary.read_bytes()).hexdigest() != baseline_build["binary_sha256"][side]:
+            raise RuntimeError(f"matrix {side} binary differs from its source attestation")
     layouts = [(family, pan, code) for family, pan in pans() for code in ("123", "1234")]
     seps = separators()
     total = len(layouts) * len(seps)
@@ -107,7 +110,7 @@ def main():
                 if kind == "removed" and not contains(candidate_mask, reference_mask):
                     space_losses.append(case_id)
                 identity = before == after
-                if kind == "visible" and not identity:
+                if kind != "removed" and not identity:
                     visible_differences.append(case_id)
                 rows.append({"case_id": case_id, "family": family, "pan_digits": len(pan),
                              "code_digits": len(code), "separator_kind": kind, "separator": name,
@@ -126,7 +129,7 @@ def main():
                          "main_code_gap_cells": len(missing),
                          "separator_classes": sorted({row["separator"] for row in missing})})
     report = {"schema": "gaze-card-code-boundary-matrix-v1", "base_sha": BASE_SHA,
-              "candidate_source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+              "candidate_source_sha": baseline_build["candidate_sha"],
               "binary_sha256": {side: hashlib.sha256(path.read_bytes()).hexdigest() for side, path in binaries.items()},
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "cells": total,
               "coverage_regressions": regressions, "removed_space_losses": space_losses,

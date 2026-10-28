@@ -927,6 +927,7 @@
     "scripts/bench/test_rescore_past_release.py",
     "scripts/bench/trace-lineage-vocabulary.json",
     "scripts/bench/validator_recall_probe/Cargo.toml",
+    "scripts/ci/card_code_matrix.py",
     "scripts/ci/check_competitor_capture_mutations.py",
     "scripts/ci/check_past_capture_mutations.py",
     "scripts/ci/invisible_separator_release.py",

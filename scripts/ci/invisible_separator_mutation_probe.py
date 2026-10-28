@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 20
+    total = len(set(args.probe)) or len(CODEPOINTS) + 21
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -95,6 +95,10 @@ def main():
         reject("recorded_card_layout", REGEX_SOURCE,
                "|| preserves_recorded_card_layout", "|| false && preserves_recorded_card_layout",
                "hard_boundary_preserves_recorded_card_and_verification_code", "validators")
+        reject("recorded_code_total_length", REGEX_SOURCE,
+               "matches!(suffix.len(), 3 | 4)",
+               "matches!(suffix.len(), 3 | 4) && input[scan.span.clone()].bytes().filter(u8::is_ascii_digit).count() == 19",
+               "hard_boundary_recorded_codes_preserve_all_lengths_and_separators", "validators")
         reject("card_window_source_gaps", PAYMENT_SOURCE,
                "if source_gap {", "if false && source_gap {",
                "hard_boundary_preserves_overlapping_valid_card_windows", "validators")
