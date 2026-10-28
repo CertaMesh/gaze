@@ -57,6 +57,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--xtask-only", action="store_true",
                         help="run the thirteen xtask gates with a separate evidence record")
+    parser.add_argument("--gate", action="append", default=[],
+                        help="run only this named xtask gate; may be repeated")
     args = parser.parse_args()
     if os.environ.get("CARGO_TARGET_DIR"):
         raise RuntimeError("use cwd-relative Cargo targets")
@@ -72,9 +74,14 @@ def main():
     commands = [("workspace-tests", ["python3", "scripts/anvil/test_nonempty.py", "cargo", "test", "--locked", "--workspace", "--all-features"]),
                 ("cargo-deny", ["cargo", "deny", "check"])]
     commands.extend((gate, ["cargo", "run", "--locked", "-p", "xtask", "--", gate]) for gate in gates)
-    if args.xtask_only:
+    if args.xtask_only or args.gate:
         commands = commands[2:]
-    output = OUTPUT.with_name("pr-ritual-xtask") if args.xtask_only else OUTPUT
+    if args.gate:
+        if len(set(args.gate)) != len(args.gate) or set(args.gate) - set(gates):
+            parser.error("selected gates must be unique names from CONTRIBUTING.md")
+        commands = [(name, command) for name, command in commands if name in args.gate]
+    output = (OUTPUT.with_name("pr-ritual-selected") if args.gate else
+              OUTPUT.with_name("pr-ritual-xtask") if args.xtask_only else OUTPUT)
     output.mkdir(parents=True, exist_ok=True)
     report = {"schema": "gaze-pr-ritual-v1", "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "started_at": now(),
