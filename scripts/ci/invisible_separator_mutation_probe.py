@@ -100,7 +100,7 @@ def main():
                "                    joined_valid\n", "                    false && joined_valid\n",
                "hard_boundary_and_joined_valid_candidates_emit_one_token", "validators")
         reject("luhn_union_preference", REGEX_SOURCE,
-               "                    preserves_card_union\n", "                    false && preserves_card_union\n",
+               "|| preserves_card_union\n", "|| false && preserves_card_union\n",
                "hard_boundary_preserves_overlapping_valid_card_windows", "validators")
         reject("recorded_card_layout", REGEX_SOURCE,
                "|| preserves_recorded_card_layout", "|| false && preserves_recorded_card_layout",
