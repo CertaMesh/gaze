@@ -2234,6 +2234,62 @@ below remain measured on generator v20 and its recorded corpus; they do not
 include v21/v22/v23/v24 cells and must not be compared directly with the v24 report.
 Their recorded scorecards, contracts and ledgers remain unchanged.
 
+### Structured-input slice (generator v26)
+
+Agents mostly send structured payloads, not prose. Generator v26 adds 270 A
+positives and 90 D counterweights per partition, in nine shapes:
+
+- Anthropic `tool_use` input.
+- Anthropic `tool_result` content as a JSON-escaped JSON string.
+- OpenAI tool-call `arguments` as an escaped string.
+- Gemini `functionCall.args`.
+- An API request body with a person block.
+- A nested record array.
+- CSV rows.
+- NDJSON event lines.
+- A JSON number under a labelled key.
+
+Each positive puts a customer, employee or person-record ID under a labelled
+field. The ID is numeric, a UUID or grouped. The API body also carries a given
+name, a surname and an email on a reserved domain. Gold is the raw document
+bytes of each value, including inside escaped strings. Every NDJSON repeat is
+gold.
+
+The values beside the ID are recorded decoys: unlabelled numbers (some six
+digits long, the numeric ID's own shape), amounts, timestamps, tool-call IDs
+and SKUs. Covering one is a false positive. The D counterweights carry the same
+shapes and value shapes under public order, request and invoice keys, with no
+person data. The [cell generator](../../../scripts/bench/structured_input_cells.py)
+holds the authored inputs. Every v25 document reconstructs byte-for-byte, and
+the v25 contract stays frozen. The full test partition now has 10,307 A,
+7,612 D and 6,481 R documents.
+
+The scorecard gates these cells in bytes, like every other cell. The
+[slice reader](../../../scripts/bench/structured_slice.py) adds the counts
+bytes cannot show. It reads one retained observation record and runs no new
+inference:
+
+```bash
+uv run --project scripts/bench python scripts/bench/structured_slice.py \
+  target/bench-data/release-v1/full/observations-v1.jsonl.gz --markdown
+```
+
+Per layer and shape, it reports:
+
+- Gold values protected whole or in part.
+- Leaked gold bytes.
+- False positives counted three ways: documents, values out of the decoys, and
+  bytes.
+- JSON or CSV syntax bytes covered.
+- Usable documents: not refused, no decoy touched, no syntax byte covered.
+
+Refused documents are counted apart and excluded from bytes and values.
+Refusing a payload is not a gain. The reader refuses a record from an older
+generator or a different corpus.
+
+No release has been measured on generator v26 yet. Until the past releases are
+re-run on it, compare the slice only between captures of the same corpus.
+
 ### Measured adjacency layer history
 
 The preserved phone and cued-cell prose above describes the historical

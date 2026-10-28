@@ -320,6 +320,22 @@ The committed [example report](fixtures/leak-diff-example.json) comes from the
 v0.17 GLiNER mechanism records, with their hashes pinned in the report.
 `test_leak_diff.py` reproduces its bytes without another benchmark capture.
 
+## Structured-input slice
+
+`structured_slice.py` reads one value-free record and reports the generator
+v26 `structured_*` cells per layer and shape. It counts false positives by
+document, by decoy value and by byte, and counts gold values protected whole.
+It also counts covered JSON/CSV syntax bytes and usable payloads. Refusals are
+kept apart. The command needs no capture, model or binary:
+
+```bash
+uv run --project scripts/bench python scripts/bench/structured_slice.py \
+  target/gate/candidate/observations-v1.jsonl.gz --config policy-file --markdown
+```
+
+A record from an older generator or a different corpus is refused.
+`test_structured_input_cells.py` pins the counts on synthetic observations.
+
 ## Required local models
 
 The runner validates the model bundle before it builds or starts a benchmark
