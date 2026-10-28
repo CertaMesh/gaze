@@ -94,7 +94,7 @@ admits them together with the first emitter, which changes detection and so
 comes with a measured benchmark that re-pins the competitor rows.
 
 Prove the committed v0.17.0 record still rescores to its committed v1-v4
-scorecards and pin its counters (CI runs the same check in
+scorecards and pin its run and A/D/R layer counters (CI runs the same check in
 `test_outcome_counters.py`):
 
 ```bash

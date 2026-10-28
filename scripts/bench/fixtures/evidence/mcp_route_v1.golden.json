@@ -164,8 +164,7 @@
       "manifest-persistence-failed",
       "not-found",
       "redaction-failed",
-      "response-serialization-failed",
-      "untransformable"
+      "response-serialization-failed"
     ],
     "COUNTING_GRADES": [
       "egress_reconstructed",
@@ -207,8 +206,7 @@
       "manifest-persistence-failed",
       "not-found",
       "redaction-failed",
-      "response-serialization-failed",
-      "untransformable"
+      "response-serialization-failed"
     ],
     "FEATURE_GRAPH_IDS": [
       "workspace.all_features",

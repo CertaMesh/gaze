@@ -11,7 +11,7 @@ together:
   (collision-family tokens such as `custom:family:<name>`);
 - false positives by document count and by affected-value count;
 - how much non-PII content stays usable, counting bytes lost to false
-  positives and to refusals separately, so a refusal never reads as a gain.
+  positives and to refusals separately, so here a refusal never reads as a gain.
 
     python scripts/bench/outcome_counters.py report RECORD \\
       --scored-labels docs/reference/benchmarks/scored-labels-v4.json --output counters-v4.json
@@ -73,10 +73,11 @@ class _ValueCounts:
         self.gold_values = 0
         self.false_positive_values = 0
 
-    def add(self, overlaps_gold: bool) -> None:
+    def add(self, overlaps_gold: bool, false_positive: bool) -> None:
+        # An over-extended value is both: it covers gold and protects extra bytes.
         self.values += 1
         self.gold_values += overlaps_gold
-        self.false_positive_values += not overlaps_gold
+        self.false_positive_values += false_positive
 
     def result(self) -> dict[str, int]:
         return {
@@ -118,15 +119,17 @@ class OutcomeAccumulator:
         false_positive_kinds = set()
         for span in scored:
             overlaps_gold = score.interval_overlaps((span.start, span.end), gold)
+            # Each span is judged by its own non-gold bytes, so a value that
+            # runs past its gold counts as a false positive too.
+            false_positive = _false_positive_bytes([(span.start, span.end)], gold, ignored) > 0
             ambiguous = is_ambiguous_class(span.label)
-            (self.possibly_sensitive if ambiguous else self.confirmed).add(overlaps_gold)
-            if not overlaps_gold:
+            (self.possibly_sensitive if ambiguous else self.confirmed).add(
+                overlaps_gold, false_positive
+            )
+            if false_positive:
                 false_positive_kinds.add(ambiguous)
-        predicted = score.subtract_intervals(
-            score.merge_intervals((span.start, span.end) for span in scored), ignored
-        )
-        false_positive_bytes = score.interval_length(predicted) - score.intersection_length(
-            gold, predicted
+        false_positive_bytes = _false_positive_bytes(
+            [(span.start, span.end) for span in scored], gold, ignored
         )
         # Same definition as metrics.documents_with_false_positives (bytes),
         # so the two document counts always agree.
@@ -159,8 +162,8 @@ class OutcomeAccumulator:
                     # `pass_audited` leaves the value raw and writes only an
                     # audit row, which the bench response does not carry.
                     "dispositions": {
-                        "protect": self.possibly_sensitive.values,
-                        "refuse": self.blocked["possibly_sensitive"],
+                        "protect_values": self.possibly_sensitive.values,
+                        "refuse_documents": self.blocked["possibly_sensitive"],
                     },
                 },
             },
@@ -179,6 +182,15 @@ class OutcomeAccumulator:
                 "retained_ratio": score.safe_ratio(retained, self.non_pii_bytes),
             },
         }
+
+
+def _false_positive_bytes(
+    intervals: Sequence[tuple[int, int]],
+    gold: Sequence[tuple[int, int]],
+    ignored: Sequence[tuple[int, int]],
+) -> int:
+    predicted = score.subtract_intervals(score.merge_intervals(intervals), ignored)
+    return score.interval_length(predicted) - score.intersection_length(gold, predicted)
 
 
 def _non_pii_bytes(
@@ -296,7 +308,7 @@ def prove(record_path: Path, release: str) -> dict[str, object]:
             "scorecard_byte_identical": replayed == committed,
             "outcome_counters": report(record_path, contract)["runs"],
         }
-    return {
+    evidence: dict[str, object] = {
         "schema": PROOF_SCHEMA,
         "release": release,
         "observation_record": {
@@ -304,6 +316,12 @@ def prove(record_path: Path, release: str) -> dict[str, object]:
         },
         "contracts": contracts,
     }
+    # Generated layers score under the record's own layer contract, whichever
+    # contract the C runs use, so they are pinned once.
+    counted = report(record_path, score.SCORED_LABEL_CONTRACT_V1)
+    if "layers" in counted:
+        evidence["layers"] = counted["layers"]
+    return evidence
 
 
 def main(argv: Sequence[str] | None = None) -> int:

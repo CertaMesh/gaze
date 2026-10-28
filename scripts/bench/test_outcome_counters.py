@@ -59,7 +59,7 @@ class RefusalTests(unittest.TestCase):
                          {"untransformable": 0, "possibly_sensitive": 1, "fail_closed": 1})
         self.assertEqual(result["untransformable_refused"]["documents"], 0)
         self.assertEqual(
-            result["protection"]["possibly_sensitive"]["dispositions"], {"protect": 0, "refuse": 1}
+            result["protection"]["possibly_sensitive"]["dispositions"], {"protect_values": 0, "refuse_documents": 1}
         )
 
     def test_only_refusals_of_documents_without_scored_gold_are_fp_refusals(self):
@@ -97,7 +97,7 @@ class ProtectionTests(unittest.TestCase):
                          {"values": 2, "gold_values": 1, "false_positive_values": 1})
         self.assertEqual(protection["possibly_sensitive"], {
             "values": 2, "gold_values": 1, "false_positive_values": 1,
-            "dispositions": {"protect": 2, "refuse": 0},
+            "dispositions": {"protect_values": 2, "refuse_documents": 0},
         })
 
     def test_false_positives_by_document_and_by_value(self):
@@ -119,6 +119,44 @@ class ProtectionTests(unittest.TestCase):
             "values": 5,
             "possibly_sensitive_values": 2,
         })
+
+    def test_an_over_extended_value_is_an_affected_false_positive_value(self):
+        outcomes = oc.OutcomeAccumulator()
+        outcomes.add_scored(document(), [score.Span(3, 12, "custom:a")])  # covers gold 5-9
+        result = outcomes.result()
+        self.assertEqual(result["protection"]["confirmed"],
+                         {"values": 1, "gold_values": 1, "false_positive_values": 1})
+        self.assertEqual(result["false_positives"], {
+            "documents": 1,
+            "documents_from_possibly_sensitive_only": 0,
+            "values": 1,
+            "possibly_sensitive_values": 0,
+        })
+        self.assertEqual(result["usable_content"]["lost_to_false_positive_bytes"], 5)
+
+    def test_confirmed_over_extension_keeps_a_document_out_of_ambiguous_only(self):
+        outcomes = oc.OutcomeAccumulator()
+        outcomes.add_scored(document(), [
+            score.Span(3, 12, "custom:a"),  # 5 non-gold bytes around gold 5-9
+            score.Span(13, 19, "custom:family:f"),  # "Berlin", 6 non-gold bytes
+        ])
+        result = outcomes.result()
+        self.assertEqual(result["false_positives"], {
+            "documents": 1,
+            "documents_from_possibly_sensitive_only": 0,
+            "values": 2,
+            "possibly_sensitive_values": 1,
+        })
+        self.assertEqual(result["usable_content"]["lost_to_false_positive_bytes"], 11)
+
+    def test_exact_confirmed_value_beside_an_ambiguous_fp_is_ambiguous_only(self):
+        outcomes = oc.OutcomeAccumulator()
+        outcomes.add_scored(document(), [
+            score.Span(5, 9, "custom:a"), score.Span(13, 19, "custom:family:f"),
+        ])
+        self.assertEqual(
+            outcomes.result()["false_positives"]["documents_from_possibly_sensitive_only"], 1
+        )
 
     def test_out_of_contract_and_neutral_bytes_are_not_counted(self):
         doc = document(spans=(), excluded_spans=(GOLD,),
@@ -226,7 +264,7 @@ class RecordReportTests(unittest.TestCase):
         })
         self.assertEqual(counters["untransformable_refused"]["by_reason"]["encoded_carrier"], 1)
         self.assertEqual(counters["fp_refusals"], {"documents": 1})
-        self.assertEqual(counters["protection"]["possibly_sensitive"]["dispositions"]["refuse"], 1)
+        self.assertEqual(counters["protection"]["possibly_sensitive"]["dispositions"]["refuse_documents"], 1)
         self.assertGreater(counters["usable_content"]["lost_to_refusal_bytes"], 0)
         assert_partition(self, counters, run)
 
@@ -267,6 +305,13 @@ class CommittedRecordProofTests(unittest.TestCase):
                 self.assertEqual(counters["config"], run["config"])
                 assert_partition(self, counters, run)
                 self.assertEqual(counters["blocked_operations"]["documents"], 0)
+                self.assertEqual(set(evidence["layers"]), {"A", "D", "R"})
+                for layer in ("A", "D", "R"):
+                    runs = committed["layers"][layer]["runs"]
+                    for counters, run in zip(evidence["layers"][layer], runs, strict=True):
+                        with self.subTest(layer=layer, config=run["config"]):
+                            self.assertEqual(counters["config"], run["config"])
+                            assert_partition(self, counters, run)
 
     def test_proof_detects_a_rescore_that_moves_an_existing_number(self):
         original = record.rescore

@@ -550,7 +550,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### CONTROL_REFUSAL_CODES
 
-`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`, `untransformable`.
+`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`.
 
 ### COUNTING_GRADES
 
@@ -566,7 +566,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### ERROR_CODES
 
-`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`, `untransformable`.
+`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`.
 
 ### FEATURE_GRAPH_IDS
 
