@@ -119,6 +119,38 @@ fn prefixed_values() -> Vec<String> {
     values
 }
 
+// sha256 of the empty input: public, hex, and 64 base64-alphabet units long.
+const SHA: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+fn long_pem(label: &str, headers: &[&str]) -> Vec<String> {
+    // Base64 of synthetic filler text in 64-unit lines, never private-key material.
+    let mut lines = vec![format!("-----BEGIN {label}-----")];
+    lines.extend(headers.iter().map(|header| header.to_string()));
+    lines.extend(
+        [
+            "c3ludGhldGljLWZpeHR1cmUtbm90LWEta2V5LTAxMjM0NTY3ODktc3ludGhldGlj",
+            "LWZpeHR1cmUtbm90LWEta2V5LTAxMjM0NTY3ODktc3ludGhldGljLWZpeHR1cmUt",
+            "bm90LWEta2V5LTAxMjM0NTY3ODktc3ludGhldGljLWZpeHR1cmUtbm90LWEta2V5",
+            "LTAxMjM0NTY3ODktc3lu",
+        ]
+        .map(String::from),
+    );
+    lines.push(format!("-----END {label}-----"));
+    lines
+}
+
+fn prefixed_lines(lines: &[String], newline: &str, prefix: impl Fn(usize) -> String) -> String {
+    let framed: Vec<_> = (1..).zip(lines).map(|(n, line)| prefix(n) + line).collect();
+    framed.join(newline)
+}
+
+/// The span runs from the first BEGIN to the end of the END line's dashes.
+fn armour(raw: &str, label: &str) -> String {
+    let start = raw.find("-----BEGIN").unwrap();
+    let footer = format!("{label}-----");
+    raw[start..raw.rfind(&footer).unwrap() + footer.len()].to_string()
+}
+
 fn pem(label: &str, newline: &str) -> String {
     // Base64 decodes to synthetic text, never private-key material.
     format!("-----BEGIN {label}-----{newline}bm90LWEta2V5c3ludGhldGlj{newline}c3ludGhldGlj{newline}-----END {label}-----")
@@ -193,6 +225,12 @@ fn prose_and_public_material_remain_untouched() {
         "--mask-None-values-in-the-output-stream".into(),
         "Your file starts with\n-----BEGIN OPENSSH PRIVATE KEY-----\nand then contains base64 lines you must never share with anyone at all.".into(),
         "A key starts with -----BEGIN PRIVATE KEY----- and ends with a matching footer.".into(),
+        // A generic line prefix needs 32 base64 units and cannot end on a quote.
+        format!("BEGIN = \"-----BEGIN PRIVATE KEY-----\"\nHASH = \"{SHA}\""),
+        format!("-----BEGIN PRIVATE KEY-----\nHASH = \"{SHA}\""),
+        "docs/a.md:3:-----BEGIN PRIVATE KEY-----\ndocs/a.md:4:Paste the key body here, 2026 edition.".into(),
+        "-----BEGIN PRIVATE KEY-----\nNote: see the internationalization guide, chapter 12.".into(),
+        prefixed_lines(&long_pem("PUBLIC KEY", &[]), "\n", |_| "-".into()),
         format!("BAIza{}", synthetic_suffix(40)),
     ];
     {
@@ -238,6 +276,7 @@ fn issuer_boundaries_protect_framing_and_preserve_identifiers() {
             ("(", ")"),
             (r"\n", r"\n"),
             (r"\u000a", r"\u000a"),
+            (r"\/", r"\/"),
             ("%20", "%3D"),
         ] {
             assert_whole(&core, &format!("{left}{value}{right}"), &[&value]);
@@ -431,6 +470,116 @@ fn numbered_bulleted_and_entity_framed_private_keys_stay_whole() {
 }
 
 #[test]
+fn tool_diff_and_gutter_prefixed_private_keys_stay_whole() {
+    let core = core();
+    let key = long_pem("PRIVATE KEY", &[]);
+    type Prefix = fn(usize) -> String;
+    let shapes: [(&str, Prefix); 20] = [
+        ("diff deletion", |_| "-".into()),
+        ("grep -n", |n| format!("k.pem:{n}:")),
+        ("grep context", |n| format!("k.pem-{n}-")),
+        ("rg --no-heading", |n| format!("src/keys/dev.pem:{n}:")),
+        ("padded tool arrow", |n| format!("{n:>6}→")),
+        ("tool arrow", |n| format!("{n}→")),
+        ("bat gutter", |n| format!("{n:>4}   │ ")),
+        ("box gutter", |_| "│ ".into()),
+        ("pipe gutter", |_| "| ".into()),
+        ("git blame", |n| {
+            format!("^1a2b3c4 (Synthetic Developer Name 2026-01-01 12:00:00 +0000 {n:>3}) ")
+        }),
+        ("semicolon comment", |_| "; ".into()),
+        ("double semicolon", |_| ";; ".into()),
+        ("percent comment", |_| "% ".into()),
+        ("bare percent", |_| "%".into()),
+        ("sql comment", |_| "-- ".into()),
+        ("batch comment", |_| "rem ".into()),
+        ("vim comment", |_| "\" ".into()),
+        ("bang comment", |_| "! ".into()),
+        ("diff deletion in hunk", |_| "-".into()),
+        ("cat -n", |n| format!("{n:>6}\t")),
+    ];
+    for (shape, prefix) in shapes {
+        for newline in ["\n", "\r\n"] {
+            let raw = prefixed_lines(&key, newline, prefix);
+            let raw = if shape == "diff deletion in hunk" {
+                format!("@@ -1,6 +0,0 @@{newline}{raw}{newline} context")
+            } else {
+                raw
+            };
+            assert_whole(&core, &raw, &[&armour(&raw, "PRIVATE KEY")]);
+        }
+    }
+    let rsa = long_pem(
+        "RSA PRIVATE KEY",
+        &[
+            "Proc-Type: 4,ENCRYPTED",
+            "DEK-Info: AES-128-CBC,00FF00FF00FF00FF",
+            "",
+        ],
+    );
+    let pgp = long_pem(
+        "PGP PRIVATE KEY BLOCK",
+        &["Comment: Alice <alice@example.invalid>", ""],
+    );
+    for (lines, label) in [(&rsa, "RSA PRIVATE KEY"), (&pgp, "PGP PRIVATE KEY BLOCK")] {
+        let prefixes: [Prefix; 2] = [|_| "-".into(), |n| format!("k.asc:{n}:")];
+        for prefix in prefixes {
+            let raw = prefixed_lines(lines, "\n", prefix);
+            assert_whole(&core, &raw, &[&armour(&raw, label)]);
+        }
+    }
+    // Trailing borders and word-diff closers after each line.
+    let bordered: Vec<_> = key.iter().map(|line| format!("│ {line:<64} │")).collect();
+    let table: Vec<_> = (1..)
+        .zip(&key)
+        .map(|(n, line)| format!("| {n} | {line} |"))
+        .collect();
+    let word_diff: Vec<_> = key.iter().map(|line| format!("[-{line}-]")).collect();
+    for lines in [bordered, table, word_diff] {
+        let raw = lines.join("\n");
+        assert_whole(&core, &raw, &[&armour(&raw, "PRIVATE KEY")]);
+    }
+    // Entity tab indentation and HTML paragraph framing.
+    for raw in [
+        format!("<k>{}</k>", key.join("&#10;&#9;")),
+        format!("<k>{}</k>", key.join("&#10;&#9;&#9;")),
+        format!("<k>{}</k>", key.join("&#xA;&#x9;")),
+        format!("<k>{}</k>", key.join("&#10;&Tab;")),
+        key.iter()
+            .map(|line| format!("<p>{line}</p>"))
+            .collect::<String>(),
+        key.iter()
+            .map(|line| format!("<p>{line}</p>\n"))
+            .collect::<String>(),
+    ] {
+        assert_whole(&core, &raw, &[&armour(&raw, "PRIVATE KEY")]);
+    }
+    // The prefix cannot cross the END line into a following hash.
+    let diff = prefixed_lines(&key, "\n", |_| "-".into());
+    let grep = prefixed_lines(&key, "\n", |n| format!("k.pem:{n}:"));
+    for raw in [
+        format!("{diff}\n+sha256: {SHA}"),
+        format!("{grep}\nk.pem:9:{SHA}"),
+        format!("{}<br>sha256: {SHA}", key.join("<br>")),
+        format!(r#"{{"k": "{}", "sha": "{SHA}"}}"#, key.join(r"\n")),
+    ] {
+        assert_whole(&core, &raw, &[&armour(&raw, "PRIVATE KEY")]);
+    }
+    let ec = long_pem("EC PRIVATE KEY", &[]);
+    let first = prefixed_lines(&key, "\n", |_| "-".into());
+    let second = prefixed_lines(&ec, "\n", |_| "-".into());
+    let raw = format!("{first}\n{second}");
+    assert_whole(
+        &core,
+        &raw,
+        &[
+            &armour(&first, "PRIVATE KEY"),
+            &armour(&second, "EC PRIVATE KEY"),
+        ],
+    );
+}
+
+#[test]
 fn issuer_alphabets_keep_separator_dense_bodies_whole() {
     let core = core();
     for prefix in [
@@ -523,10 +672,21 @@ fn literal_armour_headers_accept_free_text_and_extension_names() {
         );
         assert_whole(&core, &format!(r#"{{"k": "{value}"}}"#), &[&value]);
     }
-    // Raw quotes, markup and invalid escapes in a serialized header keep the WHOLE key raw.
-    for newline in [r"\n", r"\r\n", "<br>"] {
+    // Markup other than a `<br` terminator stays inside serialized header values.
+    for newline in [r"\n", r"\r\n", r"\u000a", "%0a", "&#10;", "<br>"] {
         for header in [
             "Comment: <synthetic>",
+            "Comment: Alice <alice@example.invalid>",
+            "Comment: <brian@example.invalid>",
+            "Comment: a > b",
+        ] {
+            let value = format!("-----BEGIN PGP PRIVATE KEY BLOCK-----{newline}{header}{newline}{newline}bm90LWEta2V5c3ludGhldGlj{newline}-----END PGP PRIVATE KEY BLOCK-----");
+            assert_whole(&core, &value, &[&value]);
+        }
+    }
+    // Raw quotes and invalid escapes in a serialized header keep the WHOLE key raw.
+    for newline in [r"\n", r"\r\n", "<br>"] {
+        for header in [
             "Comment: Alice's key",
             "Comment: \"work\"",
             "Comment: synthetic\\path",

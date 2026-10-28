@@ -16,6 +16,8 @@ RULEPACK = ROOT / "crates/gaze-recognizers/embedded/secrets.toml"
 TEST = "crates/gaze-recognizers/tests/bare_credentials.rs"
 BOUNDARY_TEST = "issuer_boundaries_protect_framing_and_preserve_identifiers"
 PEM_TEST = "truncated_mismatched_and_framed_private_keys_are_whole_and_restorable"
+PREFIX_TEST = "tool_diff_and_gutter_prefixed_private_keys_stay_whole"
+HEADER_TEST = "literal_armour_headers_accept_free_text_and_extension_names"
 PROBES = [
     ("bare-disabled", "security_token.bare", "enabled = true", "enabled = false", "bare_vendor_prefixes_are_whole_restorable_credentials"),
     ("opaque-ghs-dot", "security_token.bare", r"|\.(?:\z|[^A-Za-z0-9_\\-])", "", "bare_vendor_prefixes_are_whole_restorable_credentials"),
@@ -23,9 +25,10 @@ PROBES = [
     ("start-boundary", "security_token.bare", r"\A|", "", BOUNDARY_TEST),
     ("end-boundary", "security_token.bare", r"\z|", "", BOUNDARY_TEST),
     ("ascii-boundary", "security_token.bare", r"[^a-z0-9\\]|", "", BOUNDARY_TEST),
-    ("leading-boundary-fp", "security_token.bare", r'(?:\A|[^a-z0-9\\]|\\(?:[ntrbf"\\]|u[0-9A-Fa-f]{4})|%[0-9A-Fa-f]{2})', "", BOUNDARY_TEST),
+    ("leading-boundary-fp", "security_token.bare", r'(?:\A|[^a-z0-9\\]|\\(?:[ntrbf"\\/]|u[0-9A-Fa-f]{4})|%[0-9A-Fa-f]{2})', "", BOUNDARY_TEST),
     ("google-near-prefix-fp", "security_token.bare", "AIzaSy", "AIza", "prose_and_public_material_remain_untouched"),
-    ("json-boundary", "security_token.bare", r'\\(?:[ntrbf"\\]|u[0-9A-Fa-f]{4})', r'\\q', BOUNDARY_TEST),
+    ("json-boundary", "security_token.bare", r'\\(?:[ntrbf"\\/]|u[0-9A-Fa-f]{4})', r'\\q', BOUNDARY_TEST),
+    ("json-slash-boundary", "security_token.bare", r'[ntrbf"\\/]', r'[ntrbf"\\]', BOUNDARY_TEST),
     ("unicode-boundary", "security_token.bare", r"|u[0-9A-Fa-f]{4}", "", BOUNDARY_TEST),
     ("url-boundary", "security_token.bare", r"|%[0-9A-Fa-f]{2}", "", BOUNDARY_TEST),
     ("pem-literal-newline", "security_token.pem", r"(?:\r{0,2}\n|", "(?:", PEM_TEST),
@@ -54,11 +57,26 @@ PROBES = [
     ("pem-prose-fp", "security_token.pem", r"(?:[A-Za-z0-9+/=]|\\/|%2[BbFf]|%3[Dd]){16}", r"(?:[A-Za-z0-9+/=][\x20\t\r\n]*){16}", "prose_and_public_material_remain_untouched"),
     ("pem-truncation", "security_token.pem", "-----)?)", "-----))", PEM_TEST),
     ("pem-header-allowlist", "security_token.pem", r"[A-Za-z][A-Za-z0-9-]*:[^\r\n]*", r"(?:Proc-Type:[\x20\t]*4,ENCRYPTED|DEK-Info:[\x20\t]*[A-Za-z0-9-]+,[0-9A-Fa-f]+|(?:Version|Comment|Charset):[^\r\n\\<>\"\']*)", "literal_armour_headers_accept_free_text_and_extension_names"),
-    ("pem-serialized-header-boundary", "security_token.pem", r'''[^\r\n\\<>"\']|''', r"[^\r\n]|", "literal_armour_headers_accept_free_text_and_extension_names"),
+    ("pem-serialized-header-boundary", "security_token.pem", r'''[^\r\n\\<"\']|''', r"[^\r\n]|", "literal_armour_headers_accept_free_text_and_extension_names"),
     ("pem-header-indentation", "security_token.pem", r"[\x20\t]*[A-Za-z][A-Za-z0-9-]*:", "[A-Za-z][A-Za-z0-9-]*:", "literal_armour_headers_accept_free_text_and_extension_names"),
     ("pem-header-json-escapes", "security_token.pem", r'''|\\(?:["\\/bft]|u(?:[1-9A-Fa-f][0-9A-Fa-f]{3}|0[1-9A-Fa-f][0-9A-Fa-f]{2}|00[1-9A-Fa-f][0-9A-Fa-f]|000[0-9BCEFbcef]))''', "", "literal_armour_headers_accept_free_text_and_extension_names"),
     ("pem-two-unit-unicode-newline", "security_token.pem", r"(?:\\u000[dD])?", "", "literal_armour_headers_accept_free_text_and_extension_names"),
     ("pem-double-cr", "security_token.pem", r"\r{0,2}\n", r"\r?\n", "literal_armour_headers_accept_free_text_and_extension_names"),
+    ("pem-generic-prefix", "security_token.pem", "{0,80}", r"{0,80}\b\B", PREFIX_TEST),
+    ("pem-prefix-bound", "security_token.pem", "{0,80}", "{0,20}", PREFIX_TEST),
+    ("pem-prefix-dash", "security_token.pem", r"→!%\-]", "→!%]", PREFIX_TEST),
+    ("pem-prefix-colon", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"[\x20\t;|│┃→!%\-]", PREFIX_TEST),
+    ("pem-prefix-arrow", "security_token.pem", r"┃→!%\-]", r"┃!%\-]", PREFIX_TEST),
+    ("pem-prefix-space", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"[:;|│┃→!%\-]", PREFIX_TEST),
+    ("pem-prefix-percent", "security_token.pem", r"→!%\-]", r"→!\-]", PREFIX_TEST),
+    ("pem-prefix-dash-run-guard", "security_token.pem", "-{1,4}", "-+", PREFIX_TEST),
+    ("pem-prefix-quote-guard", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"""[\x20\t:;|│┃→!%"\-]""", "prose_and_public_material_remain_untouched"),
+    ("pem-short-last-line", "security_token.pem", "{1,31}", r"{1,31}\b\B", PREFIX_TEST),
+    ("pem-line-suffix", "security_token.pem", r"[\x20\t]*(?:[│┃|\]\}\-]{1,4}[\x20\t]*)?", "", PREFIX_TEST),
+    ("pem-word-diff-suffix", "security_token.pem", r"|\]\}", r"|\}", PREFIX_TEST),
+    ("pem-entity-tab", "security_token.pem", r"|(?i:&\#(?:0*9|x0*9);|&Tab;)", "", PREFIX_TEST),
+    ("pem-paragraph", "security_token.pem", r"(?i:</p>[\x20\t\r\n]*<p>)|", "", PREFIX_TEST),
+    ("pem-serialized-markup", "security_token.pem", r'''|<(?:[^bB\r\n\\<"\']|[bB](?:[^rR\r\n\\<"\']|[rR][^\x20/>\r\n\\<"\']))''', "", HEADER_TEST),
     ("pem-xml-entities", "security_token.pem", r"(?:(?i:&\#(?:0*13|x0*d);))?(?:(?i:&\#(?:0*10|x0*a);)|&NewLine;)", r"(?i:&\#(?:10|x0a);)", "numbered_bulleted_and_entity_framed_private_keys_stay_whole"),
 ]
 
