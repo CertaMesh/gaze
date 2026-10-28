@@ -4136,24 +4136,24 @@ mod tests {
             let mut transaction = session.begin_transaction();
             let dictionaries = DictionaryBundle::default();
             let locales = [LocaleTag::Global];
-            let mut pseudonymizer = PipelineRequestPseudonymizer::new(
-                &pipeline,
-                &locales,
-                &dictionaries,
-                &mut transaction,
-            );
-            let mut ctx = RequestTransformContext::new(
-                &mut pseudonymizer,
-                WireFormat::Json,
-                CodecLimits::default(),
-            );
-            let protected = crate::AnthropicMessagesCodec
-                .protect_request(&bytes, &mut ctx)
-                .unwrap()
-                .bytes()
-                .to_vec();
-            drop(ctx);
-            drop(pseudonymizer);
+            let protected = {
+                let mut pseudonymizer = PipelineRequestPseudonymizer::new(
+                    &pipeline,
+                    &locales,
+                    &dictionaries,
+                    &mut transaction,
+                );
+                let mut ctx = RequestTransformContext::new(
+                    &mut pseudonymizer,
+                    WireFormat::Json,
+                    CodecLimits::default(),
+                );
+                crate::AnthropicMessagesCodec
+                    .protect_request(&bytes, &mut ctx)
+                    .unwrap()
+                    .bytes()
+                    .to_vec()
+            };
             assert!(!protected
                 .windows(b"alice@example.invalid".len())
                 .any(|window| window == b"alice@example.invalid"));
