@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run the remaining PR ritual and record per-command exits and output tails."""
+import argparse
 import datetime
 import hashlib
 import json
@@ -53,6 +54,10 @@ def stop_child(child):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--xtask-only", action="store_true",
+                        help="run the thirteen xtask gates with a separate evidence record")
+    args = parser.parse_args()
     if os.environ.get("CARGO_TARGET_DIR"):
         raise RuntimeError("use cwd-relative Cargo targets")
     environment = dict(os.environ, CARGO_BUILD_JOBS="2", CARGO_PROFILE_DEV_DEBUG="0",
@@ -67,16 +72,19 @@ def main():
     commands = [("workspace-tests", ["python3", "scripts/anvil/test_nonempty.py", "cargo", "test", "--locked", "--workspace", "--all-features"]),
                 ("cargo-deny", ["cargo", "deny", "check"])]
     commands.extend((gate, ["cargo", "run", "--locked", "-p", "xtask", "--", gate]) for gate in gates)
-    OUTPUT.mkdir(parents=True, exist_ok=True)
+    if args.xtask_only:
+        commands = commands[2:]
+    output = OUTPUT.with_name("pr-ritual-xtask") if args.xtask_only else OUTPUT
+    output.mkdir(parents=True, exist_ok=True)
     report = {"schema": "gaze-pr-ritual-v1", "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "started_at": now(),
               "environment": {key: environment[key] for key in ("CARGO_BUILD_JOBS", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG", "CARGO_INCREMENTAL", "RUSTUP_TOOLCHAIN", "GAZE_DISABLE_OS_KEYSTORE")},
               "commands": [], "planned_commands": len(commands), "completed": False}
 
     def save():
-        temporary = OUTPUT / "summary.json.tmp"
+        temporary = output / "summary.json.tmp"
         temporary.write_text(json.dumps(report, indent=2) + "\n")
-        temporary.replace(OUTPUT / "summary.json")
+        temporary.replace(output / "summary.json")
 
     save()
     for index, (name, command) in enumerate(commands, 1):
@@ -84,7 +92,7 @@ def main():
         if size >= 13.5 * GIB or free < 102 * GIB:
             raise RuntimeError("insufficient headroom for the 15 GiB target cap and 100 GiB disk floor")
         print(f"PR RITUAL {index}/{len(commands)}: {name}", flush=True)
-        log = OUTPUT / f"{index:02}-{name}.log"
+        log = output / f"{index:02}-{name}.log"
         started = now()
         resource_stop = None
         with log.open("wb") as stream:
