@@ -63,7 +63,7 @@ def main():
             result = subprocess.run(["anvil", "run", str(worktree), "--", "env", "CARGO_BUILD_JOBS=2",
                                      "GAZE_DISABLE_OS_KEYSTORE=1", "nice", "-n", "10", "cargo", "test",
                                      "--locked", "-p", "gaze-types", "--features", "phone-parser",
-                                     "--test", "phone_fixture_probe", "--", "--nocapture"], cwd=ROOT,
+                                     "--test", "phone_fixture_probe", "--", "--nocapture"], cwd=worktree,
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             (output / (side + ".log")).write_bytes(result.stdout)
             print(result.stdout.decode(), flush=True)
