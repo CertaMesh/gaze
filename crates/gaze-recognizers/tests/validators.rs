@@ -942,3 +942,101 @@ fn hard_boundary_preserves_recorded_card_and_verification_code() {
     assert_eq!(session.snapshot_entries()[0].raw, raw);
     assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
 }
+
+#[test]
+fn hard_boundary_recorded_codes_preserve_all_lengths_and_separators() {
+    let class = PiiClass::custom("credit_card").unwrap();
+    let detector = RegexDetector::with_rulepack_fields(
+        r"Card: (\d(?:[\s-]?\d){12,22})\b",
+        class.clone(),
+        "recorded.card",
+        vec![gaze::LocaleTag::Global],
+        0.9,
+        50,
+        "counter",
+        Some(vec![1]),
+        Vec::new(),
+        Some(ValidatorKind::Luhn),
+        None,
+    )
+    .unwrap()
+    .with_validator_on_fail(gaze_types::ValidatorOnFail::Record)
+    .unwrap();
+    let pipeline = Pipeline::builder()
+        .recognizer(detector)
+        .rule(ClassRule::new(class, Action::Tokenize))
+        .build()
+        .unwrap();
+    let mut pans = vec!["378282246310005".to_owned()];
+    for length in 13..=19 {
+        for prefix in ["4", "37", "50"] {
+            let body = format!("{prefix}{}", "0".repeat(length - prefix.len() - 1));
+            let sum: u32 = body
+                .bytes()
+                .rev()
+                .enumerate()
+                .map(|(index, digit)| {
+                    let digit = u32::from(digit - b'0');
+                    let product = if index % 2 == 0 { digit * 2 } else { digit };
+                    product / 10 + product % 10
+                })
+                .sum();
+            let pan = format!("{body}{}", (10 - sum % 10) % 10);
+            assert!(ValidatorKind::Luhn.validates(&pan));
+            pans.push(pan);
+        }
+    }
+    let removed = regex::Regex::new(r"\A\p{Default_Ignorable_Code_Point}\z").unwrap();
+    let spaces = regex::Regex::new(r"\A\p{Zs}\z").unwrap();
+    let mut separators = Vec::new();
+    let mut removed_count = 0;
+    for ch in (0..=0x10ffff).filter_map(char::from_u32) {
+        let text = ch.to_string();
+        if removed.is_match(&text) {
+            removed_count += 1;
+            separators.push(text);
+        } else if spaces.is_match(&text) {
+            separators.push(text);
+        }
+    }
+    assert_eq!(removed_count, 4174);
+    separators.extend(
+        [
+            "-",
+            "\t",
+            "\n",
+            "\r\n",
+            "\u{2011}",
+            "\u{200b}\u{2060}\u{ad}",
+        ]
+        .map(str::to_owned),
+    );
+    for (index, separator) in separators.iter().enumerate() {
+        if index % 256 == 0 || index + 1 == separators.len() {
+            eprintln!(
+                "RECORDED CARD CODES {}/{} separators, {} layouts each",
+                index + 1,
+                separators.len(),
+                pans.len() * 2
+            );
+        }
+        for pan in &pans {
+            for code in ["123", "1234"] {
+                let value = format!("{pan}{separator}{code}");
+                let raw = format!("Card: {value}");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let clean = clean_text(&pipeline, &session, &raw);
+                assert_eq!(
+                    gaze::token_shape::pattern().replace_all(&clean, "\0"),
+                    "Card: \0",
+                    "PAN length {}, code length {}, separator {separator:?}",
+                    pan.len(),
+                    code.len()
+                );
+                assert_eq!(session.snapshot_entries().len(), 1);
+                assert_eq!(session.snapshot_entries()[0].raw, value);
+                assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+            }
+        }
+    }
+}
