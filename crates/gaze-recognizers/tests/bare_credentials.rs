@@ -229,6 +229,8 @@ fn prose_and_public_material_remain_untouched() {
         format!("BEGIN = \"-----BEGIN PRIVATE KEY-----\"\nHASH = \"{SHA}\""),
         format!("-----BEGIN PRIVATE KEY-----\nHASH = \"{SHA}\""),
         format!("-----BEGIN PRIVATE KEY-----\nsha256 {SHA} is the checksum of the empty file\n"),
+        // The same prose with a base64 digest: the first body line must end its line.
+        "-----BEGIN PRIVATE KEY-----\nsha256 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU= is the checksum\n".into(),
         "docs/a.md:3:-----BEGIN PRIVATE KEY-----\ndocs/a.md:4:Paste the key body here, 2026 edition.".into(),
         "-----BEGIN PRIVATE KEY-----\nNote: see the internationalization guide, chapter 12.".into(),
         prefixed_lines(&long_pem("PUBLIC KEY", &[]), "\n", |_| "-".into()),
@@ -591,6 +593,142 @@ fn tool_diff_and_gutter_prefixed_private_keys_stay_whole() {
     // Nor is a quote the end of a prefix before a quoted hash.
     let raw = format!("{truncated}\n\"{SHA}\"");
     assert_whole(&core, &raw, &[&truncated]);
+    // ANSI SGR colours around diff, grep and plain lines.
+    let diff: Vec<_> = key
+        .iter()
+        .map(|line| format!("\x1b[31m-{line}\x1b[m"))
+        .collect();
+    let grep: Vec<_> = (1..)
+        .zip(&key)
+        .map(|(n, line)| {
+            format!("\x1b[35mk.pem\x1b[m\x1b[36m:\x1b[m\x1b[32m{n}\x1b[m\x1b[36m:\x1b[m{line}")
+        })
+        .collect();
+    let plain: Vec<_> = key
+        .iter()
+        .map(|line| format!("\x1b[32m{line}\x1b[0m"))
+        .collect();
+    for lines in [diff, grep, plain] {
+        let raw = lines.join("\n");
+        assert_whole(&core, &raw, &[&armour(&raw, "PRIVATE KEY")]);
+    }
+}
+
+/// The span from the first BEGIN line through the end of `body`.
+fn from_begin(body: &str) -> &str {
+    &body[body.find("-----BEGIN").unwrap()..]
+}
+
+#[test]
+fn truncated_private_keys_stop_before_following_prose_and_armour() {
+    let core = core();
+    let key = long_pem("PRIVATE KEY", &[]);
+    let prose = "Note: rotate this key now\nThe deploy user owns it\nTicket OPS 4521 tracks it\nThanks\n\nNext section starts here\n";
+    let full = key[..3].to_vec();
+    let short = [&key[..2], &key[4..5]].concat();
+    // Letters-only prose joins until punctuation, as behind a gutter, and no further.
+    for lines in [&full, &short] {
+        let body = lines.join("\n");
+        let raw = format!("{body}\n{prose}");
+        assert_whole(&core, &raw, &[&format!("{body}\nNote")]);
+    }
+    let diff = prefixed_lines(&full, "\n", |_| "-".into());
+    let grep = prefixed_lines(&full, "\n", |n| format!("k.pem:{n}:"));
+    for body in [diff, grep] {
+        let raw = format!("{body}\n{prose}");
+        assert_whole(&core, &raw, &[&format!("{}\nNote", from_begin(&body))]);
+    }
+    let raw = format!(
+        r#"{{"k": "{}\n{}"}}"#,
+        full.join(r"\n"),
+        prose.replace('\n', r"\n")
+    );
+    assert_whole(&core, &raw, &[&format!(r"{}\nNote", full.join(r"\n"))]);
+    // A generic-prefixed short last line stays protected; the prose does not join.
+    let body = prefixed_lines(&short, "\n", |_| "-".into());
+    let raw = format!("{body}\n{prose}");
+    assert_whole(&core, &raw, &[&format!("{}\nNote", from_begin(&body))]);
+    // Behind a prefix without spaces, even when the line ends at a closing quote.
+    for newline in [r"\n", "<br>"] {
+        let body = prefixed_lines(&short, newline, |n| format!("k.pem:{n}:"));
+        let raw = format!(r#"{{"k": "{body}"}}"#);
+        assert_whole(&core, &raw, &[from_begin(&body)]);
+    }
+    // A following armour line keeps all of its dashes.
+    let short_lines = short.clone();
+    let short = short.join("\n");
+    let cert = format!(
+        "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----",
+        key[2]
+    );
+    for tail in [cert, format!("-----END CERTIFICATE----- sha256:{SHA}")] {
+        let raw = format!("{short}\n{tail}");
+        assert_whole(&core, &raw, &[&short]);
+        let body = prefixed_lines(&short_lines, "\n", |_| "-".into());
+        let raw = format!("{body}\n-{tail}");
+        assert_whole(&core, &raw, &[from_begin(&body)]);
+    }
+    // A foreign END line is not a body line in any position.
+    let foreign = format!("-----END CERTIFICATE----- sha256:{SHA}");
+    assert_whole(&core, &format!("{}\n{foreign}", key[0]), &[]);
+    let body = format!("{}\n- {}\n- {}", key[0], key[1], key[4]);
+    assert_whole(&core, &format!("{body}\n{foreign}"), &[&body]);
+    let body = format!("{}\n- {}", key[0], key[1]);
+    let raw = format!("{body}\n{foreign}\n{}", key[5]);
+    assert_whole(&core, &raw, &[&body]);
+    // Each prefix site: a foreign END line or a quoted value with a non-hex
+    // (base64) digest after every body position, open or before a later END.
+    let digest = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
+    let (begin, end) = (&key[0], &key[5]);
+    for foreign in [
+        format!("-----END CERTIFICATE----- sha256-{digest}"),
+        format!("\"{digest}\""),
+    ] {
+        for body in [
+            begin.clone(),
+            format!("{begin}\n-{}", key[1]),
+            format!("{begin}\n-{}\n- {}", key[1], key[2]),
+            format!("{begin}\n{}", key[1]),
+            format!("{begin}\n{}\n-{}", key[1], key[2]),
+        ] {
+            let expected: &[&str] = if &body == begin { &[] } else { &[&body] };
+            for after in [String::new(), format!("\n- {}", key[3]), format!("\n{end}")] {
+                assert_whole(&core, &format!("{body}\n{foreign}{after}"), expected);
+            }
+        }
+        // A serialized newline ends the line, so the span keeps it.
+        let body = format!(r"{begin}\n-{}\n", key[1]);
+        let raw = format!(r#"{{"k": "{body}{}"}}"#, foreign.replace('"', r#"\""#));
+        assert_whole(&core, &raw, &[&body]);
+    }
+}
+
+#[test]
+fn labelled_hashes_after_private_armour_markers_stay_raw() {
+    let core = core();
+    let begin = "-----BEGIN PRIVATE KEY-----";
+    let commit = "1a2b3c4d5e6f708192a3b4c5d6e7f80912345678";
+    let upper = SHA.to_uppercase();
+    let negatives = [
+        format!("pem_header: {begin}\nfingerprint: {SHA}\n"),
+        format!("pem_header: {begin}\nfingerprint: {upper}\n"),
+        format!("error: cannot parse {begin}\nsha256: {SHA}\n"),
+        format!("loaded {begin}\nchecksum = {SHA}\n"),
+        format!("// marker {begin}\n// digest: {SHA}\n"),
+        format!("| Header | {begin} |\n| Fingerprint | {SHA} |\n"),
+        format!("Secret: {begin}\nRuleID: private-key\nFingerprint: {SHA}\n"),
+        // gitleaks-style report: armour-header-like labels, then a commit hash.
+        format!(
+            "Finding:     {begin}\nSecret:      {begin}\nRuleID:      private-key\nEntropy:     5.950000\nFile:        deploy/k.pem\nLine:        1\nCommit:      {commit}\nAuthor:      Synthetic Developer\nDate:        2026-01-01T00:00:00Z\nFingerprint: {commit}:deploy/k.pem:private-key:1\n"
+        ),
+        // trufflehog-style report.
+        format!(
+            "Detector Type: PrivateKey\nRaw result: {begin}\nCommit: {commit}\nFile: deploy/k.pem\nLine: 1\n"
+        ),
+    ];
+    for raw in negatives {
+        assert_whole(&core, &raw, &[]);
+    }
 }
 
 #[test]
@@ -726,4 +864,137 @@ fn quoted_private_key_line_arrays_remain_a_documented_limit() {
     }
     let raw = "[\"-----BEGIN PRIVATE KEY-----\", \"YourPrivateKeyGoesHere\", \"-----END PRIVATE KEY-----\"]";
     assert_whole(&core, raw, &[]);
+}
+
+#[test]
+fn every_line_prefix_site_keeps_its_guards() {
+    let core = core();
+    let key = long_pem("PRIVATE KEY", &[]);
+    let digest = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
+    let foreign = format!("-----END CERTIFICATE----- sha256-{digest}");
+    // Each row reaches one copy of a line prefix (header, blank, gutter, short,
+    // END-line, no-space, serialized and `<br>` positions); `¦` marks where the
+    // protected span ends, and a leading `¦` means nothing is protected.
+    let rows: [(&str, &str); 76] = [
+        ("{bg}\n{l1}¦\n{F}\n{end}", "lf"),
+        (
+            "{bg}\n{l1}¦\n-----END CERTIFICATE----- id-ab12\n{end}",
+            "lf",
+        ),
+        (
+            "{bg}\n{l1}¦\n-----END CERTIFICATE----- id-ab12\n\n{end}",
+            "lf",
+        ),
+        (
+            "{bg}\n{l1}\n-{l4}¦\n-----END CERTIFICATE----- id-ab12\n{end}",
+            "lf",
+        ),
+        ("{bg}\n{l1}¦\n-----END CERTIFICATE-----  {end}", "lf"),
+        ("{bg}\n{l1}¦\n{F}\n- {l4}", "lf"),
+        ("{bg}\n{l1}¦\n{F}", "lf"),
+        ("¦{bg}\n{F}", "lf"),
+        ("¦{bg}\nComment: x\n{F}", "lf"),
+        ("¦{bg}\n- \n-----END CERTIFICATE----- \n-{l1}", "lf"),
+        ("{bg}\n-{l1}¦\n{F}\n{end}", "lf"),
+        (
+            "{bg}\n-{l1}\n-{l4}¦\n-----END CERTIFICATE----- id-ab12\n{end}",
+            "lf",
+        ),
+        (
+            "{bg}\n-{l1}¦\n-----END CERTIFICATE----- id-ab12\n{end}",
+            "lf",
+        ),
+        (
+            "{bg}\n-{l1}¦\n-----END CERTIFICATE----- id-ab12\n\n{end}",
+            "lf",
+        ),
+        ("{bg}\n-{l1}¦\n-----END CERTIFICATE-----  {end}", "lf"),
+        ("{bg}\n-{l1}¦\n{F}", "lf"),
+        ("{bg}\n-{l1}\n- {l4}¦\n{F}\n- {l4}", "lf"),
+        ("{bg}\n-{l1}\n- {l4}¦\n{F}", "lf"),
+        ("{bg}\n-{l1}\n¦{F}", "json"),
+        ("{bg}\n-{l1}\n-{l2}¦\n{F}", "json"),
+        ("{bg}\n-{l1}\n-{l2}\n- {l4}¦\n{F}\n- {l4}", "json"),
+        ("{bg}\n-{l1}\n-{l2}\n- {l4}¦\n{F}", "json"),
+        ("{bg}\n-{l1}\n- {l4}¦\n{F}\n- {l4}", "json"),
+        ("{bg}\n-{l1}\n- {l4}¦\n{F}", "json"),
+        ("{bg}\n{l1}\nx = ¦\"{D}\n{end}", "lf"),
+        ("{bg}\n{l1}\n-{l4}\nx = ¦\"ab12\n{end}", "lf"),
+        ("{bg}\n{l1}¦\n\"ab12\"\n{end}", "lf"),
+        ("{bg}\n{l1}¦\n\"ab12\"\n\n{end}", "lf"),
+        ("{bg}\n-{l1}¦\n\"ab12\"\n{end}", "lf"),
+        ("{bg}\n-{l1}¦\n\"ab12\"\n\n{end}", "lf"),
+        ("¦{bg}\nx = \"\n-{l1}", "lf"),
+        ("{bg}\n{l1}\nx = ¦\"ab12\n{end}", "lf"),
+        ("{bg}\n-{l1}\nx = ¦\"ab12\n{end}", "lf"),
+        ("{bg}\n{l1}\n-{l4}\nx = ¦\"\n{end}", "lf"),
+        ("{bg}\n{l1}\nx = ¦\"{end}", "lf"),
+        ("{bg}\n{l1}¦\n\"{D}\n- {l4}", "lf"),
+        ("{bg}\n{l1}¦\n\"{D}", "lf"),
+        ("¦{bg}\n- \n\"\n-{l1}", "lf"),
+        ("¦{bg}\nComment: x\nx = \"{D}", "lf"),
+        ("{bg}\n-{l1}\nx = ¦\"{D}\n{end}", "lf"),
+        ("{bg}\n-{l1}\n-{l4}\nx = ¦\"\n{end}", "lf"),
+        ("{bg}\n-{l1}\nx = ¦\"{end}", "lf"),
+        ("{bg}\n-{l1}¦\n\"{D}", "lf"),
+        ("{bg}\n-{l1}\n- {l4}¦\n\"{D}\n- {l4}", "lf"),
+        ("{bg}\n-{l1}\n¦\"{D}", "br"),
+        ("{bg}\n-{l1}\n-{l2}¦\n\"{D}", "br"),
+        ("{bg}\n-{l1}\n-{l2}\n- {l4}¦\n\"{D}\n- {l4}", "br"),
+        ("{bg}\n-{l1}\n- {l4}¦\n\"{D}\n- {l4}", "br"),
+        ("{bg}\n{l1}\n-{l2}\nx=¦\"ab12", "lf"),
+        ("{bg}\n-{l1}\nx=¦\"ab12", "lf"),
+        ("{bg}\n-{l1}\nx=¦\"ab12", "br"),
+        ("{bg}\n-{l1}\n-{l2}\nx=¦\"ab12", "br"),
+        ("{bg}\n{l1}\n-{l2}\nk¦-----v:ab12", "lf"),
+        ("{bg}\n-{l1}\nk¦-----v:ab12", "lf"),
+        ("{bg}\n-{l1}\nk¦-----v:ab12", "br"),
+        ("{bg}\n-{l1}\n-{l2}\nk¦-----v:ab12", "br"),
+        ("{bg}\n{l1}\n-{l2}\nk:4¦:{H}", "lf"),
+        ("{bg}\n-{l1}\nk:4¦:{H}", "lf"),
+        ("{bg}\n-{l1}\nk:4¦:{H}", "br"),
+        ("{bg}\n-{l1}\n-{l2}\nk:4¦:{H}", "br"),
+        ("{bg}\n{l1}\n-{l2}\nAsk Dana x¦:ab12", "lf"),
+        ("{bg}\n-{l1}\nAsk Dana x¦:ab12", "lf"),
+        ("{bg}\n-{l1}\nAsk Dana x¦:ab12", "br"),
+        ("{bg}\n-{l1}\n-{l2}\nAsk Dana x¦:ab12", "br"),
+        ("{bg}\n{l1}\n-{l2}\nk¦-- v:ab12", "lf"),
+        ("{bg}\n-{l1}\nk¦-- v:ab12", "lf"),
+        ("{bg}\n-{l1}\nk¦-- v:ab12", "br"),
+        ("{bg}\n-{l1}\n-{l2}\nk¦-- v:ab12", "br"),
+        ("¦{bg}\n-{H}", "lf"),
+        ("{bg}\n{l1}\n-{l2}¦\n-{H}", "lf"),
+        ("{bg}\n-{l1}¦\n-{H}", "lf"),
+        ("{bg}\n-{l1}\n¦-{H}", "br"),
+        ("{bg}\n-{l1}\n-{l2}¦\n-{H}", "br"),
+        ("{bg}\n{l1}¦\n-{H}\n{end}", "lf"),
+        ("{bg}\n-{l1}¦\n-{H}\n{end}", "lf"),
+        ("{bg}\n-{l1}\n¦-{H}", "json"),
+    ];
+    for (template, framing) in rows {
+        let text = template
+            .replace("{H}", SHA)
+            .replace("{bg}", &key[0])
+            .replace("{l1}", &key[1])
+            .replace("{l2}", &key[2])
+            .replace("{l4}", &key[4])
+            .replace("{end}", &key[5])
+            .replace("{F}", &foreign)
+            .replace("{D}", digest);
+        let (head, tail) = text.split_once('¦').unwrap();
+        let frame = |s: &str| match framing {
+            "json" => s.replace('"', r#"\""#).replace('\n', r"\n"),
+            "br" => s.replace('\n', "<br>"),
+            _ => s.to_string(),
+        };
+        let body = frame(&format!("{head}{tail}"));
+        let raw = if framing == "json" {
+            format!(r#"{{"k": "{body}"}}"#)
+        } else {
+            body
+        };
+        let span = frame(head);
+        let expected: &[&str] = if head.is_empty() { &[] } else { &[&span] };
+        assert_whole(&core, &raw, expected);
+    }
 }

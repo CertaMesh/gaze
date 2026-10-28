@@ -18,6 +18,8 @@ BOUNDARY_TEST = "issuer_boundaries_protect_framing_and_preserve_identifiers"
 PEM_TEST = "truncated_mismatched_and_framed_private_keys_are_whole_and_restorable"
 PREFIX_TEST = "tool_diff_and_gutter_prefixed_private_keys_stay_whole"
 HEADER_TEST = "literal_armour_headers_accept_free_text_and_extension_names"
+TRUNCATION_TEST = "truncated_private_keys_stop_before_following_prose_and_armour"
+SITE_TEST = "every_line_prefix_site_keeps_its_guards"
 PROBES = [
     ("bare-disabled", "security_token.bare", "enabled = true", "enabled = false", "bare_vendor_prefixes_are_whole_restorable_credentials"),
     ("opaque-ghs-dot", "security_token.bare", r"|\.(?:\z|[^A-Za-z0-9_\\-])", "", "bare_vendor_prefixes_are_whole_restorable_credentials"),
@@ -69,11 +71,10 @@ PROBES = [
     ("pem-prefix-arrow", "security_token.pem", r"┃→!%\-]", r"┃!%\-]", PREFIX_TEST),
     ("pem-prefix-space", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"[:;|│┃→!%\-]", PREFIX_TEST),
     ("pem-prefix-percent", "security_token.pem", r"→!%\-]", r"→!\-]", PREFIX_TEST),
-    ("pem-prefix-dash-run-guard", "security_token.pem", "-{1,4}", "-+", PREFIX_TEST),
-    ("pem-prefix-quote-guard", "security_token.pem", r"[\x20\t:;|│┃→!%\-]", r"""[\x20\t:;|│┃→!%"\-]""", PREFIX_TEST),
     ("pem-short-last-line", "security_token.pem", "{1,31}", r"{1,31}\b\B", PREFIX_TEST),
     ("pem-ended-alternative", "security_token.pem", "-----END", r"\b\B-----END", PREFIX_TEST),
-    ("pem-prefixed-line-end", "security_token.pem", r"\r?(?m:$)|", "|", "prose_and_public_material_remain_untouched"),
+    ("pem-serialized-line-end", "security_token.pem", "&NewLine;))))))", r"&NewLine;))\b\B))))", TRUNCATION_TEST),
+    ("pem-ansi-sgr", "security_token.pem", r"(?:\x1b\[[0-9;]{0,16}m){0,2}", "", PREFIX_TEST),
     ("pem-line-suffix", "security_token.pem", r"[\x20\t]*(?:[│┃|\]\}\-]{1,4}[\x20\t]*)?", "", PREFIX_TEST),
     ("pem-word-diff-suffix", "security_token.pem", r"|\]\}", r"|\}", PREFIX_TEST),
     ("pem-entity-tab", "security_token.pem", r"|(?i:&\#(?:0*9|x0*9);|&Tab;)", "", PREFIX_TEST),
@@ -81,6 +82,40 @@ PROBES = [
     ("pem-serialized-markup", "security_token.pem", r'''|<(?:[^bB\r\n\\<"\']|[bB](?:[^rR\r\n\\<"\']|[rR][^\x20/>\r\n\\<"\']))''', "", HEADER_TEST),
     ("pem-xml-entities", "security_token.pem", r"(?:(?i:&\#(?:0*13|x0*d);))?(?:(?i:&\#(?:0*10|x0*a);)|&NewLine;)", r"(?i:&\#(?:10|x0a);)", "numbered_bulleted_and_entity_framed_private_keys_stay_whole"),
 ]
+# Line-prefix guards are spelled out at every site of the pattern; mutate each
+# one at a single site so every copy is pinned by a behavioral row.
+SITE_GUARDS = [
+    ("pem-prefix-dash-run-guard", "-{1,4}", "-+", 25),
+    ("pem-prefix-quote-guard", r"[\x20\t:;|│┃→!%\-]", r"""[\x20\t:;|│┃→!%"\-]""", 21),
+    ("pem-tight-prefix-quote-guard", r"[:;|│┃→!%\-]", r"""[:;|│┃→!%"\-]""", 4),
+    ("pem-tight-prefix-no-space", r'[^\r\n\\"<&%\x20\t-]', r'[^\r\n\\"<&%-]', 8),
+    ("pem-short-run-boundary", r"[A-Za-z0-9]\b", "[A-Za-z0-9]", 8),
+    ("pem-line-end", r"\r?(?m:$)", "", 5),
+]
+PROBES += [
+    (f"{name}-{n:02}", "security_token.pem", before, after, SITE_TEST, (n, copies))
+    for name, before, after, copies in SITE_GUARDS
+    for n in range(copies)
+]
+# Each of the 7 non-hex runs spells its non-hex unit 32 times; mutate one run.
+PROBES += [
+    (f"pem-nonhex-run-{n}", "security_token.pem", "[G-Zg-z+/=]", "[0-9A-Za-z+/=]", SITE_TEST, (n, 224, 32))
+    for n in range(7)
+]
+
+
+def mutate(section, before, after, site, name):
+    """Replace every copy, or with `site = [(n, copies[, width])]` only group n (0-based) of `width` adjacent copies."""
+    if not site:
+        return section.replace(before, after)
+    [(occurrence, copies, *width)] = site
+    width = width[0] if width else 1
+    starts = [i for i in range(len(section)) if section.startswith(before, i)]
+    if len(starts) != copies:
+        raise AssertionError(f"{name}: expected {copies} copies of the target, found {len(starts)}")
+    for start in reversed(starts[occurrence * width:(occurrence + 1) * width]):
+        section = section[:start] + after + section[start + len(before):]
+    return section
 
 
 def main():
@@ -97,7 +132,7 @@ def main():
     original = RULEPACK.read_bytes()
     logs = Path(tempfile.mkdtemp(prefix="gaze-bare-credential-mutations-"))
     try:
-        for name, rule, before, after, test in selected_probes:
+        for name, rule, before, after, test, *site in selected_probes:
             sections = original.decode().split("[[recognizers]]")
             selected = [i for i, section in enumerate(sections) if f'id = "{rule}"\n' in section]
             if len(selected) != 1:
@@ -105,7 +140,7 @@ def main():
             index = selected[0]
             if before not in sections[index]:
                 raise AssertionError(f"{name}: mutation no longer identifies its target")
-            sections[index] = sections[index].replace(before, after)
+            sections[index] = mutate(sections[index], before, after, site, name)
             RULEPACK.write_text("[[recognizers]]".join(sections))
             log = logs / (name + ".log")
             with log.open("w") as output:
