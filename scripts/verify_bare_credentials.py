@@ -55,7 +55,7 @@ PROBES = [
     ("pem-entity-disabled", "security_token.pem", r"|(?:(?i:&\#(?:0*13|x0*d);))?(?:(?i:&\#(?:0*10|x0*a);)|&NewLine;)", "", "numbered_bulleted_and_entity_framed_private_keys_stay_whole"),
     ("pem-minimum", "security_token.pem", "{16}", "{1}", PEM_TEST),
     ("pem-prose-fp", "security_token.pem", r"(?:[A-Za-z0-9+/=]|\\/|%2[BbFf]|%3[Dd]){16}", r"(?:[A-Za-z0-9+/=][\x20\t\r\n]*){16}", "prose_and_public_material_remain_untouched"),
-    ("pem-truncation", "security_token.pem", "-----)?)", "-----))", PEM_TEST),
+    ("pem-truncation", "security_token.pem", "-----|", r"-----|\b\B", PEM_TEST),
     ("pem-header-allowlist", "security_token.pem", r"[A-Za-z][A-Za-z0-9-]*:[^\r\n]*", r"(?:Proc-Type:[\x20\t]*4,ENCRYPTED|DEK-Info:[\x20\t]*[A-Za-z0-9-]+,[0-9A-Fa-f]+|(?:Version|Comment|Charset):[^\r\n\\<>\"\']*)", "literal_armour_headers_accept_free_text_and_extension_names"),
     ("pem-serialized-header-boundary", "security_token.pem", r'''[^\r\n\\<"\']|''', r"[^\r\n]|", "literal_armour_headers_accept_free_text_and_extension_names"),
     ("pem-header-indentation", "security_token.pem", r"[\x20\t]*[A-Za-z][A-Za-z0-9-]*:", "[A-Za-z][A-Za-z0-9-]*:", "literal_armour_headers_accept_free_text_and_extension_names"),
