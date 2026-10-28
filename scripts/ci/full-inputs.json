@@ -543,6 +543,7 @@
     "docs/reference/benchmarks/observations-v0.16.0.jsonl.gz",
     "docs/reference/benchmarks/observations-v0.17.0-independent-v1.jsonl.gz",
     "docs/reference/benchmarks/observations-v0.17.0.jsonl.gz",
+    "docs/reference/benchmarks/outcome-counters-v0.17.0.json",
     "docs/reference/benchmarks/password-code-credentials/README.md",
     "docs/reference/benchmarks/password-code-credentials/base-native-v1-export.json",
     "docs/reference/benchmarks/password-code-credentials/base-native-v1-observations.jsonl.gz",
