@@ -47,13 +47,26 @@ jobs:
         if: steps.dylint-tools.outputs.cache-hit != 'true'
         run: cargo install --locked --version 6.0.4 cargo-dylint dylint-link
       - name: Cache lint, driver, and workspace targets
+        id: dylint-target
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             lint/dylint/target
             target
             ~/.dylint_drivers
-          key: dylint-target-${{ runner.os }}-${{ runner.arch }}-6.0.4-${{ hashFiles('Cargo.lock', 'lint/dylint/Cargo.toml', 'lint/dylint/Cargo.lock', 'lint/dylint/src/**', 'rust-toolchain.toml', 'lint/dylint/rust-toolchain.toml') }}
+          key: dylint-target-${{ runner.os }}-${{ runner.arch }}-6.0.4-${{ hashFiles('Cargo.lock', 'lint/dylint/Cargo.toml', 'lint/dylint/Cargo.lock', 'lint/dylint/src/**', 'rust-toolchain.toml', 'lint/dylint/rust-toolchain.toml') }}-clippy-main
+      # A cold Dylint driver build clones rust-clippy and checks out `master`
+      # (hardcoded in dylint_internal 5.0.0 through 6.2.0). rust-clippy now
+      # only has `main`, so serve the clone from a local mirror whose `master`
+      # tracks upstream `main`. Drop this once dylint clones `main`.
+      - name: Serve rust-clippy master from main
+        if: steps.dylint-target.outputs.cache-hit != 'true'
+        run: |
+          mirror="$RUNNER_TEMP/rust-clippy.git"
+          git clone --bare --quiet https://github.com/rust-lang/rust-clippy "$mirror"
+          git -C "$mirror" update-ref refs/heads/master refs/heads/main
+          git -C "$mirror" symbolic-ref HEAD refs/heads/master
+          git config --global url."$mirror".insteadOf https://github.com/rust-lang/rust-clippy
       - name: UI fixtures
         working-directory: lint/dylint
         run: cargo test --locked --test ui
