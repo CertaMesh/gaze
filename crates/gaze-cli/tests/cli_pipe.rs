@@ -17,6 +17,27 @@ use serde_json::{json, Value};
 use serial_test::file_serial;
 use tempfile::tempdir;
 
+#[test]
+fn caller_value_too_short_refuses_without_output_or_value() {
+    let dir = tempdir().unwrap();
+    let context = dir.path().join("context.json");
+    for value in ["Qx", "123", "A7", "  Q\u{a0}x  "] {
+        fs::write(&context, json!({"record":{"name":value}}).to_string()).unwrap();
+        let output = Command::cargo_bin("gaze")
+            .unwrap()
+            .args(["clean", "--context-json", context.to_str().unwrap()])
+            .write_stdin("plain text")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(8));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            output.stderr,
+            b"{\"error\":\"Untransformable\",\"exit\":8,\"reason\":\"caller_value_too_short\"}\n"
+        );
+    }
+}
+
 #[cfg(feature = "perf-timers")]
 #[path = "support/perf_invocation_snapshot.rs"]
 mod perf_invocation_snapshot;

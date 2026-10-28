@@ -11,6 +11,34 @@ fn corpus(text: &str, spans: serde_json::Value) -> tempfile::NamedTempFile {
 }
 
 #[test]
+fn caller_value_too_short_eval_warns_and_measures_without_value() {
+    let file = corpus("Qx", json!([{"start":0,"end":2,"label":"name"}]));
+    let context = tempfile::NamedTempFile::new().unwrap();
+    fs::write(
+        context.path(),
+        r#"{"record":{"Qx":"Qx"},"field_map":{"/Qx":"Name"}}"#,
+    )
+    .unwrap();
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "eval",
+            file.path().to_str().unwrap(),
+            "--json",
+            "--context-json",
+            context.path().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["leaked_bytes"], 2);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("caller_value_too_short"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("Qx"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Qx"));
+}
+
+#[test]
 fn eval_human_golden_and_json_metrics() {
     let pii = "alice@example.invalid";
     let text = format!("Contact {pii}.");
