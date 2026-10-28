@@ -318,7 +318,21 @@ fn toml_location(err: &impl std::fmt::Display) -> String {
     }
 }
 
+/// The exit-8 refusal for a confirmed sensitive value with no safe rendering. Every pipeline
+/// error mapper checks this first, so the contract holds with or without safety nets.
+pub(crate) fn untransformable_error(err: &gaze::Error) -> Option<CliError> {
+    match err {
+        gaze::Error::Protection(gaze::ProtectionError::Untransformable { reason, .. }) => {
+            Some(CliError::Untransformable { reason: *reason })
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn map_pipeline_error(err: gaze::Error) -> CliError {
+    if let Some(refusal) = untransformable_error(&err) {
+        return refusal;
+    }
     match err {
         gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
         // Same envelope as an unreadable policy file, so scripts see one PolicyOpen / exit 4 for
@@ -435,6 +449,40 @@ impl RedactionLogger for ArcLogger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn untransformable(reason: gaze_types::UntransformableReason) -> gaze::Error {
+        gaze::Error::Protection(gaze::ProtectionError::Untransformable {
+            reason,
+            field_path: gaze_types::FieldPath::new(["synthetic-key@example.invalid".into()]),
+        })
+    }
+
+    #[test]
+    fn untransformable_maps_to_exit_eight_through_every_pipeline_mapper() {
+        let reason = gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath;
+        for mapped in [
+            map_pipeline_error(untransformable(reason)),
+            crate::pipeline::run::map_safety_net_pipeline_error(untransformable(reason)),
+        ] {
+            assert!(
+                matches!(mapped, CliError::Untransformable { reason: r } if r == reason),
+                "{mapped:?}"
+            );
+            assert_eq!(mapped.exit_code(), 8);
+        }
+    }
+
+    #[test]
+    fn other_protection_errors_keep_the_pipeline_exit() {
+        for error in [
+            gaze::ProtectionError::Residual,
+            gaze::ProtectionError::Provenance,
+        ] {
+            let mapped = map_pipeline_error(gaze::Error::Protection(error.clone()));
+            assert!(matches!(mapped, CliError::Pipeline), "{mapped:?}");
+            assert!(untransformable_error(&gaze::Error::Protection(error)).is_none());
+        }
+    }
 
     #[test]
     fn policy_less_selection_matches_core_pipeline_config() {

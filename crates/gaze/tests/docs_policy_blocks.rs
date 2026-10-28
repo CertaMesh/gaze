@@ -246,7 +246,7 @@ fn every_policy_doc_toml_block_is_marked_and_loads() {
         skipped, expected,
         "not-a-policy blocks must match NOT_A_POLICY exactly"
     );
-    assert_eq!(checked, 31, "policy doc block inventory changed");
+    assert_eq!(checked, 32, "policy doc block inventory changed");
 }
 
 fn assert_invalid_policy_is_checked(prefix: &str, open: &str, close: &str) {
