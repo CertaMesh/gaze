@@ -407,6 +407,7 @@
     "docs/reference/benchmarks/gates/nym-inference-reuse/bounded-proof.json",
     "docs/reference/benchmarks/gold-gap-sample-v3.json",
     "docs/reference/benchmarks/government-id-cells.md",
+    "docs/reference/benchmarks/history-plans/generator-v26.json",
     "docs/reference/benchmarks/known-record-attribution-v4-gain.json",
     "docs/reference/benchmarks/known-record-attribution-v4-v1.json",
     "docs/reference/benchmarks/known-record-attribution-v4-v2.json",
