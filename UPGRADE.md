@@ -53,6 +53,8 @@ an array of unescaped segments.
 `ProtectionContext::with_field` attaches a complete scalar location.
 `with_field_fragment(field, offset)` instead marks a fragment at a byte offset in
 the original leaf. `FieldContext::Fragment` cannot establish a whole-value match.
+When owned tokens split a `with_field` leaf, `protect_text_transaction` passes
+each gap between them as a `Fragment` at that gap's leaf offset.
 `Pipeline::resolve_boundary_text_transaction_in_context` accepts this context for
 strict boundary protection. Recognizers must handle absent context and translate
 fragment offsets through their normalized source spans.

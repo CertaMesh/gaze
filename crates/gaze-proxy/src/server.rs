@@ -4114,6 +4114,63 @@ mod tests {
     }
 
     #[test]
+    fn field_provenance_anthropic_codec_observer_preserves_output_manifest_and_audit() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let observer = gaze::test_support::FieldObserver::default();
+        let body = serde_json::json!({"model":"claude-test","max_tokens":16,"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_test","name":"lookup","input":{"contact":"alice@example.invalid"}}]}]});
+        let bytes = serde_json::to_vec(&body).unwrap();
+        let run = |observe: bool| {
+            let audit = gaze::test_support::AuditCapture::default();
+            let builder = if observe {
+                observer.builder()
+            } else {
+                Pipeline::builder()
+            };
+            let pipeline = builder
+                .detector(RegexDetector::emails().unwrap())
+                .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+                .rule(DefaultRule::new(Action::Preserve))
+                .redaction_logger(audit.clone())
+                .build()
+                .unwrap();
+            let mut transaction = session.begin_transaction();
+            let dictionaries = DictionaryBundle::default();
+            let locales = [LocaleTag::Global];
+            let mut pseudonymizer = PipelineRequestPseudonymizer::new(
+                &pipeline,
+                &locales,
+                &dictionaries,
+                &mut transaction,
+            );
+            let mut ctx = RequestTransformContext::new(
+                &mut pseudonymizer,
+                WireFormat::Json,
+                CodecLimits::default(),
+            );
+            let protected = crate::AnthropicMessagesCodec
+                .protect_request(&bytes, &mut ctx)
+                .unwrap()
+                .bytes()
+                .to_vec();
+            drop(ctx);
+            drop(pseudonymizer);
+            assert!(!protected
+                .windows(b"alice@example.invalid".len())
+                .any(|window| window == b"alice@example.invalid"));
+            let rows = audit.rows_without_clock();
+            assert!(!rows.is_empty());
+            let manifest = transaction.manifest_payload_for_tests().unwrap();
+            assert_eq!(manifest["entries"].as_array().unwrap().len(), 1);
+            (protected, manifest, rows)
+        };
+        assert_eq!(run(false), run(true));
+        observer.assert_field(
+            "alice@example.invalid",
+            &["messages", "0", "content", "0", "input", "contact"],
+        );
+    }
+
+    #[test]
     fn field_provenance_owned_token_gaps_are_fragments() {
         let observer = gaze::test_support::FieldObserver::default();
         let pipeline = observer.pipeline();

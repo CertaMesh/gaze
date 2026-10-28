@@ -1512,8 +1512,10 @@ impl<'session> SessionTransaction<'session> {
         snapshot_entries_from_state(&self.staged)
     }
 
-    /// Complete semantic export payload for fixture equality, excluding issue time.
+    /// Semantic export payload for fixture equality, excluding issue time.
     /// Contains owner values. Available only to test-support consumers.
+    /// The opaque-identifier secret is reduced to a presence flag so this hatch
+    /// never exports key material.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn manifest_payload_for_tests(&self) -> Result<serde_json::Value> {
@@ -1523,7 +1525,10 @@ impl<'session> SessionTransaction<'session> {
         };
         let mut payload = frozen.snapshot_payload(None);
         payload.issued_at = 0;
-        serde_json::to_value(payload).map_err(Error::SnapshotDecode)
+        let has_key = payload.opaque_identifier_key.take().is_some();
+        let mut value = serde_json::to_value(payload).map_err(Error::SnapshotDecode)?;
+        value["has_opaque_identifier_key"] = serde_json::Value::Bool(has_key);
+        Ok(value)
     }
 
     pub fn restore_strict(&self, token: &str) -> Result<String> {

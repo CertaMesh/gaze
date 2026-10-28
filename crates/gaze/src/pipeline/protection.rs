@@ -530,11 +530,32 @@ impl Pipeline {
         let mut expected = String::with_capacity(input.len());
         let mut spans = Ledger::default();
         let mut cursor = 0;
+        // Owned tokens split the leaf, so each gap is only part of the scalar.
+        let split = !ranges.is_empty();
+        let gap_context = |offset: usize| {
+            if !split {
+                return context;
+            }
+            let field = match context.field {
+                Some(gaze_types::FieldContext::WholeInput(field)) => {
+                    Some(gaze_types::FieldContext::Fragment { field, offset })
+                }
+                Some(gaze_types::FieldContext::Fragment {
+                    field,
+                    offset: base,
+                }) => Some(gaze_types::FieldContext::Fragment {
+                    field,
+                    offset: base + offset,
+                }),
+                other => other,
+            };
+            ProtectionContext { field, ..context }
+        };
         for range in ranges {
             self.protect_gap(
                 transaction,
                 &input[cursor..range.start],
-                context,
+                gap_context(cursor),
                 &mut clean,
                 &mut expected,
                 &mut spans,
@@ -557,7 +578,7 @@ impl Pipeline {
         self.protect_gap(
             transaction,
             &input[cursor..],
-            context,
+            gap_context(cursor),
             &mut clean,
             &mut expected,
             &mut spans,

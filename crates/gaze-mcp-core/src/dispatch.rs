@@ -956,6 +956,31 @@ mod tests {
     }
 
     #[test]
+    fn field_provenance_mcp_owned_token_gaps_are_fragments() {
+        let observer = gaze::test_support::FieldObserver::default();
+        let pipeline = observer.pipeline();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let token = transaction
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        let payload = serde_json::json!({"note": format!("before {token} after")});
+        let protected = protect_json(
+            &pipeline,
+            &mut transaction,
+            gaze::ProtectionContext::strict(
+                &[gaze::LocaleTag::Global],
+                &gaze_types::DictionaryBundle::default(),
+            ),
+            &payload,
+        )
+        .unwrap();
+        assert_eq!(protected, payload);
+        observer.assert_fragment("before ", 0);
+        observer.assert_fragment(" after", 7 + token.len());
+    }
+
+    #[test]
     fn field_provenance_wide_mcp_paths_retain_linear_bytes() {
         let observer = gaze::test_support::FieldObserver::default();
         let pipeline = observer.pipeline();
