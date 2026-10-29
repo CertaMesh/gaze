@@ -347,6 +347,7 @@ fn process_egress(
     policy: &ResolvedToolPolicy,
     raw_args: &serde_json::Value,
 ) -> BridgeResult<EgressResult> {
+    reject_sensitive_scalars(pipeline, locale_chain, raw_args)?;
     let mut state = EgressState {
         pipeline,
         locale_chain,
@@ -719,15 +720,15 @@ fn contains_raw_pii(
     if text.is_empty() {
         return Ok(false);
     }
-    let scan_session = gaze::Session::new(gaze::Scope::Ephemeral)
-        .map_err(|err| BridgeError::Redaction(err.to_string()))?;
+    let scan_session =
+        gaze::Session::new(gaze::Scope::Ephemeral).map_err(BridgeError::from_redaction)?;
     let clean = pipeline
         .pseudonymize_with_context(
             &scan_session,
             RawDocument::Text(text.to_string()),
             locale_chain,
         )
-        .map_err(|err| BridgeError::Redaction(err.to_string()))?;
+        .map_err(BridgeError::from_redaction)?;
     match clean {
         CleanDocument::Text(redacted) => Ok(redacted != text),
         _ => Err(BridgeError::Redaction(
@@ -736,7 +737,88 @@ fn contains_raw_pii(
     }
 }
 
+/// Scan a complete JSON document so the shared parser supplies field provenance.
+/// Scalar replacements cannot be rendered as JSON numbers or booleans reversibly;
+/// refuse them before forwarding arguments or releasing any result surface.
+fn reject_sensitive_scalars(
+    pipeline: &gaze::Pipeline,
+    locale_chain: &[gaze::LocaleTag],
+    value: &serde_json::Value,
+) -> BridgeResult<()> {
+    use gaze_types::json_tree::{self, JsonKind, JsonTreeLimits};
+    let bytes = serde_json::to_vec(value)
+        .map_err(|_| BridgeError::Redaction("JSON serialization failed".to_string()))?;
+    let tree = json_tree::parse(&bytes, JsonTreeLimits::default())
+        .map_err(|_| BridgeError::Redaction("JSON scan limits exceeded".to_string()))?;
+    let mut pending = vec![tree.root];
+    let mut scalars = Vec::new();
+    while let Some(node) = pending.pop() {
+        match node.kind {
+            JsonKind::Object(members) => pending.extend(members.into_iter().rev().map(|m| m.value)),
+            JsonKind::Array(items) => pending.extend(items.into_iter().rev()),
+            JsonKind::Number(_) => scalars.push((
+                node.span,
+                node.path,
+                gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath,
+            )),
+            JsonKind::Bool(_) => scalars.push((
+                node.span,
+                node.path,
+                gaze_types::UntransformableReason::NoSafeRendering,
+            )),
+            JsonKind::String(_) | JsonKind::Null => {}
+        }
+    }
+    if scalars.is_empty() {
+        return Ok(());
+    }
+    let text = String::from_utf8(bytes)
+        .map_err(|_| BridgeError::Redaction("JSON serialization failed".to_string()))?;
+    let scan_session =
+        gaze::Session::new(gaze::Scope::Ephemeral).map_err(BridgeError::from_redaction)?;
+    let (_, spans, report) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &scan_session,
+            RawDocument::Text(text),
+            locale_chain,
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Strict,
+                gaze::SafetyNetFallback::Strict,
+            ),
+        )
+        .map_err(BridgeError::from_redaction)?;
+    if !report.suspects.is_empty() {
+        return Err(gaze::ProtectionError::Residual.into());
+    }
+    let mut ranges = spans
+        .into_iter()
+        .map(|span| span.raw_span)
+        .collect::<Vec<_>>();
+    ranges.sort_by_key(|range| range.start);
+    let mut ranges = ranges.into_iter().peekable();
+    for (range, field_path, reason) in scalars {
+        while ranges.peek().is_some_and(|span| span.end <= range.start) {
+            ranges.next();
+        }
+        if ranges.peek().is_some_and(|span| span.start < range.end) {
+            return Err(gaze::ProtectionError::Untransformable { reason, field_path }.into());
+        }
+    }
+    Ok(())
+}
+
 fn redact_json_value(
+    pipeline: &gaze::Pipeline,
+    locale_chain: &[gaze::LocaleTag],
+    session: &gaze::Session,
+    value: &serde_json::Value,
+) -> BridgeResult<serde_json::Value> {
+    reject_sensitive_scalars(pipeline, locale_chain, value)?;
+    redact_json_leaves(pipeline, locale_chain, session, value)
+}
+
+fn redact_json_leaves(
     pipeline: &gaze::Pipeline,
     locale_chain: &[gaze::LocaleTag],
     session: &gaze::Session,
@@ -752,7 +834,7 @@ fn redact_json_value(
         serde_json::Value::Array(items) => {
             let mut out = Vec::with_capacity(items.len());
             for item in items {
-                out.push(redact_json_value(pipeline, locale_chain, session, item)?);
+                out.push(redact_json_leaves(pipeline, locale_chain, session, item)?);
             }
             Ok(serde_json::Value::Array(out))
         }
@@ -761,7 +843,7 @@ fn redact_json_value(
             for (key, item) in map {
                 out.insert(
                     key.clone(),
-                    redact_json_value(pipeline, locale_chain, session, item)?,
+                    redact_json_leaves(pipeline, locale_chain, session, item)?,
                 );
             }
             Ok(serde_json::Value::Object(out))
@@ -815,7 +897,7 @@ fn redact_segment(
             RawDocument::Text(segment.to_string()),
             locale_chain,
         )
-        .map_err(|err| BridgeError::Redaction(err.to_string()))?
+        .map_err(BridgeError::from_redaction)?
     {
         CleanDocument::Text(text) => Ok(text),
         _ => Err(BridgeError::Redaction(
