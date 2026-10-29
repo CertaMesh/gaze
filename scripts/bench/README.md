@@ -354,6 +354,25 @@ The committed [example report](fixtures/leak-diff-example.json) comes from the
 v0.17 GLiNER mechanism records, with their hashes pinned in the report.
 `test_leak_diff.py` reproduces its bytes without another benchmark capture.
 
+## Structured-input slice
+
+`structured_slice.py` reads one value-free record and reports the generator
+v26 `structured_*` cells per layer and shape. It counts false positives by
+document, by decoy value and by byte, and counts gold values protected whole.
+It also counts covered JSON/CSV syntax bytes, JSON type changes and usable
+payloads. A usable payload is not refused, has no non-gold byte covered and
+changes no JSON type. Refusals are kept apart, with a refused gold bytes
+column beside leaked; the scorer gate counts refused gold as leaked. The
+command needs no capture, model or binary:
+
+```bash
+uv run --project scripts/bench python scripts/bench/structured_slice.py \
+  target/gate/candidate/observations-v1.jsonl.gz --config policy-file --markdown
+```
+
+A record from an older generator or a different corpus is refused.
+`test_structured_input_cells.py` pins the counts on synthetic observations.
+
 ## Required local models
 
 The runner validates the model bundle before it builds or starts a benchmark
@@ -831,6 +850,20 @@ version strings, and a `releases` array. Each release has these fields:
   `model_bundles` array from the intended subject. These fields must equal the
   captured provenance. They prevent a resumed job from accepting another
   subject at the same local paths.
+
+[`generator-v29.json`](../../docs/reference/benchmarks/history-plans/generator-v29.json)
+is the combined plan for structured input (v26), invisible separators (v27/v28)
+and issuer credentials (v29). It pins v0.17.0 and v0.16.0 with their tag
+revisions, policy hashes and model bundles. Copy each release policy to
+`target/history-releases/policy-<version>.toml` and check out each tag at
+`target/history-releases/<version>`. Each `binary_sha256` is pinned from a
+producer build of its tag with `CARGO_TARGET_DIR` unset; that build is the
+`subject_build.build` receipt, and no measurement is admitted against an
+unpinned or different binary. The measured result is
+[`history-generator-v29`](../../docs/reference/benchmarks/history-generator-v29/history.md). Re-resolve `benchmark_spec` after any harness
+change and assert the recomputed object equals the committed plan's spec.
+A history dry run alone does not establish that equality. The combined corpus
+is not comparable to the standalone detection branches' earlier captures.
 
 First inspect the plan without inference. Then execute only missing jobs:
 
