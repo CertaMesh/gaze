@@ -99,7 +99,7 @@ Flags:
 | `--rulepack-bundled <name[,name...]>` | Override `[policy.rulepacks].bundled`. Comma separated. `none` disables bundled packs, matching TOML `bundled = []`. A successful run without `core` or its `core-extended` alias prints a core-floor-off notice. `core-extended` is deprecated since v0.8.0; use `core --locale=<lang>` for explicit locale-gated activation. |
 | `--rulepack-path <path>` | Override `[policy.rulepacks].paths`. Repeatable; keeps the default `core` bundle unless `--rulepack-bundled` overrides it. |
 | `--max-bytes <bytes>` | Stdin byte cap. Defaults to `10485760`. |
-| `--context-json <path>` | Typed context envelope with dictionaries, class map, and fields. |
+| `--context-json <path>` | Typed context envelope with dictionaries, class map, fields, and caller record values. A record value too short for safe matching refuses the call with exit 8 and reason `caller_value_too_short`. |
 | `--audit-db <path>` | Optional SQLite redaction-log database path for metadata-only audit entries. |
 | `--safety-net <kind>` | Repeatable `openai-filter` or `nym` selection; multiple nets stack. A CLI list replaces policy selection. `none` disables all nets for this run and cannot be combined with another value. |
 | `--safety-net-backend <backend>` | Replaces exactly one explicit `--safety-net` value. Zero or multiple values are a usage error. Cannot be combined with `--safety-net-registry`. |
@@ -412,7 +412,7 @@ Exit codes are defined by `CliError` in [`src/error.rs`](src/error.rs).
 | `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, `SafetyNetConfig` (missing backend command/checkpoint or safety-net flags supplied without the matching feature), or `SafetyNetArtifactMissing` (Axis-1 fail-closed when a backend's pinned artifact is absent, including a missing `SHA256SUMS`). |
 | `3` | `UnknownToken`, `InvalidSignature`, `InvalidBlobVersion`, `BlobExpired`, `Pipeline`, sanitized panic path, and `SafetyNetFailure` variants: `Unavailable`, `WeightsMissing`, `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`, `InvalidOutput`, `SuspectedLeak` (strict mode only). |
 | `4` | `Io`, `PolicyOpen`, `SessionFile` (missing, existing, unreadable, or non-session `--session-out` / `--session-file` path). |
-| `8` | `Untransformable`: a confirmed sensitive value has no safe reversible rendering, so nothing was written. Stderr carries only the closed `reason`. |
+| `8` | `Untransformable`: a confirmed sensitive value has no safe reversible rendering, so nothing was written. Includes caller record values too short for safe matching (`caller_value_too_short`). Stderr carries only the closed `reason`. |
 
 Safety-net summary: exit `3` means the safety net (or strict mode) closed
 the door; exit `0` with no `leak_report.stats.suspect_count` means a clean

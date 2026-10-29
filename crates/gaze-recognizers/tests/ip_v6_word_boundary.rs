@@ -190,7 +190,7 @@ fn explicit_dictionary_can_protect_documentation_addresses() {
         .expect("pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let input = "host 192.0.2.1 and 2001:db8::1";
-    let dictionaries = gaze::dictionary_bundle_from_context(&context);
+    let dictionaries = gaze::dictionary_bundle_from_context(&context).unwrap();
     let (clean, manifest, _) = pipeline
         .clean_with_safety_net_detect_context(
             &session,

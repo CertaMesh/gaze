@@ -9,8 +9,10 @@ replacement safety can be evaluated separately:
 - `ConfirmedUntransformable(reason)` identifies confirmed sensitivity without a
   safe reversible rendering. Privacy-enforcing consumers must refuse it.
 
-These types are dormant contracts. No recognizer produces these outcomes yet,
-and these types do not change detection, rendering, or refusal policy.
+No recognizer produces these outcomes yet. Caller record admission already
+refuses unsafe short values at enforcing boundaries with the closed
+`caller_value_too_short` reason. Owner-side eval instead warns and measures.
+The outcome types do not otherwise change detection or rendering.
 `Candidate.outcome == None` denotes the legacy protected-candidate contract.
 It does not prove that an input contains no other sensitive values.
 

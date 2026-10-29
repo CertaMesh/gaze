@@ -1,20 +1,34 @@
 use crate::context::{Context, RECORD_DICTIONARY_PREFIX};
+use crate::UntransformableReason;
 pub use gaze_types::{
     DictionaryBundle, DictionaryEntry, DictionaryLoadError, DictionarySource, DictionaryStats,
     RulepackDict,
 };
 
 pub trait DictionaryBundleExt {
-    fn from_context(ctx: &Context) -> Self;
+    /// Convert accepted caller context, refusing unsafe short record values.
+    fn from_context(ctx: &Context) -> Result<Self, UntransformableReason>
+    where
+        Self: Sized;
 }
 
 impl DictionaryBundleExt for DictionaryBundle {
-    fn from_context(ctx: &Context) -> Self {
+    fn from_context(ctx: &Context) -> Result<Self, UntransformableReason> {
         dictionary_bundle_from_context(ctx)
     }
 }
 
-pub fn dictionary_bundle_from_context(ctx: &Context) -> DictionaryBundle {
+/// Convert caller context into runtime dictionaries.
+///
+/// Refuses rejected short record values with a closed, value-free reason.
+/// Observer-only tools must inspect [`Context::untransformable_reason`], warn
+/// without values, and explicitly clear `record_value_rejections` first.
+pub fn dictionary_bundle_from_context(
+    ctx: &Context,
+) -> Result<DictionaryBundle, UntransformableReason> {
+    if let Some(reason) = ctx.untransformable_reason() {
+        return Err(reason);
+    }
     let entries = ctx.dictionaries.iter().map(|(name, dictionary)| {
         let mut entry = DictionaryEntry::new(
             name,
@@ -32,7 +46,7 @@ pub fn dictionary_bundle_from_context(ctx: &Context) -> DictionaryBundle {
         }
         (name.clone(), entry)
     });
-    DictionaryBundle::from_entries(entries)
+    Ok(DictionaryBundle::from_entries(entries))
 }
 
 #[cfg(test)]
@@ -41,6 +55,29 @@ mod tests {
     use crate::{ContextDictionary, PiiClass};
     use serde_json::Map;
     use std::collections::HashMap;
+
+    #[test]
+    fn caller_value_too_short_refuses_public_dictionary_conversions_without_value() {
+        let context = Context::from_json_str(
+            r#"{"record":{"Qx":"Qx","email":"synthetic@example.invalid"},"field_map":{"/Qx":"Name"}}"#,
+        )
+        .unwrap();
+        for result in [
+            dictionary_bundle_from_context(&context),
+            DictionaryBundle::from_context(&context),
+        ] {
+            let error = match result {
+                Err(error) => error,
+                Ok(_) => panic!("rejected caller context must refuse dictionary conversion"),
+            };
+            assert_eq!(error, UntransformableReason::CallerValueTooShort);
+            assert_eq!(error.to_string(), "caller_value_too_short");
+            for rendered in [error.to_string(), format!("{error:?}")] {
+                assert!(!rendered.contains("Qx"));
+                assert!(!rendered.contains("synthetic@example.invalid"));
+            }
+        }
+    }
 
     #[test]
     fn context_bundle_builds_automata_per_request() {
@@ -61,7 +98,7 @@ mod tests {
             record_value_rejections: Default::default(),
         };
 
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let entry = bundle.get("dict_alpha").expect("entry");
         assert_eq!(entry.terms(), &["AAA-12345".to_string()]);
         assert!(entry.case_sensitive());
@@ -104,7 +141,7 @@ mod tests {
             record_value_rejections: Default::default(),
         };
 
-        let bundle = DictionaryBundle::from_context(&ctx);
+        let bundle = DictionaryBundle::from_context(&ctx).unwrap();
         assert!(bundle.get("dict_alpha").is_some());
     }
 }

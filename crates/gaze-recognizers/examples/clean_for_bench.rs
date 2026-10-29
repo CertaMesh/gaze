@@ -381,7 +381,7 @@ fn handle_request_with_policy(
         }
         Some(DictionaryBundle::merge(
             policy_run.dictionaries.clone(),
-            gaze::dictionary_bundle_from_context(&context),
+            gaze::dictionary_bundle_from_context(&context)?,
         ))
     } else {
         None
@@ -1575,7 +1575,7 @@ mod tests {
             gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None).unwrap();
         let session =
             Session::new_with_session_hex_for_tests(Scope::Ephemeral, 1_u32.to_be_bytes()).unwrap();
-        let dictionaries = gaze::dictionary_bundle_from_context(&context);
+        let dictionaries = gaze::dictionary_bundle_from_context(&context).unwrap();
         let (CleanDocument::Text(product_text), manifest, _, trace, _) = product
             .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
                 &session,
@@ -1772,7 +1772,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let dictionaries = gaze::dictionary_bundle_from_context(&context);
+        let dictionaries = gaze::dictionary_bundle_from_context(&context).unwrap();
         for pipeline in [&dynamic, &registered] {
             let session = Session::new(Scope::Ephemeral).unwrap();
             let raw = "ALICE SMITH emailed alice@example.invalid";

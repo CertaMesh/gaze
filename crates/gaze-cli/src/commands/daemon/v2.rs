@@ -762,6 +762,9 @@ impl Daemon {
                 .map(|raw| {
                     let context = TypedContext::from_json_str(raw.get())
                         .map_err(|_| Failure::ContextInvalid)?;
+                    if let Some(reason) = context.untransformable_reason() {
+                        return Err(Failure::Untransformable(reason.as_str()));
+                    }
                     let pipeline = gaze_assembly::pipeline_with_context(
                         &self.pipeline,
                         &self.policy,
@@ -769,10 +772,16 @@ impl Daemon {
                         &self.rulepacks,
                         &self.locale_chain,
                     )
-                    .map_err(|_| Failure::ContextInvalid)?;
+                    .map_err(|error| match error {
+                        gaze_assembly::BuildError::Untransformable(reason) => {
+                            Failure::Untransformable(reason.as_str())
+                        }
+                        _ => Failure::ContextInvalid,
+                    })?;
                     let dictionaries = DictionaryBundle::merge(
                         self.dictionaries.clone(),
-                        gaze::dictionary_bundle_from_context(&context),
+                        gaze::dictionary_bundle_from_context(&context)
+                            .map_err(|reason| Failure::Untransformable(reason.as_str()))?,
                     );
                     Ok::<_, Failure>((pipeline, dictionaries))
                 })

@@ -84,6 +84,40 @@ action = "preserve"
 }
 
 #[test]
+fn caller_value_too_short_refuses_without_value_or_session_mutation() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    for versioned in [false, true] {
+        if versioned {
+            daemon.request(json!({"version":1,"op":"open","session_id":"short-record"}));
+        }
+        let mut request = json!({"session_id":"short-record","text":"alice@example.invalid","context":{"record":{"name":"Qx"}}});
+        if versioned {
+            request["version"] = json!(1);
+            request["op"] = json!("clean");
+        }
+        let response = daemon.request(request);
+        assert_eq!(response["error"], "Untransformable");
+        assert_eq!(response["reason"], "caller_value_too_short");
+        assert!(response.get("clean_text").is_none());
+        assert!(!response.to_string().contains("Qx"));
+        assert!(!response.to_string().contains("alice@example.invalid"));
+        if versioned {
+            let clean = daemon.request(
+                json!({"version":1,"op":"clean","session_id":"short-record","text":"plain text"}),
+            );
+            assert_eq!(clean["clean_text"], "plain text");
+        } else {
+            assert_eq!(
+                daemon.request(json!({"version":1,"op":"open","session_id":"short-record"}))["op"],
+                "open"
+            );
+            daemon.request(json!({"version":1,"op":"close","session_id":"short-record"}));
+        }
+    }
+}
+
+#[test]
 fn versioned_session_round_trips_two_calls_compaction_and_tool_json() {
     let (_dir, policy) = policy();
     let mut daemon = Daemon::start(&policy);

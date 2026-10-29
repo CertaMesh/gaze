@@ -33,6 +33,7 @@ pub fn resolve_policy_inputs(
 
     let context_bundle = context
         .map(dictionary_bundle_from_context)
+        .transpose()?
         .unwrap_or_default();
     let mut policy_dictionaries = policy.dictionaries.clone();
     policy_dictionaries.extend(dictionary_terms_from_rulepacks(&rulepacks)?);
