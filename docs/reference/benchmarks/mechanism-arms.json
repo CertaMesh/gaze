@@ -2994,6 +2994,155 @@
         }
       ],
       "shipped": "on in gaze setup; explicit secrets bundle for library policies"
+    },
+    {
+      "id": "issuer-credentials",
+      "title": "Bare issuer credentials and private-key blocks",
+      "added_in": "v0.18",
+      "policy_delta": {
+        "file": "scripts/bench/mechanisms/issuer-credentials.toml",
+        "sha256": "219085ae412954e7425a5e7b04819cc412fc1fdeaef9fd55fafd22844b07b507"
+      },
+      "measurements": [
+        {
+          "release": null,
+          "records": {
+            "base": {
+              "file": "docs/reference/benchmarks/mechanisms/ea4ae68d42608f3e9f69c4b0d00de403a4d4765420632bfeb3ee1ce3ab448678/base-e272ee8c430d1f989a175ca39da178c636bfb24a3ebaa6cb4542c7fb8fcdeccb.jsonl.gz",
+              "sha256": "e272ee8c430d1f989a175ca39da178c636bfb24a3ebaa6cb4542c7fb8fcdeccb"
+            },
+            "candidate": {
+              "file": "docs/reference/benchmarks/mechanisms/ea4ae68d42608f3e9f69c4b0d00de403a4d4765420632bfeb3ee1ce3ab448678/candidate-60050e2d2d112e8204905da233116daaf6d2fcbf8f1e68fed8a842099b996b13.jsonl.gz",
+              "sha256": "60050e2d2d112e8204905da233116daaf6d2fcbf8f1e68fed8a842099b996b13"
+            }
+          },
+          "revision": "202491b7a8667992137fe8c2207a5ce2b8e3bd4c",
+          "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "sampling_seed": 20260710,
+          "base_policy_sha256": "0b1bc1665e06038d8f0a22536ce013125cd570c953c8bc2ef0484c7c907cb634",
+          "candidate_policy_sha256": "160d6e1a087573a938aa9b911eb9e93fcb75d2223079a342019c00011649d029",
+          "binary_sha256": "0f703942e4762e2104900d0ae03828a98672b8dc6ea33b42dd9a196e26a0d75c",
+          "contracts": {
+            "4": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "3": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 15224,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {}
+            },
+            "2": {
+              "base": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 123621,
+                "leaked": 6652,
+                "false_positive": 27004,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            },
+            "1": {
+              "base": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "gold": 130282,
+                "leaked": 9717,
+                "false_positive": 27021,
+                "failed_closed": 0
+              },
+              "leaked_by_label_delta": {},
+              "false_positive_by_class_delta": {}
+            }
+          },
+          "agentic_layers": {
+            "A": {
+              "base": {
+                "leaked": 504418,
+                "false_positive": 7577,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 146742,
+                "false_positive": 7577,
+                "failed_closed": 0
+              }
+            },
+            "D": {
+              "base": {
+                "leaked": 0,
+                "false_positive": 16216,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 0,
+                "false_positive": 16216,
+                "failed_closed": 0
+              }
+            },
+            "R": {
+              "base": {
+                "leaked": 271170,
+                "false_positive": 2045,
+                "failed_closed": 0
+              },
+              "candidate": {
+                "leaked": 246290,
+                "false_positive": 2045,
+                "failed_closed": 0
+              }
+            }
+          },
+          "gate": {
+            "v2": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 382556, FP bytes changed by +0"
+            },
+            "v1": {
+              "verdict": "pass",
+              "reason": "leaked bytes fell by 382556, FP bytes changed by +0"
+            }
+          },
+          "attested": {
+            "binary_sha256": "0f703942e4762e2104900d0ae03828a98672b8dc6ea33b42dd9a196e26a0d75c",
+            "crates_tree": "7cb334349451b3801e443fb9c8f803689c4df7dd",
+            "machine": "Apple M5 Max, 18 cores, 64 GiB, macOS 26.5",
+            "note": "Binary SHA-256 verified against both capture-time record bindings and --binary; crates tree and machine are attested, not re-derivable."
+          }
+        }
+      ],
+      "shipped": "default (gaze setup secrets bundle)"
     }
   ]
 }

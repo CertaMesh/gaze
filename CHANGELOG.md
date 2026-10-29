@@ -31,9 +31,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   references. Proxy `CoveragePath` materializes its legacy spelling on demand.
   Numeric leaves remain under existing admission rules without an unused inventory.
   See UPGRADE.md for custom-adapter migration steps.
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.3.0; existing fixture detections remain identical while private-key and
+  issuer-credential coverage expands.
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.2.0. Its existing fixture detections remain unchanged.
 
 
 ### Security
+
+- The setup-default `secrets` bundle protects whole private-key PEM blocks and
+  bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes.
+  Truncated private-key bodies fail closed, including DSA and PGP armour,
+  nested JSON escapes, source concatenation, comments, HTML and shell framing.
+  Overlong credentials and hyphen suffixes stay protected; generic `sk-`
+  keeps a leading boundary. Bare suffixes require a digit and a contiguous
+  16-character issuer-alphabet run. Named base64url issuers include `_` and `-`;
+  generic `sk-` keeps its initial alphanumeric run to preserve code identifiers.
+  Numbered gutters, markdown bullets and HTML newline entities stay protected.
+  Public-key and certificate blocks remain unchanged. Both rules
+  preserve exact restoration and require no network access.
 
 - Private MCP class and dictionary labels use session-keyed HMAC identifiers,
   so public hash guesses cannot recover their names. Trusted snapshot version 8

@@ -129,6 +129,7 @@
     "gaze-proxy::tool_call_structured_ids",
     "gaze-recognizers",
     "gaze-recognizers::anchored_match_fp_budget",
+    "gaze-recognizers::bare_credentials",
     "gaze-recognizers::birth_date_cues",
     "gaze-recognizers::bundled_guard_adjacency",
     "gaze-recognizers::checksum_failed_iban_card",

@@ -846,7 +846,7 @@ The fresh [password-hash and code-credential arm](password-code-credentials/json
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-17 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+18 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -859,6 +859,7 @@ Shipped releases, one column per release:
 | Credential rulepack | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 | Nym personal-name labels | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 | Password hashes and code credentials | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 |
+| Bare issuer credentials and private-key blocks | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 |
 
 <!-- END GENERATED: mechanism-arms -->
 
