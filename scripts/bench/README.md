@@ -865,6 +865,13 @@ change and assert the recomputed object equals the committed plan's spec.
 A history dry run alone does not establish that equality. The combined corpus
 is not comparable to the standalone detection branches' earlier captures.
 
+[`generator-v30.json`](../../docs/reference/benchmarks/history-plans/generator-v30.json)
+keeps those subjects and arguments on the v30 specification, whose invisible
+card twins carry no phone-shaped group. The `gaze setup` policy of v0.16.0 did
+not yet bundle `secrets`; rebuild each release policy from its tag's setup
+template and check its pinned hash. The measured result is
+[`history-generator-v30`](../../docs/reference/benchmarks/history-generator-v30/history.md).
+
 First inspect the plan without inference. Then execute only missing jobs:
 
 ```bash

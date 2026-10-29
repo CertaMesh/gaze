@@ -2400,6 +2400,30 @@ generators/contracts/pins (including the dev phone correction), drop their redun
 comparison notices, and certify their detection changes against the new main.
 Their rule-dependent tooling and mechanism arms remain with those PRs.
 
+### Phone-free invisible card twins (generator v30)
+
+The `invisible_card_twin` counterweights exist to catch false positives from
+card-checksum relaxation, so no other rule may claim them. In v29 one test twin
+ended in `0771 4620`: a German trunk prefix and area code. A phone rule rightly
+protects that fragment inside a longer digit run, whether the groups are
+separated by spaces or by invisible characters. A detector that reads
+invisible separators like spaces therefore paid a credit-guard false positive
+for a correct phone decision.
+
+v30 starts every twin group with `9` instead of `0` and keeps every twin
+Luhn-invalid. No random draw changes: only the 6 card values whose groups
+started with `0` (2 dev, 4 test, each under 5 separators) differ, and
+`records_as_of` rebuilds the original twins for every older generator. The
+credit guard is unchanged.
+[`test_invisible_separator_cells.py`](../../../scripts/bench/test_invisible_separator_cells.py)
+runs the `gaze` CLI with the model-free `gaze setup` rule stack on every twin,
+in its invisible and ASCII-space forms. No rule claims any v30 twin, and the v29
+twins still yield the phone token. CI runs this proof after building the CLI.
+
+The [v30 history plan](history-plans/generator-v30.json) re-measures v0.17.0
+and v0.16.0 on the new specification with the same subjects, policies and
+model bundles as v29. The result is the [v30 history](history-generator-v30/history.md).
+
 ### Measured adjacency layer history
 
 The preserved phone and cued-cell prose above describes the historical
