@@ -310,7 +310,11 @@ pub(crate) fn string_leaves(value: &Value) -> usize {
 pub(crate) fn fresh_session() -> Arc<Session> {
     Arc::new(must(Session::new(Scope::Ephemeral)))
 }
-pub(crate) async fn call(h: Arc<Host>, args: Value, timeout: bool) -> Option<CallToolResult> {
+pub(crate) async fn call(
+    h: Arc<dyn DispatchHost>,
+    args: Value,
+    timeout: bool,
+) -> Option<CallToolResult> {
     let handler = RmcpFrontend::stdio(Arc::new(FixedPrincipalResolver::agent("synthetic")))
         .into_server_handler(h);
     let (client_stream, server_stream) = tokio::io::duplex(16384);

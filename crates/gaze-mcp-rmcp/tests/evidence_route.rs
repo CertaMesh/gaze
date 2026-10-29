@@ -806,18 +806,47 @@ fn r2_planned_interval_refused() {
     assert!(!receipt_allowlisted(&r), "planned-interval-refused");
 }
 
-#[test]
-fn untransformable_refusal_has_closed_value_free_shape() {
+struct UntransformableHost(gaze::UntransformableReason);
+
+#[async_trait]
+impl DispatchHost for UntransformableHost {
+    async fn dispatch(
+        &self,
+        _principal: &Principal,
+        _tool_name: &str,
+        _args: Value,
+        _session_id: Option<&str>,
+        _context: HostContextSelection,
+    ) -> Result<ToolResponse, DispatchError> {
+        Err(gaze::ProtectionError::Untransformable {
+            reason: self.0,
+            field_path: gaze::FieldPath::default().child(EMAIL.to_owned()),
+        }
+        .into())
+    }
+    fn list_tools(&self) -> Vec<ToolDescriptor> {
+        vec![ToolDescriptor::agent("test", json!({"type":"object"}))]
+    }
+}
+
+#[tokio::test]
+async fn untransformable_refusal_has_closed_value_free_shape() {
+    use gaze::UntransformableReason::*;
     for reason in [
-        "json_number_no_text_only_path",
-        "encoded_carrier",
-        "no_safe_rendering",
-        "caller_value_too_short",
+        JsonNumberNoTextOnlyPath,
+        EncodedCarrier,
+        NoSafeRendering,
+        CallerValueTooShort,
     ] {
-        let response = CallToolResult::error(vec![
-            ContentBlock::text("untransformable"),
-            ContentBlock::text(reason),
-        ]);
+        let response = call(Arc::new(UntransformableHost(reason)), json!({}), false)
+            .await
+            .expect("received refusal");
+        assert_eq!(response.content.len(), 2);
+        assert_eq!(
+            response.content[0].as_text().unwrap().text,
+            "untransformable"
+        );
+        assert_eq!(response.content[1].as_text().unwrap().text, reason.as_str());
         assert_eq!(outcome(Some(&response)), "FAILED_CLOSED_NO_EGRESS");
         for key in ["structuredContent", "_meta"] {
             let mut value = must(serde_json::to_value(&response));
