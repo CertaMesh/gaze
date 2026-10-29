@@ -474,6 +474,11 @@ impl RegexDetector {
                 });
             }
         }
+        if self.phone_validator_enabled() && self.validator_on_fail == ValidatorOnFail::Veto {
+            for scan in &mut scans {
+                scan.rejected |= inside_invalid_four_by_four_card(input, &scan.span, source_spans);
+            }
+        }
         Ok(scans)
     }
 
@@ -972,6 +977,44 @@ impl RegexDetector {
 
         previous_ok && next_ok
     }
+}
+
+/// Uncued phone substrings do not turn a failed, uniformly grouped card-shaped
+/// reference into personal data. Recording cue rules retain their own evidence.
+fn inside_invalid_four_by_four_card(
+    input: &str,
+    span: &std::ops::Range<usize>,
+    source_spans: Option<&[(usize, usize)]>,
+) -> bool {
+    let member = |ch: char| ch.is_ascii_digit() || matches!(ch, ' ' | '\t' | '-');
+    let start = input[..span.start]
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !member(*ch))
+        .map_or(0, |(at, ch)| at + ch.len_utf8());
+    let end = input[span.end..]
+        .char_indices()
+        .find(|(_, ch)| !member(*ch))
+        .map_or(input.len(), |(at, _)| span.end + at);
+    let run = &input[start..end];
+    let mut widths = Vec::new();
+    let mut open = false;
+    for (offset, ch) in run.char_indices() {
+        if !ch.is_ascii_digit() {
+            open = false;
+            continue;
+        }
+        if crate::source_regex::is_gap(source_spans, start + offset) {
+            open = false;
+        }
+        if open {
+            *widths.last_mut().expect("open digit group") += 1;
+        } else {
+            widths.push(1);
+        }
+        open = true;
+    }
+    widths == [4, 4, 4, 4] && !ValidatorKind::Luhn.validates(run)
 }
 
 /// `SKU-` plus an alphabetic product component identifies a stock-keeping unit.

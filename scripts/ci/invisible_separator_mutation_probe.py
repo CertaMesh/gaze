@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 24
+    total = len(set(args.probe)) or len(CODEPOINTS) + 25
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -74,6 +74,10 @@ def main():
                    "every_default_ignorable_inside_values_keeps_all_source_bytes", codepoint=cp)
         reject("nb_hyphen", SOURCE, "        '\\u{2011}' => '-',\n", "",
                "nonbreaking_hyphen_identifiers_keep_exact_source_spans", "invisible_separators")
+        reject("card_twin_phone_guard", REGEX_SOURCE,
+               "scan.rejected |= inside_invalid_four_by_four_card(input, &scan.span, source_spans);",
+               "scan.rejected |= false && inside_invalid_four_by_four_card(input, &scan.span, source_spans);",
+               "uncued_invalid_four_by_four_cards_do_not_expose_phone_substrings", "invisible_separators")
         reject("source_boundaries", REGEX_SOURCE,
                "let additional = self.scanned_spans_in_view(input, source_spans, Some(regex));",
                "let additional = self.scanned_spans_in_view(input, source_spans, None);",
