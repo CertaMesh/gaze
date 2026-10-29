@@ -541,6 +541,8 @@ fn invalid_international_phone_prefix_does_not_license_a_national_suffix() {
 fn hyphen_grouped_ibans_keep_the_complete_value_protected() {
     for separator in ['-', '\u{2011}'] {
         let value = ["NL82", "ABNA", "8266", "3896", "21"].join(&separator.to_string());
+        assert!(gaze_types::ValidatorKind::IbanMod97
+            .validates(&gaze_types::normalize::normalize(&value).text));
         assert_exact_token("{\"result\":{\"IBAN number\":\"", &value, "\"}}");
         let value = ["GB82", "WEST", "1234", "5698", "7654", "32"].join(&separator.to_string());
         assert_exact_token("IBAN: ", &value, "; end.");
