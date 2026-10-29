@@ -1796,6 +1796,7 @@ async fn partial_scalar_overlap_refuses_before_downstream() {
             Some(
                 gaze::Pipeline::builder()
                     .detector(OverlappingScalar(true))
+                    .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
                     .build()
                     .unwrap(),
             ),
@@ -1805,6 +1806,7 @@ async fn partial_scalar_overlap_refuses_before_downstream() {
             Some(
                 gaze::Pipeline::builder()
                     .detector(OverlappingScalar(false))
+                    .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
                     .build()
                     .unwrap(),
             ),
@@ -1840,6 +1842,14 @@ async fn partial_scalar_overlap_refuses_before_downstream() {
 }
 
 struct MarkerNet(&'static str);
+
+struct MarkerDetector(&'static str);
+
+impl gaze::Detector for MarkerDetector {
+    fn detect(&self, input: &str) -> Vec<gaze::Detection> {
+        input.find(self.0).map(|start| gaze::Detection::new(start..start + self.0.len(), PiiClass::Name, "test.marker")).into_iter().collect()
+    }
+}
 
 impl gaze::SafetyNet for MarkerNet {
     fn id(&self) -> &str {
@@ -1905,8 +1915,11 @@ async fn string_residual_is_independent_of_unrelated_scalar() {
 
 #[tokio::test]
 async fn scalar_residual_refuses_before_downstream() {
+    for marker in ["maskme", "synthetic marker long enough to shrink when replaced by a token"] {
     let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
     let pipeline = gaze::Pipeline::builder()
+        .detector(MarkerDetector(marker))
+        .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
         .register_safety_net(MarkerNet("731284"))
         .build()
         .unwrap();
@@ -1922,7 +1935,7 @@ async fn scalar_residual_refuses_before_downstream() {
         .dispatch(
             &Principal::new("agent"),
             "mail.send",
-            json!({"n":731284}),
+            json!({"a":marker, "n":731284}),
             Some(SID_A),
             gaze_mcp_core::HostContextSelection::Absent,
         )
@@ -1933,6 +1946,7 @@ async fn scalar_residual_refuses_before_downstream() {
         DispatchError::Protection(gaze::ProtectionError::Residual)
     ));
     assert!(client.calls().await.is_empty());
+    }
 }
 
 impl gaze::Recognizer for LabelledScalar {
