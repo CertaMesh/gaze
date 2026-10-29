@@ -2423,6 +2423,18 @@ twins still yield the phone token. CI runs this proof after building the CLI.
 The [v30 history plan](history-plans/generator-v30.json) re-measures v0.17.0
 and v0.16.0 on the new specification with the same subjects, policies and
 model bundles as v29. The result is the [v30 history](history-generator-v30/history.md).
+Each release was captured once from a producer build whose hash matches its
+pin, and both gate contracts are scored from that one record. Neither release
+refused a document; every restore was exact and every manifest valid. Both
+rows equal their v29 rows, since neither release protects any part of a card
+twin under either generator.
+
+| Release | Contract | C leaked B | A leaked B | A all-gold leaked B | D FP B | R leaked B | Refused |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.17.0 | v2 | 6,652 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v2 | 7,348 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
+| v0.17.0 | v1 | 9,717 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v1 | 13,291 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
 
 ### Measured adjacency layer history
 
