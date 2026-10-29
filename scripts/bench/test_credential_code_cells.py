@@ -157,7 +157,15 @@ class CredentialCellsTests(unittest.TestCase):
             self.assertEqual(base, candidate)
             old = tomllib.loads((root / "base-secrets.toml").read_text())
             new = tomllib.loads((project / arm.RULEPACK_PATH).read_text())
-            self.assertEqual({r["id"] for r in old["recognizers"]}, {"password.field", "security_token.anchored"})
-            self.assertEqual({r["id"] for r in new["recognizers"]}, arm.NEW_IDS)
+            original = tomllib.loads((project / pack).read_text())
+            original_specs = {r["id"]: r for r in original["recognizers"]}
+            self.assertEqual(
+                {r["id"]: r for r in old["recognizers"]},
+                {key: spec for key, spec in original_specs.items() if key not in arm.NEW_IDS},
+            )
+            self.assertEqual(
+                {r["id"]: r for r in new["recognizers"]},
+                {key: original_specs[key] for key in arm.NEW_IDS},
+            )
             delta = tomllib.loads((root / "delta.toml").read_text())
             self.assertEqual(delta["mechanism_delta"]["append_rulepack_paths"], paths[-1:])
