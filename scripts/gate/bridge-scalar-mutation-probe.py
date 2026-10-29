@@ -38,6 +38,10 @@ def main():
         ('result-scalar-scan', 'crates/gaze-mcp-bridge/src/bridge.rs',
          '    reject_sensitive_scalars(pipeline, locale_chain, value)?;', '',
          [*bridge, 'labelled_scalar_results_refuse_and_unlabelled_results_preserve_types']),
+        ('scalar-exact-equality', 'crates/gaze-mcp-bridge/src/bridge.rs',
+         'span.raw_span.start < range.end',
+         'span.raw_span.start == range.start && span.raw_span.end == range.end',
+         [*bridge, 'partial_scalar_overlap_refuses_before_downstream']),
         ('typed-redaction-error', 'crates/gaze-mcp-bridge/src/error.rs',
          'gaze::Error::Protection(error) => Self::Protection(error)',
          'gaze::Error::Protection(error) => Self::Redaction(error.to_string())',
@@ -63,14 +67,14 @@ def main():
             print(f'KILLED {name}', flush=True)
         finally:
             path.write_text(source)
-    for command in ([*bridge, 'labelled_scalar'],
+    for command in ([*bridge, 'scalar'],
                     [*bridge, 'redaction_preserves_closed_untransformable_reason'],
                     [*evidence, 'untransformable_refusal_has_closed_value_free_shape'], python):
         code, output = run(command)
         if code:
             raise RuntimeError('Restored source failed:\n' + output[-4000:])
     subprocess.run(['git', 'diff', '--exit-code', 'HEAD'], cwd=ROOT, check=True)
-    print('PASS: five mutations killed; restored-source regressions pass', flush=True)
+    print(f'PASS: {len(probes)} mutations killed; restored-source regressions pass', flush=True)
 
 
 if __name__ == '__main__':

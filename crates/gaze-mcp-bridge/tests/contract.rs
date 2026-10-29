@@ -1773,6 +1773,168 @@ async fn eviction_retains_weak_only_candidate_until_handle_release() {
 // supply parsed provenance rather than inventing its own sensitive-label vocabulary.
 struct LabelledScalar;
 
+struct OverlappingScalar(bool);
+
+impl gaze::Detector for OverlappingScalar {
+    fn detect(&self, input: &str) -> Vec<gaze::Detection> {
+        let Some(start) = input.find("731284") else {
+            return Vec::new();
+        };
+        let range = if self.0 {
+            start + 1..start + 5
+        } else {
+            start - 1..start + 7
+        };
+        vec![gaze::Detection::new(range, PiiClass::Name, "test.overlap")]
+    }
+}
+
+#[tokio::test]
+async fn partial_scalar_overlap_refuses_before_downstream() {
+    for (pipeline, args) in [
+        (
+            Some(
+                gaze::Pipeline::builder()
+                    .detector(OverlappingScalar(true))
+                    .build()
+                    .unwrap(),
+            ),
+            json!({"n":731284}),
+        ),
+        (
+            Some(
+                gaze::Pipeline::builder()
+                    .detector(OverlappingScalar(false))
+                    .build()
+                    .unwrap(),
+            ),
+            json!({"n":731284}),
+        ),
+        (None, json!({"n":-4111111111111111_i64})),
+    ] {
+        let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            pipeline,
+        )
+        .await;
+        let error = host
+            .dispatch(
+                &Principal::new("agent"),
+                "mail.send",
+                args,
+                Some(SID_A),
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
+            .await
+            .expect_err("partial scalar overlap must refuse");
+        assert_eq!(
+            error.untransformable_reason(),
+            Some("json_number_no_text_only_path")
+        );
+        assert!(client.calls().await.is_empty());
+    }
+}
+
+struct MarkerNet(&'static str);
+
+impl gaze::SafetyNet for MarkerNet {
+    fn id(&self) -> &str {
+        "test.marker"
+    }
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        text: &str,
+        _: gaze::SafetyNetContext<'_>,
+    ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+        Ok(text
+            .find(self.0)
+            .map(|start| {
+                gaze::LeakSuspect::new(
+                    start..start + self.0.len(),
+                    PiiClass::Name,
+                    self.id(),
+                    Some(1.0),
+                    gaze::LeakKind::Uncovered,
+                    "synthetic",
+                    None,
+                )
+            })
+            .into_iter()
+            .collect())
+    }
+}
+
+#[tokio::test]
+async fn string_residual_is_independent_of_unrelated_scalar() {
+    for args in [
+        json!({"text":"residual-marker"}),
+        json!({"text":"residual-marker", "n":12}),
+    ] {
+        let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+        let pipeline = gaze::Pipeline::builder()
+            .register_safety_net(MarkerNet("residual-marker"))
+            .build()
+            .unwrap();
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            Some(pipeline),
+        )
+        .await;
+        host.dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            args.clone(),
+            Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
+        .await
+        .expect("strings retain existing observer-only behavior");
+        assert_eq!(client.calls().await, vec![args]);
+    }
+}
+
+#[tokio::test]
+async fn scalar_residual_refuses_before_downstream() {
+    let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+    let pipeline = gaze::Pipeline::builder()
+        .register_safety_net(MarkerNet("731284"))
+        .build()
+        .unwrap();
+    let (host, _) = host_with_pipeline(
+        client.clone(),
+        PolicyConfig::default(),
+        Arc::new(MemoryAudit::default()),
+        LimitCfg::default(),
+        Some(pipeline),
+    )
+    .await;
+    let error = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({"n":731284}),
+            Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
+        .await
+        .expect_err("scalar residual must refuse");
+    assert!(matches!(
+        error,
+        DispatchError::Protection(gaze::ProtectionError::Residual)
+    ));
+    assert!(client.calls().await.is_empty());
+}
+
 impl gaze::Recognizer for LabelledScalar {
     fn id(&self) -> &str {
         "test.labelled_scalar"
