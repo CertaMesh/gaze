@@ -657,8 +657,10 @@ Policy custom recognizers cannot use reserved bundled family names:
 `--context-json` can also supply dictionaries without a matching policy
 recognizer. In that mode, Gaze registers one dictionary recognizer per context
 dictionary and uses `class_map` for the class, falling back to `custom:<name>`
-when a mapping is absent. `fields` are threaded into `DetectContext` for
-recognizers and are available to library users through the borrowed
+when a mapping is absent. `fields` reach recognizers as `CallerDeclared`
+`DetectContext` field spans wherever a string or number leaf occurs in the
+document (see [whole-document field context](../explanation/detection/outcomes.md#whole-document-field-context)).
+No recognizer consumes them yet. Library users can read them through the borrowed
 `Context::fields_typed() -> ContextFieldsRef<'_>` accessor. `class_map` is
 runtime metadata for dictionary recognizer construction, not a general class
 override mechanism.

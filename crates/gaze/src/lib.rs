@@ -6,6 +6,7 @@ mod conflict;
 mod context;
 mod detector;
 mod dictionaries;
+mod field_context;
 mod house_number;
 pub mod locale;
 mod normalize;
@@ -40,6 +41,7 @@ pub use dictionaries::{
     dictionary_bundle_from_context, DictionaryBundle, DictionaryBundleExt, DictionaryEntry,
     DictionaryLoadError, DictionarySource, DictionaryStats, RulepackDict,
 };
+pub use field_context::CallerFields;
 /// The one-way `[REDACTED:<class>]` marker the safety net writes in place of flagged bytes.
 ///
 /// Re-exported so adopters recognise protected output through the SAME predicate the runtime

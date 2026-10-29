@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proxy adapters return `RequestSurfaces` and attach parsed scalar provenance to
   string leaves. The Anthropic codec and MCP also pass field context to detection.
   This adds metadata only. No production recognizer consumes the field context.
+- The strict span-preserving JSON parser moved from the Anthropic codec into
+  `gaze_types::json_tree`; the codec's behaviour is unchanged. Text cleans
+  (`gaze clean`, the daemon, `RawDocument::Text`) now pass field spans for a
+  document that strictly parses as a JSON object or array, plus the context
+  JSON `fields` map as caller-declared fields. Metadata only: output is unchanged.
 - `FieldPath` shares ancestor storage. `segments()` returns borrowed segment
   references. Proxy `CoveragePath` materializes its legacy spelling on demand.
   Numeric leaves remain under existing admission rules without an unused inventory.
