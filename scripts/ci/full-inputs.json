@@ -939,7 +939,8 @@
     "scripts/ci/check_past_capture_mutations.py",
     "scripts/ci/tutorial_gate.py",
     "scripts/fetch/fetch-ner-model.sh",
-    "scripts/gate/audit-outcome-mutation-probe.py"
+    "scripts/gate/audit-outcome-mutation-probe.py",
+    "scripts/gate/json-tree-utf8-mutation-probe.py"
   ],
   "patterns": {
     "crates/*/build.rs": "Cargo build scripts",

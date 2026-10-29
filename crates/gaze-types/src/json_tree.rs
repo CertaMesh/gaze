@@ -13,6 +13,9 @@ use thiserror::Error;
 
 use crate::FieldPath;
 
+mod input;
+use input::ValidatedInput;
+
 /// Finite parse limits. A limit overrun is an error, never a truncated tree.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JsonTreeLimits {
@@ -139,10 +142,9 @@ pub fn parse(input: &[u8], limits: JsonTreeLimits) -> Result<JsonTree, JsonTreeE
     if input.len() > limits.max_body_bytes {
         return Err(JsonTreeError::BodyLimitExceeded);
     }
-    let text = validate_utf8(input)?;
+    let input = ValidatedInput::new(input)?;
     let mut parser = Parser {
-        text,
-        bytes: input,
+        input,
         position: 0,
         limits,
         nodes: 0,
@@ -151,7 +153,7 @@ pub fn parse(input: &[u8], limits: JsonTreeLimits) -> Result<JsonTree, JsonTreeE
     parser.skip_whitespace();
     let root = parser.parse_value(0, &FieldPath::default())?;
     parser.skip_whitespace();
-    if parser.position != input.len() {
+    if parser.position != parser.input.len() {
         return Err(JsonTreeError::InvalidJson);
     }
     Ok(JsonTree {
@@ -161,9 +163,7 @@ pub fn parse(input: &[u8], limits: JsonTreeLimits) -> Result<JsonTree, JsonTreeE
 }
 
 struct Parser<'a> {
-    /// The input, validated once; decoding reads scalars from it without revalidating.
-    text: &'a str,
-    bytes: &'a [u8],
+    input: ValidatedInput<'a>,
     position: usize,
     limits: JsonTreeLimits,
     nodes: usize,
@@ -290,9 +290,8 @@ impl Parser<'_> {
                 _ => {
                     let start = self.position - 1;
                     let character = self
-                        .text
-                        .get(start..)
-                        .and_then(|remaining| remaining.chars().next())
+                        .input
+                        .scalar_at(start)
                         .ok_or(JsonTreeError::InvalidUtf8)?;
                     value.push(character);
                     self.position = start + character.len_utf8();
@@ -387,15 +386,14 @@ impl Parser<'_> {
                 self.position += 1;
             }
         }
-        let raw = &self.text[start..self.position];
-        if raw.len() > self.limits.max_number_bytes {
+        if self.position - start > self.limits.max_number_bytes {
             return Err(JsonTreeError::NumberLimitExceeded);
         }
-        Ok(raw.to_owned())
+        Ok(self.input.copy_range(start..self.position))
     }
 
     fn consume_literal(&mut self, literal: &[u8]) -> Result<(), JsonTreeError> {
-        if self.bytes.get(self.position..self.position + literal.len()) != Some(literal) {
+        if !self.input.matches_literal(self.position, literal) {
             return Err(JsonTreeError::InvalidJson);
         }
         self.position += literal.len();
@@ -415,7 +413,7 @@ impl Parser<'_> {
     }
 
     fn peek(&self) -> Option<u8> {
-        self.bytes.get(self.position).copied()
+        self.input.byte_at(self.position)
     }
 
     fn take(&mut self) -> Option<u8> {
@@ -423,12 +421,6 @@ impl Parser<'_> {
         self.position += 1;
         Some(value)
     }
-}
-
-/// Every UTF-8 validation in the parser goes through here, so the work counter sees all of it.
-fn validate_utf8(bytes: &[u8]) -> Result<&str, JsonTreeError> {
-    crate::perf_count!("json_tree_utf8_validated_bytes", bytes.len());
-    std::str::from_utf8(bytes).map_err(|_| JsonTreeError::InvalidUtf8)
 }
 
 fn hex_value(byte: u8) -> Option<u8> {

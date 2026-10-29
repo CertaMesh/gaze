@@ -299,19 +299,33 @@ fn utf8_offsets_are_bytes_in_the_input() {
 #[test]
 fn non_ascii_strings_are_validated_once() {
     for scalar in ["ü", "€", "😀"] {
-        let text = scalar.repeat(1024);
-        let input = format!(r#"{{"{scalar}":["{text}"]}}"#);
-        let capture = crate::perf::Capture::new();
-        let parsed = tree(&input);
-        let record = capture.finish();
-        assert_eq!(to_value(&parsed.root), json!({ scalar: [text] }));
-        assert_eq!(
-            record
+        let mut work = Vec::new();
+        for size in [512, 1024] {
+            let text = scalar.repeat(size);
+            let input = format!(r#"{{"{scalar}":["{text}",1e400,true,null,"\u00fc"]}}"#);
+            let capture = crate::perf::Capture::new();
+            let parsed = tree(&input);
+            let record = capture.finish();
+            let JsonKind::Object(members) = &parsed.root.kind else {
+                panic!("object root");
+            };
+            assert_eq!(members[0].key.value, scalar);
+            let JsonKind::Array(values) = &members[0].value.kind else {
+                panic!("array member");
+            };
+            assert!(matches!(&values[0].kind, JsonKind::String(value) if value.value == text));
+            assert!(matches!(&values[1].kind, JsonKind::Number(value) if value == "1e400"));
+            let bytes = record
                 .counters
                 .get("json_tree_utf8_validated_bytes")
-                .copied(),
-            Some(input.len() as u64),
-            "{scalar:?}"
+                .copied()
+                .expect("validation must be counted");
+            assert_eq!(bytes, input.len() as u64, "{scalar:?}, size {size}");
+            work.push(bytes);
+        }
+        assert!(
+            work[1] <= 2 * work[0],
+            "doubling scalar count must at most double validation work"
         );
     }
 }
