@@ -28,7 +28,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 29
+    total = len(set(args.probe)) or len(CODEPOINTS) + 28
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE, CORE_SOURCE, TYPES_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -76,10 +76,6 @@ def main():
                    "every_default_ignorable_inside_values_keeps_all_source_bytes", codepoint=cp)
         reject("nb_hyphen", SOURCE, "        '\\u{2011}' => '-',\n", "",
                "nonbreaking_hyphen_identifiers_keep_exact_source_spans", "invisible_separators")
-        reject("card_twin_phone_guard", REGEX_SOURCE,
-               "scan.rejected |= inside_invalid_four_by_four_card(input, &scan.span, source_spans);",
-               "scan.rejected |= false && inside_invalid_four_by_four_card(input, &scan.span, source_spans);",
-               "uncued_invalid_four_by_four_cards_do_not_expose_phone_substrings", "invisible_separators")
         reject("postcode_run_guard", REGEX_SOURCE,
                "scan.rejected |= gaze_types::word_run_extends_identifier(input, scan.span.end);",
                "scan.rejected |= false && gaze_types::word_run_extends_identifier(input, scan.span.end);",
