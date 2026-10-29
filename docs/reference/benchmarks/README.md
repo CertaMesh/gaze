@@ -1444,6 +1444,32 @@ python3 scripts/bench/render_benchmark_doc.py --check
 This runs in CI on every pull request. It is stdlib-only and needs no corpus, no
 model, and no network.
 
+### Outcome counters
+
+`scripts/bench/outcome_counters.py report` derives one counter block per run
+from the same observation record as the contract scorecard. The block is a
+separate report and never changes the scorecard. The byte score excludes
+refused documents, so read it together with `blocked_operations` and
+`usable_content.lost_to_refusal_bytes`. The block keeps apart what the byte
+score folds together:
+
+| Counter | Meaning |
+| --- | --- |
+| `blocked_operations.documents` | Documents the pipeline refused, by kind: `untransformable`, `possibly_sensitive` (the `[outcomes]` `refuse` disposition), `fail_closed` (any other pipeline error) |
+| `untransformable_refused.by_reason` | Untransformable refusals per closed reason (`json_number_no_text_only_path`, `encoded_carrier`, `no_safe_rendering`, `caller_value_too_short`) |
+| `fp_refusals.documents` | Refused documents that carry no scored gold |
+| `protection.confirmed` | Protected values with a concrete class: `values`, `gold_values` (touch scored gold), `false_positive_values` (protect at least one non-gold byte, so an over-extended value counts in both) |
+| `protection.possibly_sensitive` | The same for ambiguous values (family tokens `custom:family:<name>`), plus `dispositions.protect_values` (values) / `dispositions.refuse_documents` (documents) |
+| `false_positives` | `documents` with any false-positive byte (equal to `metrics.documents_with_false_positives`), affected `values`, and how many of each come only from possibly-sensitive protection (judged by each value's own non-gold bytes) |
+| `usable_content` | Non-PII bytes, how many stay readable, and how many are lost to false positives and to refusals (`retained_ratio`) |
+
+A `pass_audited` value stays raw and leaves only an audit row, which the bench
+response does not carry, so it is not counted. Out-of-contract and neutral
+bytes are excluded exactly as in the byte score.
+[`outcome-counters-v0.17.0.json`](outcome-counters-v0.17.0.json) pins the
+v0.17.0 counters under v1-v4, plus the generated A/D/R layers, and proves the record still rescores to its
+committed scorecards byte for byte; see [`scripts/bench/README.md`](../../../scripts/bench/README.md#outcome-counters).
+
 ### The runner's other outputs
 
 Beyond `scorecard-v4.json`, `run_no_opf_benchmark.py` writes a Markdown summary,
@@ -2234,6 +2260,145 @@ Historical release backfill is deferred to a separate job. The release rows
 below remain measured on generator v20 and its recorded corpus; they do not
 include v21/v22/v23/v24 cells and must not be compared directly with the v24 report.
 Their recorded scorecards, contracts and ledgers remain unchanged.
+
+### Structured-input slice (generator v26)
+
+Agents mostly send structured payloads, not prose. Generator v26 adds 270 A
+positives and 90 D counterweights per partition, in nine shapes:
+
+- Anthropic `tool_use` input.
+- Anthropic `tool_result` content as a JSON-escaped JSON string.
+- OpenAI tool-call `arguments` as an escaped string.
+- Gemini `functionCall.args`.
+- An API request body with a person block.
+- A nested record array.
+- CSV rows.
+- NDJSON event lines.
+- A JSON number under a labelled key.
+
+Each positive puts a customer, employee or person-record ID under a labelled
+field. The ID is numeric, a UUID, grouped, or written with JSON escapes
+(`SYN\/86910\u2013276`). The API body also carries a given name, a surname and
+an email on a reserved domain. Gold is the raw document bytes of each value,
+including inside escaped strings: an escaped ID is gold in its escaped form,
+with each backslash doubled inside an escaped JSON string. Every NDJSON repeat
+is gold. A person-labelled CSV column header owns the values in its column.
+
+The values beside the ID are recorded decoys: unlabelled numbers (some six
+digits long, the numeric ID's own shape), amounts, timestamps, tool-call IDs
+and SKUs. Covering one is a false positive. The D counterweights carry the same
+shapes and value shapes under public order, request and invoice keys, with no
+person data. The [cell generator](../../../scripts/bench/structured_input_cells.py)
+holds the authored inputs. Every v25 document reconstructs byte-for-byte, and
+the v25 contract stays frozen. The v26 test partition has 10,307 A,
+7,612 D and 6,481 R documents.
+
+The scorecard gates these cells in bytes, like every other cell. The
+[slice reader](../../../scripts/bench/structured_slice.py) adds the counts
+bytes cannot show. It reads one retained observation record and runs no new
+inference:
+
+```bash
+uv run --project scripts/bench python scripts/bench/structured_slice.py \
+  target/bench-data/release-v1/full/observations-v1.jsonl.gz --markdown
+```
+
+Per layer and shape, it reports:
+
+- Gold values protected whole or in part.
+- Leaked gold bytes.
+- False positives counted three ways: documents, values out of the decoys, and
+  bytes.
+- JSON or CSV syntax bytes covered.
+- Type-changed documents: a protected gold or decoy value in a JSON number
+  position. A token is a string, so the payload no longer has the type it had.
+- Usable documents: not refused, no non-gold byte covered (decoy, key or tool
+  name, enum string, quote, backslash or other syntax) and no type change.
+- Refused gold bytes, next to leaked gold bytes.
+
+Refused documents are counted apart and excluded from the other bytes and
+values. Their gold appears only as refused gold bytes. The scorer gate counts
+refused gold as leaked, so refusing a payload is never a gain. The reader refuses a record from an older
+generator or a different corpus.
+
+No release has been measured on these structured-input cells yet. Until the
+past releases are re-run, compare the slice only between captures of the same
+corpus and benchmark specification.
+
+### Invisible separators and issuer credentials (generators v27–v29)
+
+These are harness inputs, not detection changes. The
+[invisible-separator generator](../../../scripts/bench/invisible_separator_cells.py)
+comes from #870 at `c3af8c6aa592dc348f1f310a47d63ebfa5f19637`;
+the [issuer generator](../../../scripts/bench/issuer_credential_cells.py) is
+copied unchanged from #871 at `de9e8a968b94af49c982eeb4b4e226547f77b6d7`.
+One source correction is necessary: only the new v28 `invisible_boundary_`
+dev phone values use area code 206 with the NANPA fictional 555-01xx line
+range, instead of area code 202. The original range repeats an
+older test-partition value, failing the unchanged global disjointness test.
+The seed, random draws, suffixes, templates, offsets and counterweights stay
+unchanged; only these dev phone source values and their gold change. All test
+records, v25/v26/v27 records and the exact issuer corpus remain byte-identical.
+No recognizer, normalization, rule-dependent census or mechanism-arm evidence
+is included.
+
+- **v27** adds `invisible_` cells for ZWSP, WORD JOINER, SOFT HYPHEN and
+  NON-BREAKING HYPHEN in identifiers, literal-Unicode JSON and exact repeats.
+  Whole original UTF-8 values, including formatting, are gold. Benign words,
+  code, paths, small numbers and incomplete mail fragments are counterweights.
+  Format-matched invalid card, phone, IBAN, tax-placeholder and mail twins stay
+  benign; card and tax twins join the existing no-FP-rise credit guard.
+- **v28** adds `invisible_bom_`, `invisible_joined_` and `invisible_boundary_`.
+  These measure BOM-separated values, joined labelled groups and values beside
+  word-glued default-ignorable characters, plus internal formatting and repeats.
+  Leading/embedded BOM code, public build/batch references, emoji, Arabic,
+  Persian, Indic and bidi-marked text are benign counterweights. Adjacent words
+  are never part of gold.
+- **v29** adds `issuer_credentials_`: exactly 4,200 documents per partition
+  (3,440 A, 570 D, 190 R). Bare synthetic issuer credentials and complete,
+  truncated or mismatched private armour are whole-source gold across literal,
+  serialized, comment, HTML, shell and URL-encoded surfaces. Public armour,
+  placeholders, tutorials and ordinary code/hash identifiers stay benign.
+  Layer D carries no gold; every protected byte there is a false positive.
+
+The integrated corpora include v26's `structured_` cells at every later
+version. They therefore have different identities from the standalone #870
+and #871 corpora; their detection measurements cannot be relabelled as results
+for this specification. The v25 and v26 corpora and contracts reconstruct
+byte-for-byte. Frozen v27/v28 contracts and corpus pins describe the integrated
+history, not the standalone branch history.
+
+| Generator | A documents | D documents | R documents | Total per partition |
+| --- | ---: | ---: | ---: | ---: |
+| v26 | 10,307 | 7,612 | 6,481 | 24,400 |
+| v27 | 10,707 | 8,012 | 6,881 | 25,600 |
+| v28 | 16,247 | 8,262 | 12,421 | 36,930 |
+| v29 | 19,687 | 8,832 | 12,611 | 41,130 |
+
+The [v29 history plan](history-plans/generator-v29.json) covers one remeasurement
+of v0.17.0 and v0.16.0 on the combined corpus. Each subject binary comes from a
+producer build of its clean release tag, and its pinned hash matches the binary
+in that release's earlier receipts. Each release was captured once; both gate
+contracts are scored from that one record. The
+[v29 history](history-generator-v29/history.md) keeps the
+[evidence hashes](history-generator-v29/history.json) and each release's
+observation record. These are past-release rows on a new specification, not a
+detection gain, and they cannot be compared with rows measured on an earlier
+corpus. Neither release refused a document; every restore was exact and every
+manifest valid.
+
+| Release | Contract | C leaked B | A leaked B | A all-gold leaked B | D FP B | R leaked B | Refused |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.17.0 | v2 | 6,652 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v2 | 7,348 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
+| v0.17.0 | v1 | 9,717 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v1 | 13,291 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
+
+Historical numbers measured on earlier specifications are unchanged.
+After this harness lands, #870 and #871 must merge main, retain these combined
+generators/contracts/pins (including the dev phone correction), drop their redundant harness changes and standalone
+comparison notices, and certify their detection changes against the new main.
+Their rule-dependent tooling and mechanism arms remain with those PRs.
 
 ### Measured adjacency layer history
 

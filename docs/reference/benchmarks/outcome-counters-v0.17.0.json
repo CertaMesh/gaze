@@ -1,0 +1,417 @@
+{
+  "schema": "gaze-outcome-counters-proof/v1",
+  "release": "v0.17.0",
+  "observation_record": {
+    "file": "observations-v0.17.0.jsonl.gz",
+    "sha256": "f20e0cfc47b7e7867bdf1a07708314c36d1213226a7ee08592d5c99ae71b4313"
+  },
+  "contracts": {
+    "v1": {
+      "committed_scorecard": "scorecard-v0.17.0.json.gz",
+      "committed_scorecard_sha256": "48038f42f665fc41d45aab2c3b12c65eaa23854d055c99b49308b8c553a59f75",
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
+          "attempted_documents": 2910,
+          "blocked_operations": {
+            "documents": 0,
+            "by_kind": {
+              "untransformable": 0,
+              "possibly_sensitive": 0,
+              "fail_closed": 0
+            }
+          },
+          "untransformable_refused": {
+            "documents": 0,
+            "by_reason": {
+              "json_number_no_text_only_path": 0,
+              "encoded_carrier": 0,
+              "no_safe_rendering": 0,
+              "caller_value_too_short": 0
+            }
+          },
+          "fp_refusals": {
+            "documents": 0
+          },
+          "protection": {
+            "confirmed": {
+              "values": 15399,
+              "gold_values": 12219,
+              "false_positive_values": 4801
+            },
+            "possibly_sensitive": {
+              "values": 2,
+              "gold_values": 2,
+              "false_positive_values": 0,
+              "dispositions": {
+                "protect_values": 2,
+                "refuse_documents": 0
+              }
+            }
+          },
+          "false_positives": {
+            "documents": 1978,
+            "documents_from_possibly_sensitive_only": 0,
+            "values": 4801,
+            "possibly_sensitive_values": 0
+          },
+          "usable_content": {
+            "non_pii_bytes": 828743,
+            "retained_non_pii_bytes": 801722,
+            "lost_to_false_positive_bytes": 27021,
+            "lost_to_refusal_bytes": 0,
+            "retained_ratio": 0.9673951997181274
+          }
+        }
+      ]
+    },
+    "v2": {
+      "committed_scorecard": "scorecard-v0.17.0-scored-labels-v2.json.gz",
+      "committed_scorecard_sha256": "41fe2764e982c7f7cd9637b4c273c5bc4083b104d8af9ed3db24a0fbbcac1765",
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
+          "attempted_documents": 2910,
+          "blocked_operations": {
+            "documents": 0,
+            "by_kind": {
+              "untransformable": 0,
+              "possibly_sensitive": 0,
+              "fail_closed": 0
+            }
+          },
+          "untransformable_refused": {
+            "documents": 0,
+            "by_reason": {
+              "json_number_no_text_only_path": 0,
+              "encoded_carrier": 0,
+              "no_safe_rendering": 0,
+              "caller_value_too_short": 0
+            }
+          },
+          "fp_refusals": {
+            "documents": 0
+          },
+          "protection": {
+            "confirmed": {
+              "values": 15196,
+              "gold_values": 12016,
+              "false_positive_values": 4800
+            },
+            "possibly_sensitive": {
+              "values": 2,
+              "gold_values": 2,
+              "false_positive_values": 0,
+              "dispositions": {
+                "protect_values": 2,
+                "refuse_documents": 0
+              }
+            }
+          },
+          "false_positives": {
+            "documents": 1978,
+            "documents_from_possibly_sensitive_only": 0,
+            "values": 4800,
+            "possibly_sensitive_values": 0
+          },
+          "usable_content": {
+            "non_pii_bytes": 828726,
+            "retained_non_pii_bytes": 801722,
+            "lost_to_false_positive_bytes": 27004,
+            "lost_to_refusal_bytes": 0,
+            "retained_ratio": 0.9674150442969087
+          }
+        }
+      ]
+    },
+    "v3": {
+      "committed_scorecard": "scorecard-v0.17.0-scored-labels-v3.json.gz",
+      "committed_scorecard_sha256": "cdfec65479d0db7f0e00018b12dd86c8c2b30ac1e855f50afe8525a010590802",
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
+          "attempted_documents": 2910,
+          "blocked_operations": {
+            "documents": 0,
+            "by_kind": {
+              "untransformable": 0,
+              "possibly_sensitive": 0,
+              "fail_closed": 0
+            }
+          },
+          "untransformable_refused": {
+            "documents": 0,
+            "by_reason": {
+              "json_number_no_text_only_path": 0,
+              "encoded_carrier": 0,
+              "no_safe_rendering": 0,
+              "caller_value_too_short": 0
+            }
+          },
+          "fp_refusals": {
+            "documents": 0
+          },
+          "protection": {
+            "confirmed": {
+              "values": 15196,
+              "gold_values": 12016,
+              "false_positive_values": 4800
+            },
+            "possibly_sensitive": {
+              "values": 2,
+              "gold_values": 2,
+              "false_positive_values": 0,
+              "dispositions": {
+                "protect_values": 2,
+                "refuse_documents": 0
+              }
+            }
+          },
+          "false_positives": {
+            "documents": 1978,
+            "documents_from_possibly_sensitive_only": 0,
+            "values": 4800,
+            "possibly_sensitive_values": 0
+          },
+          "usable_content": {
+            "non_pii_bytes": 828726,
+            "retained_non_pii_bytes": 801722,
+            "lost_to_false_positive_bytes": 27004,
+            "lost_to_refusal_bytes": 0,
+            "retained_ratio": 0.9674150442969087
+          }
+        }
+      ]
+    },
+    "v4": {
+      "committed_scorecard": "scorecard-v0.17.0-scored-labels-v4.json.gz",
+      "committed_scorecard_sha256": "7944d60a003fd8e5d6ace066003b7a6ad291b1c644ed19dd24469bd33aaa285f",
+      "scorecard_byte_identical": true,
+      "outcome_counters": [
+        {
+          "config": "policy-file",
+          "attempted_documents": 2910,
+          "blocked_operations": {
+            "documents": 0,
+            "by_kind": {
+              "untransformable": 0,
+              "possibly_sensitive": 0,
+              "fail_closed": 0
+            }
+          },
+          "untransformable_refused": {
+            "documents": 0,
+            "by_reason": {
+              "json_number_no_text_only_path": 0,
+              "encoded_carrier": 0,
+              "no_safe_rendering": 0,
+              "caller_value_too_short": 0
+            }
+          },
+          "fp_refusals": {
+            "documents": 0
+          },
+          "protection": {
+            "confirmed": {
+              "values": 15399,
+              "gold_values": 12219,
+              "false_positive_values": 4801
+            },
+            "possibly_sensitive": {
+              "values": 2,
+              "gold_values": 2,
+              "false_positive_values": 0,
+              "dispositions": {
+                "protect_values": 2,
+                "refuse_documents": 0
+              }
+            }
+          },
+          "false_positives": {
+            "documents": 1978,
+            "documents_from_possibly_sensitive_only": 0,
+            "values": 4801,
+            "possibly_sensitive_values": 0
+          },
+          "usable_content": {
+            "non_pii_bytes": 828743,
+            "retained_non_pii_bytes": 801722,
+            "lost_to_false_positive_bytes": 27021,
+            "lost_to_refusal_bytes": 0,
+            "retained_ratio": 0.9673951997181274
+          }
+        }
+      ]
+    }
+  },
+  "layers": {
+    "A": [
+      {
+        "config": "policy-file",
+        "attempted_documents": 6617,
+        "blocked_operations": {
+          "documents": 0,
+          "by_kind": {
+            "untransformable": 0,
+            "possibly_sensitive": 0,
+            "fail_closed": 0
+          }
+        },
+        "untransformable_refused": {
+          "documents": 0,
+          "by_reason": {
+            "json_number_no_text_only_path": 0,
+            "encoded_carrier": 0,
+            "no_safe_rendering": 0,
+            "caller_value_too_short": 0
+          }
+        },
+        "fp_refusals": {
+          "documents": 0
+        },
+        "protection": {
+          "confirmed": {
+            "values": 4704,
+            "gold_values": 4328,
+            "false_positive_values": 510
+          },
+          "possibly_sensitive": {
+            "values": 444,
+            "gold_values": 444,
+            "false_positive_values": 0,
+            "dispositions": {
+              "protect_values": 444,
+              "refuse_documents": 0
+            }
+          }
+        },
+        "false_positives": {
+          "documents": 439,
+          "documents_from_possibly_sensitive_only": 0,
+          "values": 510,
+          "possibly_sensitive_values": 0
+        },
+        "usable_content": {
+          "non_pii_bytes": 456584,
+          "retained_non_pii_bytes": 454095,
+          "lost_to_false_positive_bytes": 2489,
+          "lost_to_refusal_bytes": 0,
+          "retained_ratio": 0.9945486482224519
+        }
+      }
+    ],
+    "D": [
+      {
+        "config": "policy-file",
+        "attempted_documents": 5192,
+        "blocked_operations": {
+          "documents": 0,
+          "by_kind": {
+            "untransformable": 0,
+            "possibly_sensitive": 0,
+            "fail_closed": 0
+          }
+        },
+        "untransformable_refused": {
+          "documents": 0,
+          "by_reason": {
+            "json_number_no_text_only_path": 0,
+            "encoded_carrier": 0,
+            "no_safe_rendering": 0,
+            "caller_value_too_short": 0
+          }
+        },
+        "fp_refusals": {
+          "documents": 0
+        },
+        "protection": {
+          "confirmed": {
+            "values": 1119,
+            "gold_values": 0,
+            "false_positive_values": 1119
+          },
+          "possibly_sensitive": {
+            "values": 0,
+            "gold_values": 0,
+            "false_positive_values": 0,
+            "dispositions": {
+              "protect_values": 0,
+              "refuse_documents": 0
+            }
+          }
+        },
+        "false_positives": {
+          "documents": 962,
+          "documents_from_possibly_sensitive_only": 0,
+          "values": 1119,
+          "possibly_sensitive_values": 0
+        },
+        "usable_content": {
+          "non_pii_bytes": 496335,
+          "retained_non_pii_bytes": 487007,
+          "lost_to_false_positive_bytes": 9328,
+          "lost_to_refusal_bytes": 0,
+          "retained_ratio": 0.9812062417520425
+        }
+      }
+    ],
+    "R": [
+      {
+        "config": "policy-file",
+        "attempted_documents": 3061,
+        "blocked_operations": {
+          "documents": 0,
+          "by_kind": {
+            "untransformable": 0,
+            "possibly_sensitive": 0,
+            "fail_closed": 0
+          }
+        },
+        "untransformable_refused": {
+          "documents": 0,
+          "by_reason": {
+            "json_number_no_text_only_path": 0,
+            "encoded_carrier": 0,
+            "no_safe_rendering": 0,
+            "caller_value_too_short": 0
+          }
+        },
+        "fp_refusals": {
+          "documents": 0
+        },
+        "protection": {
+          "confirmed": {
+            "values": 1600,
+            "gold_values": 1500,
+            "false_positive_values": 533
+          },
+          "possibly_sensitive": {
+            "values": 29,
+            "gold_values": 29,
+            "false_positive_values": 0,
+            "dispositions": {
+              "protect_values": 29,
+              "refuse_documents": 0
+            }
+          }
+        },
+        "false_positives": {
+          "documents": 320,
+          "documents_from_possibly_sensitive_only": 0,
+          "values": 533,
+          "possibly_sensitive_values": 0
+        },
+        "usable_content": {
+          "non_pii_bytes": 330757,
+          "retained_non_pii_bytes": 329480,
+          "lost_to_false_positive_bytes": 1277,
+          "lost_to_refusal_bytes": 0,
+          "retained_ratio": 0.9961391595642722
+        }
+      }
+    ]
+  }
+}

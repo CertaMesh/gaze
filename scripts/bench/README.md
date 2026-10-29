@@ -69,6 +69,40 @@ Planning estimates on a modern laptop are roughly 2–10 minutes for the default
 Thermals, CPU runtime, and filesystem cache state can move those estimates
 substantially; A6 records the authoritative observed runtime.
 
+## Outcome counters
+
+`outcome_counters.py report` derives a sidecar report from an observation
+record under one contract: refused operations by kind and reason, refusals of
+documents without scored gold, confirmed versus possibly-sensitive
+(`custom:family:<name>`) protection, false positives by document and by value,
+and how much non-PII content stays usable. Scorecards are untouched, so every
+existing number stays byte-identical: certification binds a capture to its
+replay byte for byte, and `gaze_bench_score.py` is digest-pinned by the
+published competitor rows. The field table is in the
+[benchmark reference](../../docs/reference/benchmarks/README.md#outcome-counters).
+
+```bash
+uv run --project scripts/bench python scripts/bench/outcome_counters.py report \
+  target/bench-data/no-opf/full/observations-v1.jsonl.gz \
+  --scored-labels docs/reference/benchmarks/scored-labels-v4.json \
+  --output target/bench-data/no-opf/full/outcome-counters-v4.json
+```
+
+The bench wire codes for refusals are `untransformable_<reason>` and
+`possibly_sensitive_refused`. The scorer's closed `pipeline_error_code` set
+admits them together with the first emitter, which changes detection and so
+comes with a measured benchmark that re-pins the competitor rows.
+
+Prove the committed v0.17.0 record still rescores to its committed v1-v4
+scorecards and pin its run and A/D/R layer counters (CI runs the same check in
+`test_outcome_counters.py`):
+
+```bash
+uv run --project scripts/bench python scripts/bench/outcome_counters.py prove \
+  docs/reference/benchmarks/observations-v0.17.0.jsonl.gz \
+  --release v0.17.0 --check docs/reference/benchmarks/outcome-counters-v0.17.0.json
+```
+
 ## Scored-label contracts
 
 A scored-label contract says which corpus labels count as gold PII. Without
@@ -319,6 +353,25 @@ gold inventories, layer identities, or observed populations refuse a report.
 The committed [example report](fixtures/leak-diff-example.json) comes from the
 v0.17 GLiNER mechanism records, with their hashes pinned in the report.
 `test_leak_diff.py` reproduces its bytes without another benchmark capture.
+
+## Structured-input slice
+
+`structured_slice.py` reads one value-free record and reports the generator
+v26 `structured_*` cells per layer and shape. It counts false positives by
+document, by decoy value and by byte, and counts gold values protected whole.
+It also counts covered JSON/CSV syntax bytes, JSON type changes and usable
+payloads. A usable payload is not refused, has no non-gold byte covered and
+changes no JSON type. Refusals are kept apart, with a refused gold bytes
+column beside leaked; the scorer gate counts refused gold as leaked. The
+command needs no capture, model or binary:
+
+```bash
+uv run --project scripts/bench python scripts/bench/structured_slice.py \
+  target/gate/candidate/observations-v1.jsonl.gz --config policy-file --markdown
+```
+
+A record from an older generator or a different corpus is refused.
+`test_structured_input_cells.py` pins the counts on synthetic observations.
 
 ## Required local models
 
@@ -797,6 +850,20 @@ version strings, and a `releases` array. Each release has these fields:
   `model_bundles` array from the intended subject. These fields must equal the
   captured provenance. They prevent a resumed job from accepting another
   subject at the same local paths.
+
+[`generator-v29.json`](../../docs/reference/benchmarks/history-plans/generator-v29.json)
+is the combined plan for structured input (v26), invisible separators (v27/v28)
+and issuer credentials (v29). It pins v0.17.0 and v0.16.0 with their tag
+revisions, policy hashes and model bundles. Copy each release policy to
+`target/history-releases/policy-<version>.toml` and check out each tag at
+`target/history-releases/<version>`. Each `binary_sha256` is pinned from a
+producer build of its tag with `CARGO_TARGET_DIR` unset; that build is the
+`subject_build.build` receipt, and no measurement is admitted against an
+unpinned or different binary. The measured result is
+[`history-generator-v29`](../../docs/reference/benchmarks/history-generator-v29/history.md). Re-resolve `benchmark_spec` after any harness
+change and assert the recomputed object equals the committed plan's spec.
+A history dry run alone does not establish that equality. The combined corpus
+is not comparable to the standalone detection branches' earlier captures.
 
 First inspect the plan without inference. Then execute only missing jobs:
 

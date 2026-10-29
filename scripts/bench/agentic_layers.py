@@ -51,6 +51,8 @@ import record_id_ownership_cells as record_id_ownership
 import record_id_boundary_cells as record_id_boundary
 import full_name_case_cells as full_name_case
 import credential_code_cells as credential_code
+import structured_input_cells as structured_input
+import invisible_separator_cells as invisible_separators
 import issuer_credential_cells as issuer_credentials
 
 
@@ -106,7 +108,7 @@ CREDIT_SCOPE_BY_LABEL: dict[str, CreditScope] = {
 }
 CUED_SURFACES = (frozenset(SURFACES) - {"prose_nocue"}) | {
     "gov_prose", "gov_log_kv", "gov_tool_json", "gov_tool_result",
-}
+} | invisible_separators.CUED_SURFACES
 
 
 def invalid_twin_credited(label: str | None, surface: str) -> bool:
@@ -3170,6 +3172,9 @@ CREDIT_GUARD_SINCE: dict[str, int] = {
 
 CREDIT_GUARD_FAMILIES["TAXNUM"] += government_ids.TAX_GUARD_FAMILIES
 CREDIT_GUARD_SINCE.update({family: 11 for family in government_ids.TAX_GUARD_FAMILIES})
+CREDIT_GUARD_FAMILIES["CREDITCARDNUMBER"] += ("invisible_card_twin",)
+CREDIT_GUARD_FAMILIES["TAXNUM"] += ("invisible_tax_twin",)
+CREDIT_GUARD_SINCE.update({"invisible_card_twin": 27, "invisible_tax_twin": 27})
 
 
 def guard_families(generator_version: int) -> list[str]:
@@ -4487,6 +4492,9 @@ GENERATOR_ADDITIONS = {
     23: "credentials_escapes_",
     24: "credentials_separators_",
     25: "credentials_prefixes_",
+    26: structured_input.SURFACE_PREFIX,
+    27: "invisible_",
+    28: ("invisible_bom_", "invisible_joined_", "invisible_boundary_"),
     29: "issuer_credentials_",
 }
 
@@ -4495,7 +4503,8 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
     """The documents of generator `version`, from the current generator's output."""
     if not 3 <= version <= GENERATOR_VERSION:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
-    later = tuple(prefix for added, prefix in GENERATOR_ADDITIONS.items() if added > version)
+    later = tuple(prefix for added, prefixes in GENERATOR_ADDITIONS.items() if added > version
+                  for prefix in ((prefixes,) if isinstance(prefixes, str) else prefixes))
     selected = [record for record in records if not record.surface.startswith(later)] if later else list(records)
     if version < 18:
         selected = [
@@ -4521,6 +4530,9 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    28: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v28.json"),
+    27: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v27.json"),
+    26: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v26.json"),
     25: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v25.json"),
     24: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"),
     23: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v23.json"),
@@ -4799,6 +4811,8 @@ def generate(partition: str) -> list[Record]:
         + credential_code.source_escape_records(sys.modules[__name__], partition)
         + credential_code.json_separator_records(sys.modules[__name__], partition)
         + credential_code.json_prefix_records(sys.modules[__name__], partition)
+        + structured_input.records(sys.modules[__name__], partition)
+        + invisible_separators.records(sys.modules[__name__], partition)
         + issuer_credentials.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)

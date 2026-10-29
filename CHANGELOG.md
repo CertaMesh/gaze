@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Dispatch APIs require an explicit `HostContextSelection`; see UPGRADE.md.
 
 
+- Update the pulldown-cmark dev-dependency from 0.13.4 to 0.13.5 to fix RustSec
+  advisory RUSTSEC-2026-0414, exponential event growth with
+  `Options::ENABLE_WIKILINKS`. Gaze uses it only in a documentation test that
+  parses repository Markdown with default options, so wikilinks stay disabled.
+
 - Update Tokio from 1.52.3 to 1.54.1 to fix RustSec advisory
   RUSTSEC-2026-0386, an I/O safety defect in the `AsyncFd` constructors.
   Gaze does not use `AsyncFd`.

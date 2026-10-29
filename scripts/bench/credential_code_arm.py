@@ -2,8 +2,8 @@
 """Prepare a same-binary credential mechanism arm without running a benchmark.
 
 Both policies retain the setup policy's other bundles, rules and model paths.
-The base retains all recognizers outside the credential-code arm;
-the candidate appends only the credential-code rulepack. mechanism_arms.py
+The base replaces bundled secrets with the two pre-existing recognizers;
+the candidate appends only the new credential rulepack. mechanism_arms.py
 accepts the committed append_rulepack_paths delta for this comparison.
 """
 import argparse

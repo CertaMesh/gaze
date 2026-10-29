@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "5b6157277645092fe698d00863070f2592a6c5204943a68068d50290e7dcd36c",
-    "test": "0b6a4d96fd74cfa3f87479bf43b1f13cee6960dfbcb0ef982f827bf3952e0395",
+    "dev": "75ff131ba6a7588a5baf71b9ed5a7dd3d44dbcbe41993bd8c2d0d8c0404ddf59",
+    "test": "ef3a457a3c1a273cd8d64f9dbb5be2010014cc40d6664f7fdff531ff9bbdb03b",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -469,7 +469,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -2272,8 +2272,8 @@ class GateTests(unittest.TestCase):
 
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
-                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16"), "IBAN": (),
-                          "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped"), "CPF": ("ref_number_11",),
+                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16", "invisible_card_twin"), "IBAN": (),
+                          "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped", "invisible_tax_twin"), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})
         self.assertEqual(set(agentic.CREDIT_GUARD_FAMILIES), set(agentic.CREDIT_SCOPE_BY_LABEL))
