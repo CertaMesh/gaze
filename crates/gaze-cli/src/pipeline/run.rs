@@ -271,18 +271,19 @@ pub(crate) fn prepare_clean_pipeline(
         .transpose()
         .map_err(map_policy_error)?;
     let clean_overrides = clean_overrides_from_options(options)?;
-    let context = options
+    let mut context = options
         .context_json
         .map(TypedContext::load)
         .transpose()
         .map_err(map_context_error)?;
-    if let Some(context) = &context {
+    if let Some(context) = &mut context {
         match context_enforcement {
             ContextEnforcement::Enforce => enforce_context_transformable(context)?,
             ContextEnforcement::Observe => {
                 if let Some(reason) = context.untransformable_reason() {
                     eprintln!("warning: {reason}");
                 }
+                context.record_value_rejections.clear();
             }
         }
     }

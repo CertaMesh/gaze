@@ -78,6 +78,11 @@ pub use policy_inputs::{resolve_policy_inputs, ResolvedPolicyInputs};
 /// bucket), context dictionaries, and a loaded NER model all
 /// count. The guard reads the registration count rather than re-deriving
 /// eligibility, so a pipeline that would preserve every byte cannot build.
+///
+/// Enforces caller context rejections by default. An unsafe short record value
+/// returns [`BuildError::Untransformable`] with a closed, value-free reason.
+/// Observer-only tools must inspect [`Context::untransformable_reason`], warn
+/// without values, and explicitly clear `record_value_rejections` before assembly.
 pub fn build_pipeline(
     policy: &gaze::Policy,
     context: &Context,
@@ -200,6 +205,7 @@ pub fn attach_nym_safety_net(
 ///
 /// The policy rules are already registered. Rule order is first match, so an added
 /// recognizer's class falls through to the policy's default rule.
+/// Caller context rejections enforce the same refusal as [`build_pipeline`].
 pub fn build_pipeline_builder(
     policy: &gaze::Policy,
     context: &Context,
@@ -220,6 +226,10 @@ pub fn build_pipeline_builder(
 /// Assemble request-local context against the resident pipeline's unchanged policy and
 /// rulepacks. NER, the DOB judge, safety nets and loggers retain their resident handles.
 /// Drop the returned pipeline and dictionary bundle after the request.
+///
+/// Enforces caller context rejections by default with [`BuildError::Untransformable`].
+/// Observer-only tools must inspect [`Context::untransformable_reason`], warn
+/// without values, and explicitly clear `record_value_rejections` before assembly.
 pub fn pipeline_with_context(
     resident: &Pipeline,
     policy: &gaze::Policy,
@@ -244,6 +254,7 @@ pub fn pipeline_with_context(
 /// Assemble a request-local policy after translating private context identifiers.
 /// The caller must preserve the resident policy's actions. Models and audit sinks
 /// remain resident; the assembled request policy supplies rules and recognizers.
+/// Caller context rejections enforce the same refusal as [`build_pipeline`].
 pub fn pipeline_with_private_context(
     resident: &Pipeline,
     policy: &gaze::Policy,
@@ -271,6 +282,9 @@ fn build_pipeline_builder_inner(
     ner_threshold: Option<f32>,
     resident: Option<&gaze::RecognizerRegistry>,
 ) -> Result<PipelineBuilder, BuildError> {
+    if let Some(reason) = context.untransformable_reason() {
+        return Err(BuildError::Untransformable(reason));
+    }
     let _assembly = gaze_types::perf_span!("assembly_ns");
     let rules = gaze_types::perf_span!("recognizer_construction_ns");
     let mut builder = registration::AssemblyBuilder::default();

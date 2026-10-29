@@ -2,7 +2,10 @@ use gaze::{
     Action, CleanDocument, Context, LocaleChain, PiiClass, Policy, RawDocument, RuleSpec, Scope,
     Session,
 };
-use gaze_assembly::{build_pipeline, BuildError};
+use gaze_assembly::{
+    build_pipeline, build_pipeline_builder, pipeline_with_context, pipeline_with_private_context,
+    BuildError,
+};
 
 fn context() -> Context {
     Context::from_json_str(
@@ -15,6 +18,32 @@ fn policy(action: Action) -> Policy {
     let mut policy = Policy::default();
     policy.rules = vec![RuleSpec::Default { action }];
     policy
+}
+
+#[test]
+fn caller_value_too_short_refuses_all_library_assembly_paths_without_value() {
+    let rejected = Context::from_json_str(r#"{"record":{"name":"Qx"}}"#).unwrap();
+    let policy = policy(Action::Tokenize);
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let resident = build_pipeline(&policy, &context(), &[], &locales, None).unwrap();
+    let results = [
+        build_pipeline(&policy, &rejected, &[], &locales, None).map(|_| ()),
+        build_pipeline_builder(&policy, &rejected, &[], &locales, None).map(|_| ()),
+        pipeline_with_context(&resident, &policy, &rejected, &[], &locales).map(|_| ()),
+        pipeline_with_private_context(&resident, &policy, &rejected, &[], &locales).map(|_| ()),
+    ];
+    for result in results {
+        let error = result.expect_err("rejected caller context must refuse assembly");
+        assert!(matches!(
+            error,
+            BuildError::Untransformable(gaze::UntransformableReason::CallerValueTooShort)
+        ));
+        assert_eq!(error.to_string(), "untransformable: caller_value_too_short");
+        for rendered in [error.to_string(), format!("{error:?}")] {
+            assert!(!rendered.contains("Qx"));
+            assert!(!rendered.contains("/name"));
+        }
+    }
 }
 
 #[test]
@@ -62,12 +91,10 @@ fn non_name_record_defaults_clean_and_restore_through_product_pipeline() {
 }
 
 #[test]
-fn valid_de_iban_record_survives_short_name_and_restores() {
+fn valid_de_iban_record_with_only_two_letters_restores() {
     let iban = "DE36000000000000000000";
-    let context =
-        Context::from_json_str(&format!(r#"{{"record":{{"iban":"{iban}","name":"A"}}}}"#)).unwrap();
-    assert_eq!(context.record_value_rejections.len(), 1);
-    assert_eq!(context.record_value_rejections[0].path, "/name");
+    let context = Context::from_json_str(&format!(r#"{{"record":{{"iban":"{iban}"}}}}"#)).unwrap();
+    assert!(context.record_value_rejections.is_empty());
     let locales = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline = build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None)
         .expect("record pipeline");

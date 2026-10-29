@@ -40,9 +40,12 @@ match changed case by default; same-case exact copies need opt-in or another
 detector. Default Nym has no person label, so model corroboration uses NER.
 
 Unsafe short values refuse the whole call with the closed reason
-`caller_value_too_short`. This applies to clean, daemon v1 and v2, and embedded
-MCP host context. Owner-side eval continues measuring with a value-free warning.
-Rust observers can inspect `record_value_rejections` for typed reasons.
+`caller_value_too_short`. This applies to clean, daemon v1 and v2, embedded
+MCP host context, and Rust callers of `gaze-assembly`. Library assembly enforces
+rejections by default with `BuildError::Untransformable`. Owner-side eval
+explicitly opts into observation: it warns with the closed reason and clears
+`record_value_rejections` before assembly. Rust observer tools must make the same
+explicit choice after inspecting `Context::untransformable_reason()`.
 Accepted values in disabled groups are inert and absent from this list.
 A valid IBAN is accepted even when
 its country code supplies its only two letters. Ordinary document detectors

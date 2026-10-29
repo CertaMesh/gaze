@@ -141,8 +141,12 @@ pub enum ContextError {
 }
 
 impl Context {
-    /// Closed refusal reason for privacy-enforcing consumers. Observers may
-    /// retain the rejection metadata and continue measuring instead.
+    /// Closed refusal reason for privacy-enforcing consumers.
+    ///
+    /// Policy assembly in `gaze-assembly` refuses this context by default when
+    /// a reason is present. Observer-only tools must explicitly inspect the
+    /// reason, emit a value-free warning, and clear `record_value_rejections`
+    /// before assembly to continue measuring accepted values.
     pub fn untransformable_reason(&self) -> Option<UntransformableReason> {
         self.record_value_rejections
             .first()

@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Caller record values too short for safe matching now refuse the entire call
-  in `gaze clean`, daemon v1 and v2, and embedded MCP host context. The closed
+  in `gaze clean`, daemon v1 and v2, embedded MCP host context, and Rust library
+  assembly. Library enforcement is the default and returns the typed
+  `BuildError::Untransformable`. The closed
   reason is `caller_value_too_short`; clean exits with code 8 and no output.
   Previously these values were skipped. Owner-side `gaze eval` remains an
-  observer and measures with a value-free warning.
+  explicit observer and measures with a value-free warning.
 - Proxy adapters return `RequestSurfaces` and attach parsed scalar provenance to
   string leaves. The Anthropic codec and MCP also pass field context to detection.
   This adds metadata only. No production recognizer consumes the field context.

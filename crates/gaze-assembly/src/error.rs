@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum BuildError {
+    #[error("untransformable: {0}")]
+    Untransformable(gaze::UntransformableReason),
     #[error("no effective recognizers configured")]
     NoRecognizers,
     #[error(

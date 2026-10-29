@@ -170,7 +170,12 @@ pub(crate) fn response_pipeline(
             rulepacks,
             &gaze::LocaleChain::from(locales),
         )
-        .map_err(|_| HostContextError::Policy)
+        .map_err(|error| match error {
+            gaze_assembly::BuildError::Untransformable(reason) => {
+                HostContextError::Untransformable(reason)
+            }
+            _ => HostContextError::Policy,
+        })
     });
     // Keep this call's models, safety nets and loggers even on a cache hit.
     detection

@@ -772,7 +772,12 @@ impl Daemon {
                         &self.rulepacks,
                         &self.locale_chain,
                     )
-                    .map_err(|_| Failure::ContextInvalid)?;
+                    .map_err(|error| match error {
+                        gaze_assembly::BuildError::Untransformable(reason) => {
+                            Failure::Untransformable(reason.as_str())
+                        }
+                        _ => Failure::ContextInvalid,
+                    })?;
                     let dictionaries = DictionaryBundle::merge(
                         self.dictionaries.clone(),
                         gaze::dictionary_bundle_from_context(&context),

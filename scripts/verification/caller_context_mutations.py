@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove short-record refusal and value-free stderr against two single-site mutations.
+"""Prove library refusal, explicit eval observation, and value-free stderr.
 
 Run through anvil run with no concurrent builds in this worktree. Source is
 restored in finally, including when a mutant survives. Logs stay under target/.
@@ -13,13 +13,20 @@ import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "crates/gaze-cli/src/pipeline/run.rs"
+CLI_SOURCE = ROOT / "crates/gaze-cli/src/pipeline/run.rs"
+ASSEMBLY_SOURCE = ROOT / "crates/gaze-assembly/src/lib.rs"
 OUTPUT = ROOT / "target/caller-context-mutations"
 SITE = "ContextEnforcement::Enforce => enforce_context_transformable(context)?,"
 TEST = "caller_value_too_short_refuses_without_output_or_value"
+LIBRARY_TEST = "caller_value_too_short_refuses_all_library_assembly_paths_without_value"
+EVAL_TEST = "caller_value_too_short_eval_warns_and_measures_without_value"
+ASSEMBLY_SITE = """    if let Some(reason) = context.untransformable_reason() {
+        return Err(BuildError::Untransformable(reason));
+    }
+"""
 
 
-def run(name):
+def run(name, package, target, test):
     while True:
         cargo = subprocess.run(["pgrep", "-x", "cargo"], capture_output=True, text=True)
         memory = subprocess.check_output(["memory_pressure"], text=True).splitlines()[-1]
@@ -30,8 +37,8 @@ def run(name):
     env = dict(os.environ, CARGO_BUILD_JOBS="2", CARGO_PROFILE_DEV_DEBUG="0",
                CARGO_PROFILE_TEST_DEBUG="0", CARGO_INCREMENTAL="0", GAZE_DISABLE_OS_KEYSTORE="1")
     result = subprocess.run([
-        "nice", "-n", "10", "cargo", "test", "--locked", "-p", "gaze-cli",
-        "--test", "cli_pipe", TEST, "--", "--exact",
+        "nice", "-n", "10", "cargo", "test", "--locked", "-p", package,
+        "--test", target, test, "--", "--exact",
     ], cwd=ROOT, env=env, capture_output=True)
     log = result.stdout + result.stderr
     (OUTPUT / f"{name}.log").write_bytes(log)
@@ -40,28 +47,39 @@ def run(name):
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    original = SOURCE.read_text()
-    assert original.count(SITE) == 1
+    originals = {source: source.read_text() for source in (CLI_SOURCE, ASSEMBLY_SOURCE)}
+    cli_test = ("gaze-cli", "cli_pipe", TEST)
+    library_test = ("gaze-assembly", "record_context", LIBRARY_TEST)
+    eval_test = ("gaze-cli", "eval_cli", EVAL_TEST)
     mutations = {
-        "skip-refusal": "ContextEnforcement::Enforce => (),",
-        "echo-context": """ContextEnforcement::Enforce => {
+        "library-refusal": (ASSEMBLY_SOURCE, ASSEMBLY_SITE, "", library_test),
+        "eval-opt-out": (CLI_SOURCE, "context.record_value_rejections.clear();", "", eval_test),
+        "echo-context": (CLI_SOURCE, SITE, """ContextEnforcement::Enforce => {
             eprintln!("{}", std::fs::read_to_string(options.context_json.unwrap()).unwrap());
             enforce_context_transformable(context)?;
-        }""",
+        }""", cli_test),
     }
-    receipt = {"source_sha256": hashlib.sha256(original.encode()).hexdigest(), "mutations": {}}
+    receipt = {"source_sha256": {
+        str(source.relative_to(ROOT)): hashlib.sha256(original.encode()).hexdigest()
+        for source, original in originals.items()
+    }, "mutations": {}}
     try:
-        for name, replacement in mutations.items():
-            SOURCE.write_text(original.replace(SITE, replacement))
-            code, log = run(name)
-            killed = code == 101 and f"test {TEST} ... FAILED".encode() in log
+        for name, (source, site, replacement, test) in mutations.items():
+            original = originals[source]
+            assert original.count(site) == 1
+            source.write_text(original.replace(site, replacement))
+            code, log = run(name, *test)
+            killed = code == 101 and f"test {test[2]} ... FAILED".encode() in log
             receipt["mutations"][name] = {"exit": code, "killed_by_regression": killed}
             assert killed, f"{name} must fail the regression test, not compilation"
+            source.write_text(original)
     finally:
-        SOURCE.write_text(original)
-    code, _ = run("restored")
-    receipt["restored_exit"] = code
-    assert code == 0
+        for source, original in originals.items():
+            source.write_text(original)
+    for test in (library_test, eval_test, cli_test):
+        code, _ = run("restored-" + test[1], *test)
+        receipt["restored-" + test[1]] = code
+        assert code == 0
     (OUTPUT / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt, sort_keys=True))
 
