@@ -51,10 +51,12 @@ import record_id_ownership_cells as record_id_ownership
 import record_id_boundary_cells as record_id_boundary
 import full_name_case_cells as full_name_case
 import credential_code_cells as credential_code
+import structured_input_cells as structured_input
 import invisible_separator_cells as invisible_separators
+import issuer_credential_cells as issuer_credentials
 
 
-GENERATOR_VERSION = 28
+GENERATOR_VERSION = 29
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4490,8 +4492,10 @@ GENERATOR_ADDITIONS = {
     23: "credentials_escapes_",
     24: "credentials_separators_",
     25: "credentials_prefixes_",
+    26: structured_input.SURFACE_PREFIX,
     27: "invisible_",
     28: ("invisible_bom_", "invisible_joined_", "invisible_boundary_"),
+    29: "issuer_credentials_",
 }
 
 
@@ -4526,7 +4530,9 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    28: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v28.json"),
     27: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v27.json"),
+    26: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v26.json"),
     25: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v25.json"),
     24: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v24.json"),
     23: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v23.json"),
@@ -4805,7 +4811,9 @@ def generate(partition: str) -> list[Record]:
         + credential_code.source_escape_records(sys.modules[__name__], partition)
         + credential_code.json_separator_records(sys.modules[__name__], partition)
         + credential_code.json_prefix_records(sys.modules[__name__], partition)
+        + structured_input.records(sys.modules[__name__], partition)
         + invisible_separators.records(sys.modules[__name__], partition)
+        + issuer_credentials.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)

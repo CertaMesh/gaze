@@ -15,7 +15,10 @@ __pycache__/
 .DS_Store
 
 # Internal agent tooling (not for contributors)
-.agents/
+.agents/*
+!.agents/setup
+!.agents/resume
+.amp/portals/
 .claude/skills/
 .scribe.yaml
 LEAN-CTX.md

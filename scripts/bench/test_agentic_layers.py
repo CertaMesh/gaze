@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "df5088b9e003c214fe42c5414061b8b7814b5b5f4cc060798b24661657d5bd91",
-    "test": "e08d20c2b83863f35237dbbc5cf419ddcdee2ce8e9e13f0bc990136286f9f688",
+    "dev": "75ff131ba6a7588a5baf71b9ed5a7dd3d44dbcbe41993bd8c2d0d8c0404ddf59",
+    "test": "ef3a457a3c1a273cd8d64f9dbb5be2010014cc40d6664f7fdff531ff9bbdb03b",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -469,7 +469,7 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
