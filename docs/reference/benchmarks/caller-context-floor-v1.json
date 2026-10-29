@@ -215,9 +215,14 @@
   "mutations": {
     "source_sha256": {
       "crates/gaze-cli/src/pipeline/run.rs": "f4e440407272cca5c7dc334eb338040d76c08ecf68e5e8bcc0a73e4eb28dee45",
-      "crates/gaze-assembly/src/lib.rs": "ef2462df6342888f0e693cf33212ce416086b7c4a0f1ae15569de1704cc9c3a8"
+      "crates/gaze-assembly/src/lib.rs": "ef2462df6342888f0e693cf33212ce416086b7c4a0f1ae15569de1704cc9c3a8",
+      "crates/gaze/src/dictionaries.rs": "d4b70335219cbefdb2a542a46049c061fed2516bc18cc2bf177327ab673d2c05"
     },
     "mutations": {
+      "dictionary-refusal": {
+        "exit": 101,
+        "killed_by_regression": true
+      },
       "library-refusal": {
         "exit": 101,
         "killed_by_regression": true
@@ -231,6 +236,7 @@
         "killed_by_regression": true
       }
     },
+    "restored-lib": 0,
     "restored-record_context": 0,
     "restored-eval_cli": 0,
     "restored-cli_pipe": 0

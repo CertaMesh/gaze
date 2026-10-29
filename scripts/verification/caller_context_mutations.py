@@ -15,13 +15,19 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 CLI_SOURCE = ROOT / "crates/gaze-cli/src/pipeline/run.rs"
 ASSEMBLY_SOURCE = ROOT / "crates/gaze-assembly/src/lib.rs"
+DICTIONARY_SOURCE = ROOT / "crates/gaze/src/dictionaries.rs"
 OUTPUT = ROOT / "target/caller-context-mutations"
 SITE = "ContextEnforcement::Enforce => enforce_context_transformable(context)?,"
 TEST = "caller_value_too_short_refuses_without_output_or_value"
 LIBRARY_TEST = "caller_value_too_short_refuses_all_library_assembly_paths_without_value"
 EVAL_TEST = "caller_value_too_short_eval_warns_and_measures_without_value"
+DICTIONARY_TEST = "dictionaries::tests::caller_value_too_short_refuses_public_dictionary_conversions_without_value"
 ASSEMBLY_SITE = """    if let Some(reason) = context.untransformable_reason() {
         return Err(BuildError::Untransformable(reason));
+    }
+"""
+DICTIONARY_SITE = """    if let Some(reason) = ctx.untransformable_reason() {
+        return Err(reason);
     }
 """
 
@@ -38,7 +44,7 @@ def run(name, package, target, test):
                CARGO_PROFILE_TEST_DEBUG="0", CARGO_INCREMENTAL="0", GAZE_DISABLE_OS_KEYSTORE="1")
     result = subprocess.run([
         "nice", "-n", "10", "cargo", "test", "--locked", "-p", package,
-        "--test", target, test, "--", "--exact",
+        *(["--lib"] if target == "lib" else ["--test", target]), test, "--", "--exact",
     ], cwd=ROOT, env=env, capture_output=True)
     log = result.stdout + result.stderr
     (OUTPUT / f"{name}.log").write_bytes(log)
@@ -47,11 +53,15 @@ def run(name, package, target, test):
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    originals = {source: source.read_text() for source in (CLI_SOURCE, ASSEMBLY_SOURCE)}
+    originals = {source: source.read_text() for source in (
+        CLI_SOURCE, ASSEMBLY_SOURCE, DICTIONARY_SOURCE,
+    )}
     cli_test = ("gaze-cli", "cli_pipe", TEST)
     library_test = ("gaze-assembly", "record_context", LIBRARY_TEST)
     eval_test = ("gaze-cli", "eval_cli", EVAL_TEST)
+    dictionary_test = ("gaze-pii", "lib", DICTIONARY_TEST)
     mutations = {
+        "dictionary-refusal": (DICTIONARY_SOURCE, DICTIONARY_SITE, "", dictionary_test),
         "library-refusal": (ASSEMBLY_SOURCE, ASSEMBLY_SITE, "", library_test),
         "eval-opt-out": (CLI_SOURCE, "context.record_value_rejections.clear();", "", eval_test),
         "echo-context": (CLI_SOURCE, SITE, """ContextEnforcement::Enforce => {
@@ -76,7 +86,7 @@ def main():
     finally:
         for source, original in originals.items():
             source.write_text(original)
-    for test in (library_test, eval_test, cli_test):
+    for test in (dictionary_test, library_test, eval_test, cli_test):
         code, _ = run("restored-" + test[1], *test)
         receipt["restored-" + test[1]] = code
         assert code == 0

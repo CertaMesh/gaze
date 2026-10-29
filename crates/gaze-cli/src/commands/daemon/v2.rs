@@ -780,7 +780,8 @@ impl Daemon {
                     })?;
                     let dictionaries = DictionaryBundle::merge(
                         self.dictionaries.clone(),
-                        gaze::dictionary_bundle_from_context(&context),
+                        gaze::dictionary_bundle_from_context(&context)
+                            .map_err(|reason| Failure::Untransformable(reason.as_str()))?,
                     );
                     Ok::<_, Failure>((pipeline, dictionaries))
                 })

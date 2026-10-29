@@ -238,6 +238,10 @@ clears these rejections, and continues measuring accepted values. Rust observer
 tools must explicitly inspect `Context::untransformable_reason()`, warn without
 values, and clear the rejections before assembly. Off-by-default accepted groups
 are inert and absent from this list.
+The core `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context`
+APIs return `Result<DictionaryBundle, UntransformableReason>`. They enforce the
+same short-value refusal before producing dictionaries, including for callers
+that manually build a pipeline.
 
 Common single names (`Will`, `Grace`, `May`, `Mark`) from the
 [versioned dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)

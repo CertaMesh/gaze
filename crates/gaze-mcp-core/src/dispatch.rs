@@ -333,7 +333,8 @@ impl<'a> PiiEnvelope<'a> {
             exclude_argument_guesses(context, &argument_text)?;
             let dictionaries = gaze::DictionaryBundle::merge(
                 self.dictionaries.clone(),
-                gaze::dictionary_bundle_from_context(context),
+                gaze::dictionary_bundle_from_context(context)
+                    .map_err(crate::HostContextError::Untransformable)?,
             );
             Some((pipeline, dictionaries))
         } else {

@@ -56,7 +56,7 @@ fn non_name_record_defaults_clean_and_restore_through_product_pipeline() {
         .expect("record pipeline");
     let session = Session::new(Scope::Ephemeral).unwrap();
     let raw = "Card 4111 1111 1111 1111; phone +1-212-555-0104; passport SYN-PASS-123456; national ID SYN-ID-12345; Steuer-ID 12 345 678 901.";
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let CleanDocument::Text(clean) = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -100,7 +100,7 @@ fn valid_de_iban_record_with_only_two_letters_restores() {
         .expect("record pipeline");
     let session = Session::new(Scope::Ephemeral).unwrap();
     let raw = format!("IBAN: {iban}");
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let CleanDocument::Text(clean) = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -131,7 +131,7 @@ fn record_name_casing_tokenizes_and_restores_exact_source_bytes() {
         .expect("record pipeline");
     let session = Session::new(Scope::Ephemeral).unwrap();
     let raw = "CONTACT ALICE SMITH; alice smith wrote alice@example.invalid";
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let clean = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -167,7 +167,7 @@ fn record_unicode_name_case_match_restores_source_bytes() {
         .expect("record pipeline");
     let session = Session::new(Scope::Ephemeral).unwrap();
     let raw = "ÉMILIE MÜLLER met émilie müller.";
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let clean = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -202,7 +202,7 @@ fn record_full_unicode_fold_preserves_original_byte_span() {
         .expect("record pipeline");
     let session = Session::new(Scope::Ephemeral).unwrap();
     let raw = "Jörg Straße wrote to JÖRG STRASSE.";
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let clean = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -236,7 +236,7 @@ fn record_whitespace_variants_restore_original_bytes() {
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
     let session = Session::new(Scope::Ephemeral).unwrap();
     let raw = "Maren  Okafor met Maren Okafor and Maren\u{202f}Okafor.";
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let CleanDocument::Text(clean) = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -282,7 +282,7 @@ fn record_kind_after_normalization_matches_attribution_fixtures() {
             let pipeline =
                 build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
             let session = Session::new(Scope::Ephemeral).unwrap();
-            let bundle = gaze::dictionary_bundle_from_context(&context);
+            let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
             let CleanDocument::Text(clean) = pipeline
                 .pseudonymize_with_detect_context(
                     &session,
@@ -319,7 +319,7 @@ fn record_whitespace_flex_has_a_bounded_gap() {
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
     let within = format!("Maren{}Okafor", "\u{a0}".repeat(32));
     let beyond = format!("Maren{}Okafor", "\u{a0}".repeat(33));
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     for (raw, protected) in [(within, true), (beyond, false)] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = pipeline
@@ -351,7 +351,7 @@ fn measured_full_name_defaults_keep_whitespace_only_variant_off() {
     let locales = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline =
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     for (raw, should_match) in [
         ("Maren Okafor", true),
         ("MAREN OKAFOR", true),
@@ -393,7 +393,7 @@ fn single_token_record_names_need_corroboration() {
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
     let session = Session::new(Scope::Ephemeral).unwrap();
     let raw = "Will you send it? Will Smith called. Hi Will,";
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let CleanDocument::Text(clean) = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -433,7 +433,7 @@ fn unlisted_single_name_exact_requires_opt_in() {
     )
     .unwrap();
     let default_session = Session::new(Scope::Ephemeral).unwrap();
-    let default_bundle = gaze::dictionary_bundle_from_context(&default_context);
+    let default_bundle = gaze::dictionary_bundle_from_context(&default_context).unwrap();
     let CleanDocument::Text(default_clean) = default_pipeline
         .pseudonymize_with_detect_context(
             &default_session,
@@ -453,7 +453,7 @@ fn unlisted_single_name_exact_requires_opt_in() {
     let pipeline =
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
     let session = Session::new(Scope::Ephemeral).unwrap();
-    let bundle = gaze::dictionary_bundle_from_context(&context);
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
     let CleanDocument::Text(clean) = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -492,7 +492,7 @@ fn address_part_exact_requires_opt_in() {
         let pipeline =
             build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let bundle = gaze::dictionary_bundle_from_context(&context);
+        let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
         let CleanDocument::Text(clean) = pipeline
             .pseudonymize_with_detect_context(
                 &session,
@@ -530,7 +530,7 @@ fn unmeasured_record_class_is_off_until_adopter_enables_it() {
         .unwrap();
         let pipeline =
             build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
-        let bundle = gaze::dictionary_bundle_from_context(&context);
+        let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = pipeline
             .pseudonymize_with_detect_context(

@@ -46,6 +46,10 @@ rejections by default with `BuildError::Untransformable`. Owner-side eval
 explicitly opts into observation: it warns with the closed reason and clears
 `record_value_rejections` before assembly. Rust observer tools must make the same
 explicit choice after inspecting `Context::untransformable_reason()`.
+Direct dictionary conversion through `dictionary_bundle_from_context` or
+`DictionaryBundleExt::from_context` also refuses by default. Both APIs return
+`Result<DictionaryBundle, UntransformableReason>` so manual pipeline callers must
+handle the same closed refusal before using the bundle.
 Accepted values in disabled groups are inert and absent from this list.
 A valid IBAN is accepted even when
 its country code supplies its only two letters. Ordinary document detectors

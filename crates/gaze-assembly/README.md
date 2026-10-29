@@ -83,6 +83,10 @@ registering recognizers. The error contains only the closed reason, with no
 caller value or field path. Observer-only tools must explicitly inspect
 `Context::untransformable_reason()`, warn without values, and clear
 `record_value_rejections` before assembly to measure the accepted values.
+The core `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context`
+converters also enforce rejections and return
+`Result<DictionaryBundle, UntransformableReason>`. Manual pipeline builders must
+propagate this result before using a caller's dictionary bundle.
 
 ## What it assembles
 

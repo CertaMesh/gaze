@@ -373,12 +373,16 @@ impl Daemon {
                     &self.rulepacks,
                     &self.locale_chain,
                 )
-                .map_err(|_| {
-                    CliError::PolicyConfigDetail("invalid context JSON configuration".into())
+                .map_err(|error| match error {
+                    gaze_assembly::BuildError::Untransformable(reason) => {
+                        CliError::Untransformable { reason }
+                    }
+                    _ => CliError::PolicyConfigDetail("invalid context JSON configuration".into()),
                 })?;
                 let dictionaries = DictionaryBundle::merge(
                     self.dictionaries.clone(),
-                    gaze::dictionary_bundle_from_context(&context),
+                    gaze::dictionary_bundle_from_context(&context)
+                        .map_err(|reason| CliError::Untransformable { reason })?,
                 );
                 Ok::<_, CliError>((pipeline, dictionaries))
             })

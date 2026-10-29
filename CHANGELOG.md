@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reason is `caller_value_too_short`; clean exits with code 8 and no output.
   Previously these values were skipped. Owner-side `gaze eval` remains an
   explicit observer and measures with a value-free warning.
+  `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context` now
+  return `Result<DictionaryBundle, UntransformableReason>` and refuse rejected
+  caller values too. Callers must propagate the result before using a bundle.
 - Proxy adapters return `RequestSurfaces` and attach parsed scalar provenance to
   string leaves. The Anthropic codec and MCP also pass field context to detection.
   This adds metadata only. No production recognizer consumes the field context.
