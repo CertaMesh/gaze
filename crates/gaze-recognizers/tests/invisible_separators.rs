@@ -384,9 +384,9 @@ fn valid_joined_values_never_ship_split_remainders_raw() {
     let en_locales = [LocaleTag::EnUs, LocaleTag::Global];
     for sep in ['\u{200b}', '\u{200c}', '\u{200d}', '\u{2060}', '\u{ad}'] {
         for (selected, locales, cue, value) in [
-            (&de, &de_locales, "Ref: Tel. ", "+49 89 12345678"),
-            (&de, &de_locales, "Tel. ", "+49 30 12345678"),
-            (&de, &de_locales, "Tel. ", "030 12345678"),
+            (&de, &de_locales, "Ref: Tel. ", "+49 89 99998123"),
+            (&de, &de_locales, "Tel. ", "+49 30 23125123"),
+            (&de, &de_locales, "Tel. ", "030 23125456"),
             (pipeline(), &en_locales, "Tel ", "+39 06 1234 5678"),
             (pipeline(), &en_locales, "Tel ", "+1 202 555 0100"),
             (pipeline(), &en_locales, "IP ", "192.168.10.20"),
