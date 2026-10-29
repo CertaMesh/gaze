@@ -1847,7 +1847,13 @@ struct MarkerDetector(&'static str);
 
 impl gaze::Detector for MarkerDetector {
     fn detect(&self, input: &str) -> Vec<gaze::Detection> {
-        input.find(self.0).map(|start| gaze::Detection::new(start..start + self.0.len(), PiiClass::Name, "test.marker")).into_iter().collect()
+        input
+            .find(self.0)
+            .map(|start| {
+                gaze::Detection::new(start..start + self.0.len(), PiiClass::Name, "test.marker")
+            })
+            .into_iter()
+            .collect()
     }
 }
 
@@ -1915,37 +1921,40 @@ async fn string_residual_is_independent_of_unrelated_scalar() {
 
 #[tokio::test]
 async fn scalar_residual_refuses_before_downstream() {
-    for marker in ["maskme", "synthetic marker long enough to shrink when replaced by a token"] {
-    let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
-    let pipeline = gaze::Pipeline::builder()
-        .detector(MarkerDetector(marker))
-        .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
-        .register_safety_net(MarkerNet("731284"))
-        .build()
-        .unwrap();
-    let (host, _) = host_with_pipeline(
-        client.clone(),
-        PolicyConfig::default(),
-        Arc::new(MemoryAudit::default()),
-        LimitCfg::default(),
-        Some(pipeline),
-    )
-    .await;
-    let error = host
-        .dispatch(
-            &Principal::new("agent"),
-            "mail.send",
-            json!({"a":marker, "n":731284}),
-            Some(SID_A),
-            gaze_mcp_core::HostContextSelection::Absent,
+    for marker in [
+        "maskme",
+        "synthetic marker long enough to shrink when replaced by a token",
+    ] {
+        let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+        let pipeline = gaze::Pipeline::builder()
+            .detector(MarkerDetector(marker))
+            .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
+            .register_safety_net(MarkerNet("731284"))
+            .build()
+            .unwrap();
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            Some(pipeline),
         )
-        .await
-        .expect_err("scalar residual must refuse");
-    assert!(matches!(
-        error,
-        DispatchError::Protection(gaze::ProtectionError::Residual)
-    ));
-    assert!(client.calls().await.is_empty());
+        .await;
+        let error = host
+            .dispatch(
+                &Principal::new("agent"),
+                "mail.send",
+                json!({"a":marker, "n":731284}),
+                Some(SID_A),
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
+            .await
+            .expect_err("scalar residual must refuse");
+        assert!(matches!(
+            error,
+            DispatchError::Protection(gaze::ProtectionError::Residual)
+        ));
+        assert!(client.calls().await.is_empty());
     }
 }
 

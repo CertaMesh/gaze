@@ -788,21 +788,32 @@ fn reject_sensitive_scalars(
             ),
         )
         .map_err(BridgeError::from_redaction)?;
-    if !report.suspects.is_empty() {
-        return Err(gaze::ProtectionError::Residual.into());
-    }
-    let mut ranges = spans
-        .into_iter()
-        .map(|span| span.raw_span)
-        .collect::<Vec<_>>();
-    ranges.sort_by_key(|range| range.start);
-    let mut ranges = ranges.into_iter().peekable();
+    let mut spans = spans;
+    spans.sort_by_key(|span| span.raw_span.start);
+    let mut ranges = spans.into_iter().peekable();
+    let (mut raw_end, mut clean_end) = (0, 0);
     for (range, field_path, reason) in scalars {
-        while ranges.peek().is_some_and(|span| span.end <= range.start) {
-            ranges.next();
+        while ranges
+            .peek()
+            .is_some_and(|span| span.raw_span.end <= range.start)
+        {
+            let span = ranges.next().expect("peeked replacement");
+            raw_end = span.raw_span.end;
+            clean_end = span.clean_span.end;
         }
-        if ranges.peek().is_some_and(|span| span.start < range.end) {
+        if ranges
+            .peek()
+            .is_some_and(|span| span.raw_span.start < range.end)
+        {
             return Err(gaze::ProtectionError::Untransformable { reason, field_path }.into());
+        }
+        // Suspects use clean coordinates; preceding string replacements can shift a scalar.
+        let clean_start = clean_end + (range.start - raw_end);
+        let clean_range = clean_start..clean_start + range.len();
+        if report.suspects.iter().any(|suspect| {
+            suspect.span.start < clean_range.end && clean_range.start < suspect.span.end
+        }) {
+            return Err(gaze::ProtectionError::Residual.into());
         }
     }
     Ok(())
