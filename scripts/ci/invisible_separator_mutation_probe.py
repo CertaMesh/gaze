@@ -102,7 +102,8 @@ def main():
                "if false && gaze_types::has_zero_country_phone_prefix(text, matched.start()) {",
                "session::tests::restore_dlp_hyphen_zero_country_keeps_explicit_international_values", None, package="gaze-pii")
         reject("phone_explicit_plus_boundary", TYPES_SOURCE,
-               "if value.starts_with('+') {", "if false && value.starts_with('+') {",
+               "if value.starts_with('+') {\n        return false;\n    }\n    let member =",
+               "if false && value.starts_with('+') {\n        return false;\n    }\n    let member =",
                "invalid_international_phone_prefix_does_not_license_a_national_suffix", "invisible_separators")
         reject("source_boundaries", REGEX_SOURCE,
                "let additional = self.scanned_spans_in_view(input, source_spans, Some(regex));",
