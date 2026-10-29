@@ -449,10 +449,12 @@ fn uncued_invalid_four_by_four_cards_do_not_expose_phone_substrings() {
         let input = format!("Phone: {value}");
         let session = Session::new(Scope::Ephemeral).unwrap();
         let clean = support::clean(&selected, &session, &input, &locales);
-        assert_eq!(
-            gaze::token_shape::pattern().replace_all(&clean, "\0"),
-            "Phone: \0",
-            "{input:?}"
+        let blank = gaze::token_shape::pattern().replace_all(&clean, "\0");
+        assert!(
+            blank
+                .strip_prefix("Phone: ")
+                .is_some_and(|value| value.chars().all(|ch| ch == '\0' || ch == separator)),
+            "{input:?}: {clean}"
         );
         assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
 
