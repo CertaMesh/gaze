@@ -2375,9 +2375,25 @@ history, not the standalone branch history.
 | v29 | 19,687 | 8,832 | 12,611 | 41,130 |
 
 The [v29 history plan](history-plans/generator-v29.json) covers one remeasurement
-of v0.17.0 and v0.16.0 on the combined corpus. **Step 4a remains a prerequisite:**
-build each pinned release tag and pin its binary hash before any capture.
-No historical numbers have been changed or new measurements claimed here.
+of v0.17.0 and v0.16.0 on the combined corpus. Each subject binary comes from a
+producer build of its clean release tag, and its pinned hash matches the binary
+in that release's earlier receipts. Each release was captured once; both gate
+contracts are scored from that one record. The
+[v29 history](history-generator-v29/history.md) keeps the
+[evidence hashes](history-generator-v29/history.json) and each release's
+observation record. These are past-release rows on a new specification, not a
+detection gain, and they cannot be compared with rows measured on an earlier
+corpus. Neither release refused a document; every restore was exact and every
+manifest valid.
+
+| Release | Contract | C leaked B | A leaked B | A all-gold leaked B | D FP B | R leaked B | Refused |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.17.0 | v2 | 6,652 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v2 | 7,348 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
+| v0.17.0 | v1 | 9,717 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v1 | 13,291 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
+
+Historical numbers measured on earlier specifications are unchanged.
 After this harness lands, #870 and #871 must merge main, retain these combined
 generators/contracts/pins (including the dev phone correction), drop their redundant harness changes and standalone
 comparison notices, and certify their detection changes against the new main.
