@@ -292,3 +292,26 @@ fn utf8_offsets_are_bytes_in_the_input() {
     assert_eq!(&input[values[0].span.clone()], "\"é\"");
     assert_eq!(values[0].path.segments(), ["k", "0"]);
 }
+
+/// Work counter, no timing: the document is validated as UTF-8 once, and decoding each
+/// non-ASCII scalar never revalidates the rest of the input.
+#[cfg(feature = "perf-timers")]
+#[test]
+fn non_ascii_strings_are_validated_once() {
+    for scalar in ["ü", "€", "😀"] {
+        let text = scalar.repeat(1024);
+        let input = format!(r#"{{"{scalar}":["{text}"]}}"#);
+        let capture = crate::perf::Capture::new();
+        let parsed = tree(&input);
+        let record = capture.finish();
+        assert_eq!(to_value(&parsed.root), json!({ scalar: [text] }));
+        assert_eq!(
+            record
+                .counters
+                .get("json_tree_utf8_validated_bytes")
+                .copied(),
+            Some(input.len() as u64),
+            "{scalar:?}"
+        );
+    }
+}

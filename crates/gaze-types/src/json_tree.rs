@@ -139,8 +139,9 @@ pub fn parse(input: &[u8], limits: JsonTreeLimits) -> Result<JsonTree, JsonTreeE
     if input.len() > limits.max_body_bytes {
         return Err(JsonTreeError::BodyLimitExceeded);
     }
-    std::str::from_utf8(input).map_err(|_| JsonTreeError::InvalidUtf8)?;
+    let text = validate_utf8(input)?;
     let mut parser = Parser {
+        text,
         bytes: input,
         position: 0,
         limits,
@@ -160,6 +161,8 @@ pub fn parse(input: &[u8], limits: JsonTreeLimits) -> Result<JsonTree, JsonTreeE
 }
 
 struct Parser<'a> {
+    /// The input, validated once; decoding reads scalars from it without revalidating.
+    text: &'a str,
     bytes: &'a [u8],
     position: usize,
     limits: JsonTreeLimits,
@@ -286,9 +289,11 @@ impl Parser<'_> {
                 0x20..=0x7f => value.push(char::from(byte)),
                 _ => {
                     let start = self.position - 1;
-                    let remaining = std::str::from_utf8(&self.bytes[start..])
-                        .map_err(|_| JsonTreeError::InvalidUtf8)?;
-                    let character = remaining.chars().next().ok_or(JsonTreeError::InvalidUtf8)?;
+                    let character = self
+                        .text
+                        .get(start..)
+                        .and_then(|remaining| remaining.chars().next())
+                        .ok_or(JsonTreeError::InvalidUtf8)?;
                     value.push(character);
                     self.position = start + character.len_utf8();
                 }
@@ -382,13 +387,11 @@ impl Parser<'_> {
                 self.position += 1;
             }
         }
-        let raw = &self.bytes[start..self.position];
+        let raw = &self.text[start..self.position];
         if raw.len() > self.limits.max_number_bytes {
             return Err(JsonTreeError::NumberLimitExceeded);
         }
-        Ok(std::str::from_utf8(raw)
-            .map_err(|_| JsonTreeError::InvalidUtf8)?
-            .to_owned())
+        Ok(raw.to_owned())
     }
 
     fn consume_literal(&mut self, literal: &[u8]) -> Result<(), JsonTreeError> {
@@ -420,6 +423,12 @@ impl Parser<'_> {
         self.position += 1;
         Some(value)
     }
+}
+
+/// Every UTF-8 validation in the parser goes through here, so the work counter sees all of it.
+fn validate_utf8(bytes: &[u8]) -> Result<&str, JsonTreeError> {
+    crate::perf_count!("json_tree_utf8_validated_bytes", bytes.len());
+    std::str::from_utf8(bytes).map_err(|_| JsonTreeError::InvalidUtf8)
 }
 
 fn hex_value(byte: u8) -> Option<u8> {
