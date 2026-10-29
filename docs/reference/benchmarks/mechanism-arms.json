@@ -3008,19 +3008,19 @@
           "release": null,
           "records": {
             "base": {
-              "file": "docs/reference/benchmarks/mechanisms/2c15fd1b8b83ff140b7c70fb4ad1ab359d759a3a80e1d4647f2d7d03c478fa01/base-7a1cb4b0d1818c121053dd00bd2f64faef4f3b73fabe86c6b852fbe0f6a4d583.jsonl.gz",
-              "sha256": "7a1cb4b0d1818c121053dd00bd2f64faef4f3b73fabe86c6b852fbe0f6a4d583"
+              "file": "docs/reference/benchmarks/mechanisms/ea4ae68d42608f3e9f69c4b0d00de403a4d4765420632bfeb3ee1ce3ab448678/base-e272ee8c430d1f989a175ca39da178c636bfb24a3ebaa6cb4542c7fb8fcdeccb.jsonl.gz",
+              "sha256": "e272ee8c430d1f989a175ca39da178c636bfb24a3ebaa6cb4542c7fb8fcdeccb"
             },
             "candidate": {
-              "file": "docs/reference/benchmarks/mechanisms/2c15fd1b8b83ff140b7c70fb4ad1ab359d759a3a80e1d4647f2d7d03c478fa01/candidate-4d2f2c3f0fa4b810f817a8b5b61b13f93ec06c0b32a2840111d7a62ef57cc2ce.jsonl.gz",
-              "sha256": "4d2f2c3f0fa4b810f817a8b5b61b13f93ec06c0b32a2840111d7a62ef57cc2ce"
+              "file": "docs/reference/benchmarks/mechanisms/ea4ae68d42608f3e9f69c4b0d00de403a4d4765420632bfeb3ee1ce3ab448678/candidate-60050e2d2d112e8204905da233116daaf6d2fcbf8f1e68fed8a842099b996b13.jsonl.gz",
+              "sha256": "60050e2d2d112e8204905da233116daaf6d2fcbf8f1e68fed8a842099b996b13"
             }
           },
-          "revision": "9649199781613d546d76d55482d9684b529d2d8d",
+          "revision": "202491b7a8667992137fe8c2207a5ce2b8e3bd4c",
           "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
           "sampling_seed": 20260710,
-          "base_policy_sha256": "c27a4406fe427f9e04e28bc2c1727b9a7d3c9cab67bbf2ba49ddf3bbf81b30a3",
-          "candidate_policy_sha256": "f184983aae1603ec4bdb8767c80ece8cc05d9be5241e886e2b80fa727314380a",
+          "base_policy_sha256": "0b1bc1665e06038d8f0a22536ce013125cd570c953c8bc2ef0484c7c907cb634",
+          "candidate_policy_sha256": "160d6e1a087573a938aa9b911eb9e93fcb75d2223079a342019c00011649d029",
           "binary_sha256": "0f703942e4762e2104900d0ae03828a98672b8dc6ea33b42dd9a196e26a0d75c",
           "contracts": {
             "4": {
@@ -3089,37 +3089,37 @@
           "agentic_layers": {
             "A": {
               "base": {
-                "leaked": 428880,
-                "false_positive": 4953,
+                "leaked": 504418,
+                "false_positive": 7577,
                 "failed_closed": 0
               },
               "candidate": {
-                "leaked": 71204,
-                "false_positive": 4953,
+                "leaked": 146742,
+                "false_positive": 7577,
                 "failed_closed": 0
               }
             },
             "D": {
               "base": {
                 "leaked": 0,
-                "false_positive": 14760,
+                "false_positive": 16216,
                 "failed_closed": 0
               },
               "candidate": {
                 "leaked": 0,
-                "false_positive": 14760,
+                "false_positive": 16216,
                 "failed_closed": 0
               }
             },
             "R": {
               "base": {
-                "leaked": 145824,
-                "false_positive": 1385,
+                "leaked": 271170,
+                "false_positive": 2045,
                 "failed_closed": 0
               },
               "candidate": {
-                "leaked": 120944,
-                "false_positive": 1385,
+                "leaked": 246290,
+                "false_positive": 2045,
                 "failed_closed": 0
               }
             }
@@ -3136,7 +3136,7 @@
           },
           "attested": {
             "binary_sha256": "0f703942e4762e2104900d0ae03828a98672b8dc6ea33b42dd9a196e26a0d75c",
-            "crates_tree": "cc7a58173ccc7e4ce023222ef3f8b3a8aa05cef1",
+            "crates_tree": "7cb334349451b3801e443fb9c8f803689c4df7dd",
             "machine": "Apple M5 Max, 18 cores, 64 GiB, macOS 26.5",
             "note": "Binary SHA-256 verified against both capture-time record bindings and --binary; crates tree and machine are attested, not re-derivable."
           }
