@@ -11,10 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 def run(command):
     if command[0] == 'cargo':
         while True:
-            cargos = subprocess.run(['pgrep', '-x', 'cargo'], capture_output=True, text=True)
             pressure = subprocess.check_output(['memory_pressure'], text=True)
             free = re.search(r'free percentage: (\d+)%', pressure)
-            if len(cargos.stdout.splitlines()) < 2 and free and int(free[1]) >= 30:
+            if free and int(free[1]) >= 30:
                 break
             time.sleep(15)
         command = ['anvil', 'run', '--', 'env', 'CARGO_BUILD_JOBS=4', 'nice', '-n', '10', *command]
