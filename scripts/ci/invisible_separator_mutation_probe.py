@@ -16,6 +16,7 @@ VETO_SOURCE = ROOT / "crates/gaze/src/validator_veto.rs"
 PAYMENT_SOURCE = ROOT / "crates/gaze-types/src/payment_card.rs"
 CORE_SOURCE = ROOT / "crates/gaze-recognizers/embedded/core.toml"
 TYPES_SOURCE = ROOT / "crates/gaze-types/src/lib.rs"
+SESSION_SOURCE = ROOT / "crates/gaze/src/session.rs"
 # One representative per Unicode range, plus every original removed character.
 CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
               0x200D, 0x202A, 0x2060, 0x3164, 0xFE0F, 0xFEFF, 0xFFA0,
@@ -28,8 +29,8 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 28
-    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE, CORE_SOURCE, TYPES_SOURCE)
+    total = len(set(args.probe)) or len(CODEPOINTS) + 31
+    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE, CORE_SOURCE, TYPES_SOURCE, SESSION_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
         relative = path.relative_to(ROOT).as_posix()
@@ -40,7 +41,7 @@ def main():
     output = ROOT / "target/separator-checks/mutations"
     output.mkdir(parents=True, exist_ok=True)
 
-    def reject(name, path, before, after, test, binary="default_ignorable_boundaries", codepoint=None, features=None):
+    def reject(name, path, before, after, test, binary="default_ignorable_boundaries", codepoint=None, features=None, package="gaze-recognizers"):
         nonlocal completed
         seen.add(name)
         if args.probe and name not in args.probe:
@@ -57,7 +58,7 @@ def main():
             target = ["--lib"] if binary is None else ["--test", binary]
             extra = ["--features", features] if features else []
             result = subprocess.run(
-                ["nice", "-n", "10", "cargo", "test", "-p", "gaze-recognizers",
+                ["nice", "-n", "10", "cargo", "test", "-p", package,
                  *extra, *target, test, "--", "--exact"], cwd=ROOT, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             (output / f"{name}.log").write_bytes(result.stdout)
@@ -81,8 +82,8 @@ def main():
                "scan.rejected |= false && gaze_types::word_run_extends_identifier(input, scan.span.end);",
                "invisible_code_fragments_do_not_create_a_postcode_prefix", "invisible_separators")
         reject("zero_country_phone_guard", REGEX_SOURCE,
-               "scan.rejected |= inside_zero_country_phone(input, &scan.span);",
-               "scan.rejected |= false && inside_zero_country_phone(input, &scan.span);",
+               "scan.rejected |= gaze_types::has_zero_country_phone_prefix(input, scan.span.start);",
+               "scan.rejected |= false && gaze_types::has_zero_country_phone_prefix(input, scan.span.start);",
                "invalid_international_phone_prefix_does_not_license_a_national_suffix", "invisible_separators")
         reject("iban_hyphen_pattern", CORE_SOURCE,
                r"(?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:[\x20-]?[A-Z0-9]{4}){3}[\x20-]?[A-Z0-9]{2}",
@@ -92,6 +93,17 @@ def main():
                ".filter(|ch| !ch.is_ascii_whitespace() && *ch != '-')",
                ".filter(|ch| !ch.is_ascii_whitespace())",
                "hyphen_grouped_ibans_keep_the_complete_value_protected", "invisible_separators")
+        reject("restore_iban_hyphen_pattern", SESSION_SOURCE,
+               r"(?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:[\x20-]?[A-Z0-9]{4}){3}[\x20-]?[A-Z0-9]{2}",
+               r"(?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{2}",
+               "session::tests::restore_dlp_hyphen_groups_keep_raw_offsets_and_aliases", None, package="gaze-pii")
+        reject("restore_zero_country_phone_guard", SESSION_SOURCE,
+               "if gaze_types::has_zero_country_phone_prefix(text, matched.start()) {",
+               "if false && gaze_types::has_zero_country_phone_prefix(text, matched.start()) {",
+               "session::tests::restore_dlp_hyphen_zero_country_keeps_explicit_international_values", None, package="gaze-pii")
+        reject("phone_explicit_plus_boundary", TYPES_SOURCE,
+               "if value.starts_with('+') {", "if false && value.starts_with('+') {",
+               "invalid_international_phone_prefix_does_not_license_a_national_suffix", "invisible_separators")
         reject("source_boundaries", REGEX_SOURCE,
                "let additional = self.scanned_spans_in_view(input, source_spans, Some(regex));",
                "let additional = self.scanned_spans_in_view(input, source_spans, None);",

@@ -2490,7 +2490,7 @@ fn authorized_structural_values_from_state(state: &SessionState) -> BTreeSet<(Pi
         // the value alone, so authorize its canonical form directly from the typed entry.
         if let PiiClass::Custom(class) = &entry.class {
             let canonical = match class.as_str() {
-                "iban" => Some(iban_canonicalize(
+                "iban" => Some(gaze_types::iban_canonicalize(
                     &crate::normalize::normalize(&entry.raw).text,
                 )),
                 "credit_card" => Some(ascii_digits(&crate::normalize::normalize(&entry.raw).text)),
@@ -2595,6 +2595,9 @@ fn collect_email_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
 
 fn collect_phone_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
     for matched in phone_pattern().find_iter(text) {
+        if gaze_types::has_zero_country_phone_prefix(text, matched.start()) {
+            continue;
+        }
         let raw = matched.as_str();
         findings.push(StructuralFinding {
             class: PiiClass::custom("phone").expect("valid custom class"),
@@ -2623,7 +2626,7 @@ fn collect_iban_match(text: &str, location: Range<usize>, findings: &mut Vec<Str
     findings.push(StructuralFinding {
         class: PiiClass::custom("iban").expect("valid custom class"),
         raw: raw.to_string(),
-        canonical: iban_canonicalize(raw),
+        canonical: gaze_types::iban_canonicalize(raw),
         location,
     });
 }
@@ -2699,24 +2702,24 @@ fn phone_pattern() -> &'static Regex {
 // These patterns are byte-for-byte copies of the bundled forward recognizers. The
 // rulepack parity test below makes a change to either direction update both.
 const IBAN_STRUCTURAL_PATTERN: &str = r###"(?x)\b(?:
-  (?:NO)\d{2}(?:\x20?[A-Z0-9]{4}){2}\x20?[A-Z0-9]{3}
-| (?:BE)\d{2}(?:\x20?[A-Z0-9]{4}){3}
-| (?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{2}
-| (?:MK|SI)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{3}
-| (?:AT|BA|EE|KZ|LT|LU|MN|XK)\d{2}(?:\x20?[A-Z0-9]{4}){4}
-| (?:CH|HR|LI|LV)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{1}
-| (?:BG|BH|CR|DE|GB|GE|IE|ME|RS|VA)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{2}
-| (?:AE|GI|IL|IQ|OM|SO|TL)\d{2}(?:\x20?[A-Z0-9]{4}){4}\x20?[A-Z0-9]{3}
-| (?:AD|CZ|ES|MD|PK|RO|SA|SE|SK|TN|VG)\d{2}(?:\x20?[A-Z0-9]{4}){5}
-| (?:LY|PT|ST)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{1}
-| (?:IS|TR)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{2}
-| (?:BI|DJ|FR|GR|IT|MC|MR|SM)\d{2}(?:\x20?[A-Z0-9]{4}){5}\x20?[A-Z0-9]{3}
-| (?:AL|AZ|BY|CY|DO|GT|HN|HU|LB|NI|PL|SV)\d{2}(?:\x20?[A-Z0-9]{4}){6}
-| (?:BR|EG|PS|QA|UA)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{1}
-| (?:JO|KW|MU|YE)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{2}
-| (?:MT|SC)\d{2}(?:\x20?[A-Z0-9]{4}){6}\x20?[A-Z0-9]{3}
-| (?:LC)\d{2}(?:\x20?[A-Z0-9]{4}){7}
-| (?:RU)\d{2}(?:\x20?[A-Z0-9]{4}){7}\x20?[A-Z0-9]{1}
+  (?:NO)\d{2}(?:[\x20-]?[A-Z0-9]{4}){2}[\x20-]?[A-Z0-9]{3}
+| (?:BE)\d{2}(?:[\x20-]?[A-Z0-9]{4}){3}
+| (?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:[\x20-]?[A-Z0-9]{4}){3}[\x20-]?[A-Z0-9]{2}
+| (?:MK|SI)\d{2}(?:[\x20-]?[A-Z0-9]{4}){3}[\x20-]?[A-Z0-9]{3}
+| (?:AT|BA|EE|KZ|LT|LU|MN|XK)\d{2}(?:[\x20-]?[A-Z0-9]{4}){4}
+| (?:CH|HR|LI|LV)\d{2}(?:[\x20-]?[A-Z0-9]{4}){4}[\x20-]?[A-Z0-9]{1}
+| (?:BG|BH|CR|DE|GB|GE|IE|ME|RS|VA)\d{2}(?:[\x20-]?[A-Z0-9]{4}){4}[\x20-]?[A-Z0-9]{2}
+| (?:AE|GI|IL|IQ|OM|SO|TL)\d{2}(?:[\x20-]?[A-Z0-9]{4}){4}[\x20-]?[A-Z0-9]{3}
+| (?:AD|CZ|ES|MD|PK|RO|SA|SE|SK|TN|VG)\d{2}(?:[\x20-]?[A-Z0-9]{4}){5}
+| (?:LY|PT|ST)\d{2}(?:[\x20-]?[A-Z0-9]{4}){5}[\x20-]?[A-Z0-9]{1}
+| (?:IS|TR)\d{2}(?:[\x20-]?[A-Z0-9]{4}){5}[\x20-]?[A-Z0-9]{2}
+| (?:BI|DJ|FR|GR|IT|MC|MR|SM)\d{2}(?:[\x20-]?[A-Z0-9]{4}){5}[\x20-]?[A-Z0-9]{3}
+| (?:AL|AZ|BY|CY|DO|GT|HN|HU|LB|NI|PL|SV)\d{2}(?:[\x20-]?[A-Z0-9]{4}){6}
+| (?:BR|EG|PS|QA|UA)\d{2}(?:[\x20-]?[A-Z0-9]{4}){6}[\x20-]?[A-Z0-9]{1}
+| (?:JO|KW|MU|YE)\d{2}(?:[\x20-]?[A-Z0-9]{4}){6}[\x20-]?[A-Z0-9]{2}
+| (?:MT|SC)\d{2}(?:[\x20-]?[A-Z0-9]{4}){6}[\x20-]?[A-Z0-9]{3}
+| (?:LC)\d{2}(?:[\x20-]?[A-Z0-9]{4}){7}
+| (?:RU)\d{2}(?:[\x20-]?[A-Z0-9]{4}){7}[\x20-]?[A-Z0-9]{1}
 )
 "###;
 
@@ -2827,14 +2830,6 @@ fn ascii_digits(input: &str) -> String {
 fn raw_sha256(input: &str) -> String {
     let digest = Sha256::digest(input.as_bytes());
     hex::encode(digest)
-}
-
-fn iban_canonicalize(input: &str) -> String {
-    input
-        .chars()
-        .filter(|ch| !ch.is_ascii_whitespace())
-        .flat_map(char::to_uppercase)
-        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -4713,6 +4708,95 @@ mod tests {
             unflagged.len(),
             &unflagged[..unflagged.len().min(12)]
         );
+    }
+
+    #[test]
+    fn restore_dlp_hyphen_groups_keep_raw_offsets_and_aliases() {
+        for separator in ['-', '\u{2011}'] {
+            for (label, groups, compact) in [
+                (
+                    "iban",
+                    &["GB82", "WEST", "1234", "5698", "7654", "32"][..],
+                    "GB82WEST12345698765432",
+                ),
+                (
+                    "iban",
+                    &["GB83", "WEST", "1234", "5698", "7654", "32"][..],
+                    "GB83WEST12345698765432",
+                ),
+                (
+                    "iban",
+                    &["NL82", "ABNA", "8266", "3896", "21"][..],
+                    "NL82ABNA8266389621",
+                ),
+                (
+                    "credit_card",
+                    &["4012", "8888", "8888", "1881"][..],
+                    "4012888888881881",
+                ),
+                ("phone", &["+44", "7700", "900123"][..], "+447700900123"),
+            ] {
+                let class = PiiClass::custom(label).unwrap();
+                let value = groups.join(&separator.to_string());
+                let prefix = "Überweisung: ";
+                let input = format!("{prefix}{value}; end.");
+                let fresh = Session::new(Scope::Ephemeral).unwrap();
+                let events: Vec<_> = fresh
+                    .restore_boundary_events(&input)
+                    .into_iter()
+                    .filter(|event| event.class == class)
+                    .collect();
+                assert_eq!(events.len(), 1, "{input:?}: {events:?}");
+                assert_eq!(events[0].kind, RestoreEventKind::FreshPiiDetected);
+                assert_eq!(events[0].location, prefix.len()..prefix.len() + value.len());
+                assert_eq!(events[0].raw_sha256, raw_sha256(&value));
+
+                let known = Session::new(Scope::Ephemeral).unwrap();
+                known.tokenize(&class, compact).unwrap();
+                let events: Vec<_> = known
+                    .restore_boundary_events(&input)
+                    .into_iter()
+                    .filter(|event| event.class == class)
+                    .collect();
+                assert_eq!(events.len(), 1, "{input:?}: {events:?}");
+                assert_eq!(
+                    events[0].kind,
+                    RestoreEventKind::ManifestBypass,
+                    "{input:?}"
+                );
+
+                let original = Session::new(Scope::Ephemeral).unwrap();
+                let token = original.tokenize(&class, &value).unwrap();
+                assert_eq!(original.restore_strict_text(&token).unwrap(), value);
+            }
+        }
+    }
+
+    #[test]
+    fn restore_dlp_hyphen_zero_country_keeps_explicit_international_values() {
+        let phone = PiiClass::custom("phone").unwrap();
+        for separator in ['-', '\u{2011}'] {
+            let benign = ["+0", "1", "555", "0101"].join(&separator.to_string());
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            assert!(
+                session
+                    .restore_boundary_events(&benign)
+                    .iter()
+                    .all(|event| event.class != phone),
+                "{benign:?}"
+            );
+
+            let prefix = format!("Ref +0{separator}");
+            let value = ["+44", "7700", "900123"].join(&separator.to_string());
+            let events: Vec<_> = session
+                .restore_boundary_events(&format!("{prefix}{value}"))
+                .into_iter()
+                .filter(|event| event.class == phone)
+                .collect();
+            assert_eq!(events.len(), 1, "{prefix}{value}: {events:?}");
+            assert_eq!(events[0].kind, RestoreEventKind::FreshPiiDetected);
+            assert_eq!(events[0].location, prefix.len()..prefix.len() + value.len());
+        }
     }
 
     #[test]

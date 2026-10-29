@@ -1420,7 +1420,9 @@ fn iban_country_length(country: &[u8]) -> Option<usize> {
     }
 }
 
-fn iban_canonicalize(input: &str) -> String {
+/// Canonicalize an already-normalized IBAN, removing ASCII whitespace and hyphens.
+/// Forward recognition and restore authorization use the same identity.
+pub fn iban_canonicalize(input: &str) -> String {
     input
         .chars()
         .filter(|ch| !ch.is_ascii_whitespace() && *ch != '-')
@@ -2620,6 +2622,27 @@ pub fn word_run_extends_identifier(text: &str, at: usize) -> bool {
             .take_while(|ch| is_word_char(*ch) || *ch == '_')
             .any(|ch| !ch.is_alphabetic())
     })
+}
+
+/// A national phone suffix cannot recover inside a `+0` international expression.
+/// An explicitly `+`-started value remains an independent international candidate.
+/// Input is the normalized detection view; an invalid byte offset returns false.
+pub fn has_zero_country_phone_prefix(text: &str, at: usize) -> bool {
+    let Some(value) = text.get(at..) else {
+        return false;
+    };
+    if value.starts_with('+') {
+        return false;
+    }
+    let member =
+        |ch: char| ch.is_ascii_digit() || matches!(ch, ' ' | '\t' | '-' | '.' | '/' | '(' | ')');
+    let before = &text[..at];
+    let start = before
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !member(*ch))
+        .map_or(0, |(offset, ch)| offset + ch.len_utf8());
+    before[..start].ends_with('+') && before[start..].trim_start().starts_with('0')
 }
 
 /// Closed safety-net PII vocabulary before mapping into `PiiClass`.

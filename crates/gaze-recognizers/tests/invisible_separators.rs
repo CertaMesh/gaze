@@ -467,6 +467,11 @@ fn invalid_international_phone_prefix_does_not_license_a_national_suffix() {
             &["212", "555", "0122"].join(&separator.to_string()),
             ". Done.",
         );
+        assert_exact_token(
+            &format!("Ref +0{separator}"),
+            &["+44", "7700", "900123"].join(&separator.to_string()),
+            ". Done.",
+        );
     }
 }
 

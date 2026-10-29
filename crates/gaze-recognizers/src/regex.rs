@@ -27,7 +27,7 @@ impl NormalizerKind {
     pub fn normalize(self, input: &str) -> String {
         match self {
             Self::EmailCanonical => input.to_ascii_lowercase(),
-            Self::IbanCanonical => iban_canonicalize(input),
+            Self::IbanCanonical => gaze_types::iban_canonicalize(input),
         }
     }
 }
@@ -476,7 +476,7 @@ impl RegexDetector {
         }
         if self.phone_validator_enabled() && self.validator_on_fail == ValidatorOnFail::Veto {
             for scan in &mut scans {
-                scan.rejected |= inside_zero_country_phone(input, &scan.span);
+                scan.rejected |= gaze_types::has_zero_country_phone_prefix(input, scan.span.start);
             }
         }
         if self.source == "postal.gb" {
@@ -984,18 +984,6 @@ impl RegexDetector {
     }
 }
 
-fn inside_zero_country_phone(input: &str, span: &std::ops::Range<usize>) -> bool {
-    let member =
-        |ch: char| ch.is_ascii_digit() || matches!(ch, ' ' | '\t' | '-' | '.' | '/' | '(' | ')');
-    let before = &input[..span.start];
-    let start = before
-        .char_indices()
-        .rev()
-        .find(|(_, ch)| !member(*ch))
-        .map_or(0, |(at, ch)| at + ch.len_utf8());
-    before[..start].ends_with('+') && before[start..].trim_start().starts_with('0')
-}
-
 /// `SKU-` plus an alphabetic product component identifies a stock-keeping unit.
 /// A numeric-only suffix is ambiguous and keeps postal detection.
 /// Check the complete connected prefix, so country prefixes and hyphenated
@@ -1240,14 +1228,6 @@ fn labelled_value_over_limit(value: &str) -> bool {
             .filter(|group| !group.is_empty())
             .count()
             > 4
-}
-
-fn iban_canonicalize(input: &str) -> String {
-    input
-        .chars()
-        .filter(|ch| !ch.is_ascii_whitespace() && *ch != '-')
-        .flat_map(char::to_uppercase)
-        .collect()
 }
 
 fn is_ascii_email_continuation(ch: char) -> bool {
