@@ -14,6 +14,8 @@ PIPELINE_SOURCE = ROOT / "crates/gaze/src/pipeline.rs"
 DICTIONARY_SOURCE = ROOT / "crates/gaze-recognizers/src/dictionary.rs"
 VETO_SOURCE = ROOT / "crates/gaze/src/validator_veto.rs"
 PAYMENT_SOURCE = ROOT / "crates/gaze-types/src/payment_card.rs"
+CORE_SOURCE = ROOT / "crates/gaze-recognizers/embedded/core.toml"
+TYPES_SOURCE = ROOT / "crates/gaze-types/src/lib.rs"
 # One representative per Unicode range, plus every original removed character.
 CODEPOINTS = (0xAD, 0x34F, 0x61C, 0x115F, 0x17B4, 0x180E, 0x200B, 0x200C,
               0x200D, 0x202A, 0x2060, 0x3164, 0xFE0F, 0xFEFF, 0xFFA0,
@@ -26,8 +28,8 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 25
-    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE)
+    total = len(set(args.probe)) or len(CODEPOINTS) + 29
+    paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE, CORE_SOURCE, TYPES_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
         relative = path.relative_to(ROOT).as_posix()
@@ -78,6 +80,22 @@ def main():
                "scan.rejected |= inside_invalid_four_by_four_card(input, &scan.span, source_spans);",
                "scan.rejected |= false && inside_invalid_four_by_four_card(input, &scan.span, source_spans);",
                "uncued_invalid_four_by_four_cards_do_not_expose_phone_substrings", "invisible_separators")
+        reject("postcode_run_guard", REGEX_SOURCE,
+               "scan.rejected |= gaze_types::word_run_extends_identifier(input, scan.span.end);",
+               "scan.rejected |= false && gaze_types::word_run_extends_identifier(input, scan.span.end);",
+               "invisible_code_fragments_do_not_create_a_postcode_prefix", "invisible_separators")
+        reject("zero_country_phone_guard", REGEX_SOURCE,
+               "scan.rejected |= inside_zero_country_phone(input, &scan.span);",
+               "scan.rejected |= false && inside_zero_country_phone(input, &scan.span);",
+               "invalid_international_phone_prefix_does_not_license_a_national_suffix", "invisible_separators")
+        reject("iban_hyphen_pattern", CORE_SOURCE,
+               r"(?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:[\x20-]?[A-Z0-9]{4}){3}[\x20-]?[A-Z0-9]{2}",
+               r"(?:DK|FI|FK|FO|GL|NL|SD)\d{2}(?:\x20?[A-Z0-9]{4}){3}\x20?[A-Z0-9]{2}",
+               "hyphen_grouped_ibans_keep_the_complete_value_protected", "invisible_separators")
+        reject("iban_hyphen_validator", TYPES_SOURCE,
+               ".filter(|ch| !ch.is_ascii_whitespace() && *ch != '-')",
+               ".filter(|ch| !ch.is_ascii_whitespace())",
+               "hyphen_grouped_ibans_keep_the_complete_value_protected", "invisible_separators")
         reject("source_boundaries", REGEX_SOURCE,
                "let additional = self.scanned_spans_in_view(input, source_spans, Some(regex));",
                "let additional = self.scanned_spans_in_view(input, source_spans, None);",

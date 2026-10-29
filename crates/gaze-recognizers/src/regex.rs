@@ -477,6 +477,12 @@ impl RegexDetector {
         if self.phone_validator_enabled() && self.validator_on_fail == ValidatorOnFail::Veto {
             for scan in &mut scans {
                 scan.rejected |= inside_invalid_four_by_four_card(input, &scan.span, source_spans);
+                scan.rejected |= inside_zero_country_phone(input, &scan.span);
+            }
+        }
+        if self.source == "postal.gb" {
+            for scan in &mut scans {
+                scan.rejected |= gaze_types::word_run_extends_identifier(input, scan.span.end);
             }
         }
         Ok(scans)
@@ -1017,6 +1023,18 @@ fn inside_invalid_four_by_four_card(
     widths == [4, 4, 4, 4] && !ValidatorKind::Luhn.validates(run)
 }
 
+fn inside_zero_country_phone(input: &str, span: &std::ops::Range<usize>) -> bool {
+    let member =
+        |ch: char| ch.is_ascii_digit() || matches!(ch, ' ' | '\t' | '-' | '.' | '/' | '(' | ')');
+    let before = &input[..span.start];
+    let start = before
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !member(*ch))
+        .map_or(0, |(at, ch)| at + ch.len_utf8());
+    before[..start].ends_with('+') && before[start..].trim_start().starts_with('0')
+}
+
 /// `SKU-` plus an alphabetic product component identifies a stock-keeping unit.
 /// A numeric-only suffix is ambiguous and keeps postal detection.
 /// Check the complete connected prefix, so country prefixes and hyphenated
@@ -1266,7 +1284,7 @@ fn labelled_value_over_limit(value: &str) -> bool {
 fn iban_canonicalize(input: &str) -> String {
     input
         .chars()
-        .filter(|ch| !ch.is_ascii_whitespace())
+        .filter(|ch| !ch.is_ascii_whitespace() && *ch != '-')
         .flat_map(char::to_uppercase)
         .collect()
 }

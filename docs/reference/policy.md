@@ -1037,6 +1037,17 @@ that names one. For example, `ID\x{200B}\d{6}\b` matches `ID` + ZERO WIDTH
 SPACE + `123456`, and also plain `ID123456`. Do not rely on an invisible
 character to narrow a match; use a visible cue instead.
 
+The bundled IBAN recognizer accepts spaces and hyphens between its four-character
+groups, including U+2011 NON-BREAKING HYPHEN. Tokens retain the original bytes.
+An uncued phone match inside a 16-digit run with four groups of four digits is
+rejected when the whole run fails Luhn. Card and phone cues retain their own
+protection, and this exception does not apply to other group layouts or valid cards.
+An invalid international prefix starting with `+0` cannot supply a national phone suffix.
+
+Invisible gaps inside an email can also separate it from an ordinary word.
+When both interpretations are possible, Gaze protects the joined email. This can
+include a neighbouring word in the token.
+
 #### Pitfall: `\b` next to non-word characters (currency symbols, punctuation)
 
 `\b` requires a word/non-word transition. A boundary beside `€`, `$`, `£` or

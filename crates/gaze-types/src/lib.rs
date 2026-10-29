@@ -1423,7 +1423,7 @@ fn iban_country_length(country: &[u8]) -> Option<usize> {
 fn iban_canonicalize(input: &str) -> String {
     input
         .chars()
-        .filter(|ch| !ch.is_ascii_whitespace())
+        .filter(|ch| !ch.is_ascii_whitespace() && *ch != '-')
         .flat_map(char::to_uppercase)
         .collect()
 }

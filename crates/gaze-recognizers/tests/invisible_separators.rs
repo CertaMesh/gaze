@@ -83,8 +83,7 @@ fn soft_hyphen_identifiers_keep_exact_source_spans() {
 
 #[test]
 fn nonbreaking_hyphen_identifiers_keep_exact_source_spans() {
-    // IBAN's own syntax permits spaces, not hyphens; folding to '-' must not
-    // silently widen that recognizer's contract.
+    // Nonbreaking hyphens retain the same group semantics as visible hyphens.
     for (cue, groups) in [
         ("Tax ID: ", &["123", "456", "7890"][..]),
         ("Phone: ", &["+1", "202", "555", "0100"][..]),
@@ -479,5 +478,71 @@ fn valid_four_by_four_cards_remain_fully_protected() {
     for separator in [' ', '-', '\u{200b}', '\u{2060}', '\u{feff}', '\u{ad}'] {
         let value = ["4111", "1111", "1111", "1111"].join(&separator.to_string());
         assert_exact_token("Public format fixture = ", &value, ". Not assigned.");
+    }
+}
+
+#[test]
+fn invisible_code_fragments_do_not_create_a_postcode_prefix() {
+    for separator in ['\u{200b}', '\u{2060}', '\u{feff}', '\u{ad}'] {
+        for groups in [["XY", "56", "ZT", "78"], ["VR", "23", "QP", "91"]] {
+            let value = groups.join(&separator.to_string());
+            let input = format!("Documentation only = {value}. Done.");
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            assert_eq!(
+                support::clean(
+                    pipeline(),
+                    &session,
+                    &input,
+                    &[LocaleTag::EnUs, LocaleTag::Global]
+                ),
+                input
+            );
+            assert!(session.snapshot_entries().is_empty());
+        }
+        // Interior formatting in a complete postcode is still protected.
+        assert_exact_token(
+            "Postcode: ",
+            &format!("XY{separator}56{separator}ZT"),
+            ". Done.",
+        );
+    }
+}
+
+#[test]
+fn invalid_international_phone_prefix_does_not_license_a_national_suffix() {
+    for separator in ['-', '\u{2011}'] {
+        let value = ["+0", "212", "555", "0122"].join(&separator.to_string());
+        let input = format!("Public format fixture = {value}. Not assigned.");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert_eq!(
+            support::clean(
+                pipeline(),
+                &session,
+                &input,
+                &[LocaleTag::EnUs, LocaleTag::Global]
+            ),
+            input
+        );
+        assert!(session.snapshot_entries().is_empty());
+        assert_exact_token(
+            "Phone: ",
+            &["+1", "212", "555", "0122"].join(&separator.to_string()),
+            ". Done.",
+        );
+        assert_exact_token(
+            "Phone: ",
+            &["212", "555", "0122"].join(&separator.to_string()),
+            ". Done.",
+        );
+    }
+}
+
+#[test]
+fn hyphen_grouped_ibans_keep_the_complete_value_protected() {
+    for separator in ['-', '\u{2011}'] {
+        let value = ["NL82", "ABNA", "8266", "3896", "21"].join(&separator.to_string());
+        assert_exact_token("{\"result\":{\"IBAN number\":\"", &value, "\"}}");
+        let value = ["GB82", "WEST", "1234", "5698", "7654", "32"].join(&separator.to_string());
+        assert_exact_token("IBAN: ", &value, "; end.");
     }
 }
