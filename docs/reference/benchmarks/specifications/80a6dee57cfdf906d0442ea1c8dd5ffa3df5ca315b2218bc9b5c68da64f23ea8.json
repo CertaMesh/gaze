@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:f38b834c0ab48ce42d549b5c6cde11bff1abe2be988cceeec65d7cc0f0569507",
+  "id": "gaze-benchmark-v1:80a6dee57cfdf906d0442ea1c8dd5ffa3df5ca315b2218bc9b5c68da64f23ea8",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -265,7 +265,9 @@
       "postal.ie",
       "postal.us",
       "security_token.anchored",
+      "security_token.bare",
       "security_token.code",
+      "security_token.pem",
       "ssn.de_cue",
       "ssn.us",
       "steuer_id.de",
