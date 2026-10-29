@@ -4,7 +4,7 @@ use gaze::{
 };
 use gaze_assembly::{
     build_pipeline, build_pipeline_builder, pipeline_with_context, pipeline_with_private_context,
-    BuildError,
+    resolve_policy_inputs, BuildError,
 };
 
 fn context() -> Context {
@@ -31,6 +31,7 @@ fn caller_value_too_short_refuses_all_library_assembly_paths_without_value() {
         build_pipeline_builder(&policy, &rejected, &[], &locales, None).map(|_| ()),
         pipeline_with_context(&resident, &policy, &rejected, &[], &locales).map(|_| ()),
         pipeline_with_private_context(&resident, &policy, &rejected, &[], &locales).map(|_| ()),
+        resolve_policy_inputs(&policy, Some(&rejected), None, None).map(|_| ()),
     ];
     for result in results {
         let error = result.expect_err("rejected caller context must refuse assembly");
