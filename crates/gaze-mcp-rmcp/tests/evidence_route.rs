@@ -1,6 +1,7 @@
 #[path = "support/evidence_harness.rs"]
 mod evidence_harness;
 use evidence_harness::*;
+use rmcp::model::ContentBlock;
 
 #[tokio::test]
 async fn protected_success_and_golden_receipt() {
@@ -803,4 +804,37 @@ fn r2_planned_interval_refused() {
     let mut r = must(serde_json::from_str::<Value>(GOLDEN))["receipt"].clone();
     r["intervals"]["gold_bytes_planned"] = json!({"point":0.0,"low":0.0,"high":0.0,"method_id":"grouped_paired_percentile_v1","conditional":false,"basis":"paired_completed"});
     assert!(!receipt_allowlisted(&r), "planned-interval-refused");
+}
+
+#[test]
+fn untransformable_refusal_has_closed_value_free_shape() {
+    for reason in [
+        "json_number_no_text_only_path",
+        "encoded_carrier",
+        "no_safe_rendering",
+        "caller_value_too_short",
+    ] {
+        let response = CallToolResult::error(vec![
+            ContentBlock::text("untransformable"),
+            ContentBlock::text(reason),
+        ]);
+        assert_eq!(outcome(Some(&response)), "FAILED_CLOSED_NO_EGRESS");
+        for key in ["structuredContent", "_meta"] {
+            let mut value = must(serde_json::to_value(&response));
+            value[key] = json!({"synthetic": EMAIL});
+            assert_eq!(
+                outcome(Some(&must(serde_json::from_value(value)))),
+                "UNKNOWN_EGRESS"
+            );
+        }
+    }
+    for texts in [
+        vec!["untransformable"],
+        vec!["untransformable", "unknown"],
+        vec!["invalid-args", "encoded_carrier"],
+        vec!["untransformable", "encoded_carrier", "extra"],
+    ] {
+        let response = CallToolResult::error(texts.into_iter().map(ContentBlock::text).collect());
+        assert_eq!(outcome(Some(&response)), "UNKNOWN_EGRESS");
+    }
 }

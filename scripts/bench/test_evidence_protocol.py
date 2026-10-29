@@ -36,6 +36,10 @@ class ReceiptTests(unittest.TestCase):
             ep.validate_structure(self.r)
         self.assertTrue(ctx.exception.code == code, 'refusal-code')
 
+    def test_untransformable_refusal_code_is_accepted(self):
+        self.r['error_codes'] = {'untransformable': 1}
+        self.assertEqual(ep.validate_structure(self.r), self.r)
+
     def test_golden_receipt_with_all_non_counting_derivations_is_accepted(self):
         self.assertTrue(ep.validate_structure(self.r) == self.r)
 

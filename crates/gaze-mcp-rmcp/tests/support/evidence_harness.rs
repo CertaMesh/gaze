@@ -336,26 +336,31 @@ pub(crate) async fn call(h: Arc<Host>, args: Value, timeout: bool) -> Option<Cal
     response
 }
 pub(crate) fn no_payload_surfaces(r: &CallToolResult) -> bool {
-    let Some(t) = r.content.first().and_then(|c| c.as_text()) else {
+    let texts: Option<Vec<_>> = r
+        .content
+        .iter()
+        .map(|c| c.as_text().map(|t| t.text.as_str()))
+        .collect();
+    let Some(texts) = texts else {
         return false;
     };
+    let closed = match texts.as_slice() {
+        ["untransformable", reason] => {
+            serde_json::from_value::<gaze::UntransformableReason>(json!(reason)).is_ok()
+        }
+        [code] => *code != "untransformable" && CONTROL_REFUSAL_CODES.contains(code),
+        _ => false,
+    };
     // Equality closes every serialized data-bearing surface, including future fields.
-    must(serde_json::to_value(r))
-        == json!({"isError":true,"content":[{"type":"text","text":t.text}]})
+    closed
+        && must(serde_json::to_value(r))
+            == json!({"isError":true,"content":texts.into_iter().map(|text| json!({"type":"text","text":text})).collect::<Vec<_>>()})
 }
 pub(crate) fn outcome(r: Option<&CallToolResult>) -> &'static str {
     match r {
         None => "UNKNOWN_EGRESS",
         Some(r) if r.is_error != Some(true) => "COMPLETED",
-        Some(r)
-            if no_payload_surfaces(r)
-                && r.content.len() == 1
-                && r.content[0]
-                    .as_text()
-                    .is_some_and(|t| CONTROL_REFUSAL_CODES.contains(&t.text.as_str())) =>
-        {
-            "FAILED_CLOSED_NO_EGRESS"
-        }
+        Some(r) if no_payload_surfaces(r) => "FAILED_CLOSED_NO_EGRESS",
         Some(_) => "UNKNOWN_EGRESS",
     }
 }
@@ -566,6 +571,7 @@ pub(crate) const CONTROL_REFUSAL_CODES: &[&str] = &[
     "auth-denied",
     "backend-failure",
     "backend-unavailable",
+    "host-context-rejected",
     "internal",
     "invalid-args",
     "invalid-session-id",
@@ -574,6 +580,7 @@ pub(crate) const CONTROL_REFUSAL_CODES: &[&str] = &[
     "not-found",
     "redaction-failed",
     "response-serialization-failed",
+    "untransformable",
 ];
 pub(crate) const COUNTING_GRADES: &[&str] = &[
     "egress_reconstructed",
@@ -604,19 +611,7 @@ pub(crate) const DERIVATIONS: &[&str] = &[
     "private_authored_records",
     "route_native",
 ];
-pub(crate) const ERROR_CODES: &[&str] = &[
-    "auth-denied",
-    "backend-failure",
-    "backend-unavailable",
-    "internal",
-    "invalid-args",
-    "invalid-session-id",
-    "limit-exceeded",
-    "manifest-persistence-failed",
-    "not-found",
-    "redaction-failed",
-    "response-serialization-failed",
-];
+pub(crate) const ERROR_CODES: &[&str] = CONTROL_REFUSAL_CODES;
 pub(crate) const FEATURE_GRAPH_IDS: &[&str] = &["workspace.all_features", "workspace.default"];
 pub(crate) const GATE_IDS: &[&str] = &[
     "build_attestation_clean_source",
