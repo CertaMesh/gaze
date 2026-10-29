@@ -126,7 +126,7 @@ fn explicit_class_override_does_not_validate_unused_dictionary_name_as_class() {
         let pipeline = build_pipeline(&policy, &context, &[], &locales, None)
             .expect("explicit valid class must replace the unused fallback");
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let dictionaries = gaze::dictionary_bundle_from_context(&context);
+        let dictionaries = gaze::dictionary_bundle_from_context(&context).unwrap();
         let clean = pipeline
             .pseudonymize_with_detect_context(
                 &session,

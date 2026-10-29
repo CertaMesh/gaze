@@ -1,0 +1,244 @@
+{
+  "arms": {
+    "dictionary/current/calibration": [
+      648,
+      0,
+      0
+    ],
+    "dictionary/current/published": [
+      648,
+      0,
+      0
+    ],
+    "dictionary/pinned/calibration": [
+      648,
+      0,
+      0
+    ],
+    "dictionary/pinned/published": [
+      648,
+      0,
+      0
+    ],
+    "known-record-cells/kinds-False": [
+      168,
+      0,
+      0
+    ],
+    "known-record-cells/kinds-True": [
+      168,
+      0,
+      0
+    ],
+    "known-record-cells/raw": [
+      168,
+      0,
+      0
+    ],
+    "known-record/v1/probe/A": [
+      1706,
+      0,
+      0
+    ],
+    "known-record/v1/probe/C": [
+      2907,
+      0,
+      0
+    ],
+    "known-record/v1/probe/D": [
+      7752,
+      0,
+      0
+    ],
+    "known-record/v1/probe/K": [
+      168,
+      0,
+      0
+    ],
+    "known-record/v1/probe/R": [
+      274,
+      0,
+      0
+    ],
+    "known-record/v1/shipping/A": [
+      1706,
+      0,
+      0
+    ],
+    "known-record/v1/shipping/C": [
+      2907,
+      0,
+      0
+    ],
+    "known-record/v1/shipping/D": [
+      7752,
+      0,
+      0
+    ],
+    "known-record/v1/shipping/K": [
+      168,
+      0,
+      0
+    ],
+    "known-record/v1/shipping/R": [
+      274,
+      0,
+      0
+    ],
+    "known-record/v2/probe/A": [
+      1706,
+      0,
+      0
+    ],
+    "known-record/v2/probe/C": [
+      2907,
+      0,
+      0
+    ],
+    "known-record/v2/probe/D": [
+      7752,
+      0,
+      0
+    ],
+    "known-record/v2/probe/K": [
+      168,
+      0,
+      0
+    ],
+    "known-record/v2/probe/R": [
+      274,
+      0,
+      0
+    ],
+    "known-record/v2/shipping/A": [
+      1706,
+      0,
+      0
+    ],
+    "known-record/v2/shipping/C": [
+      2907,
+      0,
+      0
+    ],
+    "known-record/v2/shipping/D": [
+      7752,
+      0,
+      0
+    ],
+    "known-record/v2/shipping/K": [
+      168,
+      0,
+      0
+    ],
+    "known-record/v2/shipping/R": [
+      274,
+      0,
+      0
+    ],
+    "perf-hook-deletion": [
+      1,
+      0,
+      0
+    ],
+    "perf-snapshot": [
+      2,
+      0,
+      0
+    ],
+    "positive-control": [
+      1,
+      1,
+      1
+    ]
+  },
+  "columns": [
+    "contexts",
+    "unsafe_short_values",
+    "contexts_with_rejections"
+  ],
+  "inputs": {
+    "generator_source_commit": "f43045ec6ccc9196ead83fda6e43f13ab8ad1c70",
+    "contexts_per_arm": {
+      "known-record/v1/shipping/C": 2907,
+      "known-record/v1/shipping/A": 1706,
+      "known-record/v1/shipping/D": 7752,
+      "known-record/v1/shipping/R": 274,
+      "known-record/v1/shipping/K": 168,
+      "known-record/v1/probe/C": 2907,
+      "known-record/v1/probe/A": 1706,
+      "known-record/v1/probe/D": 7752,
+      "known-record/v1/probe/R": 274,
+      "known-record/v1/probe/K": 168,
+      "known-record/v2/shipping/C": 2907,
+      "known-record/v2/shipping/A": 1706,
+      "known-record/v2/shipping/D": 7752,
+      "known-record/v2/shipping/R": 274,
+      "known-record/v2/shipping/K": 168,
+      "known-record/v2/probe/C": 2907,
+      "known-record/v2/probe/A": 1706,
+      "known-record/v2/probe/D": 7752,
+      "known-record/v2/probe/R": 274,
+      "known-record/v2/probe/K": 168,
+      "known-record-cells/raw": 168,
+      "known-record-cells/kinds-False": 168,
+      "known-record-cells/kinds-True": 168,
+      "dictionary/current/published": 648,
+      "dictionary/current/calibration": 648,
+      "dictionary/pinned/published": 648,
+      "dictionary/pinned/calibration": 648,
+      "perf-snapshot": 2,
+      "perf-hook-deletion": 1,
+      "positive-control": 1
+    },
+    "context_stream_sha256": "c0d08ca01ae66ff5d6045494d7b9ff3952e7e59a0c5cb16cf3383ce3364aeb80",
+    "generator_input_sha256": "764ee4b7170e287c873bc900f7f79d08d721444bc9dd7244b8f827c8e5f6a8e9",
+    "dataset_sha256": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+    "policy": {
+      "rule": [
+        {
+          "kind": "default",
+          "action": "tokenize"
+        }
+      ]
+    },
+    "dictionary_seed": 20260710,
+    "positive_control_expected": 1
+  },
+  "total_benchmark_contexts": 54327,
+  "total_benchmark_unsafe_short_values": 0,
+  "loader_source_commit": "d5789211f67a8e15ededaf6ffe0442d810899745",
+  "loader_context_parser_sha256": "194194e9dac18dbcf84ca0c28659093ddc7964ea383fa6d180a75a460b5ae677",
+  "loader_binary_sha256": "9c38e38267f4e73526f966c3e700ccaa090a59c8879b56d39eeae20d275a1f2e",
+  "loader": "TypedContext::load in prepared main review worktree, no default features",
+  "generator_script_sha256": "13b4ec0cdc20dedafe2e3e3553ba227af16012d7892eac9e046a7737d86a7008",
+  "probe_source_sha256": "3a56a41b260d62789022c4e77e947a6ddfe2a5f5adb1d8f92653521c6664cfea",
+  "mutations": {
+    "source_sha256": {
+      "crates/gaze-cli/src/pipeline/run.rs": "f4e440407272cca5c7dc334eb338040d76c08ecf68e5e8bcc0a73e4eb28dee45",
+      "crates/gaze-assembly/src/lib.rs": "ef2462df6342888f0e693cf33212ce416086b7c4a0f1ae15569de1704cc9c3a8",
+      "crates/gaze/src/dictionaries.rs": "d4b70335219cbefdb2a542a46049c061fed2516bc18cc2bf177327ab673d2c05"
+    },
+    "mutations": {
+      "dictionary-refusal": {
+        "exit": 101,
+        "killed_by_regression": true
+      },
+      "library-refusal": {
+        "exit": 101,
+        "killed_by_regression": true
+      },
+      "eval-opt-out": {
+        "exit": 101,
+        "killed_by_regression": true
+      },
+      "echo-context": {
+        "exit": 101,
+        "killed_by_regression": true
+      }
+    },
+    "restored-lib": 0,
+    "restored-record_context": 0,
+    "restored-eval_cli": 0,
+    "restored-cli_pipe": 0
+  }
+}

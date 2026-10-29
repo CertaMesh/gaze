@@ -3,6 +3,26 @@ use super::*;
 const KNOWN: &str = "Synthetic Qorvex";
 const UNUSED: &str = "Synthetic Zunvel";
 
+#[tokio::test]
+async fn caller_value_too_short_refuses_before_tool_or_session_mutation() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let result = call(
+        &session,
+        json!({}),
+        Some(json!("alice@example.invalid")),
+        raw_context("Qx"),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        result.untransformable_reason(),
+        Some("caller_value_too_short")
+    );
+    assert!(!format!("{result:?}").contains("Qx"));
+    assert!(!format!("{result}").contains("Qx"));
+    assert!(session.snapshot_entries().is_empty());
+}
+
 fn host_policy() -> gaze::Policy {
     let mut detector = gaze::DetectorSpec::default();
     detector.name = "synthetic-email".into();

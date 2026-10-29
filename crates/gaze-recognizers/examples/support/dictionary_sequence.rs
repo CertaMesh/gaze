@@ -3,6 +3,22 @@ use super::*;
 use gaze::{DefaultRule, Recognizer};
 use gaze_recognizers::DictionaryRecognizer;
 
+trait ContextBundleResult {
+    fn context_bundle_result(self) -> Result<DictionaryBundle, Box<dyn std::error::Error>>;
+}
+
+impl ContextBundleResult for DictionaryBundle {
+    fn context_bundle_result(self) -> Result<DictionaryBundle, Box<dyn std::error::Error>> {
+        Ok(self)
+    }
+}
+
+impl<E: std::error::Error + 'static> ContextBundleResult for Result<DictionaryBundle, E> {
+    fn context_bundle_result(self) -> Result<DictionaryBundle, Box<dyn std::error::Error>> {
+        self.map_err(Into::into)
+    }
+}
+
 pub(super) fn handle(
     sequence: &str,
     mut request: Request,
@@ -12,7 +28,7 @@ pub(super) fn handle(
         .take()
         .ok_or("sequence requires dictionary context")?;
     let context = Context::from_json_str(&raw)?;
-    let dictionaries = gaze::dictionary_bundle_from_context(&context);
+    let dictionaries = gaze::dictionary_bundle_from_context(&context).context_bundle_result()?;
     if dictionaries.iter().count() != 1 || dictionaries.get("sequence").is_none() {
         return Err("sequence requires exactly one dictionary".into());
     }

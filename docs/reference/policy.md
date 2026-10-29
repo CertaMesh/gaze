@@ -223,11 +223,25 @@ class, or sets them to `"ignore"`. Unknown unmapped keys, paths without leaves,
 arrays, nulls and duplicate JSON keys fail closed; errors contain paths, never values.
 
 Values are trimmed and whitespace runs (including NBSP) collapse to one space.
-Restore preserves source bytes. Individually skip values with fewer than three
-letters or digit-only values shorter than four digits; valid registry-length,
-mod-97-passing IBANs are exempt. `Context::record_value_rejections` lists safe
-paths and typed refusal reasons, never values. Off-by-default accepted groups
-are inert and absent from this list. Clean warns per refused path.
+Restore preserves source bytes. Values containing letters require at least
+three letters. Values without letters require at least four numeric characters.
+A value below this floor refuses the whole call in clean,
+daemon v1 and v2, embedded MCP host context, and Rust `gaze-assembly` callers. Valid registry-length,
+mod-97-passing IBANs are exempt. The refusal reports only
+`caller_value_too_short`, with no value or field path. Clean exits with code 8
+and empty stdout, even when the short value does not occur in the input.
+Library assembly enforces rejections by default with
+`BuildError::Untransformable(UntransformableReason::CallerValueTooShort)`.
+`Context::record_value_rejections` retains typed refusal metadata. Owner-side
+`gaze eval` explicitly opts into observation: it warns with the closed reason,
+clears these rejections, and continues measuring accepted values. Rust observer
+tools must explicitly inspect `Context::untransformable_reason()`, warn without
+values, and clear the rejections before assembly. Off-by-default accepted groups
+are inert and absent from this list.
+The core `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context`
+APIs return `Result<DictionaryBundle, UntransformableReason>`. They enforce the
+same short-value refusal before producing dictionaries, including for callers
+that manually build a pipeline.
 
 Common single names (`Will`, `Grace`, `May`, `Mark`) from the
 [versioned dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)
@@ -657,8 +671,10 @@ Policy custom recognizers cannot use reserved bundled family names:
 `--context-json` can also supply dictionaries without a matching policy
 recognizer. In that mode, Gaze registers one dictionary recognizer per context
 dictionary and uses `class_map` for the class, falling back to `custom:<name>`
-when a mapping is absent. `fields` are threaded into `DetectContext` for
-recognizers and are available to library users through the borrowed
+when a mapping is absent. `fields` reach recognizers as `CallerDeclared`
+`DetectContext` field spans wherever a string or number leaf occurs in the
+document (see [whole-document field context](../explanation/detection/outcomes.md#whole-document-field-context)).
+No recognizer consumes them yet. Library users can read them through the borrowed
 `Context::fields_typed() -> ContextFieldsRef<'_>` accessor. `class_map` is
 runtime metadata for dictionary recognizer construction, not a general class
 override mechanism.

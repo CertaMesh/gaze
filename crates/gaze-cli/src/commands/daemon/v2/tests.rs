@@ -92,6 +92,29 @@ fn assert_error(value: &Value, variant: &str) {
 }
 
 #[test]
+fn caller_value_too_short_refuses_before_changing_block_state() {
+    let mut d = daemon();
+    let opened = open(&mut d, "short-record");
+    for op in ["clean_blocks", "resync"] {
+        let mut request = if op == "clean_blocks" {
+            clean_request(&opened, vec![block("a", "alice@example.invalid")])
+        } else {
+            let mut r = operation(&opened, op);
+            r["blocks"] = json!([block("a", "alice@example.invalid")]);
+            r
+        };
+        request["context"] = json!({"record":{"name":"Qx"}});
+        let result = send(&mut d, request);
+        assert_error(&result, "Untransformable");
+        assert_eq!(result["reason"], "caller_value_too_short");
+        assert!(!result.to_string().contains("Qx"));
+        assert!(!result.to_string().contains("alice@example.invalid"));
+        assert_eq!(d.v2.sessions["short-record"].revision, 0);
+        assert_eq!(d.v2.sessions["short-record"].generation, 0);
+    }
+}
+
+#[test]
 fn six_hundred_one_value_blocks_fit_default_limits() {
     let mut d = daemon();
     let opened = open(&mut d, "long-conversation");

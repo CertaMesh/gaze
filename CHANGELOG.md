@@ -9,9 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Caller record values too short for safe matching now refuse the entire call
+  in `gaze clean`, daemon v1 and v2, embedded MCP host context, and Rust library
+  assembly. Library enforcement is the default and returns the typed
+  `BuildError::Untransformable`. The closed
+  reason is `caller_value_too_short`; clean exits with code 8 and no output.
+  Previously these values were skipped. Owner-side `gaze eval` remains an
+  explicit observer and measures with a value-free warning.
+  `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context` now
+  return `Result<DictionaryBundle, UntransformableReason>` and refuse rejected
+  caller values too. Callers must propagate the result before using a bundle.
 - Proxy adapters return `RequestSurfaces` and attach parsed scalar provenance to
   string leaves. The Anthropic codec and MCP also pass field context to detection.
   This adds metadata only. No production recognizer consumes the field context.
+- The strict span-preserving JSON parser moved from the Anthropic codec into
+  `gaze_types::json_tree`; the codec's behaviour is unchanged. Text cleans
+  (`gaze clean`, the daemon, `RawDocument::Text`) now pass field spans for a
+  document that strictly parses as a JSON object or array, plus the context
+  JSON `fields` map as caller-declared fields. Metadata only: output is unchanged.
 - `FieldPath` shares ancestor storage. `segments()` returns borrowed segment
   references. Proxy `CoveragePath` materializes its legacy spelling on demand.
   Numeric leaves remain under existing admission rules without an unused inventory.

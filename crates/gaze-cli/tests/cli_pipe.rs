@@ -17,6 +17,27 @@ use serde_json::{json, Value};
 use serial_test::file_serial;
 use tempfile::tempdir;
 
+#[test]
+fn caller_value_too_short_refuses_without_output_or_value() {
+    let dir = tempdir().unwrap();
+    let context = dir.path().join("context.json");
+    for value in ["Qx", "123", "A7", "  Q\u{a0}x  "] {
+        fs::write(&context, json!({"record":{"name":value}}).to_string()).unwrap();
+        let output = Command::cargo_bin("gaze")
+            .unwrap()
+            .args(["clean", "--context-json", context.to_str().unwrap()])
+            .write_stdin("plain text")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(8));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            output.stderr,
+            b"{\"error\":\"Untransformable\",\"exit\":8,\"reason\":\"caller_value_too_short\"}\n"
+        );
+    }
+}
+
 #[cfg(feature = "perf-timers")]
 #[path = "support/perf_invocation_snapshot.rs"]
 mod perf_invocation_snapshot;
@@ -3620,13 +3641,13 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
 }
 
 #[test]
-fn unsafe_record_value_warns_by_path_while_valid_iban_still_cleans() {
+fn valid_iban_with_only_two_letters_still_cleans() {
     let dir = tempdir().unwrap();
     let context_path = dir.path().join("context.json");
     let iban = "DE36000000000000000000";
     fs::write(
         &context_path,
-        format!(r#"{{"record":{{"iban":"{iban}","name":"A"}}}}"#),
+        format!(r#"{{"record":{{"iban":"{iban}"}}}}"#),
     )
     .unwrap();
     let output = Command::cargo_bin("gaze")
@@ -3638,7 +3659,7 @@ fn unsafe_record_value_warns_by_path_while_valid_iban_still_cleans() {
         .unwrap();
     assert!(output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("/name skipped: unsafe short match"));
+    assert!(!stderr.contains("caller_value_too_short"));
     assert!(!stderr.contains(iban));
     let response: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(!response["clean_text"].as_str().unwrap().contains(iban));

@@ -314,6 +314,8 @@
     "docs/reference/benchmarks/agentic-layers-v20-v0.16.0.json.gz",
     "docs/reference/benchmarks/bsn-twin-labels.md",
     "docs/reference/benchmarks/bsn-twin-v16-contract-replay.json",
+    "docs/reference/benchmarks/caller-context-floor-v1.json",
+    "docs/reference/benchmarks/caller-context-floor.md",
     "docs/reference/benchmarks/class-commitments-v1.json",
     "docs/reference/benchmarks/class-coverage-source-attribution-v13.json.gz",
     "docs/reference/benchmarks/class-coverage-sources.json",

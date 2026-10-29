@@ -29,6 +29,19 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: handle caller-context dictionary refusals
+
+`dictionary_bundle_from_context` and `DictionaryBundleExt::from_context` now
+return `Result<DictionaryBundle, UntransformableReason>`. Propagate the result
+with `?` before passing the bundle to a manually built pipeline. Unsafe short
+caller values refuse with `CallerValueTooShort`, including when another record
+value is accepted. Policy assembly also refuses by default through
+`BuildError::Untransformable`.
+
+Observer-only tools must explicitly inspect `Context::untransformable_reason()`,
+warn without caller values, and clear `record_value_rejections` before conversion
+or assembly. Owner-side `gaze eval` makes this choice explicitly.
+
 ### Action required: update proxy adapters and field-path readers
 
 Custom `ProviderAdapter::request_pii_surfaces` implementations now return
