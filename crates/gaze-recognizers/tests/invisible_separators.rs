@@ -481,3 +481,33 @@ fn hyphen_grouped_ibans_keep_the_complete_value_protected() {
         assert_exact_token("IBAN: ", &value, "; end.");
     }
 }
+
+#[test]
+fn phone_fragments_inside_grouped_references_remain_protected() {
+    let locales = [LocaleTag::EnUs, LocaleTag::DeDe, LocaleTag::Global];
+    let selected = support::pipeline_for(
+        &locales,
+        &["core", "locale-en", "locale-de"],
+        vec![RuleSpec::Default {
+            action: Action::Tokenize,
+        }],
+        true,
+    );
+    for separator in [
+        ' ', '-', '\u{2011}', '\u{200b}', '\u{2060}', '\u{feff}', '\u{ad}',
+    ] {
+        let value = ["5234", "7762", "0771", "4620"].join(&separator.to_string());
+        let tail = ["0771", "4620"].join(&separator.to_string());
+        let input = format!("Public format fixture = {value}. Not assigned.");
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let clean = support::clean(&selected, &session, &input, &locales);
+        assert!(
+            session
+                .snapshot_entries()
+                .iter()
+                .any(|entry| entry.raw == tail),
+            "{input:?}: {clean}"
+        );
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+    }
+}
