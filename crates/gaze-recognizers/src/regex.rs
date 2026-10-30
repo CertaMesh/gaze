@@ -1238,6 +1238,38 @@ fn is_ascii_email_continuation(ch: char) -> bool {
 mod tests {
     use super::*;
 
+    fn with_failed_source_regex_compilation(detector: RegexDetector) -> RegexDetector {
+        // Inject the compile error into this detector's lazy cache; other tests are unaffected.
+        let failure = crate::source_regex::compile("(");
+        assert!(failure.is_err());
+        detector.source_regex.set(failure).unwrap();
+        detector
+    }
+
+    #[test]
+    fn source_regex_compile_failure_refuses_the_document() {
+        use gaze::{Action, ClassRule, Pipeline, RawDocument, Scope, Session};
+
+        let detector = with_failed_source_regex_compilation(RegexDetector::emails().unwrap());
+        let pipeline = Pipeline::builder()
+            .recognizer(detector)
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let result = pipeline.redact(
+            &session,
+            RawDocument::Text("Contact cedar\u{200b}@example.invalid".to_owned()),
+        );
+        let error =
+            result.expect_err("a failed source regex must refuse, never return clean output");
+        assert!(matches!(error, gaze::Error::RecognizerDetect(_)));
+        assert!(error
+            .to_string()
+            .contains("source-boundary regex compilation failed"));
+        assert!(session.snapshot_entries().is_empty());
+    }
+
     #[test]
     fn source_regex_compiles_only_after_a_document_has_source_gaps() {
         let detector =

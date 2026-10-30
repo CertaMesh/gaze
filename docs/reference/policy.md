@@ -1053,6 +1053,14 @@ that names one. For example, `ID\x{200B}\d{6}\b` matches `ID` + ZERO WIDTH
 SPACE + `123456`, and also plain `ID123456`. Do not rely on an invisible
 character to narrow a match; use a visible cue instead.
 
+The source-boundary transform has an **80 MiB compile budget per pattern**,
+separate from the original pattern's 10 MiB admission budget. There is no shared
+total budget across recognizers. Transformed patterns compile lazily on the first
+gap-bearing input that needs them, rather than at policy load. A custom pattern
+can therefore load successfully but exceed the transformed budget later. In that
+case, detection refuses the affected document with a recognizer error and returns
+no clean output; it never silently skips the pattern.
+
 The bundled IBAN recognizer accepts spaces and hyphens between its four-character
 groups, including U+2011 NON-BREAKING HYPHEN. Tokens retain the original bytes.
 An invalid international prefix starting with `+0` cannot supply a national phone suffix.

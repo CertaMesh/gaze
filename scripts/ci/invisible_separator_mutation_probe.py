@@ -29,7 +29,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 32
+    total = len(set(args.probe)) or len(CODEPOINTS) + 33
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE, CORE_SOURCE, TYPES_SOURCE, SESSION_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -70,6 +70,19 @@ def main():
             path.write_bytes(originals[path])
 
     try:
+        reject("source_regex_compile_failure", REGEX_SOURCE,
+               '                .map_err(|_| {\n'
+               '                    gaze_types::DetectError::backend(\n'
+               '                        &self.source,\n'
+               '                        "source-boundary regex compilation failed",\n'
+               '                    )\n'
+               '                })?;',
+               '                .map_err(|_| ());\n'
+               '            let regex = match regex {\n'
+               '                Ok(regex) => regex,\n'
+               '                Err(()) => return Ok(scans),\n'
+               '            };',
+               "regex::tests::source_regex_compile_failure_refuses_the_document", binary=None)
         reject("source_regex_size_budget", SOURCE_REGEX,
                ".size_limit(COMPILED_SIZE_LIMIT)", ".size_limit(10 * (1 << 20))",
                "private_pem_source_gaps_keep_the_complete_value_and_restore", "bare_credentials")
