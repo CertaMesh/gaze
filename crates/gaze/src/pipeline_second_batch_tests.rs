@@ -116,6 +116,7 @@ fn second_batch_single_and_multigap_owned_format_preserve_restore_trace_and_pare
                     GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                     vec!["primary.fixture".into()],
                     lineage::Lineage::fixture("primary.fixture"),
+                    gaze_types::ProtectionOutcome::Protected,
                 )
                 .unwrap();
             pipeline
@@ -395,6 +396,7 @@ fn second_batch_history_counts_exposed_fragments_only() {
             GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
             vec!["primary.fixture".into()],
             lineage::Lineage::fixture("primary.fixture"),
+            gaze_types::ProtectionOutcome::Protected,
         )
         .unwrap();
     pipeline
@@ -481,6 +483,7 @@ fn second_batch_utf8_before_between_after_two_tokens_keeps_exact_source_and_audi
                 GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                 vec!["primary.fixture".into()],
                 lineage::Lineage::fixture("primary.fixture"),
+                gaze_types::ProtectionOutcome::Protected,
             )
             .unwrap();
     }
@@ -603,6 +606,7 @@ fn second_batch_preflight_failure_keeps_existing_trace_manifest_and_audit_untouc
                 GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                 vec!["primary.fixture".into()],
                 lineage::Lineage::fixture("primary.fixture"),
+                gaze_types::ProtectionOutcome::Protected,
             )
             .unwrap();
         let before_text = clean.text.clone();

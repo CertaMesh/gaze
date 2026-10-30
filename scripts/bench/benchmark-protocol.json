@@ -28,5 +28,11 @@
     "mode": "canonical-once",
     "corpus_contract": "all-corpus-labels-v1",
     "generated_contract": "committed generated-label contract"
+  },
+  "refusal_contract": {
+    "version": 2,
+    "semantics": "Only typed untransformable refusals with evidence_complete=true covering every refused path, emitted by a producer listed in complete_evidence_producers (each added only with its end-to-end completeness test), whose every refused span exactly matches ownership-labelled confirmed-ID gold, are blocked operations. Single-path first-error evidence and unsupported encoded carriers are ineligible. Benign/non-gold refusals fail. Layers C/A/D/R without refusals, and dictionary-sequence layers K/B, retain legacy arithmetic. Compare common unblocked operations for bytes, exact restore and valid manifest; refusing creates no gain.",
+    "legacy_version": 1,
+    "complete_evidence_producers": []
   }
 }

@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parents[3]
 BENCH = REPO / "scripts/bench"
 import compare  # noqa: E402
 import row_sources  # noqa: E402
+import scorer_compatibility  # noqa: E402
 import freshness  # noqa: E402
 from comparison_availability import unavailable_tools  # noqa: E402
 from layer_display import layer_display_name  # noqa: E402
@@ -129,6 +130,7 @@ def validate_current(report: dict[str, object], source_path: Path | None = None)
     for name, (recorded, current) in expected.items():
         compatible = (row_sources.adapter_is_compatible(recorded, current) if name == "comparison adapter"
                       else row_sources.finalizer_is_compatible(recorded, current) if name == "report finalizer"
+                      else scorer_compatibility.scorer_is_compatible(recorded, current) if name == "scorer"
                       else recorded == current)
         if not compatible:
             raise ValueError(f"{name} changed; rerun affected competitor rows on the same corpus")
@@ -454,7 +456,9 @@ def validate_tuned(tuned: dict[str, object], report_path: Path, *, tuned_path: P
     }
     for name, (recorded, current) in expected.items():
         compatible = (row_sources.adapter_is_compatible(recorded, current)
-                      if name == "comparison adapter" else recorded == current)
+                      if name == "comparison adapter"
+                      else scorer_compatibility.scorer_is_compatible(recorded, current) if name == "scorer"
+                      else recorded == current)
         if not compatible:
             raise ValueError(f"{name} changed; rerun tuned_presidio/tune.py measure")
     if tuned.get("harness_dirty") is not False or not tuned["anchor"]["equal"]:

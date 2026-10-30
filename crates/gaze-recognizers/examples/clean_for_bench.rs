@@ -141,6 +141,7 @@ struct FinalProtectionTraceItem {
     raw_end: usize,
     class: String,
     action: String,
+    protection_outcome: gaze_types::ProtectionOutcome,
     provenance: FinalProtectionTraceProvenance,
 }
 
@@ -247,6 +248,7 @@ enum Outcome {
         fixture_id: String,
         stage: &'static str,
         reason: PipelineFailureReason,
+        refusal_evidence: Vec<RefusalEvidence>,
         total_ms: f64,
     },
 }
@@ -314,12 +316,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 fixture_id,
                 stage,
                 reason,
+                refusal_evidence,
                 total_ms,
             } => {
                 if let Some(rows) = &audit_rows {
                     rows.drain();
                 }
-                write_pipeline_error(&mut stdout, &fixture_id, stage, reason, total_ms)?;
+                write_pipeline_error(
+                    &mut stdout,
+                    &fixture_id,
+                    stage,
+                    reason,
+                    refusal_evidence,
+                    total_ms,
+                )?;
             }
         }
     }
@@ -435,6 +445,7 @@ fn handle_request_with_policy(
                 fixture_id: request.fixture_id,
                 stage: "clean",
                 reason,
+                refusal_evidence: refusal_evidence(&raw_text, &error),
                 total_ms: clean_ms,
             });
         }
@@ -478,6 +489,7 @@ fn handle_request_with_policy(
                         fixture_id: request.fixture_id,
                         stage: "post_policy_scan",
                         reason,
+                        refusal_evidence: Vec::new(),
                         total_ms: clean_ms,
                     });
                 }
@@ -574,10 +586,57 @@ struct Response {
 }
 
 #[derive(Debug, Serialize)]
+struct RefusalEvidence {
+    raw_start: usize,
+    raw_end: usize,
+    outcome: &'static str,
+    reason: gaze_types::UntransformableReason,
+}
+
+fn refusal_evidence(text: &str, error: &gaze::Error) -> Vec<RefusalEvidence> {
+    use gaze_types::json_tree::{self, JsonKind, JsonTreeLimits};
+    let gaze::Error::Protection(gaze::ProtectionError::Untransformable { reason, field_path }) =
+        error
+    else {
+        return Vec::new();
+    };
+    let Ok(tree) = json_tree::parse(text.as_bytes(), JsonTreeLimits::default()) else {
+        return Vec::new();
+    };
+    let mut pending = vec![tree.root];
+    while let Some(node) = pending.pop() {
+        match node.kind {
+            JsonKind::Object(members) => pending.extend(members.into_iter().map(|m| m.value)),
+            JsonKind::Array(values) => pending.extend(values),
+            scalar if node.path == *field_path => {
+                let span = if matches!(scalar, JsonKind::String(_)) {
+                    node.span.start + 1..node.span.end - 1
+                } else {
+                    node.span
+                };
+                if span.is_empty() {
+                    return Vec::new();
+                }
+                return vec![RefusalEvidence {
+                    raw_start: span.start,
+                    raw_end: span.end,
+                    outcome: "confirmed_untransformable",
+                    reason: *reason,
+                }];
+            }
+            _ => {}
+        }
+    }
+    Vec::new()
+}
+
+#[derive(Debug, Serialize)]
 struct PipelineErrorResponse<'a> {
     fixture_id: &'a str,
     pipeline_error_stage: &'a str,
     pipeline_error_code: &'a str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    refusal_evidence: Vec<RefusalEvidence>,
     timing: PipelineErrorTiming,
 }
 
@@ -591,6 +650,7 @@ fn write_pipeline_error(
     fixture_id: &str,
     stage: &str,
     reason: PipelineFailureReason,
+    refusal_evidence: Vec<RefusalEvidence>,
     total_ms: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     serde_json::to_writer(
@@ -599,6 +659,7 @@ fn write_pipeline_error(
             fixture_id,
             pipeline_error_stage: stage,
             pipeline_error_code: reason.as_str(),
+            refusal_evidence,
             timing: PipelineErrorTiming { total_ms },
         },
     )?;
@@ -609,6 +670,13 @@ fn write_pipeline_error(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PipelineFailureReason {
+    Untransformable(gaze_types::UntransformableReason),
+    ProtectionEmptyPrimary,
+    ProtectionUnsupportedCoverage,
+    ProtectionPrimary,
+    ProtectionSafetyNet,
+    ProtectionResidual,
+    ProtectionProvenance,
     InvalidRegex,
     UnknownToken,
     ExportForbidden,
@@ -650,6 +718,27 @@ enum PipelineFailureReason {
 impl PipelineFailureReason {
     fn as_str(self) -> &'static str {
         match self {
+            Self::Untransformable(reason) => match reason {
+                gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath => {
+                    "untransformable_json_number_no_text_only_path"
+                }
+                gaze_types::UntransformableReason::EncodedCarrier => {
+                    "untransformable_encoded_carrier"
+                }
+                gaze_types::UntransformableReason::NoSafeRendering => {
+                    "untransformable_no_safe_rendering"
+                }
+                gaze_types::UntransformableReason::CallerValueTooShort => {
+                    "untransformable_caller_value_too_short"
+                }
+                _ => unreachable!("classifier rejects unknown untransformable reasons"),
+            },
+            Self::ProtectionEmptyPrimary => "protection_empty_primary",
+            Self::ProtectionUnsupportedCoverage => "protection_unsupported_coverage",
+            Self::ProtectionPrimary => "protection_primary",
+            Self::ProtectionSafetyNet => "protection_safety_net",
+            Self::ProtectionResidual => "protection_residual",
+            Self::ProtectionProvenance => "protection_provenance",
             Self::InvalidRegex => "invalid_regex",
             Self::UnknownToken => "unknown_token",
             Self::ExportForbidden => "export_forbidden",
@@ -702,6 +791,28 @@ impl PipelineFailureReason {
 
 fn pipeline_failure_reason(error: &gaze::Error) -> Option<PipelineFailureReason> {
     match error {
+        gaze::Error::Protection(error) => match error {
+            gaze::ProtectionError::Untransformable { reason, .. } => match reason {
+                gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath
+                | gaze_types::UntransformableReason::EncodedCarrier
+                | gaze_types::UntransformableReason::NoSafeRendering
+                | gaze_types::UntransformableReason::CallerValueTooShort => {
+                    Some(PipelineFailureReason::Untransformable(*reason))
+                }
+                _ => None,
+            },
+            gaze::ProtectionError::EmptyPrimary => {
+                Some(PipelineFailureReason::ProtectionEmptyPrimary)
+            }
+            gaze::ProtectionError::UnsupportedCoverage => {
+                Some(PipelineFailureReason::ProtectionUnsupportedCoverage)
+            }
+            gaze::ProtectionError::Primary => Some(PipelineFailureReason::ProtectionPrimary),
+            gaze::ProtectionError::SafetyNet => Some(PipelineFailureReason::ProtectionSafetyNet),
+            gaze::ProtectionError::Residual => Some(PipelineFailureReason::ProtectionResidual),
+            gaze::ProtectionError::Provenance => Some(PipelineFailureReason::ProtectionProvenance),
+            _ => None,
+        },
         gaze::Error::InvalidRegex(_) => Some(PipelineFailureReason::InvalidRegex),
         gaze::Error::UnknownToken { .. } => Some(PipelineFailureReason::UnknownToken),
         gaze::Error::ExportForbidden => Some(PipelineFailureReason::ExportForbidden),
@@ -1286,6 +1397,7 @@ fn serialize_final_protection_trace(
             raw_end: item.raw_end(),
             class: item.class().to_canonical_str(),
             action: item.action().to_string(),
+            protection_outcome: item.protection_outcome(),
             provenance: FinalProtectionTraceProvenance {
                 stage: item.stage().to_string(),
                 decision: item.decision().to_string(),
@@ -1972,8 +2084,15 @@ mod tests {
             let object = serialized_item
                 .as_object()
                 .expect("trace item should be an object");
-            assert_eq!(object.len(), 5);
-            for field in ["raw_start", "raw_end", "class", "action", "provenance"] {
+            assert_eq!(object.len(), 6);
+            for field in [
+                "raw_start",
+                "raw_end",
+                "class",
+                "action",
+                "provenance",
+                "protection_outcome",
+            ] {
                 assert!(object.contains_key(field), "missing trace field {field}");
             }
             let provenance = object["provenance"]
@@ -2285,11 +2404,118 @@ mod tests {
     }
 
     #[test]
+    fn possible_sensitivity_survives_final_protection_evidence() {
+        struct PossibleId;
+        impl gaze_types::Recognizer for PossibleId {
+            fn id(&self) -> &str {
+                "possible.id"
+            }
+            fn supported_class(&self) -> &PiiClass {
+                &PiiClass::Name
+            }
+            fn token_family(&self) -> &str {
+                "counter"
+            }
+            fn detect(
+                &self,
+                input: &str,
+                _ctx: &DetectContext<'_>,
+            ) -> Result<Vec<Candidate>, gaze_types::DetectError> {
+                let Some(start) = input.find("Dr. Schmidt") else {
+                    return Ok(Vec::new());
+                };
+                let mut candidate = Candidate::new(
+                    start..start + "Dr. Schmidt".len(),
+                    PiiClass::Name,
+                    self.id(),
+                    1.0,
+                    0,
+                    None,
+                    self.token_family(),
+                    "test",
+                    gaze::ConflictTier::None,
+                    Vec::new(),
+                );
+                candidate.outcome = Some(gaze_types::ProtectionOutcome::PossiblySensitive(
+                    gaze_types::PossiblySensitiveReason::LabelBindingUnproven,
+                ));
+                Ok(vec![candidate])
+            }
+        }
+        let pipeline = Pipeline::builder()
+            .recognizer(PossibleId)
+            .rule(gaze::ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(gaze::DefaultRule::new(Action::Preserve))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let (clean, _, _, trace, _) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_evidence(
+                &session,
+                "Dr. Schmidt",
+                &[],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::default(),
+            )
+            .unwrap();
+        let serialized = serde_json::to_value(serialize_final_protection_trace(trace)).unwrap();
+        assert_eq!(
+            serialized[0]["protection_outcome"]["possibly_sensitive"],
+            "label_binding_unproven"
+        );
+        let CleanDocument::Text(clean) = clean else {
+            panic!("text");
+        };
+        assert!(!clean.contains("Dr. Schmidt"));
+        assert_eq!(
+            pipeline
+                .restore_with_telemetry(&session, &clean)
+                .unwrap()
+                .0
+                .text,
+            "Dr. Schmidt"
+        );
+    }
+
+    #[test]
+    fn typed_untransformable_refusal_keeps_source_coordinates_without_values() {
+        use gaze_types::{FieldPath, UntransformableReason};
+        let text = r#"{"limit":7,"customer_id":812345}"#;
+        let path = FieldPath::default().child("customer_id".to_string());
+        for reason in [
+            UntransformableReason::JsonNumberNoTextOnlyPath,
+            UntransformableReason::EncodedCarrier,
+            UntransformableReason::NoSafeRendering,
+            UntransformableReason::CallerValueTooShort,
+        ] {
+            let error = gaze::Error::Protection(gaze::ProtectionError::Untransformable {
+                reason,
+                field_path: path.clone(),
+            });
+            let code = pipeline_failure_reason(&error).expect("closed typed refusal");
+            assert_eq!(
+                code.as_str(),
+                format!("untransformable_{}", reason.as_str())
+            );
+            let evidence = refusal_evidence(text, &error);
+            assert_eq!(evidence.len(), 1);
+            let value = serde_json::to_value(&evidence).unwrap();
+            assert_eq!(value[0]["raw_start"], 25);
+            assert_eq!(value[0]["raw_end"], 31);
+            let serialized = serde_json::to_string(&evidence).unwrap();
+            assert!(!serialized.contains("812345"));
+            assert!(!serialized.contains("customer_id"));
+            assert!(refusal_evidence("not JSON", &error).is_empty());
+        }
+    }
+
+    #[test]
     fn pipeline_error_response_has_exact_jsonl_shape() {
         let response = PipelineErrorResponse {
             fixture_id: "failure-1",
             pipeline_error_stage: "clean",
             pipeline_error_code: "safety_net_runtime_subprocess_timeout",
+            refusal_evidence: Vec::new(),
             timing: PipelineErrorTiming { total_ms: 12.5 },
         };
         let serialized = serde_json::to_string(&response).expect("error response should serialize");
@@ -2324,6 +2550,7 @@ mod tests {
             "failure-1",
             "clean",
             PipelineFailureReason::SafetyNetRuntimeSubprocessTimeout,
+            Vec::new(),
             12.5,
         )
         .expect("error response should be written");

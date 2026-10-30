@@ -690,9 +690,12 @@ The [qualified-runtime specification](../../docs/reference/benchmarks/specificat
 also binds the qualified runtime and canonical document descriptors.
 The [capture-reuse specification](../../docs/reference/benchmarks/specifications/0635170f7142114d6b666e65945a194c0041cfa61e685dfee6f6c3c9bc56900b.json)
 binds native-capture reuse admission. The
-[current specification](../../docs/reference/benchmarks/specifications/5b09cd287f0453aadc605a8136219378b56bacdfe4eb57a49bc01b53d9c785be.json)
+[bounded-reuse specification](../../docs/reference/benchmarks/specifications/5b09cd287f0453aadc605a8136219378b56bacdfe4eb57a49bc01b53d9c785be.json)
 also includes the bounded inference-equivalence and key-mutation tools in the
-measuring source closure. Previous manifests retain their original identities.
+measuring source closure. The
+[current specification](../../docs/reference/benchmarks/specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json)
+also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
+Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
 inputs does not itself change the benchmark specification.

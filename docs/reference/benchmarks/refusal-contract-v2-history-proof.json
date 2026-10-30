@@ -1,0 +1,37 @@
+{
+  "baseline_revision": "9fb578e421a9f91d3868c7eeb585156e2a07eae8",
+  "baseline_scorer_sha256": "27bf262c5382e3d80adc8204357fb3939c4d634261d294ac1650b26ca22c2403",
+  "candidate_scorer_sha256": "3a14e0780a612797312768df66cbee3a4b14b997cf988db10c1993c37c6c40a1",
+  "changed_scorer_definitions": [
+    "PIPELINE_FAILURE_REASONS",
+    "_validate_final_protection_trace",
+    "validate_response"
+  ],
+  "releases": {
+    "v0.16.0": {
+      "complete_scorecards_identical": true,
+      "contracts": {
+        "1": "6a583f824b22e679096397db91b390768d90ea4cc3c595110f29a3c3849256f9",
+        "2": "ec0f41fe544d0b8d336c898d0de31b22c52a0077d5fa753ab5391edc157ebebd",
+        "3": "88935e11d8bf89da552dc346296be541d7861d750268ab8dfe2d40b86ebe435b",
+        "4": "607ae676db6ba902eaefc4d825b7a5c235348b7a81438121986f05b83a6d058b"
+      },
+      "observations": 44040,
+      "record_sha256": "1e5505b2705ea90764b530ad0f32ac8007fdef734b77301512abcd934806d632",
+      "refusals": 0
+    },
+    "v0.17.0": {
+      "complete_scorecards_identical": true,
+      "contracts": {
+        "1": "c6b2db8bc194a76cd27aa7a1073783520f4a091defcf207069ba0bdcf4e9c1ac",
+        "2": "ef09b8d1f183ec68c338135c33e7a1a9e3970398b4558be297d6466567843a80",
+        "3": "92078656d5ef526a498e2432bba2b85a98d048b8bf81cf0a5983d495c77571a7",
+        "4": "85f7e5c3d86a7d389a1ec13bbbcfed20288f4126fd9f025c3ab50081c7fbb1f1"
+      },
+      "observations": 44040,
+      "record_sha256": "1d0528aeff2a0d66167f709a86e6576085a540d72dd96bdca3ad527aa95c4627",
+      "refusals": 0
+    }
+  },
+  "schema": "gaze-refusal-history-proof/v1"
+}

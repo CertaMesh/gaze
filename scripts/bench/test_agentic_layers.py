@@ -2095,10 +2095,31 @@ class GateTests(unittest.TestCase):
     def test_refusal_fix_can_pass_and_refusal_rise_keeps_its_reason(self) -> None:
         base = _scorecard(self.BASE, self.FP, refused={"C": 1})
         candidate = _scorecard({**self.BASE, "C": 98}, self.FP)
-        self.assertEqual(agentic.gate(base, candidate)["verdict"], "pass")
+        self.assertEqual(agentic.gate(base, candidate, refusal_contract_version=1)["verdict"], "pass")
+        self.assertEqual(agentic.gate(base, candidate)["verdict"], "fail")  # v2 needs bound records.
         result = agentic.gate(candidate, base)
         self.assertEqual(result["verdict"], "fail")
         self.assertIn("failed-closed documents rose", result["reason"])
+
+    def test_dictionary_sequence_refusals_keep_legacy_verdict_under_v2(self) -> None:
+        # refusal_gate replays only C/A/D/R, so K/B refusals must not demand records.
+        real = agentic.compare_layers
+
+        def with_sequence_refusals(*args, **kwargs):
+            result = real(*args, **kwargs)
+            layers = {**result["layers"], **{layer: {**result["layers"]["C"], "failed_closed_base": 3,
+                                                     "failed_closed_candidate": 3}
+                                             for layer in agentic.DICTIONARY_SEQUENCE_LAYERS}}
+            return {**result, "layers": layers}
+
+        base = _scorecard(self.BASE, self.FP)
+        candidate = _scorecard({**self.BASE, "C": 98}, self.FP)
+        with mock.patch.object(agentic, "compare_layers", side_effect=with_sequence_refusals):
+            legacy = agentic.gate(base, candidate, refusal_contract_version=1)
+            current = agentic.gate(base, candidate)
+        self.assertEqual(legacy["verdict"], "pass")
+        self.assertFalse(agentic.has_gated_refusal(current))
+        self.assertEqual({**current, "refusal_contract_version": 1}, legacy)
 
     def test_refusal_fix_cannot_hide_new_restore_or_manifest_failure(self) -> None:
         for field, reason in (("restore", "exact-restore failures rose"),
