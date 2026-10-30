@@ -51,7 +51,7 @@ def require_pass(result):
     return sum(map(int, summaries))
 
 
-def rejected_at_conversion(result, code, line):
+def rejected_at_line(result, code, line):
     for raw in result.stdout.splitlines():
         if not raw.startswith("{"):
             continue
@@ -105,12 +105,37 @@ def main():
         try:
             path.write_text(original.replace(ANCHOR, mutation))
             result = run_test(env, name, output_dir)
-            if not rejected_at_conversion(result, code, line):
+            if not rejected_at_line(result, code, line):
                 raise RuntimeError(f"{name}: raw conversion escaped the type guard; inspect probe logs")
         finally:
             path.write_bytes(saved)
         probes.append({"name": name, "mutation": "rejected", "diagnostic": code})
         print(json.dumps(probes[-1]), flush=True)
+    name = "raw-field-capture"
+    capture_anchors = [
+        ("    parse_validated(ValidatedInput::new(input)?, limits)",
+         "    let raw = input;\n    parse_validated(ValidatedInput::new(input)?, limits)"),
+        ("struct Parser<'a> {", "struct Parser<'a> {\n    raw: &'a [u8],"),
+        ("    let mut parser = Parser {", "    let mut parser = Parser {\n        raw,"),
+        (ANCHOR, "let character = std::str::from_utf8(&self.raw[start..])\n"
+         "                        .map_err(|_| JsonTreeError::InvalidUtf8)?\n"
+         "                        .chars().next().ok_or(JsonTreeError::InvalidUtf8)?;"),
+    ]
+    mutation = original
+    for before, after in capture_anchors:
+        if mutation.count(before) != 1:
+            raise RuntimeError(f"{name}: mutation anchor must be unique: {before}")
+        mutation = mutation.replace(before, after)
+    line = mutation[:mutation.index("        raw,")].count("\n") + 1
+    try:
+        path.write_text(mutation)
+        result = run_test(env, name, output_dir)
+        if not rejected_at_line(result, "E0425", line):
+            raise RuntimeError(f"{name}: raw input reached parser construction; inspect probe logs")
+    finally:
+        path.write_bytes(saved)
+    probes.append({"name": name, "mutation": "rejected", "diagnostic": "E0425"})
+    print(json.dumps(probes[-1]), flush=True)
     for name, prefix, raw_bytes in RUNTIME_PROBES:
         mutation = (
             prefix + f"let character = std::str::from_utf8({raw_bytes})\n"

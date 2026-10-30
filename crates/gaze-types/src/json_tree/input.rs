@@ -2,11 +2,13 @@
 //! receives individual bytes/scalars and owned spellings only. Keep the validated
 //! text private, with no Deref, AsRef, indexing or borrowed-slice escape hatch.
 //!
-//! Types prevent direct suffix borrowing. Owned copies and byte-by-byte
-//! reconstruction remain possible, so every accessor counts calls and the bytes
-//! it reads or copies. The scaling test catches repeated suffix reconstruction.
-//! This is not a proof against arbitrary work on previously returned values or
-//! new uncounted accessors; changes to this boundary still require review.
+//! Parser construction lives in a separate function that receives only
+//! ValidatedInput and limits. The raw input slice is out of scope there, and
+//! types prevent direct suffix borrowing through ValidatedInput. Owned copies
+//! and byte-by-byte reconstruction remain possible, so every accessor counts
+//! calls and the bytes it reads or copies. The scaling test catches repeated
+//! suffix reconstruction through these accessors. Changes to accessors inside
+//! this module and repeated work on already-returned values still require review.
 
 use std::ops::Range;
 

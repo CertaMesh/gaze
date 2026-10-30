@@ -142,7 +142,13 @@ pub fn parse(input: &[u8], limits: JsonTreeLimits) -> Result<JsonTree, JsonTreeE
     if input.len() > limits.max_body_bytes {
         return Err(JsonTreeError::BodyLimitExceeded);
     }
-    let input = ValidatedInput::new(input)?;
+    parse_validated(ValidatedInput::new(input)?, limits)
+}
+
+fn parse_validated(
+    input: ValidatedInput<'_>,
+    limits: JsonTreeLimits,
+) -> Result<JsonTree, JsonTreeError> {
     let mut parser = Parser {
         input,
         position: 0,
