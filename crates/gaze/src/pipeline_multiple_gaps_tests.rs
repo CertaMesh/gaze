@@ -129,6 +129,7 @@ fn multiple_gap_parent_overlap_on_owned_bytes_is_permutation_deterministic() {
                     GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                     vec!["primary.fixture".into()],
                     lineage::Lineage::fixture("primary.fixture"),
+                    gaze_types::ProtectionOutcome::Protected,
                 )
                 .unwrap();
         }

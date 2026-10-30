@@ -6974,6 +6974,7 @@ mod tests {
                         None,
                     )],
                 },
+                gaze_types::ProtectionOutcome::Protected,
             )
             .expect("valid literal-plus source ID");
         assert_eq!(
