@@ -1,11 +1,11 @@
 {
-  "id": "gaze-benchmark-v1:80a6dee57cfdf906d0442ea1c8dd5ffa3df5ca315b2218bc9b5c68da64f23ea8",
+  "id": "gaze-benchmark-v1:1370fde4fa845fc4ba68d632265b8e878588142ca0312e552eef0617167a05f9",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
     "generator": {
       "generator": "scripts/bench/agentic_layers.py",
-      "generator_version": 29,
+      "generator_version": 30,
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
@@ -15,7 +15,7 @@
         "D": 8832,
         "R": 12611
       },
-      "corpus_sha256": "ef3a457a3c1a273cd8d64f9dbb5be2010014cc40d6664f7fdff531ff9bbdb03b",
+      "corpus_sha256": "c8f6d8ca34c5f9d63538e993503c615fbfa24ae15295bd260090ed3f5214459e",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,10 +24,10 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "b495d72c09e1067a714251af5fc4353ca998334d56f81d5d91ffeac86b1f4d81"
+      "generated": "a43d16f23f945efe663c4c8c57f36c73d8f55e300d6f1082bda4cb57c0357ee0"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "955d61a54859a3c4f5b52cf6b43b47c093a3c2fea8f8f3d1c6ef1cd9a200ec80",
+      "scripts/bench/agentic_layers.py": "7f1806cc82c48bc152606a7f68a6c0539db86c605c00102b728ac7b8aa149a60",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -77,7 +77,7 @@
       "scripts/bench/government_id_cells.py": "027584c0ffd28a0fa07b266d7e640e6c15936195cfc0a24c26cfbd261697d6f8",
       "scripts/bench/iban_trailing_word_enumeration.py": "83ba3d356cd7e4ee129e834b9cae60d97e73d428698cc497191f8ba1dc6081ee",
       "scripts/bench/inference_reuse_proof.py": "cfed22114bfc72f53b84ee92ec2244a6f71ec1ff3f2cf62f56ec5cf561616e59",
-      "scripts/bench/invisible_separator_cells.py": "de0f9160f7317d2f88c35ed09b55b52703a3808bc7e72a9bd6f69d8e0f4a9505",
+      "scripts/bench/invisible_separator_cells.py": "5d0e1d8beff7b01dac1971bd4c01e264ee5f9fc67795eb9e621ba071d4117324",
       "scripts/bench/ip_adjacent_gain.py": "5bd80284889be703cbbce018cbf35d74010a6eacc9b195c36398ebc41d8fd006",
       "scripts/bench/issuer_credential_cells.py": "869cb0809040c4b3d3d8d7fe797dc909ec5c252cf509b1516e11f4260e7af398",
       "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",

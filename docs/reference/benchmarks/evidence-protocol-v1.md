@@ -900,7 +900,7 @@ detector-improvement or private-corpus gate.
 ## Refusal vocabulary specification
 
 The refusal vocabulary update is pinned in
-[specification 80a6dee5](specifications/80a6dee57cfdf906d0442ea1c8dd5ffa3df5ca315b2218bc9b5c68da64f23ea8.json).
+[specification 1370fde4](specifications/1370fde4fa845fc4ba68d632265b8e878588142ca0312e552eef0617167a05f9.json).
 This specification records measuring inputs and the verified canonical population.
 It contains no new score observations. Historical results retain their original
 specifications and do not establish gains under this specification.
