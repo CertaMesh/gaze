@@ -213,9 +213,12 @@ is NOT_MEASURED and `producer_membership_order_proof` remains BLOCKED.
 Ordered states: `NOT_STARTED`, `COMPLETED`, `FAILED_CLOSED_NO_EGRESS`,
 `ERROR_PROTOCOL`, `UNKNOWN_EGRESS`. Planned absent cases are NOT_STARTED;
 completed requires actual decoded client response. No-payload requires a
-received error frame with exactly one text content block in the committed
-control vocabulary and no other data-bearing content. Neither client Ok nor
-Err alone classifies dispatch. The actual result must serialize to exactly the
+received error frame with one text content block in the committed control
+vocabulary, or exactly two text blocks containing `untransformable` and a reason
+from `UntransformableReason`. The closed reasons are `json_number_no_text_only_path`,
+`encoded_carrier`, `no_safe_rendering`, and `caller_value_too_short`.
+A lone `untransformable` code or an unknown reason does not prove no payload.
+Neither client Ok nor Err alone classifies dispatch. The actual result must serialize to exactly the
 allowlisted error shape: no structuredContent, result/content metadata,
 annotations or other data-bearing surfaces. Adversarial classifier tests mutate
 a clone of an actual received safe error, not a claimed production leak.
@@ -550,7 +553,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### CONTROL_REFUSAL_CODES
 
-`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`.
+`auth-denied`, `backend-failure`, `backend-unavailable`, `host-context-rejected`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`, `untransformable`.
 
 ### COUNTING_GRADES
 
@@ -566,7 +569,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### ERROR_CODES
 
-`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`.
+`auth-denied`, `backend-failure`, `backend-unavailable`, `host-context-rejected`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`, `untransformable`.
 
 ### FEATURE_GRAPH_IDS
 
@@ -893,3 +896,11 @@ The additional fresh builds cost test time and disk space. They strengthen
 reliability and trust without changing restore behavior or runtime integration.
 This helper exports no evidence receipt or interval and unblocks no producer,
 detector-improvement or private-corpus gate.
+
+## Refusal vocabulary specification
+
+The refusal vocabulary update is pinned in
+[specification 1370fde4](specifications/1370fde4fa845fc4ba68d632265b8e878588142ca0312e552eef0617167a05f9.json).
+This specification records measuring inputs and the verified canonical population.
+It contains no new score observations. Historical results retain their original
+specifications and do not establish gains under this specification.

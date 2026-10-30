@@ -1,6 +1,7 @@
 #[path = "support/evidence_harness.rs"]
 mod evidence_harness;
 use evidence_harness::*;
+use rmcp::model::ContentBlock;
 
 #[tokio::test]
 async fn protected_success_and_golden_receipt() {
@@ -803,4 +804,66 @@ fn r2_planned_interval_refused() {
     let mut r = must(serde_json::from_str::<Value>(GOLDEN))["receipt"].clone();
     r["intervals"]["gold_bytes_planned"] = json!({"point":0.0,"low":0.0,"high":0.0,"method_id":"grouped_paired_percentile_v1","conditional":false,"basis":"paired_completed"});
     assert!(!receipt_allowlisted(&r), "planned-interval-refused");
+}
+
+struct UntransformableHost(gaze::UntransformableReason);
+
+#[async_trait]
+impl DispatchHost for UntransformableHost {
+    async fn dispatch(
+        &self,
+        _principal: &Principal,
+        _tool_name: &str,
+        _args: Value,
+        _session_id: Option<&str>,
+        _context: HostContextSelection,
+    ) -> Result<ToolResponse, DispatchError> {
+        Err(gaze::ProtectionError::Untransformable {
+            reason: self.0,
+            field_path: gaze::FieldPath::default().child(EMAIL.to_owned()),
+        }
+        .into())
+    }
+    fn list_tools(&self) -> Vec<ToolDescriptor> {
+        vec![ToolDescriptor::agent("test", json!({"type":"object"}))]
+    }
+}
+
+#[tokio::test]
+async fn untransformable_refusal_has_closed_value_free_shape() {
+    use gaze::UntransformableReason::*;
+    for reason in [
+        JsonNumberNoTextOnlyPath,
+        EncodedCarrier,
+        NoSafeRendering,
+        CallerValueTooShort,
+    ] {
+        let response = call(Arc::new(UntransformableHost(reason)), json!({}), false)
+            .await
+            .expect("received refusal");
+        assert_eq!(response.content.len(), 2);
+        assert_eq!(
+            response.content[0].as_text().unwrap().text,
+            "untransformable"
+        );
+        assert_eq!(response.content[1].as_text().unwrap().text, reason.as_str());
+        assert_eq!(outcome(Some(&response)), "FAILED_CLOSED_NO_EGRESS");
+        for key in ["structuredContent", "_meta"] {
+            let mut value = must(serde_json::to_value(&response));
+            value[key] = json!({"synthetic": EMAIL});
+            assert_eq!(
+                outcome(Some(&must(serde_json::from_value(value)))),
+                "UNKNOWN_EGRESS"
+            );
+        }
+    }
+    for texts in [
+        vec!["untransformable"],
+        vec!["untransformable", "unknown"],
+        vec!["invalid-args", "encoded_carrier"],
+        vec!["untransformable", "encoded_carrier", "extra"],
+    ] {
+        let response = CallToolResult::error(texts.into_iter().map(ContentBlock::text).collect());
+        assert_eq!(outcome(Some(&response)), "UNKNOWN_EGRESS");
+    }
 }
