@@ -386,10 +386,8 @@ impl Parser<'_> {
                 self.position += 1;
             }
         }
-        if self.position - start > self.limits.max_number_bytes {
-            return Err(JsonTreeError::NumberLimitExceeded);
-        }
-        Ok(self.input.copy_range(start..self.position))
+        self.input
+            .copy_range(start..self.position, self.limits.max_number_bytes)
     }
 
     fn consume_literal(&mut self, literal: &[u8]) -> Result<(), JsonTreeError> {

@@ -293,8 +293,18 @@ fn utf8_offsets_are_bytes_in_the_input() {
     assert_eq!(values[0].path.segments(), ["k", "0"]);
 }
 
-/// Work counter, no timing: the document is validated as UTF-8 once, and decoding each
-/// non-ASCII scalar never revalidates the rest of the input.
+#[test]
+fn input_copies_enforce_number_limit() {
+    let input = super::input::ValidatedInput::new(b"12345").unwrap();
+    assert_eq!(input.copy_range(0..3, 3).unwrap(), "123");
+    assert!(matches!(
+        input.copy_range(0..5, 3),
+        Err(JsonTreeError::NumberLimitExceeded)
+    ));
+}
+
+/// Count validation plus every input accessor's work, including owned copies and
+/// byte-by-byte reconstruction. No timing assertions.
 #[cfg(feature = "perf-timers")]
 #[test]
 fn non_ascii_strings_are_validated_once() {
@@ -321,11 +331,16 @@ fn non_ascii_strings_are_validated_once() {
                 .copied()
                 .expect("validation must be counted");
             assert_eq!(bytes, input.len() as u64, "{scalar:?}, size {size}");
-            work.push(bytes);
+            let accessor_work = record
+                .counters
+                .get("json_tree_input_work")
+                .copied()
+                .expect("input accessor work must be counted");
+            work.push(bytes + accessor_work);
         }
         assert!(
             work[1] <= 2 * work[0],
-            "doubling scalar count must at most double validation work"
+            "doubling scalar count must at most double total input work"
         );
     }
 }

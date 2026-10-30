@@ -1,6 +1,12 @@
 //! The byte-to-text boundary. The parser cannot borrow input bytes or text: it
 //! receives individual bytes/scalars and owned spellings only. Keep the validated
 //! text private, with no Deref, AsRef, indexing or borrowed-slice escape hatch.
+//!
+//! Types prevent direct suffix borrowing. Owned copies and byte-by-byte
+//! reconstruction remain possible, so every accessor counts calls and the bytes
+//! it reads or copies. The scaling test catches repeated suffix reconstruction.
+//! This is not a proof against arbitrary work on previously returned values or
+//! new uncounted accessors; changes to this boundary still require review.
 
 use std::ops::Range;
 
@@ -18,22 +24,38 @@ impl<'a> ValidatedInput<'a> {
     }
 
     pub(super) fn len(&self) -> usize {
+        crate::perf_count!("json_tree_input_work", 1);
         self.text.len()
     }
 
     pub(super) fn byte_at(&self, position: usize) -> Option<u8> {
+        // Charge the call and its possible one-byte read, including failed reads.
+        crate::perf_count!("json_tree_input_work", 2);
         self.text.as_bytes().get(position).copied()
     }
 
     pub(super) fn matches_literal(&self, start: usize, literal: &[u8]) -> bool {
+        crate::perf_count!("json_tree_input_work", 1 + literal.len());
         self.text.as_bytes().get(start..start + literal.len()) == Some(literal)
     }
 
     pub(super) fn scalar_at(&self, start: usize) -> Option<char> {
-        self.text.get(start..)?.chars().next()
+        crate::perf_count!("json_tree_input_work", 1);
+        let scalar = self.text.get(start..)?.chars().next()?;
+        crate::perf_count!("json_tree_input_work", scalar.len_utf8());
+        Some(scalar)
     }
 
-    pub(super) fn copy_range(&self, range: Range<usize>) -> String {
-        self.text[range].to_owned()
+    pub(super) fn copy_range(
+        &self,
+        range: Range<usize>,
+        limit: usize,
+    ) -> Result<String, JsonTreeError> {
+        crate::perf_count!("json_tree_input_work", 1);
+        if range.len() > limit {
+            return Err(JsonTreeError::NumberLimitExceeded);
+        }
+        crate::perf_count!("json_tree_input_work", range.len());
+        Ok(self.text[range].to_owned())
     }
 }
