@@ -293,25 +293,54 @@ fn utf8_offsets_are_bytes_in_the_input() {
     assert_eq!(values[0].path.segments(), ["k", "0"]);
 }
 
-/// Work counter, no timing: the document is validated as UTF-8 once, and decoding each
-/// non-ASCII scalar never revalidates the rest of the input.
+#[test]
+fn input_copies_enforce_number_limit() {
+    let input = super::input::ValidatedInput::new(b"12345").unwrap();
+    assert_eq!(input.copy_range(0..3, 3).unwrap(), "123");
+    assert!(matches!(
+        input.copy_range(0..5, 3),
+        Err(JsonTreeError::NumberLimitExceeded)
+    ));
+}
+
+/// Count validation plus every input accessor's work, including owned copies and
+/// byte-by-byte reconstruction. No timing assertions.
 #[cfg(feature = "perf-timers")]
 #[test]
 fn non_ascii_strings_are_validated_once() {
     for scalar in ["ü", "€", "😀"] {
-        let text = scalar.repeat(1024);
-        let input = format!(r#"{{"{scalar}":["{text}"]}}"#);
-        let capture = crate::perf::Capture::new();
-        let parsed = tree(&input);
-        let record = capture.finish();
-        assert_eq!(to_value(&parsed.root), json!({ scalar: [text] }));
-        assert_eq!(
-            record
+        let mut work = Vec::new();
+        for size in [512, 1024] {
+            let text = scalar.repeat(size);
+            let input = format!(r#"{{"{scalar}":["{text}",1e400,true,null,"\u00fc"]}}"#);
+            let capture = crate::perf::Capture::new();
+            let parsed = tree(&input);
+            let record = capture.finish();
+            let JsonKind::Object(members) = &parsed.root.kind else {
+                panic!("object root");
+            };
+            assert_eq!(members[0].key.value, scalar);
+            let JsonKind::Array(values) = &members[0].value.kind else {
+                panic!("array member");
+            };
+            assert!(matches!(&values[0].kind, JsonKind::String(value) if value.value == text));
+            assert!(matches!(&values[1].kind, JsonKind::Number(value) if value == "1e400"));
+            let bytes = record
                 .counters
                 .get("json_tree_utf8_validated_bytes")
-                .copied(),
-            Some(input.len() as u64),
-            "{scalar:?}"
+                .copied()
+                .expect("validation must be counted");
+            assert_eq!(bytes, input.len() as u64, "{scalar:?}, size {size}");
+            let accessor_work = record
+                .counters
+                .get("json_tree_input_work")
+                .copied()
+                .expect("input accessor work must be counted");
+            work.push(bytes + accessor_work);
+        }
+        assert!(
+            work[1] <= 2 * work[0],
+            "doubling scalar count must at most double total input work"
         );
     }
 }
