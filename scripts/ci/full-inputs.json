@@ -950,6 +950,7 @@
     "scripts/ci/tutorial_gate.py",
     "scripts/fetch/fetch-ner-model.sh",
     "scripts/gate/audit-outcome-mutation-probe.py",
+    "scripts/gate/json-tree-utf8-mutation-probe.py",
     "scripts/issuer_credential_cases.py",
     "scripts/verify_issuer_credential_classes.py"
   ],
