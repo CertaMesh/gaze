@@ -506,6 +506,17 @@ mod tests {
             .map(|block| block.as_text().unwrap().text.as_str())
             .collect();
         assert_eq!(texts, ["untransformable", "encoded_carrier"]);
+        let host = dispatch_error_to_tool_result(DispatchError::HostContext(
+            gaze_mcp_core::HostContextError::Untransformable(
+                gaze::UntransformableReason::CallerValueTooShort,
+            ),
+        ));
+        let texts: Vec<_> = host
+            .content
+            .iter()
+            .map(|block| block.as_text().unwrap().text.as_str())
+            .collect();
+        assert_eq!(texts, ["untransformable", "caller_value_too_short"]);
         let other = dispatch_error_to_tool_result(DispatchError::Protection(
             gaze::ProtectionError::Residual,
         ));

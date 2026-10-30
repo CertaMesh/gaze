@@ -12,6 +12,7 @@ use gaze_types::inspection::{
     ProjectionOmissionReasonV1, SseDeltaKindV1, SseEntryOrdinalV1, SseEventKindV1,
     SseTimelineEntryV1, SseTimelineMetaV1, MAX_JSON_SHAPE_NODES_V1,
 };
+use gaze_types::json_tree;
 
 use crate::codec::{
     BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionParsedFactsV1,
@@ -797,315 +798,78 @@ struct JsonString {
     authorized: Vec<Range<usize>>,
 }
 
-struct JsonParser<'a> {
-    bytes: &'a [u8],
-    position: usize,
-    limits: CodecLimits,
-    nodes: usize,
-    next_occurrence: usize,
-}
-
 fn parse_json(
     input: &[u8],
     limits: CodecLimits,
     phase: CodecPhase,
 ) -> Result<JsonDocument, CodecError> {
-    if input.len() > limits.max_body_bytes() {
-        return Err(codec_error(CodecErrorCode::BodyLimitExceeded, phase));
-    }
-    std::str::from_utf8(input).map_err(|_| codec_error(CodecErrorCode::InvalidUtf8, phase))?;
-    let mut parser = JsonParser {
-        bytes: input,
-        position: 0,
-        limits,
-        nodes: 0,
-        next_occurrence: 0,
-    };
-    parser.skip_whitespace();
-    let root = parser
-        .parse_value(0, &gaze_types::FieldPath::default())
-        .map_err(|code| codec_error(code, phase))?;
-    parser.skip_whitespace();
-    if parser.position != input.len() {
-        return Err(codec_error(CodecErrorCode::InvalidJson, phase));
-    }
+    let tree = json_tree::parse(input, json_tree_limits(limits))
+        .map_err(|error| codec_error(json_tree_error_code(error), phase))?;
     Ok(JsonDocument {
-        root,
-        occurrence_count: parser.next_occurrence,
+        root: codec_node(tree.root),
+        occurrence_count: tree.occurrence_count,
     })
 }
 
-impl JsonParser<'_> {
-    fn parse_value(
-        &mut self,
-        depth: usize,
-        path: &gaze_types::FieldPath,
-    ) -> Result<JsonNode, CodecErrorCode> {
-        if depth > self.limits.max_json_depth() {
-            return Err(CodecErrorCode::DepthLimitExceeded);
-        }
-        self.nodes = self
-            .nodes
-            .checked_add(1)
-            .ok_or(CodecErrorCode::NodeLimitExceeded)?;
-        if self.nodes > self.limits.max_json_nodes() {
-            return Err(CodecErrorCode::NodeLimitExceeded);
-        }
-        let occurrence = self.occurrence();
-        let start = self.position;
-        let kind = match self.peek() {
-            Some(b'{') => self.parse_object(depth + 1, path)?,
-            Some(b'[') => self.parse_array(depth + 1, path)?,
-            Some(b'"') => JsonKind::String(self.parse_string()?),
-            Some(b't') => {
-                self.consume_literal(b"true")?;
-                JsonKind::Bool(true)
-            }
-            Some(b'f') => {
-                self.consume_literal(b"false")?;
-                JsonKind::Bool(false)
-            }
-            Some(b'n') => {
-                self.consume_literal(b"null")?;
-                JsonKind::Null
-            }
-            Some(b'-' | b'0'..=b'9') => JsonKind::Number(self.parse_number()?),
-            _ => return Err(CodecErrorCode::InvalidJson),
-        };
-        Ok(JsonNode {
-            path: path.clone(),
-            occurrence,
-            span: start..self.position,
-            raw_preserve: false,
-            kind,
-        })
-    }
+fn json_tree_limits(limits: CodecLimits) -> json_tree::JsonTreeLimits {
+    json_tree::JsonTreeLimits::default()
+        .with_max_body_bytes(limits.max_body_bytes())
+        .with_max_depth(limits.max_json_depth())
+        .with_max_nodes(limits.max_json_nodes())
+        .with_max_string_bytes(limits.max_string_bytes())
+        .with_max_number_bytes(limits.max_number_bytes())
+        .with_ascii_keys_only(true)
+}
 
-    fn parse_object(
-        &mut self,
-        depth: usize,
-        path: &gaze_types::FieldPath,
-    ) -> Result<JsonKind, CodecErrorCode> {
-        self.position += 1;
-        self.skip_whitespace();
-        let mut members = Vec::new();
-        let mut keys = HashSet::new();
-        if self.peek() == Some(b'}') {
-            self.position += 1;
-            return Ok(JsonKind::Object(members));
-        }
-        loop {
-            if self.peek() != Some(b'"') {
-                return Err(CodecErrorCode::InvalidJson);
-            }
-            let key_occurrence = self.occurrence();
-            let key = self.parse_string()?;
-            if !key.value.is_ascii() {
-                return Err(CodecErrorCode::InvalidJson);
-            }
-            if !keys.insert(key.value.clone()) {
-                return Err(CodecErrorCode::DuplicateObjectKey);
-            }
-            self.skip_whitespace();
-            if self.take() != Some(b':') {
-                return Err(CodecErrorCode::InvalidJson);
-            }
-            self.skip_whitespace();
-            let child = path.child(key.value.clone());
-            let value = self.parse_value(depth, &child)?;
-            members.push(JsonMember {
-                key_occurrence,
-                key,
-                value,
-            });
-            self.skip_whitespace();
-            match self.take() {
-                Some(b',') => self.skip_whitespace(),
-                Some(b'}') => break,
-                _ => return Err(CodecErrorCode::InvalidJson),
-            }
-        }
-        Ok(JsonKind::Object(members))
+fn json_tree_error_code(error: json_tree::JsonTreeError) -> CodecErrorCode {
+    match error {
+        json_tree::JsonTreeError::InvalidUtf8 => CodecErrorCode::InvalidUtf8,
+        json_tree::JsonTreeError::InvalidJson => CodecErrorCode::InvalidJson,
+        json_tree::JsonTreeError::DuplicateObjectKey => CodecErrorCode::DuplicateObjectKey,
+        json_tree::JsonTreeError::DepthLimitExceeded => CodecErrorCode::DepthLimitExceeded,
+        json_tree::JsonTreeError::NodeLimitExceeded => CodecErrorCode::NodeLimitExceeded,
+        json_tree::JsonTreeError::StringLimitExceeded => CodecErrorCode::StringLimitExceeded,
+        json_tree::JsonTreeError::NumberLimitExceeded => CodecErrorCode::NumberLimitExceeded,
+        json_tree::JsonTreeError::BodyLimitExceeded => CodecErrorCode::BodyLimitExceeded,
+        // Closed today; any future parse failure stays a strict refusal.
+        _ => CodecErrorCode::InvalidJson,
     }
+}
 
-    fn parse_array(
-        &mut self,
-        depth: usize,
-        path: &gaze_types::FieldPath,
-    ) -> Result<JsonKind, CodecErrorCode> {
-        self.position += 1;
-        self.skip_whitespace();
-        let mut values = Vec::new();
-        if self.peek() == Some(b']') {
-            self.position += 1;
-            return Ok(JsonKind::Array(values));
+/// Attach the codec's mutable rewrite state to the shared strict tree.
+fn codec_node(node: json_tree::JsonNode) -> JsonNode {
+    let kind = match node.kind {
+        json_tree::JsonKind::Object(members) => JsonKind::Object(
+            members
+                .into_iter()
+                .map(|member| JsonMember {
+                    key_occurrence: member.key_occurrence,
+                    key: codec_string(member.key),
+                    value: codec_node(member.value),
+                })
+                .collect(),
+        ),
+        json_tree::JsonKind::Array(values) => {
+            JsonKind::Array(values.into_iter().map(codec_node).collect())
         }
-        loop {
-            let child = path.child(values.len().to_string());
-            values.push(self.parse_value(depth, &child)?);
-            self.skip_whitespace();
-            match self.take() {
-                Some(b',') => self.skip_whitespace(),
-                Some(b']') => break,
-                _ => return Err(CodecErrorCode::InvalidJson),
-            }
-        }
-        Ok(JsonKind::Array(values))
+        json_tree::JsonKind::String(value) => JsonKind::String(codec_string(value)),
+        json_tree::JsonKind::Number(spelling) => JsonKind::Number(spelling),
+        json_tree::JsonKind::Bool(value) => JsonKind::Bool(value),
+        json_tree::JsonKind::Null => JsonKind::Null,
+    };
+    JsonNode {
+        path: node.path,
+        occurrence: node.occurrence,
+        span: node.span,
+        raw_preserve: false,
+        kind,
     }
+}
 
-    fn parse_string(&mut self) -> Result<JsonString, CodecErrorCode> {
-        if self.take() != Some(b'"') {
-            return Err(CodecErrorCode::InvalidJson);
-        }
-        let mut value = String::new();
-        loop {
-            let byte = self.take().ok_or(CodecErrorCode::InvalidJson)?;
-            match byte {
-                b'"' => break,
-                b'\\' => self.parse_escape(&mut value)?,
-                0x00..=0x1f => return Err(CodecErrorCode::InvalidJson),
-                0x20..=0x7f => value.push(char::from(byte)),
-                _ => {
-                    let start = self.position - 1;
-                    let remaining = std::str::from_utf8(&self.bytes[start..])
-                        .map_err(|_| CodecErrorCode::InvalidUtf8)?;
-                    let character = remaining
-                        .chars()
-                        .next()
-                        .ok_or(CodecErrorCode::InvalidUtf8)?;
-                    value.push(character);
-                    self.position = start + character.len_utf8();
-                }
-            }
-            if value.len() > self.limits.max_string_bytes() {
-                return Err(CodecErrorCode::StringLimitExceeded);
-            }
-        }
-        Ok(JsonString {
-            value,
-            authorized: Vec::new(),
-        })
-    }
-
-    fn parse_escape(&mut self, output: &mut String) -> Result<(), CodecErrorCode> {
-        match self.take().ok_or(CodecErrorCode::InvalidJson)? {
-            b'"' => output.push('"'),
-            b'\\' => output.push('\\'),
-            b'/' => output.push('/'),
-            b'b' => output.push('\u{0008}'),
-            b'f' => output.push('\u{000c}'),
-            b'n' => output.push('\n'),
-            b'r' => output.push('\r'),
-            b't' => output.push('\t'),
-            b'u' => {
-                let first = self.parse_hex_quad()?;
-                let scalar = if (0xd800..=0xdbff).contains(&first) {
-                    if self.take() != Some(b'\\') || self.take() != Some(b'u') {
-                        return Err(CodecErrorCode::InvalidJson);
-                    }
-                    let second = self.parse_hex_quad()?;
-                    if !(0xdc00..=0xdfff).contains(&second) {
-                        return Err(CodecErrorCode::InvalidJson);
-                    }
-                    0x1_0000 + (((u32::from(first) - 0xd800) << 10) | (u32::from(second) - 0xdc00))
-                } else if (0xdc00..=0xdfff).contains(&first) {
-                    return Err(CodecErrorCode::InvalidJson);
-                } else {
-                    u32::from(first)
-                };
-                output.push(char::from_u32(scalar).ok_or(CodecErrorCode::InvalidJson)?);
-            }
-            _ => return Err(CodecErrorCode::InvalidJson),
-        }
-        Ok(())
-    }
-
-    fn parse_hex_quad(&mut self) -> Result<u16, CodecErrorCode> {
-        let mut value = 0u16;
-        for _ in 0..4 {
-            let digit = self
-                .take()
-                .and_then(hex_value)
-                .ok_or(CodecErrorCode::InvalidJson)?;
-            value = (value << 4) | u16::from(digit);
-        }
-        Ok(value)
-    }
-
-    fn parse_number(&mut self) -> Result<String, CodecErrorCode> {
-        let start = self.position;
-        if self.peek() == Some(b'-') {
-            self.position += 1;
-        }
-        match self.take() {
-            Some(b'0') if matches!(self.peek(), Some(b'0'..=b'9')) => {
-                return Err(CodecErrorCode::InvalidJson);
-            }
-            Some(b'0'..=b'9') => {
-                while matches!(self.peek(), Some(b'0'..=b'9')) {
-                    self.position += 1;
-                }
-            }
-            _ => return Err(CodecErrorCode::InvalidJson),
-        }
-        if self.peek() == Some(b'.') {
-            self.position += 1;
-            if !matches!(self.peek(), Some(b'0'..=b'9')) {
-                return Err(CodecErrorCode::InvalidJson);
-            }
-            while matches!(self.peek(), Some(b'0'..=b'9')) {
-                self.position += 1;
-            }
-        }
-        if matches!(self.peek(), Some(b'e' | b'E')) {
-            self.position += 1;
-            if matches!(self.peek(), Some(b'+' | b'-')) {
-                self.position += 1;
-            }
-            if !matches!(self.peek(), Some(b'0'..=b'9')) {
-                return Err(CodecErrorCode::InvalidJson);
-            }
-            while matches!(self.peek(), Some(b'0'..=b'9')) {
-                self.position += 1;
-            }
-        }
-        let raw = &self.bytes[start..self.position];
-        if raw.len() > self.limits.max_number_bytes() {
-            return Err(CodecErrorCode::NumberLimitExceeded);
-        }
-        Ok(std::str::from_utf8(raw)
-            .map_err(|_| CodecErrorCode::InvalidUtf8)?
-            .to_owned())
-    }
-
-    fn consume_literal(&mut self, literal: &[u8]) -> Result<(), CodecErrorCode> {
-        if self.bytes.get(self.position..self.position + literal.len()) != Some(literal) {
-            return Err(CodecErrorCode::InvalidJson);
-        }
-        self.position += literal.len();
-        Ok(())
-    }
-
-    fn occurrence(&mut self) -> usize {
-        let occurrence = self.next_occurrence;
-        self.next_occurrence += 1;
-        occurrence
-    }
-
-    fn skip_whitespace(&mut self) {
-        while matches!(self.peek(), Some(b' ' | b'\n' | b'\r' | b'\t')) {
-            self.position += 1;
-        }
-    }
-
-    fn peek(&self) -> Option<u8> {
-        self.bytes.get(self.position).copied()
-    }
-
-    fn take(&mut self) -> Option<u8> {
-        let value = self.peek()?;
-        self.position += 1;
-        Some(value)
+fn codec_string(value: json_tree::JsonString) -> JsonString {
+    JsonString {
+        value: value.value,
+        authorized: Vec::new(),
     }
 }
 

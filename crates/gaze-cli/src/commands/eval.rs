@@ -13,6 +13,7 @@ use super::shared_args::CleanPipelineArgs;
 use crate::error::CliError;
 use crate::pipeline::{
     enforce_safety_net_mode, map_safety_net_pipeline_error, prepare_clean_pipeline,
+    ContextEnforcement,
 };
 
 const MAX_CORPUS_BYTES: u64 = 64 * 1024 * 1024;
@@ -238,7 +239,8 @@ pub(crate) fn run(args: Args) -> Result<(), CliError> {
     let source = read_limited(&args.annotated)?;
     let labels = label_map(args.label_map.as_deref())?;
     let options = args.pipeline.options("json", MAX_CORPUS_BYTES, None);
-    let (resolved, safety_policy) = prepare_clean_pipeline(&options, None)?;
+    let (resolved, safety_policy) =
+        prepare_clean_pipeline(&options, None, ContextEnforcement::Observe)?;
     let pipeline = resolved.pipeline;
     let mut score = Score::default();
     for (index, line) in source.lines().enumerate() {

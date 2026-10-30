@@ -492,6 +492,10 @@ jobs:
         run: |
           cargo build --locked -p gaze-cli --bin gaze
           cargo build --locked -p gaze-recognizers --example clean_for_bench
+      - name: Prove no detector rule claims a benchmark card twin
+        env:
+          GAZE_CLI_BINARY: target/debug/gaze
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench/test_invisible_separator_cells.py -k CardTwinDetector
       - name: Prove exact native capture reuse on the committed fixture
         env:
           GAZE_CAPTURE_FIXTURE_BINARY: target/debug/examples/clean_for_bench

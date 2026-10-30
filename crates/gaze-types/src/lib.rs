@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod inspection;
+pub mod json_tree;
 pub mod normalize;
 pub mod nym;
 pub mod outcome;

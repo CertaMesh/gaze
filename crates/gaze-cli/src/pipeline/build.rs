@@ -376,6 +376,7 @@ fn pipeline_builder_from_policy(
 
 fn map_build_error(err: gaze_assembly::BuildError) -> CliError {
     match err {
+        gaze_assembly::BuildError::Untransformable(reason) => CliError::Untransformable { reason },
         gaze_assembly::BuildError::NoRecognizers => map_policy_error(PolicyError::NoDetectors),
         err @ gaze_assembly::BuildError::RecordPolicy => {
             CliError::PolicyConfigDetail(err.to_string())
@@ -449,6 +450,14 @@ impl RedactionLogger for ArcLogger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejected_caller_context_assembly_maps_to_exit_eight() {
+        let reason = gaze::UntransformableReason::CallerValueTooShort;
+        let mapped = map_build_error(gaze_assembly::BuildError::Untransformable(reason));
+        assert!(matches!(mapped, CliError::Untransformable { reason: r } if r == reason));
+        assert_eq!(mapped.exit_code(), 8);
+    }
 
     fn untransformable(reason: gaze_types::UntransformableReason) -> gaze::Error {
         gaze::Error::Protection(gaze::ProtectionError::Untransformable {

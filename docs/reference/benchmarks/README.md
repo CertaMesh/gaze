@@ -846,7 +846,7 @@ The fresh [password-hash and code-credential arm](password-code-credentials/json
 
 Each row runs the same binary, corpus and seed twice: once with the base policy, once with the base policy plus one mechanism's policy delta. Nothing else differs, so the change is that mechanism's own effect. Layer C bytes; the contract v4 headline counts false-positive bytes after gold-gap credit.
 
-17 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
+18 measurements of unreleased builds stay in [`mechanism-arms.json`](mechanism-arms.json) with their evidence and are not shown here: public pages show tagged releases only.
 
 Shipped releases, one column per release:
 
@@ -859,6 +859,7 @@ Shipped releases, one column per release:
 | Credential rulepack | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 | Nym personal-name labels | not measured for this release | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 | not available: mechanism added in v0.17 |
 | Password hashes and code credentials | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 |
+| Bare issuer credentials and private-key blocks | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 | not available: mechanism added in v0.18 |
 
 <!-- END GENERATED: mechanism-arms -->
 
@@ -2398,6 +2399,42 @@ After this harness lands, #870 and #871 must merge main, retain these combined
 generators/contracts/pins (including the dev phone correction), drop their redundant harness changes and standalone
 comparison notices, and certify their detection changes against the new main.
 Their rule-dependent tooling and mechanism arms remain with those PRs.
+
+### Phone-free invisible card twins (generator v30)
+
+The `invisible_card_twin` counterweights exist to catch false positives from
+card-checksum relaxation, so no other rule may claim them. In v29 one test twin
+ended in `0771 4620`: a German trunk prefix and area code. A phone rule rightly
+protects that fragment inside a longer digit run, whether the groups are
+separated by spaces or by invisible characters. A detector that reads
+invisible separators like spaces therefore paid a credit-guard false positive
+for a correct phone decision.
+
+v30 starts every twin group with `9` instead of `0` and keeps every twin
+Luhn-invalid. No random draw changes: only the 6 card values whose groups
+started with `0` (2 dev, 4 test, each under 5 separators) differ, and
+`records_as_of` rebuilds the original twins for every older generator. The
+credit guard is unchanged.
+[`test_invisible_separator_cells.py`](../../../scripts/bench/test_invisible_separator_cells.py)
+runs the `gaze` CLI with the model-free `gaze setup` rule stack on every twin,
+in its invisible and ASCII-space forms. No rule claims any v30 twin, and the v29
+twins still yield the phone token. CI runs this proof after building the CLI.
+
+The [v30 history plan](history-plans/generator-v30.json) re-measures v0.17.0
+and v0.16.0 on the new specification with the same subjects, policies and
+model bundles as v29. The result is the [v30 history](history-generator-v30/history.md).
+Each release was captured once from a producer build whose hash matches its
+pin, and both gate contracts are scored from that one record. Neither release
+refused a document; every restore was exact and every manifest valid. Both
+rows equal their v29 rows, since neither release protects any part of a card
+twin under either generator.
+
+| Release | Contract | C leaked B | A leaked B | A all-gold leaked B | D FP B | R leaked B | Refused |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| v0.17.0 | v2 | 6,652 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v2 | 7,348 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
+| v0.17.0 | v1 | 9,717 | 755,052 | 756,254 | 15,286 | 876,124 | 0 |
+| v0.16.0 | v1 | 13,291 | 758,651 | 759,853 | 15,055 | 877,036 | 0 |
 
 ### Measured adjacency layer history
 

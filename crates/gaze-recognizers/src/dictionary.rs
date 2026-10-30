@@ -758,7 +758,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&context);
+        let bundle = dictionary_bundle_from_context(&context).unwrap();
         let ctx = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "context/record-name",
@@ -793,7 +793,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "context/record-name",
@@ -825,7 +825,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&context);
+        let bundle = dictionary_bundle_from_context(&context).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let make_recognizer = || {
             DictionaryRecognizer::new(
@@ -888,7 +888,7 @@ mod tests {
                 record_match_kinds: Default::default(),
                 record_value_rejections: Default::default(),
             };
-            let bundle = dictionary_bundle_from_context(&context);
+            let bundle = dictionary_bundle_from_context(&context).unwrap();
             let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
             let hits = recognizer
                 .detect("alpha-one then bravo-two", &detect_context)
@@ -914,7 +914,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&context);
+        let bundle = dictionary_bundle_from_context(&context).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "context/record-name",
@@ -985,7 +985,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let recognizer = DictionaryRecognizer::new(
             "context/record-first",
             PiiClass::Name,
@@ -1097,7 +1097,7 @@ mod tests {
                 record_match_kinds: Default::default(),
                 record_value_rejections: Default::default(),
             };
-            let bundle = dictionary_bundle_from_context(&ctx);
+            let bundle = dictionary_bundle_from_context(&ctx).unwrap();
             let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
             let recognizer =
                 DictionaryRecognizer::new("context/name", PiiClass::Name, &key, true, "counter")
@@ -1139,7 +1139,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer =
             DictionaryRecognizer::new("context/name", PiiClass::Name, &key, true, "counter")
@@ -1166,7 +1166,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/dict_alpha",
@@ -1208,7 +1208,7 @@ mod tests {
                 record_match_kinds: Default::default(),
                 record_value_rejections: Default::default(),
             };
-            let bundle = dictionary_bundle_from_context(&context);
+            let bundle = dictionary_bundle_from_context(&context).unwrap();
             let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
             assert_eq!(recognizer.detect(value, &detect_context).unwrap().len(), 1);
             assert_eq!(recognizer.compiled_dictionaries.lock().unwrap().len(), 1);
@@ -1230,7 +1230,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::EnUs], &bundle);
         let recognizer = DictionaryRecognizer::with_rulepack_fields(
             "dict/songs",
@@ -1269,7 +1269,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/songs",
@@ -1319,7 +1319,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/songs",
@@ -1353,7 +1353,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/artist_refs",
@@ -1384,7 +1384,7 @@ mod tests {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         };
-        let bundle = dictionary_bundle_from_context(&ctx);
+        let bundle = dictionary_bundle_from_context(&ctx).unwrap();
         let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/dict_alpha",

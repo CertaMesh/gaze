@@ -617,7 +617,7 @@ fn build_pipeline_context_only_still_succeeds() {
     let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None)
         .expect("context-only assembly must remain supported");
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let dictionaries = gaze::dictionary_bundle_from_context(&context);
+    let dictionaries = gaze::dictionary_bundle_from_context(&context).unwrap();
     let clean = pipeline
         .pseudonymize_with_detect_context(
             &session,
@@ -1053,7 +1053,7 @@ fn t20_context_class_map_overrides_policy_dict_class() {
     let context = context_with_alpha_override();
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None).expect("pipeline");
-    let dictionaries = gaze::dictionary_bundle_from_context(&context);
+    let dictionaries = gaze::dictionary_bundle_from_context(&context).unwrap();
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = pipeline
         .pseudonymize_with_detect_context(
@@ -2243,7 +2243,7 @@ fn tenant_tie_policy(rules: Vec<RuleSpec>) -> (gaze::Policy, Context) {
 fn clean_tenant_tie(policy: &gaze::Policy, context: &Context, input: &str) -> String {
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline(policy, context, &[], &active_locales, None).expect("pipeline");
-    let dictionaries = gaze::dictionary_bundle_from_context(context);
+    let dictionaries = gaze::dictionary_bundle_from_context(context).unwrap();
     let session = Session::new(Scope::Ephemeral).expect("session");
     clean_text(
         pipeline

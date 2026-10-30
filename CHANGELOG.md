@@ -9,16 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Caller record values too short for safe matching now refuse the entire call
+  in `gaze clean`, daemon v1 and v2, embedded MCP host context, and Rust library
+  assembly. Library enforcement is the default and returns the typed
+  `BuildError::Untransformable`. The closed
+  reason is `caller_value_too_short`; clean exits with code 8 and no output.
+  Previously these values were skipped. Owner-side `gaze eval` remains an
+  explicit observer and measures with a value-free warning.
+  `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context` now
+  return `Result<DictionaryBundle, UntransformableReason>` and refuse rejected
+  caller values too. Callers must propagate the result before using a bundle.
 - Proxy adapters return `RequestSurfaces` and attach parsed scalar provenance to
   string leaves. The Anthropic codec and MCP also pass field context to detection.
   This adds metadata only. No production recognizer consumes the field context.
+- The strict span-preserving JSON parser moved from the Anthropic codec into
+  `gaze_types::json_tree`; the codec's behaviour is unchanged. Text cleans
+  (`gaze clean`, the daemon, `RawDocument::Text`) now pass field spans for a
+  document that strictly parses as a JSON object or array, plus the context
+  JSON `fields` map as caller-declared fields. Metadata only: output is unchanged.
 - `FieldPath` shares ancestor storage. `segments()` returns borrowed segment
   references. Proxy `CoveragePath` materializes its legacy spelling on demand.
   Numeric leaves remain under existing admission rules without an unused inventory.
   See UPGRADE.md for custom-adapter migration steps.
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.3.0; existing fixture detections remain identical while private-key and
+  issuer-credential coverage expands.
+- [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
+  0.2.0. Its existing fixture detections remain unchanged.
 
 
 ### Security
+
+- The setup-default `secrets` bundle protects whole private-key PEM blocks and
+  bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes.
+  Truncated private-key bodies fail closed, including DSA and PGP armour,
+  nested JSON escapes, source concatenation, comments, HTML and shell framing.
+  Overlong credentials and hyphen suffixes stay protected; generic `sk-`
+  keeps a leading boundary. Bare suffixes require a digit and a contiguous
+  16-character issuer-alphabet run. Named base64url issuers include `_` and `-`;
+  generic `sk-` keeps its initial alphanumeric run to preserve code identifiers.
+  Numbered gutters, markdown bullets and HTML newline entities stay protected.
+  Public-key and certificate blocks remain unchanged. Both rules
+  preserve exact restoration and require no network access.
 
 - Private MCP class and dictionary labels use session-keyed HMAC identifiers,
   so public hash guesses cannot recover their names. Trusted snapshot version 8

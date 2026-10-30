@@ -21,7 +21,7 @@ fn build_recognizer(term_count: usize) -> (DictionaryRecognizer, DictionaryBundl
         record_match_kinds: Default::default(),
         record_value_rejections: Default::default(),
     };
-    let bundle = dictionary_bundle_from_context(&ctx);
+    let bundle = dictionary_bundle_from_context(&ctx).unwrap();
     (
         DictionaryRecognizer::new(
             "dict/orders",

@@ -63,8 +63,16 @@ jobs:
 
       - name: Check effective family precedence history
         run: python3 scripts/bench/family_precedence_history.py check
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: 0.11.31
+          enable-cache: true
+          cache-dependency-glob: scripts/bench/uv.lock
+
+      # Spec-bound arm records replay only under the pinned measuring runtime
+      # (CPython 3.13, its Unicode tables and the locked pyarrow).
       - name: mechanism arm table matches its committed observation records
-        run: python3 scripts/bench/mechanism_arms.py check
+        run: uv run --project scripts/bench --python 3.13 --locked --no-dev python scripts/bench/mechanism_arms.py check
 
       - name: leak ledger matches its committed observation record
         run: python3 scripts/bench/leak_ledger.py check

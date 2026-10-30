@@ -28,6 +28,7 @@ use gaze_types::{
 use thiserror::Error;
 
 use crate::detector::{Detection, Detector, PiiClass};
+use crate::field_context::{document_field_spans, project_to_normalized, CallerFields};
 use crate::normalize::normalize;
 use crate::policy::PolicyError;
 use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
@@ -312,6 +313,7 @@ pub struct Pipeline {
     restore_boundary_dlp_audit: bool,
     rules: Vec<crate::rule::RuleEntry>,
     residual_coverage: bool,
+    caller_fields: CallerFields,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -628,7 +630,19 @@ impl Pipeline {
     pub fn with_detection_policy_from(mut self, policy: &Pipeline) -> Self {
         self.registry = policy.registry.clone();
         self.rules = policy.rules.clone();
+        self.caller_fields = policy.caller_fields.clone();
         self
+    }
+
+    /// Replace the caller-declared fields located in each cleaned text document.
+    pub fn with_caller_fields(mut self, fields: CallerFields) -> Self {
+        self.caller_fields = fields;
+        self
+    }
+
+    /// The caller-declared fields located in each cleaned text document.
+    pub fn caller_fields(&self) -> &CallerFields {
+        &self.caller_fields
     }
 
     pub fn builder() -> PipelineBuilder {
@@ -897,6 +911,7 @@ impl Pipeline {
             }
             RawDocument::Text(text) => {
                 let mut report = LeakReport::default();
+                let fields = document_field_spans(&text, &self.caller_fields);
                 let clean = self.clean_text_target(
                     target,
                     &text,
@@ -904,7 +919,7 @@ impl Pipeline {
                     dictionaries,
                     decision,
                     &mut report,
-                    None,
+                    (!fields.is_empty()).then_some(gaze_types::FieldContext::Spans(&fields)),
                 )?;
                 Ok((
                     CleanDocument::Text(clean.text),
@@ -1015,6 +1030,7 @@ impl Pipeline {
         let decision = policy.decision();
         let mut target = ProtectionTarget::Live(session);
         let mut protection_trace = ProtectionTraceCollector::new(text);
+        let fields = document_field_spans(text, &self.caller_fields);
         let mut clean = self.redact_text_with_manifest_uncached(
             &mut target,
             text,
@@ -1023,7 +1039,7 @@ impl Pipeline {
             locale_chain,
             dictionaries,
             Some(&mut protection_trace),
-            None,
+            (!fields.is_empty()).then_some(gaze_types::FieldContext::Spans(&fields)),
         )?;
         let mut report = self.run_safety_nets(
             &mut target,
@@ -1259,6 +1275,15 @@ impl Pipeline {
         let json_literals = JsonStringLiterals::scan(text);
         let spans = &normalized.spans;
         let mut ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
+        // Field spans arrive in source coordinates; recognizers read the normalized view.
+        let projected;
+        let field = match field {
+            Some(gaze_types::FieldContext::Spans(fields)) => {
+                projected = project_to_normalized(fields, spans, &normalized.text);
+                (!projected.is_empty()).then_some(gaze_types::FieldContext::Spans(&projected))
+            }
+            other => other,
+        };
         if let Some(field) = field {
             ctx = ctx.with_fields(field);
         }
@@ -5018,9 +5043,16 @@ pub struct PipelineBuilder {
     optimization_config: PipelineOptimizationConfig,
     restore_boundary_dlp_audit: bool,
     rules: Vec<crate::rule::RuleEntry>,
+    caller_fields: CallerFields,
 }
 
 impl PipelineBuilder {
+    /// Locate these caller-declared fields in every cleaned text document.
+    pub fn caller_fields(mut self, fields: CallerFields) -> Self {
+        self.caller_fields = fields;
+        self
+    }
+
     pub fn detector<D>(mut self, detector: D) -> Self
     where
         D: Detector + 'static,
@@ -5188,6 +5220,7 @@ impl PipelineBuilder {
             restore_boundary_dlp_audit: self.restore_boundary_dlp_audit,
             rules: self.rules,
             residual_coverage: true,
+            caller_fields: self.caller_fields,
         })
     }
 }
