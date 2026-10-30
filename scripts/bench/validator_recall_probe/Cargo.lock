@@ -456,6 +456,7 @@ dependencies = [
  "ort",
  "phonenumber",
  "regex",
+ "regex-syntax 0.8.11",
  "serde",
  "serde_json",
  "sha2",

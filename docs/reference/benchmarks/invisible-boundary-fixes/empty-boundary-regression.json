@@ -1,0 +1,19 @@
+{
+  "schema": "gaze-empty-boundary-regression-v1",
+  "baseline_source_sha": "3b3808c66a528a308b293b5d6bfd1e4924a637c1",
+  "baseline_test_passed": true,
+  "focused_test": "hard_boundary_marker_only_captures_do_not_hide_real_values",
+  "red_source_sha": "246b2f696c29264bb04af896bb9d9f3eb67ec5aa",
+  "red_exit_code": 101,
+  "green_source_sha": "5233b79f75be8a15a1dd1e50d806b7ee298fbeca",
+  "green_exit_code": 0,
+  "representative_ignorable_classes": 19,
+  "empty_only_cases": 19,
+  "real_value_counterweights": 19,
+  "strict_restore": true,
+  "mutation": "hard_boundary_empty_candidate",
+  "mutation_rejected": true,
+  "red_log_sha256": "c463c4f771fd65258d31e133303f171e2718c1c3381fd7f17de329503f75d872",
+  "green_log_sha256": "bad7eb9a1b6a99d58cdb851e946e2c938f2ee1c94f4000ddbab05e972042177d",
+  "fix": "Discard hard-boundary candidates whose mapped normalized span is empty; preserve all nonempty candidates and the recovery geometry guard."
+}

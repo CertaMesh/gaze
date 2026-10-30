@@ -73,7 +73,7 @@ pub fn scan_card_run(
     };
     let mut candidates = Vec::new();
     let mut failed = Vec::new();
-    for window in pattern_windows(run_text, run.start) {
+    for window in pattern_windows(run_text, run.start, source_spans) {
         if crate::luhn_check(&text[window.clone()]) {
             candidates.push(window);
         } else {
@@ -176,11 +176,14 @@ fn overlaps(left: &Range<usize>, right: &Range<usize>) -> bool {
     left.start < right.end && right.start < left.end
 }
 
-/// The windows `\b\d(?:[\s-]?\d){12,18}\b` matches inside one run, offset by `base`. Inside a run
-/// the word boundaries are exactly the separator edges, so a match starts at a
-/// separator-delimited group, takes the most whole groups that stay within 19 digits, and must
-/// reach 13; a start that cannot moves on to the next group.
-fn pattern_windows(run_text: &str, base: usize) -> Vec<Range<usize>> {
+/// Greedy bounded card-pattern windows, offset by `base`. Visible separators and
+/// removed source runs delimit groups. A window takes the most whole groups that
+/// stay within 19 digits and must reach 13; otherwise the next group is tried.
+fn pattern_windows(
+    run_text: &str,
+    base: usize,
+    source_spans: Option<&[(usize, usize)]>,
+) -> Vec<Range<usize>> {
     let mut groups: Vec<(Range<usize>, usize)> = Vec::new();
     let mut open = false;
     for (offset, ch) in run_text.char_indices() {
@@ -188,6 +191,16 @@ fn pattern_windows(run_text: &str, base: usize) -> Vec<Range<usize>> {
         if is_separator(ch) {
             open = false;
             continue;
+        }
+        let source_gap = at > 0
+            && source_spans.is_some_and(|spans| {
+                spans
+                    .get(at - 1)
+                    .zip(spans.get(at))
+                    .is_some_and(|(left, right)| left.1 < right.0)
+            });
+        if source_gap {
+            open = false;
         }
         match groups.last_mut() {
             Some((range, digits)) if open => {
@@ -345,6 +358,10 @@ mod tests {
             cards("x 0\u{200D}4111 1111 1111 1111 x"),
             ["0\u{200D}4111 1111 1111 1111"]
         );
+        assert_eq!(
+            cards("x 0\u{200D}4111 1111 1111 1111\u{200D}003 x"),
+            ["0\u{200D}4111 1111 1111 1111\u{200D}003"]
+        );
         // REVIEW 658 F2: the 18-digit pattern window and the 4-4-4-4 card start on the same
         // byte and both pass Luhn; the union must keep the longer end, or ` 00` ships raw.
         assert_eq!(
@@ -376,7 +393,7 @@ mod tests {
         // The sorted walk in `without_overlap` must equal "overlaps no card".
         let text = random_grouped_run(20_000);
         let scan = scan_card_run(&text, 0..text.len(), None);
-        let all_failed: Vec<_> = pattern_windows(&text, 0)
+        let all_failed: Vec<_> = pattern_windows(&text, 0, None)
             .into_iter()
             .filter(|window| !crate::luhn_check(&text[window.clone()]))
             .collect();
@@ -394,7 +411,7 @@ mod tests {
         // quadratic. Count card comparisons instead of timing (no wall clock): the walk may
         // compare at most once per card passed over and once per window, whatever the size.
         let failing_windows = |text: &str| -> Vec<Range<usize>> {
-            pattern_windows(text, 0)
+            pattern_windows(text, 0, None)
                 .into_iter()
                 .filter(|window| !crate::luhn_check(&text[window.clone()]))
                 .collect()
@@ -538,7 +555,7 @@ mod tests {
             let expected: Vec<Range<usize>> = card.find_iter(&text).map(|m| m.range()).collect();
             let actual: Vec<Range<usize>> = run
                 .find_iter(&text)
-                .flat_map(|m| pattern_windows(m.as_str(), m.start()))
+                .flat_map(|m| pattern_windows(m.as_str(), m.start(), None))
                 .collect();
             assert_eq!(actual, expected, "{text:?}");
         }

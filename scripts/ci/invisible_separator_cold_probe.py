@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Alternate process-cold CLI cleans; validate output and record child peak RSS.
+
+Each sample starts a fresh default release CLI with core/en-US and an empty cwd.
+The OS page cache is not flushed. This measures loader + rule construction + first
+clean + JSON serialization, and not isolated recognizer throughput. Both inputs
+are synthetic and differ by exactly one ZWSP. No model/policy download occurs.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import statistics
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+
+def host():
+    return {"load_average": os.getloadavg(), "cpu_count": os.cpu_count(),
+            "memory_pressure": subprocess.check_output(["memory_pressure"], text=True).splitlines()[-1]}
+
+
+def once(binary, text, cwd, require_card):
+    started = time.perf_counter_ns()
+    child = subprocess.Popen([str(binary), "clean", "--locale", "en-US"],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             cwd=cwd, env=dict(os.environ, GAZE_DISABLE_OS_KEYSTORE="1"))
+    captured = {}
+    readers = [threading.Thread(target=lambda name=name, stream=stream: captured.__setitem__(name, stream.read()))
+               for name, stream in (("stdout", child.stdout), ("stderr", child.stderr))]
+    for reader in readers:
+        reader.start()
+    child.stdin.write(text.encode())
+    child.stdin.close()
+    _, status, usage = os.wait4(child.pid, 0)
+    elapsed = (time.perf_counter_ns() - started) / 1e6
+    child.returncode = os.waitstatus_to_exitcode(status)
+    for reader in readers:
+        reader.join()
+    child.stdout.close()
+    child.stderr.close()
+    if child.returncode:
+        raise RuntimeError(f"clean failed, exit {child.returncode}")
+    response = json.loads(captured["stdout"])
+    email = "cedar@example.invalid"
+    card = text.split("Card: ", 1)[1].split(";", 1)[0]
+    entries = response["entries"]
+    values = {entry["raw"] for entry in entries}
+    if email not in values or values - {email, card} or (require_card and card not in values):
+        raise RuntimeError("sample did not protect the required complete values")
+    if len(entries) != len(values) or response["stats"]["detections"] != len(entries):
+        raise RuntimeError("sample emitted duplicate or inconsistent detections")
+    restored = response["clean_text"]
+    for entry in entries:
+        restored = restored.replace(entry["token"], entry["raw"])
+    if restored != text:
+        raise RuntimeError("sample manifest failed exact round trip")
+    return {"milliseconds": elapsed,
+            "protected_card": card in values, "protected_email": True,
+            "manifest_substitution_round_trip": True,
+            "cpu_milliseconds": (usage.ru_utime + usage.ru_stime) * 1000,
+            "user_milliseconds": usage.ru_utime * 1000,
+            "system_milliseconds": usage.ru_stime * 1000,
+            "peak_rss_bytes": usage.ru_maxrss if sys.platform == "darwin" else usage.ru_maxrss * 1024,
+            "detections": response["stats"]["detections"], "exit_code": child.returncode}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base-bin", type=Path, required=True)
+    parser.add_argument("--candidate-bin", type=Path, required=True)
+    parser.add_argument("--base-sha", required=True)
+    parser.add_argument("--candidate-sha", required=True)
+    parser.add_argument("--rounds", type=int, default=7)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--max-load-one", type=float, default=20)
+    parser.add_argument("--max-load-wait-seconds", type=int, default=1800)
+    args = parser.parse_args()
+    if args.rounds < 5:
+        parser.error("at least five alternating rounds are required")
+    binaries = {"base": args.base_bin.resolve(strict=True), "candidate": args.candidate_bin.resolve(strict=True)}
+    inputs = {"plain": "Order received. Card: 4111111111111111; email cedar@example.invalid.",
+              "zwsp": "Order received. Card: 4111\u200b111111111111; email cedar@example.invalid."}
+    waiting_started = time.monotonic()
+    while os.getloadavg()[0] >= args.max_load_one and time.monotonic() - waiting_started < args.max_load_wait_seconds:
+        print(json.dumps({"waiting_for_load1_below": args.max_load_one, "load1": os.getloadavg()[0]}), flush=True)
+        time.sleep(min(30, max(0, args.max_load_wait_seconds - (time.monotonic() - waiting_started))))
+    waited = time.monotonic() - waiting_started
+    before = host()
+    samples = {side: {kind: [] for kind in inputs} for side in binaries}
+    with tempfile.TemporaryDirectory(prefix="gaze-invisible-cold-") as cwd:
+        for index in range(args.rounds):
+            sides = list(binaries) if index % 2 == 0 else list(reversed(binaries))
+            for kind, text in inputs.items():
+                for side in sides:
+                    completed = sum(len(rows) for kinds in samples.values() for rows in kinds.values())
+                    print(f"COLD {completed + 1}/{args.rounds * 4}: {side}/{kind}", flush=True)
+                    samples[side][kind].append(once(binaries[side], text, cwd, side == "candidate" or kind == "plain"))
+    summary = {side: {kind: {
+        "median_ms": statistics.median(row["milliseconds"] for row in rows),
+        "median_cpu_ms": statistics.median(row["cpu_milliseconds"] for row in rows),
+        "min_cpu_ms": min(row["cpu_milliseconds"] for row in rows),
+        "max_cpu_ms": max(row["cpu_milliseconds"] for row in rows),
+        "min_ms": min(row["milliseconds"] for row in rows), "max_ms": max(row["milliseconds"] for row in rows),
+        "peak_rss_min_bytes": min(row["peak_rss_bytes"] for row in rows),
+        "peak_rss_max_bytes": max(row["peak_rss_bytes"] for row in rows),
+        "detections": sorted({row["detections"] for row in rows}),
+    } for kind, rows in kinds.items()} for side, kinds in samples.items()}
+    report = {"schema": "gaze-invisible-process-cold-v1", "rounds": args.rounds,
+              "base_sha": args.base_sha, "candidate_sha": args.candidate_sha,
+              "binary_sha256": {side: hashlib.sha256(binary.read_bytes()).hexdigest() for side, binary in binaries.items()},
+              "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              "inputs_sha256": {kind: hashlib.sha256(text.encode()).hexdigest() for kind, text in inputs.items()},
+              "host_before": before, "host_after": host(), "summary": summary, "samples": samples,
+              "load_wait_seconds": waited, "busy_host": before["load_average"][0] >= args.max_load_one,
+              "measurement": "fresh process to exit; loader, original regex compilation, detection and output; warm OS page cache; shared host",
+              "interpretation": "descriptive cold samples; ZWSP base may leak where candidate protects, so detection work differs"}
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2) + "\n")
+    print(json.dumps({"summary": summary, "host_before": before, "host_after": report["host_after"]}))
+
+
+if __name__ == "__main__":
+    main()

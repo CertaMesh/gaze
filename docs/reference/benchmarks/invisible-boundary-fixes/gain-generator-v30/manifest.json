@@ -1,0 +1,48 @@
+{
+  "base": "9fb578e421a9f91d3868c7eeb585156e2a07eae8",
+  "benchmark_spec_id": "gaze-benchmark-v1:1370fde4fa845fc4ba68d632265b8e878588142ca0312e552eef0617167a05f9",
+  "candidate": "5df6f47ad4d6a54de44db150e345b699ff722aee",
+  "captures_per_side": 1,
+  "claims": [
+    "bytes",
+    "restore integrity",
+    "manifest integrity",
+    "refusals"
+  ],
+  "files": {
+    "README.md": "7795770b3c02f1275a5689616a4bc3268fe2bd11e24fecac11ca86cde8204229",
+    "base/capture-v1.json.gz": "b995e8988188f0c94a1c74c03ac580f2e1ca41e17b52240ab3a8a7c643353100",
+    "base/observations-v1.jsonl.gz": "d5281f0e1f1d3ec24b879eca3740a5899d490f7a0ad9c8f16851d96459312c90",
+    "base/run-evidence.json": "3304a15d49e5398d09532ff600349e91d86e0cb704b8d60550fce2a2e1404e54",
+    "base/scorecard-v1.json.gz": "b995e8988188f0c94a1c74c03ac580f2e1ca41e17b52240ab3a8a7c643353100",
+    "base/scorecard-v2.json.gz": "1f06710dffcd88e5832bd855fc6395caff604171cb6a7f5fc7bc5e1e4a4827ae",
+    "base/scorecard-v3.json.gz": "ccc796192ae718549725e6ec51e264f0af811bc1176ebf81f555a7161de51208",
+    "base/scorecard-v4.json.gz": "d05d4cd90653f8dbc23b9e355813248ea0682615b1cba330ddd4e41061bbb7f5",
+    "build-noop-audit.json": "7d308154ab12665c4dd589aa0d3e6eee5ed26308d4c1e2dbd8ae8d77b59434bc",
+    "candidate/capture-v1.json.gz": "2ddde2ce292e4038f8f86438ea3bdf3b410f7f4d8c86479d090d71eadd3d83a8",
+    "candidate/observations-v1.jsonl.gz": "7d2941551e59b9f8fb5252f67d163e1b0a4e712ebbf8c079620238546f855be0",
+    "candidate/run-evidence.json": "a44b020a66aa7614786435cd8079a55aecea071ee0f4ee6fed1213e7f39241fe",
+    "candidate/scorecard-v1.json.gz": "2ddde2ce292e4038f8f86438ea3bdf3b410f7f4d8c86479d090d71eadd3d83a8",
+    "candidate/scorecard-v2.json.gz": "ead34b621337cd17b01fdc86d03642e875b148e2c66cec58da1bca31ccb90707",
+    "candidate/scorecard-v3.json.gz": "0af2cf6b6f6a49b37e57faf0326c49ba83678f78c2eaa12524c4ca0b6d35acc8",
+    "candidate/scorecard-v4.json.gz": "e0f016c2ecf4eb2f0cc8cc1ab3a5ac0a8bbcbacb42882195f83638b1f812c924",
+    "gate-v1.json": "601cdba72f7a4f25a6f9d30d2bdee8461489fa7ce3e4c546d4b1e9f3f6a1e811",
+    "gate-v2.json": "15b8e3ab28800e7f837a3b046dff63ea305817fc396906e23ba4dfdc0fc8139b",
+    "headline-v4.json": "f277d8adddcd31fb54285ac233107f256604535991e675a844e28632f0995729",
+    "setup-policy.portable.toml": "9ac5f5fcb6e801982a882ba440e5eaee3a72346e87e620334d3c8de4c4e68e8e",
+    "specification.json": "b3c42bca72b6cbb80757feeb0eed50f75ac234fd8b30e3c33fcf035acb44f00c",
+    "verification.json": "61da291079b27bb0650a70ea27e583b71fc7bd89c1c2ae41ecf7f8f70c1543d9"
+  },
+  "gated_contracts": [
+    2,
+    1
+  ],
+  "headline_contract": 4,
+  "kind": "invisible-separator-gain-evidence",
+  "mechanism_reason": "Normalization always runs and has no policy switch.",
+  "observations_per_side": 44040,
+  "orchestration_sha256": "6605a89f0784e3b45c907600deccbf06bf92c9debc20df38da1e158627a8eb80",
+  "policy_sha256": "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+  "required_mechanisms": [],
+  "schema_version": 1
+}

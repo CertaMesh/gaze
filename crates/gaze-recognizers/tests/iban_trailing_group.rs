@@ -489,9 +489,9 @@ fn iban_pattern_branch_lengths_match_the_validator_registry() {
         panic!("iban.structural must be a plain regex recognizer");
     };
 
-    // `(?:AT|BA|...)\d{2}(?:\x20?[A-Z0-9]{4}){4}` optionally followed by `\x20?[A-Z0-9]{3}`.
+    // `(?:AT|BA|...)\d{2}(?:[\x20-]?[A-Z0-9]{4}){4}` optionally followed by `[\x20-]?[A-Z0-9]{3}`.
     let branch = regex::Regex::new(
-        r"\(\?:([A-Z|]+)\)\\d\{2\}\(\?:\\x20\?\[A-Z0-9\]\{4\}\)\{(\d+)\}(?:\\x20\?\[A-Z0-9\]\{(\d+)\})?",
+        r"\(\?:([A-Z|]+)\)\\d\{2\}\(\?:\[\\x20-\]\?\[A-Z0-9\]\{4\}\)\{(\d+)\}(?:\[\\x20-\]\?\[A-Z0-9\]\{(\d+)\})?",
     )
     .expect("branch regex");
 

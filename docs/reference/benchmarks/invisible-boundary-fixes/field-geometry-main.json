@@ -1,0 +1,6 @@
+{
+  "schema": "gaze-field-geometry-main-v1",
+  "source_sha": "3b3808c66a528a308b293b5d6bfd1e4924a637c1",
+  "test": "actual_assembly_normalization_exposes_source_boundaries_and_raw_size_limitations",
+  "exit_code": 0
+}

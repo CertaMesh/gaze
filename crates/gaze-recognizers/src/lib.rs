@@ -39,6 +39,8 @@ pub mod normalize;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;
+mod source_prefilter;
+mod source_regex;
 pub mod validators;
 
 pub use anchored_match::{
@@ -99,6 +101,13 @@ pub fn embedded(name: &str) -> Option<&'static str> {
         name
     };
     embedded_rulepacks().find_map(|(id, content)| (id == canonical).then_some(content))
+}
+
+/// Drain test-only (original pattern, compiled pattern, construction nanoseconds) work for this thread.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub fn take_source_regex_compilations() -> Vec<(String, String, u64)> {
+    source_regex::take_compilations()
 }
 
 #[cfg(test)]

@@ -1,0 +1,81 @@
+{
+  "schema": "gaze-invisible-boundary-evidence-v1",
+  "measured_source_sha": "9e87f4df7bef7b23db1824c8224d2fe78dc37bb3",
+  "production_git_objects": {
+    "crates": "ddd45f126269ee60b5abc41a8779c194120826bb",
+    "Cargo.toml": "e172bc817ba68affff1f0550faa9af9f7e42741a",
+    "Cargo.lock": "d229f0155f4ccaf04e267cb4bb164f05c8a28cfc",
+    ".cargo": "a858e206dfbe9996dc77b95974b3614810c3e200",
+    "rust-toolchain.toml": "4f0430eac96d545bcfaa0df23ce475faf4aee96a"
+  },
+  "records": {
+    "release-build.json": {
+      "file_sha256": "6f5da34db56fb6fae4b62256b41b389a91b589ccd94fb4764f0c409bc09bfe7c",
+      "json_sha256": "6f5da34db56fb6fae4b62256b41b389a91b589ccd94fb4764f0c409bc09bfe7c"
+    },
+    "card-code-matrix.json.gz": {
+      "file_sha256": "7e55c9f371fb47f2641af0e2748bcd65ac7f1bc586292cfbc851a35edf3df6ce",
+      "json_sha256": "cb8f85c51fb75ad8f0ca63dd39e5df3ecbaea1d98dca6a8bb4c636beaceea387"
+    },
+    "card-code-reuse.json": {
+      "file_sha256": "8a00544c8334cdea565ddde630512f13d1d40af37c714642abbf33ded849bec0",
+      "json_sha256": "8a00544c8334cdea565ddde630512f13d1d40af37c714642abbf33ded849bec0"
+    },
+    "main-gap-probe.json": {
+      "file_sha256": "a9a40c13204901e903b3f07f284cc88f5de39832a2c351c873040ab5fb67ec0d",
+      "json_sha256": "a9a40c13204901e903b3f07f284cc88f5de39832a2c351c873040ab5fb67ec0d"
+    },
+    "clean-equality.json": {
+      "file_sha256": "4f3cb5e0f293875af8bb1a62aa2b01d8c0a174cddcf0d94d9f53225c1f63fdd9",
+      "json_sha256": "4f3cb5e0f293875af8bb1a62aa2b01d8c0a174cddcf0d94d9f53225c1f63fdd9"
+    },
+    "compilation-work.json": {
+      "file_sha256": "b6916430e47bd0a4daaf9c205eb1a763b5f206b05f6e7cda7105e7ce96925aae",
+      "json_sha256": "b6916430e47bd0a4daaf9c205eb1a763b5f206b05f6e7cda7105e7ce96925aae"
+    },
+    "phone-fixtures.json": {
+      "file_sha256": "73cfdde24be90c2d41fd940702127c5efd393a570f7d7dde8e9ceb6d93c737b1",
+      "json_sha256": "73cfdde24be90c2d41fd940702127c5efd393a570f7d7dde8e9ceb6d93c737b1"
+    },
+    "field-geometry-main.json": {
+      "file_sha256": "7132669be44ab936f9b450fdf8f037b051e8284f70d21ceb62f101696b541761",
+      "json_sha256": "7132669be44ab936f9b450fdf8f037b051e8284f70d21ceb62f101696b541761"
+    },
+    "empty-boundary-regression.json": {
+      "file_sha256": "414c251cc531b2c4a25e39a30584d267a30ef04e5ec04bdd1bf97b1fb873d7b8",
+      "json_sha256": "414c251cc531b2c4a25e39a30584d267a30ef04e5ec04bdd1bf97b1fb873d7b8"
+    },
+    "cold-build.json": {
+      "file_sha256": "9e093c2d176097ef356582c5a9f9ad0bd0e9c77ff0e5f22bef09cd54ba908886",
+      "json_sha256": "9e093c2d176097ef356582c5a9f9ad0bd0e9c77ff0e5f22bef09cd54ba908886"
+    },
+    "cold-current-main.json": {
+      "file_sha256": "77f4806a9df8901ea2bbfbf3235639b4a57f62d992cc11f39a38d8d0180fa58f",
+      "json_sha256": "77f4806a9df8901ea2bbfbf3235639b4a57f62d992cc11f39a38d8d0180fa58f"
+    },
+    "gates.json": {
+      "file_sha256": "e7b91e6676a59646c4992cc878a916e7dc62f5bdad4dd48e4e33a04f55249518",
+      "json_sha256": "e7b91e6676a59646c4992cc878a916e7dc62f5bdad4dd48e4e33a04f55249518"
+    },
+    "pr-ritual.json": {
+      "file_sha256": "cc0be970c1f87010d43058340a9c623b342b657961a67ae22240ba4849305404",
+      "json_sha256": "cc0be970c1f87010d43058340a9c623b342b657961a67ae22240ba4849305404"
+    },
+    "main-advisories.json": {
+      "file_sha256": "0df406a745e3205ec0b4fc74b30002b8eae9e7f91d509911d1dd440258f04f74",
+      "json_sha256": "0df406a745e3205ec0b4fc74b30002b8eae9e7f91d509911d1dd440258f04f74"
+    },
+    "merge-focus.json": {
+      "file_sha256": "397f9bf1df14afb4bfb8259bddb96b2ad7271b6907060dcf88f6f6473e38d41d",
+      "json_sha256": "397f9bf1df14afb4bfb8259bddb96b2ad7271b6907060dcf88f6f6473e38d41d"
+    }
+  },
+  "supplemental_source_sha": "5b90e12ff748fa001fe7de4610e45509141aff46",
+  "supplemental_production_git_objects": {
+    "crates": "bac1542691df7eab602ad643ffc9961227289ff7",
+    "Cargo.toml": "e172bc817ba68affff1f0550faa9af9f7e42741a",
+    "Cargo.lock": "d229f0155f4ccaf04e267cb4bb164f05c8a28cfc",
+    ".cargo": "a858e206dfbe9996dc77b95974b3614810c3e200",
+    "rust-toolchain.toml": "4f0430eac96d545bcfaa0df23ce475faf4aee96a"
+  }
+}

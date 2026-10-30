@@ -157,6 +157,22 @@ fn pem(label: &str, newline: &str) -> String {
 }
 
 #[test]
+fn private_pem_source_gaps_keep_the_complete_value_and_restore() {
+    let core = core();
+    let plain = pem("PRIVATE KEY", "\n");
+    assert_whole(&core, &plain, &[&plain]);
+    for separator in ['\u{200b}', '\u{2060}', '\u{feff}'] {
+        for value in [
+            plain.replace("BEGIN", &format!("BE{separator}GIN")),
+            plain.replace("bm90", &format!("bm{separator}90")),
+        ] {
+            let raw = format!("é\n{value}\n終");
+            assert_whole(&core, &raw, &[&value]);
+        }
+    }
+}
+
+#[test]
 fn bare_vendor_prefixes_are_whole_restorable_credentials() {
     let core = core();
     for value in prefixed_values() {

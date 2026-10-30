@@ -725,3 +725,363 @@ fn digits_to_string(digits: &[u8]) -> String {
         .map(|digit| char::from(b'0' + *digit))
         .collect()
 }
+
+#[test]
+fn validator_classes_keep_gap_neighbours_outside_valid_values() {
+    let mut cases = vec![
+        (
+            ValidatorKind::EmailRfc,
+            r"\b[a-z]+@[a-z]+\.invalid\b",
+            "cedar@example.invalid".to_owned(),
+        ),
+        (
+            ValidatorKind::Luhn,
+            r"\b\d+\b",
+            "4111111111111111".to_owned(),
+        ),
+        (
+            ValidatorKind::IbanMod97,
+            r"\b[A-Z0-9]+\b",
+            "GB82WEST12345698765432".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv4Parse,
+            r"\b[0-9.]+\b",
+            "192.0.2.1".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv4ParseNonDocumentation,
+            r"\b[0-9.]+\b",
+            "192.168.10.20".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv6Parse,
+            r"\b[0-9a-f:]+\b",
+            "2001:db8::1".to_owned(),
+        ),
+        (
+            ValidatorKind::Ipv6ParseNonDocumentation,
+            r"\b[0-9a-f:]+\b",
+            "fc00::1".to_owned(),
+        ),
+        (
+            ValidatorKind::EthEip55,
+            r"\b0x[0-9a-fA-F]+\b",
+            "0x0000000000000000000000000000000000000000".to_owned(),
+        ),
+        (
+            ValidatorKind::AadhaarVerhoeff,
+            r"\b\d+\b",
+            gen_aadhaar(20).replace(' ', ""),
+        ),
+        (
+            ValidatorKind::FrNirMod97,
+            r"\b\d+\b",
+            gen_fr_nir(0).replace(' ', ""),
+        ),
+        (
+            ValidatorKind::DeSteuerIdMod1110,
+            r"\b\d+\b",
+            gen_steuer_id(0).replace(' ', ""),
+        ),
+        (ValidatorKind::BsnMod11, r"\b\d+\b", gen_bsn(0)),
+        (ValidatorKind::CpfMod11, r"\b\d+\b", gen_cpf(0)),
+        (ValidatorKind::CnpjMod11, r"\b\d+\b", gen_cnpj(0)),
+        (ValidatorKind::UkNhsMod11, r"\b\d+\b", gen_nhs(0)),
+    ];
+    #[cfg(feature = "phone-parser")]
+    for (kind, value) in [
+        // E164Phone uses parser metadata without PhoneNumber's UK-reservation fallback.
+        // This BNetzA drama number validates on both pinned parents.
+        (ValidatorKind::E164Phone, "+49 171 3920000"),
+        (
+            ValidatorKind::E164PhoneNational(gaze_types::Region::De),
+            "+49 171 3920000",
+        ),
+        (
+            ValidatorKind::E164PhoneNational(gaze_types::Region::Us),
+            "+1 202 555 0100",
+        ),
+        (ValidatorKind::PhoneNumber, "+44 7700 900123"),
+    ] {
+        cases.push((kind, r"\+[0-9 ]+[0-9]\b", value.to_owned()));
+    }
+    let total = cases.len();
+    for (index, (kind, pattern, value)) in cases.into_iter().enumerate() {
+        eprintln!("VALIDATORS {}/{}", index + 1, total);
+        assert!(
+            kind.validates(&value),
+            "synthetic fixture must validate: {kind:?}"
+        );
+        let pipeline = validator_pipeline(pattern, kind, None);
+        for sep in [
+            '\u{ad}',
+            '\u{34f}',
+            '\u{61c}',
+            '\u{115f}',
+            '\u{17b4}',
+            '\u{180e}',
+            '\u{200b}',
+            '\u{200c}',
+            '\u{200d}',
+            '\u{202a}',
+            '\u{2060}',
+            '\u{3164}',
+            '\u{fe0f}',
+            '\u{feff}',
+            '\u{ffa0}',
+            '\u{fff0}',
+            '\u{1bca0}',
+            '\u{1d173}',
+            '\u{e0067}',
+        ] {
+            for prefix in [String::new(), format!("9{sep}")] {
+                let raw = format!("{prefix}{value}{sep}9");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let clean = clean_text(&pipeline, &session, &raw);
+                // A joined value that validates absorbs the glued digit (FP bytes);
+                // otherwise the hard-boundary value stays alone. Never a raw value byte.
+                // With a glued prefix, whether `{value}9` is a candidate depends on the
+                // pattern (`\b\d+` starts at the prefix; `\+` cannot), so both are fine.
+                let joins =
+                    |joined: String| kind != ValidatorKind::EmailRfc && kind.validates(&joined);
+                let alone = (format!("{prefix}\0{sep}9"), value.clone());
+                let suffix = (format!("{prefix}\0"), format!("{value}{sep}9"));
+                let allowed = if !prefix.is_empty() && joins(format!("9{value}9")) {
+                    vec![("\0".to_owned(), raw.clone())]
+                } else if joins(format!("{value}9")) {
+                    if prefix.is_empty() {
+                        vec![suffix]
+                    } else {
+                        vec![suffix, alone]
+                    }
+                } else {
+                    vec![alone]
+                };
+                let observed = (
+                    gaze::token_shape::pattern()
+                        .replace_all(&clean, "\0")
+                        .into_owned(),
+                    session.snapshot_entries()[0].raw.clone(),
+                );
+                assert!(
+                    allowed.contains(&observed),
+                    "{kind:?}, {raw:?}: {observed:?}"
+                );
+                assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+            }
+        }
+    }
+}
+
+#[test]
+fn hard_boundary_and_joined_valid_candidates_emit_one_token() {
+    assert!(ValidatorKind::Ipv4Parse.validates("192.0.2.1"));
+    assert!(ValidatorKind::Ipv4Parse.validates("192.0.2.19"));
+    let pipeline = validator_pipeline(r"\b[0-9.]+\b", ValidatorKind::Ipv4Parse, None);
+    let raw = "192.0.2.1\u{200b}9";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = clean_text(&pipeline, &session, raw);
+    // The joined value validates, so it wins: the glued `9` is over-redacted
+    // rather than the shorter value leaving part of the address raw.
+    assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 1);
+    assert_eq!(gaze::token_shape::pattern().replace_all(&clean, "\0"), "\0");
+    let entries = session.snapshot_entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].raw, raw);
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+}
+
+#[test]
+fn hard_boundary_value_survives_enclosing_joined_validator_failure() {
+    assert!(ValidatorKind::Luhn.validates("4111111111111111"));
+    assert!(!ValidatorKind::Luhn.validates("941111111111111119"));
+    let pipeline = validator_pipeline(r"\b\d+\b", ValidatorKind::Luhn, None);
+    let raw = "9\u{200b}4111111111111111\u{200b}9";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = clean_text(&pipeline, &session, raw);
+    assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 1);
+    assert_eq!(
+        gaze::token_shape::pattern().replace_all(&clean, "\0"),
+        "9\u{200b}\0\u{200b}9"
+    );
+    let entries = session.snapshot_entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].raw, "4111111111111111");
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+}
+
+#[test]
+fn hard_boundary_preserves_overlapping_valid_card_windows() {
+    for pattern in [
+        r"\b\d(?:[ ]?\d)*\b",
+        gaze_types::payment_card::CARD_RUN_PATTERN,
+    ] {
+        let pipeline = validator_pipeline(pattern, ValidatorKind::Luhn, None);
+        for raw in [
+            "0\u{200b}4111 1111 1111 1111",
+            "0\u{200b}4111 1111 1111 1111\u{200b}003",
+            // Both 16-digit windows pass Luhn; their 20-digit union does not.
+            "4111 1111 1111 1038 \u{200b}7262",
+        ] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = clean_text(&pipeline, &session, raw);
+            assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 1);
+            assert_eq!(gaze::token_shape::pattern().replace_all(&clean, "\0"), "\0");
+            let entries = session.snapshot_entries();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].raw, raw);
+            assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+        }
+    }
+}
+
+#[test]
+fn hard_boundary_preserves_recorded_card_and_verification_code() {
+    let class = PiiClass::custom("credit_card").unwrap();
+    let detector = RegexDetector::with_rulepack_fields(
+        r"\b\d+\b",
+        class.clone(),
+        "recorded.card",
+        vec![gaze::LocaleTag::Global],
+        0.9,
+        50,
+        "counter",
+        None,
+        Vec::new(),
+        Some(ValidatorKind::Luhn),
+        None,
+    )
+    .unwrap()
+    .with_validator_on_fail(gaze_types::ValidatorOnFail::Record)
+    .unwrap();
+    let pipeline = Pipeline::builder()
+        .recognizer(detector)
+        .rule(ClassRule::new(class, Action::Tokenize))
+        .build()
+        .unwrap();
+    let raw = "4111111111111111\u{200b}123";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = clean_text(&pipeline, &session, raw);
+    assert_eq!(gaze::token_shape::pattern().replace_all(&clean, "\0"), "\0");
+    assert_eq!(session.snapshot_entries().len(), 1);
+    assert_eq!(session.snapshot_entries()[0].raw, raw);
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+
+    // Recording keeps a failing joined value, so only the hard-boundary preference
+    // stops it absorbing a glued digit that is no verification code. The digit is
+    // recorded as its own failing candidate.
+    let raw = "4111111111111111\u{200b}9";
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let clean = clean_text(&pipeline, &session, raw);
+    assert_eq!(
+        gaze::token_shape::pattern().replace_all(&clean, "\0"),
+        "\0\u{200b}\0"
+    );
+    let mut raws: Vec<_> = session
+        .snapshot_entries()
+        .into_iter()
+        .map(|entry| entry.raw)
+        .collect();
+    raws.sort();
+    assert_eq!(raws, ["4111111111111111", "9"]);
+    assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+}
+
+#[test]
+fn hard_boundary_recorded_codes_preserve_all_lengths_and_separators() {
+    let class = PiiClass::custom("credit_card").unwrap();
+    let detector = RegexDetector::with_rulepack_fields(
+        r"Card: (\d(?:[\s-]*\d){12,22})\b",
+        class.clone(),
+        "recorded.card",
+        vec![gaze::LocaleTag::Global],
+        0.9,
+        50,
+        "counter",
+        Some(vec![1]),
+        Vec::new(),
+        Some(ValidatorKind::Luhn),
+        None,
+    )
+    .unwrap()
+    .with_validator_on_fail(gaze_types::ValidatorOnFail::Record)
+    .unwrap();
+    let pipeline = Pipeline::builder()
+        .recognizer(detector)
+        .rule(ClassRule::new(class, Action::Tokenize))
+        .build()
+        .unwrap();
+    let mut pans = vec!["378282246310005".to_owned()];
+    for length in 13..=19 {
+        for prefix in ["4", "37", "50"] {
+            let body = format!("{prefix}{}", "0".repeat(length - prefix.len() - 1));
+            let sum: u32 = body
+                .bytes()
+                .rev()
+                .enumerate()
+                .map(|(index, digit)| {
+                    let digit = u32::from(digit - b'0');
+                    let product = if index % 2 == 0 { digit * 2 } else { digit };
+                    product / 10 + product % 10
+                })
+                .sum();
+            let pan = format!("{body}{}", (10 - sum % 10) % 10);
+            assert!(ValidatorKind::Luhn.validates(&pan));
+            pans.push(pan);
+        }
+    }
+    let removed = regex::Regex::new(r"\A\p{Default_Ignorable_Code_Point}\z").unwrap();
+    let spaces = regex::Regex::new(r"\A\p{Zs}\z").unwrap();
+    let mut separators = Vec::new();
+    let mut removed_count = 0;
+    for ch in (0..=0x10ffff).filter_map(char::from_u32) {
+        let text = ch.to_string();
+        if removed.is_match(&text) {
+            removed_count += 1;
+            separators.push(text);
+        } else if spaces.is_match(&text) {
+            separators.push(text);
+        }
+    }
+    assert_eq!(removed_count, 4174);
+    separators.extend(
+        [
+            "-",
+            "\t",
+            "\n",
+            "\r\n",
+            "\u{2011}",
+            "\u{200b}\u{2060}\u{ad}",
+        ]
+        .map(str::to_owned),
+    );
+    for (index, separator) in separators.iter().enumerate() {
+        if index % 256 == 0 || index + 1 == separators.len() {
+            eprintln!(
+                "RECORDED CARD CODES {}/{} separators, {} layouts each",
+                index + 1,
+                separators.len(),
+                pans.len() * 2
+            );
+        }
+        for pan in &pans {
+            for code in ["123", "1234"] {
+                let value = format!("{pan}{separator}{code}");
+                let raw = format!("Card: {value}");
+                let session = Session::new(Scope::Ephemeral).unwrap();
+                let clean = clean_text(&pipeline, &session, &raw);
+                assert_eq!(
+                    gaze::token_shape::pattern().replace_all(&clean, "\0"),
+                    "Card: \0",
+                    "PAN length {}, code length {}, separator {separator:?}",
+                    pan.len(),
+                    code.len()
+                );
+                assert_eq!(session.snapshot_entries().len(), 1);
+                assert_eq!(session.snapshot_entries()[0].raw, value);
+                assert_eq!(session.restore_strict_text(&clean).unwrap(), raw);
+            }
+        }
+    }
+}

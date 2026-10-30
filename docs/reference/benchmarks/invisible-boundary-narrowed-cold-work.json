@@ -1,0 +1,23 @@
+{
+  "cases": [
+    {
+      "compile_nanoseconds": 0,
+      "document": "plain",
+      "extra_immutable_compiled_bytes": 0,
+      "transformed_regexes_compiled": 0
+    },
+    {
+      "compile_nanoseconds": 10384500,
+      "document": "zwsp",
+      "extra_immutable_compiled_bytes": 4036216,
+      "transformed_regexes_compiled": 11
+    }
+  ],
+  "locale": "en-US",
+  "rulepacks": [
+    "core"
+  ],
+  "schema": "gaze-source-regex-cold-work-v1",
+  "product_source_sha": "384da05887905d3ba733aadddc50c51edc20fc62",
+  "measurement": "release instrumented construction-wall counter, immutable compiled bytes excludes search caches; separate production CLI RSS capture"
+}

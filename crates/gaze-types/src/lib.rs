@@ -67,6 +67,18 @@ pub trait Detector: Send + Sync {
     fn try_detect(&self, input: &str) -> Result<Vec<Detection>, RecognizerRuntimeError> {
         Ok(self.detect(input))
     }
+
+    /// Detect with normalized-source provenance when installed in a pipeline.
+    /// Returned spans remain byte offsets into `input`.
+    /// Override this when lexical boundaries depend on removed source characters.
+    /// Existing backends retain their fallible detection contract by default.
+    fn try_detect_with_context(
+        &self,
+        input: &str,
+        _ctx: &DetectContext<'_>,
+    ) -> Result<Vec<Detection>, RecognizerRuntimeError> {
+        self.try_detect(input)
+    }
 }
 
 /// Runtime failure raised by a recognizer or detector backend during detection.
@@ -732,6 +744,8 @@ pub const LABELLED_FIELD_CONNECTORS: &[char] = &[':', '=', '|', '\t', ',', ';', 
 pub enum LabelledValueScanReason {
     /// The complete value run exceeded four groups or forty bytes.
     LimitExceeded,
+    /// Removed source formatting joined value groups beyond the regex capture's bound.
+    JoinedRunLimitExceeded,
     /// A date starts the next field after the captured identifier.
     DateBoundary,
     /// A labelled field starts after the captured identifier.
@@ -1407,10 +1421,12 @@ fn iban_country_length(country: &[u8]) -> Option<usize> {
     }
 }
 
-fn iban_canonicalize(input: &str) -> String {
+/// Canonicalize an already-normalized IBAN, removing ASCII whitespace and hyphens.
+/// Forward recognition and restore authorization use the same identity.
+pub fn iban_canonicalize(input: &str) -> String {
     input
         .chars()
-        .filter(|ch| !ch.is_ascii_whitespace())
+        .filter(|ch| !ch.is_ascii_whitespace() && *ch != '-')
         .flat_map(char::to_uppercase)
         .collect()
 }
@@ -2607,6 +2623,27 @@ pub fn word_run_extends_identifier(text: &str, at: usize) -> bool {
             .take_while(|ch| is_word_char(*ch) || *ch == '_')
             .any(|ch| !ch.is_alphabetic())
     })
+}
+
+/// A national phone suffix cannot recover inside a `+0` international expression.
+/// An explicitly `+`-started value remains an independent international candidate.
+/// Input is the normalized detection view; an invalid byte offset returns false.
+pub fn has_zero_country_phone_prefix(text: &str, at: usize) -> bool {
+    let Some(value) = text.get(at..) else {
+        return false;
+    };
+    if value.starts_with('+') {
+        return false;
+    }
+    let member =
+        |ch: char| ch.is_ascii_digit() || matches!(ch, ' ' | '\t' | '-' | '.' | '/' | '(' | ')');
+    let before = &text[..at];
+    let start = before
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| !member(*ch))
+        .map_or(0, |(offset, ch)| offset + ch.len_utf8());
+    before[..start].ends_with('+') && before[start..].trim_start().starts_with('0')
 }
 
 /// Closed safety-net PII vocabulary before mapping into `PiiClass`.

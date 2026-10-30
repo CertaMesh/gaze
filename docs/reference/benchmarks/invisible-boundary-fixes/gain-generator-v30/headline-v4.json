@@ -1,0 +1,38 @@
+{
+  "base": {
+    "A": {
+      "false_positive": 7577,
+      "leaked": 147944
+    },
+    "C": {
+      "false_positive": 15224,
+      "leaked": 9717
+    },
+    "D": {
+      "false_positive": 16216,
+      "leaked": 0
+    },
+    "R": {
+      "false_positive": 2045,
+      "leaked": 246290
+    }
+  },
+  "candidate": {
+    "A": {
+      "false_positive": 15197,
+      "leaked": 78442
+    },
+    "C": {
+      "false_positive": 15224,
+      "leaked": 9717
+    },
+    "D": {
+      "false_positive": 16212,
+      "leaked": 0
+    },
+    "R": {
+      "false_positive": 9665,
+      "leaked": 120944
+    }
+  }
+}

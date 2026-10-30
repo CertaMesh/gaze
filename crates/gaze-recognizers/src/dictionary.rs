@@ -237,7 +237,11 @@ impl Recognizer for DictionaryRecognizer {
                     ))
                 })
                 .collect::<Vec<_>>();
-            normalized_text = Some(folded);
+            normalized_text = Some(FoldedInput {
+                text: folded,
+                starts,
+                ends,
+            });
             hits
         } else {
             self.automaton_for(entry)
@@ -248,7 +252,9 @@ impl Recognizer for DictionaryRecognizer {
 
         Ok(matches
             .into_iter()
-            .filter(|(start, end, _)| is_token_boundary_match(input, *start, *end))
+            .filter(|(start, end, _)| {
+                is_token_boundary_match(input, *start, *end, ctx.source_spans)
+            })
             .filter(|(start, end, index)| {
                 if !self.record_matching {
                     return true;
@@ -267,7 +273,7 @@ impl Recognizer for DictionaryRecognizer {
                     && (!corroborate_single_name
                         || corroborated_record_name(
                             input,
-                            normalized_text.as_deref().unwrap_or(input),
+                            normalized_text.as_ref(),
                             *start,
                             *end,
                             ctx,
@@ -401,14 +407,21 @@ pub(crate) fn fold_with_original_offsets(
     (folded, starts, ends)
 }
 
+struct FoldedInput {
+    text: String,
+    starts: HashMap<usize, usize>,
+    ends: HashMap<usize, usize>,
+}
+
 fn corroborated_record_name(
     input: &str,
-    normalized_input: &str,
+    folded: Option<&FoldedInput>,
     start: usize,
     end: usize,
     ctx: &DetectContext<'_>,
     own_name: &str,
 ) -> bool {
+    let normalized_input = folded.map_or(input, |view| view.text.as_str());
     let matched = &input[start..end];
     let Some(first) = matched.chars().next() else {
         return false;
@@ -453,17 +466,32 @@ fn corroborated_record_name(
                         && normalized_input
                             .match_indices(&folded_term)
                             .any(|(span_start, _)| {
-                                is_token_boundary_match(
+                                let span_end = span_start + folded_term.len();
+                                // Preserve folded lexical rules; translate only the extra
+                                // source-gap evidence through length-changing case folds.
+                                let before_gap = folded
+                                    .and_then(|view| view.starts.get(&span_start))
+                                    .is_some_and(|&at| {
+                                        crate::source_regex::is_gap(ctx.source_spans, at)
+                                    });
+                                let after_gap = folded
+                                    .and_then(|view| view.ends.get(&span_end))
+                                    .is_some_and(|&at| {
+                                        crate::source_regex::is_gap(ctx.source_spans, at)
+                                    });
+                                token_boundaries_allow(
                                     normalized_input,
                                     span_start,
-                                    span_start + folded_term.len(),
+                                    span_end,
+                                    before_gap,
+                                    after_gap,
                                 )
                             })
                         && name_position(input, start, end);
                 }
                 input.match_indices(term).any(|(peer_start, _)| {
                     let peer_end = peer_start + term.len();
-                    if !is_token_boundary_match(input, peer_start, peer_end) {
+                    if !is_token_boundary_match(input, peer_start, peer_end, ctx.source_spans) {
                         return false;
                     }
                     let between = if peer_end <= start {
@@ -494,8 +522,30 @@ fn name_position(input: &str, start: usize, end: usize) -> bool {
             .is_some_and(|ch| matches!(ch, ',' | '!' | ':'))
 }
 
-fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
-    !has_identifier_char_before(input, start) && !has_identifier_char_after(input, end)
+fn is_token_boundary_match(
+    input: &str,
+    start: usize,
+    end: usize,
+    source_spans: Option<&[(usize, usize)]>,
+) -> bool {
+    token_boundaries_allow(
+        input,
+        start,
+        end,
+        crate::source_regex::is_gap(source_spans, start),
+        crate::source_regex::is_gap(source_spans, end),
+    )
+}
+
+fn token_boundaries_allow(
+    input: &str,
+    start: usize,
+    end: usize,
+    before_gap: bool,
+    after_gap: bool,
+) -> bool {
+    (before_gap || !has_identifier_char_before(input, start))
+        && (after_gap || !has_identifier_char_after(input, end))
 }
 
 fn has_identifier_char_before(input: &str, start: usize) -> bool {
@@ -619,6 +669,19 @@ mod tests {
             0
         }
         fn write(&mut self, _: &[u8]) {}
+    }
+
+    #[test]
+    fn dictionary_source_gaps_are_token_boundaries() {
+        let input = "wordSchmidtword";
+        let spans = (0..input.len())
+            .map(|at| {
+                let raw = at + if at >= 4 { 3 } else { 0 } + if at >= 11 { 3 } else { 0 };
+                (raw, raw + 1)
+            })
+            .collect::<Vec<_>>();
+        assert!(!is_token_boundary_match(input, 4, 11, None));
+        assert!(is_token_boundary_match(input, 4, 11, Some(&spans)));
     }
 
     #[test]
@@ -964,6 +1027,57 @@ mod tests {
             .detect("will called", &flagged)
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn folded_record_peer_keeps_source_boundaries_after_length_changing_case_fold() {
+        let own = gaze::record_dictionary_name(&PiiClass::Name, 0);
+        let peer = gaze::record_dictionary_name(&PiiClass::Name, 1);
+        let context = TypedContext {
+            dictionaries: HashMap::from([
+                (
+                    own.clone(),
+                    ContextDictionary {
+                        terms: vec!["May".into()],
+                        case_sensitive: true,
+                    },
+                ),
+                (
+                    peer,
+                    ContextDictionary {
+                        terms: vec!["May Schmidt".into()],
+                        case_sensitive: true,
+                    },
+                ),
+            ]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        };
+        let input = "İ Dear May,\nwordMay Schmidtword";
+        let gaps = [
+            "İ Dear May,\nword".len(),
+            "İ Dear May,\nwordMay Schmidt".len(),
+        ];
+        let mut spans = Vec::new();
+        for (at, ch) in input.char_indices() {
+            let offset = 3 * gaps.iter().filter(|&&gap| gap <= at).count();
+            spans.extend(std::iter::repeat_n(
+                (at + offset, at + offset + ch.len_utf8()),
+                ch.len_utf8(),
+            ));
+        }
+        let bundle = dictionary_bundle_from_context(&context).unwrap();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &bundle).with_source_spans(&spans);
+        let recognizer =
+            DictionaryRecognizer::new("context/name", PiiClass::Name, &own, true, "counter")
+                .with_record_matching()
+                .with_unicode_case_insensitive();
+        let hits = recognizer.detect(input, &ctx).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(&input[hits[0].span.clone()], "May");
+        assert_eq!(hits[0].span.start, "İ Dear ".len());
     }
 
     #[test]

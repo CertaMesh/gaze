@@ -1,0 +1,54 @@
+{
+  "base_sha": "3fb02d70e756102c871c51471cfd76d7ce6de4bc",
+  "binary_sha256": [
+    "becb30fceacd481fb50f1a855f75d5516be749d03521244ab05debb629e2f389",
+    "99ad817746aa187b030c3f7d1d075cad59b64d4ab5e7a69f9abb480149f1ad78"
+  ],
+  "candidate_sha": "775a114782aa17ef21f09a9537aeff332932e2d2",
+  "cases": 2144,
+  "completed": true,
+  "detections": [
+    767,
+    767
+  ],
+  "difference_count": 0,
+  "differences": [],
+  "exit_codes": [
+    {
+      "0": 2144
+    },
+    {
+      "0": 2144
+    }
+  ],
+  "manifest_sha256": "52e491458f33111d60c4b07e4ef472df0f88084f23a37dcb767a70fb2f42c0f1",
+  "modes": {
+    "no-policy": {
+      "cases": 1072,
+      "differences": 0
+    },
+    "setup-policy": {
+      "cases": 1072,
+      "differences": 0
+    }
+  },
+  "one_byte_mutants": {
+    "no-policy": {
+      "case_id": "crates/xtask/fixtures/drift-corpus.txt:1",
+      "changed_output_bytes": 1,
+      "detected": true
+    },
+    "setup-policy": {
+      "case_id": "crates/xtask/fixtures/drift-corpus.txt:1",
+      "changed_output_bytes": 1,
+      "detected": true
+    }
+  },
+  "planned_cases": 2144,
+  "policy_sha256": [
+    "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462",
+    "a23c28a1037c744cb8aac0f90eac0866943991e7e7bde85671b261b886a20462"
+  ],
+  "schema": "gaze-clean-equality-v2",
+  "script_sha256": "b52e919b8d0ec234248c687a83a15077068be01bccb66433fdf032509f513b65"
+}

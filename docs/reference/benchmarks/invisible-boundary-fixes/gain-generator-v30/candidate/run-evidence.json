@@ -1,0 +1,234 @@
+{
+  "schema_version": 2,
+  "outcome": "completed",
+  "cache": {
+    "status": "disabled",
+    "key_sha256": null,
+    "reason": "unresolved_release_inputs"
+  },
+  "artifacts": {
+    "scorecard": {
+      "file": "capture-v1.json",
+      "sha256": "6a6abe53ae84e2b5c90d392eb210d5c147861f00c2d1bf196289f00678f1b3a4"
+    },
+    "record": {
+      "file": "observations-v1.jsonl.gz",
+      "sha256": "7d2941551e59b9f8fb5252f67d163e1b0a4e712ebbf8c079620238546f855be0"
+    }
+  },
+  "timing_semantics": "inclusive spans; native stages use child process CPU; scoring excludes transport",
+  "stages": [
+    {
+      "stage": "build",
+      "role": "validator",
+      "wall_seconds": 0.5996032909024507,
+      "cpu_self_seconds": 0.004634999999999945,
+      "cpu_children_seconds": 0.38335300000000005,
+      "cpu_seconds": 0.387988
+    },
+    {
+      "stage": "detection",
+      "wall_seconds": 363.10392177899973,
+      "cpu_seconds": 531.9201010000008,
+      "samples": 2911,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "wall_seconds": 0.18919144900000043,
+      "cpu_seconds": 0.17843600000033533,
+      "samples": 2911,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "wall_seconds": 3.44162025,
+      "cpu_seconds": 3.348531,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "validator_measurements",
+      "layer": "A",
+      "wall_seconds": 9.851580790942535,
+      "cpu_self_seconds": 3.7653700000000008,
+      "cpu_children_seconds": 5.41006799999991,
+      "cpu_seconds": 9.175437999999911
+    },
+    {
+      "stage": "validator_measurements",
+      "layer": "R",
+      "wall_seconds": 7.316112417029217,
+      "cpu_self_seconds": 2.971911999999998,
+      "cpu_children_seconds": 4.044643999999948,
+      "cpu_seconds": 7.016555999999946
+    },
+    {
+      "stage": "detection",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 997.1827599909984,
+      "cpu_seconds": 1829.220082999998,
+      "samples": 19688,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 0.9695430999999983,
+      "cpu_seconds": 0.8338189999963359,
+      "samples": 19688,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 2.7757977499999997,
+      "cpu_seconds": 2.711368,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "scoring",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 6.245439988560975,
+      "cpu_self_seconds": 6.054761999999673,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 6.054761999999673
+    },
+    {
+      "stage": "layer_capture",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 1510.5188880420756,
+      "cpu_self_seconds": 15.797341,
+      "cpu_children_seconds": 2241.1387240000004,
+      "cpu_seconds": 2256.9360650000003
+    },
+    {
+      "stage": "detection",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 336.72145192000056,
+      "cpu_seconds": 775.0261180000031,
+      "samples": 8833,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 0.10977725899999935,
+      "cpu_seconds": 0.1051649999952855,
+      "samples": 8833,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 2.864994709,
+      "cpu_seconds": 2.843253,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "scoring",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 1.7065598857589066,
+      "cpu_self_seconds": 1.6764900000002427,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.6764900000002427
+    },
+    {
+      "stage": "layer_capture",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 500.8129972079769,
+      "cpu_self_seconds": 5.176872000000003,
+      "cpu_children_seconds": 924.2320559999998,
+      "cpu_seconds": 929.4089279999998
+    },
+    {
+      "stage": "detection",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 785.2157631269936,
+      "cpu_seconds": 1695.3659799999857,
+      "samples": 12612,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "restore",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 0.5831659720000012,
+      "cpu_seconds": 0.5447370000066871,
+      "samples": 12612,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "startup_model_load",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 2.238460417,
+      "cpu_seconds": 2.2220310000000003,
+      "samples": 1,
+      "cpu_source": "producer_process_clock"
+    },
+    {
+      "stage": "scoring",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 4.0755488716531545,
+      "cpu_self_seconds": 4.01599799999952,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 4.01599799999952
+    },
+    {
+      "stage": "layer_capture",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 1188.5103205409832,
+      "cpu_self_seconds": 10.922240000000002,
+      "cpu_children_seconds": 2060.4951139999994,
+      "cpu_seconds": 2071.4173539999992
+    },
+    {
+      "stage": "artifact_write_compress",
+      "wall_seconds": 1.9484798749908805,
+      "cpu_self_seconds": 1.8823500000000024,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.8823500000000024
+    },
+    {
+      "stage": "artifact_write",
+      "wall_seconds": 0.05989570892415941,
+      "cpu_self_seconds": 0.030613000000002444,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.030613000000002444
+    }
+  ]
+}

@@ -1,23 +1,21 @@
-//! Shared detection view and raw-byte provenance for recognition and guess exclusion.
+//! Shared detection view and raw-byte provenance.
 
 use std::ops::Range;
 
 use unicode_normalization::UnicodeNormalization;
 
-/// Detection text with a source range for every normalized byte.
 pub struct NormalizedText {
     pub text: String,
     pub spans: Vec<(usize, usize)>,
 }
 
-/// Fold Unicode spaces and fullwidth ASCII, remove joiners, and apply per-scalar NFC.
 pub fn normalize(input: &str) -> NormalizedText {
     let mut text = String::new();
     let mut spans = Vec::new();
 
     for (start, ch) in input.char_indices() {
         let end = start + ch.len_utf8();
-        if matches!(ch, '\u{200C}' | '\u{200D}') {
+        if is_default_ignorable(ch) {
             continue;
         }
 
@@ -59,6 +57,20 @@ fn fullwidth_to_ascii(ch: char) -> char {
         | '\u{205F}'
         | '\u{3000}' => ' ',
         '\u{FF01}'..='\u{FF5E}' => char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch),
+        '\u{2011}' => '-',
         _ => ch,
     }
+}
+
+// Unicode 17.0 Default_Ignorable_Code_Point, including reserved scalars:
+// https://www.unicode.org/Public/17.0.0/ucd/DerivedCoreProperties.txt
+fn is_default_ignorable(ch: char) -> bool {
+    matches!(ch,
+        '\u{00AD}' | '\u{034F}' | '\u{061C}' | '\u{115F}'..='\u{1160}'
+        | '\u{17B4}'..='\u{17B5}' | '\u{180B}'..='\u{180F}'
+        | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
+        | '\u{2060}'..='\u{206F}' | '\u{3164}' | '\u{FE00}'..='\u{FE0F}'
+        | '\u{FEFF}' | '\u{FFA0}' | '\u{FFF0}'..='\u{FFF8}'
+        | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}'
+        | '\u{E0000}'..='\u{E0FFF}')
 }

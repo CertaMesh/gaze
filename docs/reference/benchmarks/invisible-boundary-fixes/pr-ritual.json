@@ -1,0 +1,450 @@
+{
+  "schema": "gaze-pr-ritual-combined-v1",
+  "workspace_and_dependency_check": {
+    "schema": "gaze-pr-ritual-v1",
+    "source_sha": "a27c78a6efb4b9da55119bb04a4fda4e70137dd1",
+    "script_sha256": "9c3630a5fb6c5742132a50ebab323b94aa6a8e3aae12334dd92d60b4a26be017",
+    "started_at": "2026-10-28T09:13:56.359677+00:00",
+    "environment": {
+      "CARGO_BUILD_JOBS": "2",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_PROFILE_TEST_DEBUG": "0",
+      "CARGO_INCREMENTAL": "0",
+      "RUSTUP_TOOLCHAIN": "1.96.0",
+      "GAZE_DISABLE_OS_KEYSTORE": "1"
+    },
+    "commands": [
+      {
+        "name": "workspace-tests",
+        "command": [
+          "python3",
+          "scripts/anvil/test_nonempty.py",
+          "cargo",
+          "test",
+          "--locked",
+          "--workspace",
+          "--all-features"
+        ],
+        "started_at": "2026-10-28T09:13:56.505434+00:00",
+        "finished_at": "2026-10-28T10:06:56.602086+00:00",
+        "exit_code": 0,
+        "log_sha256": "2b6c4a9212db9e344f5bf187f790edad24a1631d02093ea7096efab6e20467c6",
+        "tail": "test crates/gaze-proxy/src/adapter.rs - adapter::AdapterContract (line 313) - compile fail ... ok\ntest crates/gaze-proxy/src/adapter.rs - adapter::SessionRegistryConfig (line 84) - compile fail ... ok\ntest crates/gaze-proxy/src/adapter.rs - adapter::ProviderAdapter (line 422) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 190) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::LocalAuthCredential (line 68) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 166) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 158) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 182) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 174) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::PrincipalContext (line 91) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 197) - compile fail ... ok\ntest crates/gaze-proxy/src/adapter.rs - adapter::ProviderAdapter (line 444) ... ok\n\ntest result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s\n\n   Doc-tests gaze_proxy_dashboard\n\nrunning 1 test\ntest crates/gaze-proxy-dashboard/src/supervisor.rs - supervisor::SpawnedDashboardChild::spawn (line 65) - compile fail ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s\n\n   Doc-tests gaze_recognizers\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   Doc-tests gaze_token_bridge\n\nrunning 1 test\ntest crates/gaze-token-bridge/src/adapter.rs - adapter (line 6) - compile fail ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s\n\n   Doc-tests gaze_types\n\nrunning 3 tests\ntest crates/gaze-types/src/lib.rs - PiiClass (line 123) ... ok\ntest crates/gaze-types/src/lib.rs - CleanDocument (line 3830) ... ok\ntest crates/gaze-types/src/lib.rs - RedactionLogger (line 3511) ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.99s\n\nVerified 3542 passing Rust tests"
+      },
+      {
+        "name": "cargo-deny",
+        "command": [
+          "cargo",
+          "deny",
+          "check"
+        ],
+        "started_at": "2026-10-28T10:06:56.857130+00:00",
+        "finished_at": "2026-10-28T10:06:59.122153+00:00",
+        "exit_code": 1,
+        "log_sha256": "42e1694099cf3a7e767c6ab62fd0858d5ae934000fd1ab67078c947dbd850c28",
+        "tail": "                  \u2502   \u2502   \u2502       \u251c\u2500\u2500 (dev) gaze-document v0.17.0 (*)\n                  \u2502   \u2502   \u2502       \u2514\u2500\u2500 gaze-mcp-bridge v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 (dev) gaze-mcp-rmcp v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 gaze-proxy v0.17.0\n                  \u2502   \u2502   \u2502   \u2514\u2500\u2500 gaze-cli v0.17.0 (*)\n                  \u2502   \u2502   \u2514\u2500\u2500 (dev) gaze-recognizers v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 (dev) gaze-cli v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-document v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-mcp-core v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-model-setup v0.17.0\n                  \u2502   \u2502   \u2514\u2500\u2500 gaze-cli v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-pii v0.17.0\n                  \u2502   \u2502   \u251c\u2500\u2500 gaze-assembly v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 gaze-cli v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 gaze-document v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 gaze-mcp-bridge v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 (dev) gaze-mcp-core v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 (dev) gaze-mcp-rmcp v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 (dev) gaze-proxy v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 (dev) gaze-recognizers v0.17.0 (*)\n                  \u2502   \u2502   \u251c\u2500\u2500 gaze-token-bridge v0.17.0\n                  \u2502   \u2502   \u2502   \u2514\u2500\u2500 xtask v0.0.1\n                  \u2502   \u2502   \u2514\u2500\u2500 xtask v0.0.1 (*)\n                  \u2502   \u251c\u2500\u2500 (dev) gaze-proxy v0.17.0 (*)\n                  \u2502   \u2514\u2500\u2500 xtask v0.0.1 (*)\n                  \u251c\u2500\u2500 gaze-types v0.17.0\n                  \u2502   \u251c\u2500\u2500 feature-graph-probe v0.0.0\n                  \u2502   \u251c\u2500\u2500 gaze-assembly v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-audit v0.17.0\n                  \u2502   \u2502   \u251c\u2500\u2500 (dev) gaze-cli v0.17.0 (*)\n                  \u2502   \u2502   \u2514\u2500\u2500 (dev) gaze-pii v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-cli v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-document v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-inspection v0.17.0\n                  \u2502   \u2502   \u251c\u2500\u2500 gaze-proxy v0.17.0 (*)\n                  \u2502   \u2502   \u2514\u2500\u2500 gaze-proxy-dashboard v0.17.0\n                  \u2502   \u251c\u2500\u2500 gaze-mcp-bridge v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-mcp-core v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-pii v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-proxy v0.17.0 (*)\n                  \u2502   \u251c\u2500\u2500 gaze-proxy-dashboard v0.17.0 (*)\n                  \u2502   \u2514\u2500\u2500 gaze-recognizers v0.17.0 (*)\n                  \u2514\u2500\u2500 xtask v0.0.1 (*)\n\nadvisories FAILED, bans ok, licenses ok, sources ok"
+      }
+    ],
+    "planned_commands": 15,
+    "completed": false
+  },
+  "standalone_xtask_attempts": [
+    {
+      "schema": "gaze-pr-ritual-v1",
+      "source_sha": "970bc173a55991b724b2d95d2512599113facb4e",
+      "script_sha256": "096d3744e27aa0bd5a07eb2bf854127bab7857cc52aaec7b08535a5088b200e8",
+      "started_at": "2026-10-28T10:10:33.134093+00:00",
+      "environment": {
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_PROFILE_DEV_DEBUG": "0",
+        "CARGO_PROFILE_TEST_DEBUG": "0",
+        "CARGO_INCREMENTAL": "0",
+        "RUSTUP_TOOLCHAIN": "1.96.0",
+        "GAZE_DISABLE_OS_KEYSTORE": "1"
+      },
+      "commands": [
+        {
+          "name": "symmetric-potemkin",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "symmetric-potemkin"
+          ],
+          "started_at": "2026-10-28T10:10:33.249341+00:00",
+          "finished_at": "2026-10-28T10:12:24.469113+00:00",
+          "exit_code": 0,
+          "log_sha256": "f8c1139dc46e6c4b9c52acae9b07635e1e3ae79d492379b5de4f06427d46559d",
+          "tail": "    Finished `test` profile [unoptimized] target(s) in 0.20s\n     Running unittests src/lib.rs (target/debug/deps/gaze-e6715f05f1576dcc)\n\nrunning 1 test\ntest policy::tests::rejects_ner_threshold_out_of_range ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 528 filtered out; finished in 0.00s\n\nsymmetric_potemkin_gate: running gaze-cli --bin gaze pipeline::run::tests::t_cli_ner_threshold_overrides_policy_value\n    Finished `test` profile [unoptimized] target(s) in 0.27s\n     Running unittests src/main.rs (target/debug/deps/gaze-17e54ed8f9d6825b)\n\nrunning 1 test\ntest pipeline::run::tests::t_cli_ner_threshold_overrides_policy_value ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 92 filtered out; finished in 0.09s\n\nsymmetric_potemkin_gate: running gaze-cli --test cli_pipe t_cli_ner_threshold_out_of_range_fails_closed\n    Finished `test` profile [unoptimized] target(s) in 0.22s\n     Running tests/cli_pipe.rs (target/debug/deps/cli_pipe-80001ef3ad0b655d)\n\nrunning 1 test\ntest t_cli_ner_threshold_out_of_range_fails_closed ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 148 filtered out; finished in 2.28s\n\nsymmetric_potemkin_gate: running gaze-assembly --lib tests::t20_context_class_map_overrides_policy_dict_class\n    Finished `test` profile [unoptimized] target(s) in 0.17s\n     Running unittests src/lib.rs (target/debug/deps/gaze_assembly-200a450bdcddc1dd)\n\nrunning 1 test\ntest tests::t20_context_class_map_overrides_policy_dict_class ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.00s\n\nsymmetric_potemkin_gate: running gaze-assembly --lib tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered\n    Finished `test` profile [unoptimized] target(s) in 0.16s\n     Running unittests src/lib.rs (target/debug/deps/gaze_assembly-200a450bdcddc1dd)\n\nrunning 1 test\ntest tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.00s\n\nsymmetric_potemkin_gate: passed"
+        },
+        {
+          "name": "class-map-override-safety",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "class-map-override-safety"
+          ],
+          "started_at": "2026-10-28T10:12:24.562495+00:00",
+          "finished_at": "2026-10-28T10:13:16.426234+00:00",
+          "exit_code": 0,
+          "log_sha256": "ebcd69309a606bf53f1b928338a59893565894fba6d35cf88eb4406329bf78b1",
+          "tail": "   Compiling ort v2.0.0-rc.12\n   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n   Compiling gaze-token-bridge v0.17.0 (<worktree>/crates/gaze-token-bridge)\n   Compiling xtask v0.0.1 (<worktree>/crates/xtask)\n    Finished `dev` profile [unoptimized] target(s) in 14.87s\n     Running `target/debug/xtask class-map-override-safety`\nclass_map_override_safety: checking 4 behavioral tests\nclass_map_override_safety: running gaze-assembly --lib tests::t20_context_class_map_overrides_policy_dict_class\n    Finished `test` profile [unoptimized] target(s) in 0.15s\n     Running unittests src/lib.rs (target/debug/deps/gaze_assembly-200a450bdcddc1dd)\n\nrunning 1 test\ntest tests::t20_context_class_map_overrides_policy_dict_class ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.01s\n\nclass_map_override_safety: running gaze-assembly --lib tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered\n    Finished `test` profile [unoptimized] target(s) in 0.14s\n     Running unittests src/lib.rs (target/debug/deps/gaze_assembly-200a450bdcddc1dd)\n\nrunning 1 test\ntest tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.00s\n\nclass_map_override_safety: running gaze-assembly --lib tests::t20b_rulepack_context_dict_override_fails_closed_when_uncovered\n    Finished `test` profile [unoptimized] target(s) in 0.13s\n     Running unittests src/lib.rs (target/debug/deps/gaze_assembly-200a450bdcddc1dd)\n\nrunning 1 test\ntest tests::t20b_rulepack_context_dict_override_fails_closed_when_uncovered ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.00s\n\nclass_map_override_safety: running gaze-cli --test cli_pipe context_json_standalone_dictionary_detects_without_policy_entry\n    Finished `test` profile [unoptimized] target(s) in 0.21s\n     Running tests/cli_pipe.rs (target/debug/deps/cli_pipe-80001ef3ad0b655d)\n\nrunning 1 test\ntest context_json_standalone_dictionary_detects_without_policy_entry ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 148 filtered out; finished in 2.28s\n\nclass_map_override_safety: passed"
+        },
+        {
+          "name": "recognizer-composition-validator",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "recognizer-composition-validator"
+          ],
+          "started_at": "2026-10-28T10:13:16.649157+00:00",
+          "finished_at": "2026-10-28T10:14:07.157171+00:00",
+          "exit_code": 0,
+          "log_sha256": "1c6a1542ede04a2643a647adf916bab18353a2a10e769562b113fa767321bf21",
+          "tail": "    Finished `test` profile [unoptimized] target(s) in 0.18s\n     Running unittests src/lib.rs (target/debug/deps/gaze-e6715f05f1576dcc)\n\nrunning 1 test\ntest rulepack::tests::rulepack_load_fails_when_two_name_recognizers_omit_cooperates_with ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 528 filtered out; finished in 0.00s\n\nrecognizer_composition_validator: running gaze-pii --lib rulepack::tests::rulepack_load_accepts_same_class_pair_with_cooperates_with\n    Finished `test` profile [unoptimized] target(s) in 0.16s\n     Running unittests src/lib.rs (target/debug/deps/gaze-e6715f05f1576dcc)\n\nrunning 1 test\ntest rulepack::tests::rulepack_load_accepts_same_class_pair_with_cooperates_with ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 528 filtered out; finished in 0.00s\n\nrecognizer_composition_validator: running gaze-pii --lib registry::tests::format_basis_runs_once_and_unions_with_document_fallback\n    Finished `test` profile [unoptimized] target(s) in 0.18s\n     Running unittests src/lib.rs (target/debug/deps/gaze-e6715f05f1576dcc)\n\nrunning 1 test\ntest registry::tests::format_basis_runs_once_and_unions_with_document_fallback ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 528 filtered out; finished in 0.00s\n\nrecognizer_composition_validator: running gaze-assembly --lib tests::format_basis_rulepack_ignores_document_locale\n    Finished `test` profile [unoptimized] target(s) in 0.16s\n     Running unittests src/lib.rs (target/debug/deps/gaze_assembly-200a450bdcddc1dd)\n\nrunning 1 test\ntest tests::format_basis_rulepack_ignores_document_locale ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.01s\n\nrecognizer_composition_validator: running gaze-recognizers --lib tests::embedded_core_declares_locale_basis_for_every_recognizer\n    Finished `test` profile [unoptimized] target(s) in 0.17s\n     Running unittests src/lib.rs (target/debug/deps/gaze_recognizers-9a49167fb68fa0a8)\n\nrunning 1 test\ntest tests::embedded_core_declares_locale_basis_for_every_recognizer ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 194 filtered out; finished in 0.08s\n\nrecognizer_composition_validator: passed"
+        },
+        {
+          "name": "no-tenant-knowledge",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "no-tenant-knowledge"
+          ],
+          "started_at": "2026-10-28T10:14:07.270492+00:00",
+          "finished_at": "2026-10-28T10:14:21.641064+00:00",
+          "exit_code": 0,
+          "log_sha256": "c450d6989b1e13cfbad658256762925835220aad0de9f91892790e356c45aea3",
+          "tail": "   Compiling ring v0.17.14\n   Compiling rustls v0.23.46\n   Compiling rustls-webpki v0.103.16\n   Compiling ureq v3.3.0\n   Compiling ort-sys v2.0.0-rc.12\n   Compiling ort v2.0.0-rc.12\n   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n   Compiling gaze-token-bridge v0.17.0 (<worktree>/crates/gaze-token-bridge)\n   Compiling xtask v0.0.1 (<worktree>/crates/xtask)\n    Finished `dev` profile [unoptimized] target(s) in 13.51s\n     Running `target/debug/xtask no-tenant-knowledge`\nno_tenant_knowledge: passed"
+        },
+        {
+          "name": "bundle-tokenization-drift",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "bundle-tokenization-drift"
+          ],
+          "started_at": "2026-10-28T10:14:21.731386+00:00",
+          "finished_at": "2026-10-28T10:15:15.039115+00:00",
+          "exit_code": 0,
+          "log_sha256": "4abd2c7e673836e15d7a0b53718e6589a71a348e17abd5cc1a8ff931e680c5d8",
+          "tail": "    Finished `dev` profile [unoptimized] target(s) in 0.15s\n     Running `target/debug/xtask bundle-tokenization-drift`\nbundle-tokenization-drift: passed"
+        },
+        {
+          "name": "family-policy-table-coherence",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "family-policy-table-coherence"
+          ],
+          "started_at": "2026-10-28T10:15:15.125532+00:00",
+          "finished_at": "2026-10-28T10:15:28.446515+00:00",
+          "exit_code": 0,
+          "log_sha256": "9cffe97a8f252b9abf3ffd5e228de40a7084e5897a922b320b7b8abe2a7a72f9",
+          "tail": "   Compiling ring v0.17.14\n   Compiling rustls v0.23.46\n   Compiling rustls-webpki v0.103.16\n   Compiling ureq v3.3.0\n   Compiling ort-sys v2.0.0-rc.12\n   Compiling ort v2.0.0-rc.12\n   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n   Compiling gaze-token-bridge v0.17.0 (<worktree>/crates/gaze-token-bridge)\n   Compiling xtask v0.0.1 (<worktree>/crates/xtask)\n    Finished `dev` profile [unoptimized] target(s) in 12.19s\n     Running `target/debug/xtask family-policy-table-coherence`\nfamily-policy-table-coherence: passed"
+        },
+        {
+          "name": "locale-cue-bundle-coherence",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "locale-cue-bundle-coherence"
+          ],
+          "started_at": "2026-10-28T10:15:28.536877+00:00",
+          "finished_at": "2026-10-28T10:15:29.623925+00:00",
+          "exit_code": 0,
+          "log_sha256": "fb4bf0db4863785346a6f7104418ea4763313a7f50530216a395205b14f09ed1",
+          "tail": "    Finished `dev` profile [unoptimized] target(s) in 0.15s\n     Running `target/debug/xtask locale-cue-bundle-coherence`\nlocale-cue-bundle-coherence: passed"
+        },
+        {
+          "name": "fixture-citation-lint",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "fixture-citation-lint"
+          ],
+          "started_at": "2026-10-28T10:15:29.703825+00:00",
+          "finished_at": "2026-10-28T10:19:41.329643+00:00",
+          "exit_code": 0,
+          "log_sha256": "8db8cb3daa03ca23d086bcc73b1336f0c7acdd35af09164c9c7081a086d6fd7a",
+          "tail": "    Finished `dev` profile [unoptimized] target(s) in 0.14s\n     Running `target/debug/xtask fixture-citation-lint`\nfixture_citation_lint: passed"
+        },
+        {
+          "name": "trybuild-fixture-hygiene",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "trybuild-fixture-hygiene"
+          ],
+          "started_at": "2026-10-28T10:19:41.431222+00:00",
+          "finished_at": "2026-10-28T10:19:54.781543+00:00",
+          "exit_code": 0,
+          "log_sha256": "e5319763738af4301d942043ca24ee3a496f97837e7cc201f9b1eb5fde03aadc",
+          "tail": "   Compiling ring v0.17.14\n   Compiling rustls v0.23.46\n   Compiling rustls-webpki v0.103.16\n   Compiling ureq v3.3.0\n   Compiling ort-sys v2.0.0-rc.12\n   Compiling ort v2.0.0-rc.12\n   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n   Compiling gaze-token-bridge v0.17.0 (<worktree>/crates/gaze-token-bridge)\n   Compiling xtask v0.0.1 (<worktree>/crates/xtask)\n    Finished `dev` profile [unoptimized] target(s) in 12.35s\n     Running `target/debug/xtask trybuild-fixture-hygiene`\ntrybuild_fixture_hygiene: root expectations verified: gaze-inspection=13 gaze=3 gaze-mcp-core=7 total=23\ntrybuild_fixture_hygiene: detached Dylint verified: fixtures=18 stderr=16 pass=2\ntrybuild_fixture_hygiene: passed"
+        },
+        {
+          "name": "cargo-metadata-audit-isolation",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "cargo-metadata-audit-isolation"
+          ],
+          "started_at": "2026-10-28T10:19:54.883178+00:00",
+          "finished_at": "2026-10-28T10:19:56.984169+00:00",
+          "exit_code": 0,
+          "log_sha256": "e49ccf2b76b735f893260e40be62c0710f7a74bd46e77a7a251e77222ebdab55",
+          "tail": "    Finished `dev` profile [unoptimized] target(s) in 0.15s\n     Running `target/debug/xtask cargo-metadata-audit-isolation`\ncargo_metadata_audit_isolation: default: passed\ncargo_metadata_audit_isolation: no-default-features: passed\ncargo_metadata_audit_isolation: safety-net-base: allowed reqwest for gaze-proxy: gaze-proxy -> reqwest (HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps)\ncargo_metadata_audit_isolation: safety-net-base: allowed hyper for gaze-proxy: gaze-proxy -> axum -> hyper (HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps)\ncargo_metadata_audit_isolation: safety-net-base: allowed tokio for gaze-proxy: gaze-proxy -> tokio (HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps)\ncargo_metadata_audit_isolation: safety-net-base: allowed tokio for gaze-mcp-rmcp: gaze-mcp-rmcp -> tokio (rmcp transport sink; tokio is a runtime dep for the MCP transport, not the safety-net pipeline)\ncargo_metadata_audit_isolation: safety-net-base: allowed tokio for gaze-mcp-bridge: gaze-mcp-bridge -> tokio (MCP bridge transport/client boundary; tokio is a downstream MCP runtime dep, not the safety-net pipeline)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-recognizers: gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-cli: gaze-cli -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-proxy: gaze-proxy -> gaze-assembly -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-pii: gaze-pii -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-token-bridge: gaze-token-bridge -> gaze-pii -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-model-setup: gaze-model-setup -> ureq (exact direct model setup/download edge; ureq is not a safety-net pipeline dep)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for xtask: xtask -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-assembly: gaze-assembly -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-document: gaze-document -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-mcp-core: gaze-mcp-core -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-mcp-rmcp: gaze-mcp-rmcp -> gaze-mcp-core -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: allowed ureq for gaze-mcp-bridge: gaze-mcp-bridge -> gaze-assembly -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-base: passed\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed reqwest for gaze-proxy: gaze-proxy -> reqwest (HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed hyper for gaze-proxy: gaze-proxy -> axum -> hyper (HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed tokio for gaze-proxy: gaze-proxy -> tokio (HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed tokio for gaze-mcp-rmcp: gaze-mcp-rmcp -> tokio (rmcp transport sink; tokio is a runtime dep for the MCP transport, not the safety-net pipeline)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed tokio for gaze-mcp-bridge: gaze-mcp-bridge -> tokio (MCP bridge transport/client boundary; tokio is a downstream MCP runtime dep, not the safety-net pipeline)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-recognizers: gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-cli: gaze-cli -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-proxy: gaze-proxy -> gaze-assembly -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-pii: gaze-pii -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-token-bridge: gaze-token-bridge -> gaze-pii -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-model-setup: gaze-model-setup -> ureq (exact direct model setup/download edge; ureq is not a safety-net pipeline dep)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for xtask: xtask -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-assembly: gaze-assembly -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-document: gaze-document -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-mcp-core: gaze-mcp-core -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-mcp-rmcp: gaze-mcp-rmcp -> gaze-mcp-core -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: allowed ureq for gaze-mcp-bridge: gaze-mcp-bridge -> gaze-assembly -> gaze-recognizers -> ort -> ureq (legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only)\ncargo_metadata_audit_isolation: safety-net-openai-subprocess: passed\ncargo_metadata_audit_isolation: passed"
+        },
+        {
+          "name": "readme-version-check",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "readme-version-check"
+          ],
+          "started_at": "2026-10-28T10:19:57.085119+00:00",
+          "finished_at": "2026-10-28T10:20:16.574315+00:00",
+          "exit_code": 0,
+          "log_sha256": "0c83e43d84b810c8c3c0ad440df3feda5780d7b5ff8cba128aea03459f35b5eb",
+          "tail": "    Finished `dev` profile [unoptimized] target(s) in 0.15s\n     Running `target/debug/xtask readme-version-check`\nreadme-version-check: checking 2 fixture tests\nreadme-version-check: running xtask --bin xtask readme_version_check::tests::readme_version_check_accepts_matching_fixture\n    Finished `test` profile [unoptimized] target(s) in 0.13s\n     Running unittests src/main.rs (target/debug/deps/xtask-89aa4c62848e9670)\n\nrunning 1 test\ntest readme_version_check::tests::readme_version_check_accepts_matching_fixture ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 76 filtered out; finished in 0.00s\n\nreadme-version-check: running xtask --bin xtask readme_version_check::tests::readme_version_check_rejects_mismatched_fixture\n    Finished `test` profile [unoptimized] target(s) in 0.13s\n     Running unittests src/main.rs (target/debug/deps/xtask-89aa4c62848e9670)\n\nrunning 1 test\ntest readme_version_check::tests::readme_version_check_rejects_mismatched_fixture ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 76 filtered out; finished in 0.00s\n\nreadme-version-check: passed (15 published crates)"
+        }
+      ],
+      "planned_commands": 13,
+      "completed": false
+    },
+    {
+      "schema": "gaze-pr-ritual-v1",
+      "source_sha": "4588c51906858fb82a5601285ee04aef504951cd",
+      "script_sha256": "7b6bc426441c83965790709e395df5db8ae2e7b6ab780a4e8eabd4cbc6d91ad6",
+      "started_at": "2026-10-28T10:21:37.774914+00:00",
+      "environment": {
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_PROFILE_DEV_DEBUG": "0",
+        "CARGO_PROFILE_TEST_DEBUG": "0",
+        "CARGO_INCREMENTAL": "0",
+        "RUSTUP_TOOLCHAIN": "1.96.0",
+        "GAZE_DISABLE_OS_KEYSTORE": "1"
+      },
+      "commands": [
+        {
+          "name": "safety-net-sanity",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "safety-net-sanity"
+          ],
+          "started_at": "2026-10-28T10:21:37.811188+00:00",
+          "finished_at": "2026-10-28T10:25:44.694494+00:00",
+          "exit_code": 0,
+          "log_sha256": "e3488315d2fc17dd86dad3ee42b3e6f4e645d6d3a149def652fd9f29c8d22ad8",
+          "tail": "test result: ok. 34 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 33.81s\n\nsafety_net_sanity: running Nym-small backend on captured real-model output\n    Finished `test` profile [unoptimized] target(s) in 0.23s\n     Running tests/nym_safety_net.rs (target/debug/deps/nym_safety_net-5badeee84a5bf00b)\n\nrunning 19 tests\ntest live_capture_matches_the_committed_fixture ... ignored, needs GAZE_NYM_MODEL_DIR (run by CI test-support)\ntest live_long_document_is_scanned_to_the_end ... ignored, needs GAZE_NYM_MODEL_DIR (run by CI test-support)\ntest live_plate_in_prose_is_a_suspect ... ignored, needs GAZE_NYM_MODEL_DIR (run by CI test-support)\ntest live_salutation_protects_surname_but_not_unsupported_secret ... ignored, needs GAZE_NYM_MODEL_DIR (run by CI test-support)\ntest offline_capture_person_name_calibration ... ignored, offline synthetic calibration; needs GAZE_NYM_MODEL_DIR and GAZE_NYM_NAME_CAPTURE\ntest person_name_join_respects_record_and_json_boundaries ... ok\ntest covered_name_emits_no_suspect_before_pipeline_filtering ... ok\ntest person_name_bio_continuations_preserve_record_boundaries ... ok\ntest captured_room_number_is_a_known_false_positive ... ok\ntest captured_plate_in_prose_is_one_suspect ... ok\ntest captured_multibyte_offsets_land_on_whole_words ... ok\ntest person_name_parts_decode_as_one_word_aligned_span_in_every_case_and_surface ... ok\ntest captured_salutation_protects_surname_but_not_unsupported_secret ... ok\ntest captured_username_and_dob_shapes_are_suspects ... ok\ntest captured_long_document_flags_the_tail ... ok\ntest nym_name_preserves_rule_and_learned_name_winners ... ok\ntest captured_person_names_are_enabled_by_default_with_auditable_thresholds ... ok\ntest person_name_pipeline_preserves_record_boundaries_and_restores ... ok\ntest captured_person_names_restore_exactly_and_benign_controls_stay_raw ... ok\n\ntest result: ok. 14 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.02s\n\nsafety_net_sanity: running safety_net_log metadata-only schema\n    Finished `test` profile [unoptimized] target(s) in 0.13s\n     Running tests/safety_net_log.rs (target/debug/deps/safety_net_log-2282e97bcfbead0a)\n\nrunning 7 tests\ntest safety_net_log_does_not_persist_suspect_or_placeholder_bytes ... ok\ntest nym_pagination_refusal_has_a_typed_audit_row_without_source_bytes ... ok\ntest restricted_columns_have_no_raw_payload_fields ... ok\ntest safety_net_log_insert_and_read_round_trips_bytes_free_metadata ... ok\ntest safety_net_query_filter_maps_to_safety_net_columns ... ok\ntest sqlite_logger_implements_gaze_types_redaction_logger_trait ... ok\ntest opens_v05_db_creates_safety_net_log_and_preserves_redaction_rows ... ok\n\ntest result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s\n\nsafety_net_sanity: passed"
+        },
+        {
+          "name": "ci-feature-matrix",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "xtask",
+            "--",
+            "ci-feature-matrix"
+          ],
+          "started_at": "2026-10-28T10:25:44.778347+00:00",
+          "finished_at": "2026-10-28T11:18:25.423145+00:00",
+          "exit_code": -2,
+          "log_sha256": "628e7a4356a182fb17040540ba48cd97de39275d8f068a94fdcc305e93e8be49",
+          "tail": "\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.04s\n\nrecognizer_composition_validator: running gaze-recognizers --lib tests::embedded_core_declares_locale_basis_for_every_recognizer\n    Finished `test` profile [unoptimized] target(s) in 0.46s\n     Running unittests src/lib.rs (target/debug/deps/gaze_recognizers-9a49167fb68fa0a8)\n\nrunning 1 test\ntest tests::embedded_core_declares_locale_basis_for_every_recognizer ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 194 filtered out; finished in 0.18s\n\nrecognizer_composition_validator: passed\nci_feature_matrix: running cargo test --workspace --all-features\n   Compiling gaze-types v0.17.0 (<worktree>/crates/gaze-types)\n   Compiling ring v0.17.14\n   Compiling rustls v0.23.46\n   Compiling gaze-audit v0.17.0 (<worktree>/crates/gaze-audit)\n   Compiling gaze-inspection v0.17.0 (<worktree>/crates/gaze-inspection)\n   Compiling rustls-webpki v0.103.16\n   Compiling ureq v3.3.0\n   Compiling ort-sys v2.0.0-rc.12\n   Compiling security-framework-sys v2.17.0\n   Compiling core-foundation v0.10.1\n   Compiling security-framework v3.7.0\n   Compiling ort v2.0.0-rc.12\n   Compiling keyring v3.6.3\n   Compiling tokio-rustls v0.26.4\n   Compiling hyper-rustls v0.27.9\n   Compiling reqwest v0.12.28\n   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n   Compiling sse-stream v0.2.3\n   Compiling rmcp v2.2.0\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n   Compiling gaze-assembly v0.17.0 (<worktree>/crates/gaze-assembly)\n   Compiling gaze-mcp-core v0.17.0 (<worktree>/crates/gaze-mcp-core)\n   Compiling gaze-proxy v0.17.0 (<worktree>/crates/gaze-proxy)\n   Compiling gaze-token-bridge v0.17.0 (<worktree>/crates/gaze-token-bridge)\n   Compiling gaze-mcp-rmcp v0.17.0 (<worktree>/crates/gaze-mcp-rmcp)\n   Compiling gaze-proxy-dashboard v0.17.0 (<worktree>/crates/gaze-proxy-dashboard)\n   Compiling gaze-document v0.17.0 (<worktree>/crates/gaze-document)\n   Compiling gaze-mcp-bridge v0.17.0 (<worktree>/crates/gaze-mcp-bridge)\n   Compiling gaze-model-setup v0.17.0 (<worktree>/crates/gaze-model-setup)\n   Compiling gaze-cli v0.17.0 (<worktree>/crates/gaze-cli)\n   Compiling xtask v0.0.1 (<worktree>/crates/xtask)",
+          "resource_stop": "stopped early to preserve target/disk headroom"
+        }
+      ],
+      "planned_commands": 2,
+      "completed": false
+    }
+  ],
+  "matrix_completion": {
+    "schema": "gaze-pr-ritual-v1",
+    "source_sha": "c080d409f5e2368100be942d510bee12cc373970",
+    "script_sha256": "01287fd7f3015f19e8da2ad9b566ef4fc5c0703d9ea91f63cce898b00779286b",
+    "started_at": "2026-10-28T11:27:58.979957+00:00",
+    "environment": {
+      "CARGO_BUILD_JOBS": "2",
+      "CARGO_PROFILE_DEV_DEBUG": "0",
+      "CARGO_PROFILE_TEST_DEBUG": "0",
+      "CARGO_INCREMENTAL": "0",
+      "RUSTUP_TOOLCHAIN": "1.96.0",
+      "GAZE_DISABLE_OS_KEYSTORE": "1"
+    },
+    "commands": [
+      {
+        "name": "matrix-all-features",
+        "command": [
+          "python3",
+          "scripts/anvil/test_nonempty.py",
+          "cargo",
+          "test",
+          "--workspace",
+          "--all-features"
+        ],
+        "started_at": "2026-10-28T11:27:59.431201+00:00",
+        "finished_at": "2026-10-28T12:51:55.727457+00:00",
+        "exit_code": 0,
+        "log_sha256": "e4053b889e1eb05a993fe345cee9b862bf83ab6f966247ac891610940edf1c6a",
+        "tail": "test crates/gaze-proxy/src/adapter.rs - adapter::SessionRegistryConfig (line 84) - compile fail ... ok\ntest crates/gaze-proxy/src/adapter.rs - adapter::AdapterContract (line 313) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 190) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 166) - compile fail ... ok\ntest crates/gaze-proxy/src/adapter.rs - adapter::ProviderAdapter (line 422) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::PrincipalContext (line 91) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::LocalAuthCredential (line 68) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 158) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 182) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 174) - compile fail ... ok\ntest crates/gaze-proxy/src/principal.rs - principal::AuthenticatedPrincipal (line 197) - compile fail ... ok\ntest crates/gaze-proxy/src/adapter.rs - adapter::ProviderAdapter (line 444) ... ok\n\ntest result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s\n\n   Doc-tests gaze_proxy_dashboard\n\nrunning 1 test\ntest crates/gaze-proxy-dashboard/src/supervisor.rs - supervisor::SpawnedDashboardChild::spawn (line 65) - compile fail ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s\n\n   Doc-tests gaze_recognizers\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   Doc-tests gaze_token_bridge\n\nrunning 1 test\ntest crates/gaze-token-bridge/src/adapter.rs - adapter (line 6) - compile fail ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s\n\n   Doc-tests gaze_types\n\nrunning 3 tests\ntest crates/gaze-types/src/lib.rs - CleanDocument (line 3830) ... ok\ntest crates/gaze-types/src/lib.rs - RedactionLogger (line 3511) ... ok\ntest crates/gaze-types/src/lib.rs - PiiClass (line 123) ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s\n\nVerified 3542 passing Rust tests"
+      },
+      {
+        "name": "matrix-default",
+        "command": [
+          "python3",
+          "scripts/anvil/test_nonempty.py",
+          "cargo",
+          "run",
+          "--locked",
+          "-p",
+          "xtask",
+          "--",
+          "ci-feature-matrix",
+          "--partition",
+          "ci-default"
+        ],
+        "started_at": "2026-10-28T12:51:58.526985+00:00",
+        "finished_at": "2026-10-28T14:07:54.398445+00:00",
+        "exit_code": 0,
+        "log_sha256": "6c2ab361f5359c4b64abd7a96306479f7d22cee49cb5d2aa616a944dc85b3b50",
+        "tail": "\n     Running tests/scrub_public_text.rs (target/debug/deps/scrub_public_text-e228a1e8da40c865)\n\nrunning 13 tests\ntest scrub_public_text_passes_cited_comparison_source ... ok\ntest scrub_public_text_fails_token_and_user_path_fixture ... ok\ntest scrub_public_text_passes_clean_fixture ... ok\ntest scrub_public_text_fails_lookalike_semver_host ... ok\ntest scrub_public_text_passes_allowlisted_public_urls ... ok\ntest scrub_public_text_refuses_query_on_cited_comparison_source ... ok\ntest scrub_public_text_fails_lookalike_repo_url ... ok\ntest scrub_public_text_refuses_uncited_comparison_path ... ok\ntest scrub_public_text_refuses_fragment_on_cited_comparison_source ... ok\ntest scrub_public_text_fails_free_text_path_on_allowlisted_host ... ok\ntest scrub_public_text_fails_suffix_lookalike_host ... ok\ntest scrub_public_text_resolves_paths_from_the_workspace_root ... ok\ntest scrub_public_text_passes_published_and_linked_docs has been running for over 60 seconds\ntest scrub_public_text_passes_published_and_linked_docs ... ok\n\ntest result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 183.75s\n\n     Running tests/snapshot_ack.rs (target/debug/deps/snapshot_ack-5737e06c9f3a9702)\n\nrunning 1 test\ntest drift_ack_marker_is_source_controlled ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n     Running tests/tokenbridge_encrypted_index.rs (target/debug/deps/tokenbridge_encrypted_index-de28ba7bdd0a93e2)\n\nrunning 1 test\ntest tokenbridge_encrypted_index_gate_runs_behavioral_test ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.20s\n\n     Running tests/tokenbridge_no_raw_index.rs (target/debug/deps/tokenbridge_no_raw_index-4ddb427ae61df210)\n\nrunning 2 tests\ntest tokenbridge_no_raw_index_gate_passes_on_real_ingest_path ... ok\ntest tokenbridge_no_raw_index_gate_fails_when_raw_value_would_be_stored ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s\n\nci_feature_matrix: passed\nVerified 3333 passing Rust tests"
+      }
+    ],
+    "planned_commands": 2,
+    "completed": true,
+    "matrix_prefix": {
+      "source_sha": "4588c51906858fb82a5601285ee04aef504951cd",
+      "matrix_source_sha256": "1da381ee3f0222286b005802c36f5ab6eab7bca9e5eaa36827e2a751c7f7bf75",
+      "log_sha256": "628e7a4356a182fb17040540ba48cd97de39275d8f068a94fdcc305e93e8be49",
+      "observed_steps": [
+        "33 library-graph commands without dev-dependencies",
+        "cargo run --locked -p feature-graph-probe --no-default-features --features gaze-pii-no-default (gaze-pii --no-default-features)",
+        "cargo run --locked -p feature-graph-probe --no-default-features --features gaze-pii-default (gaze-pii default features)",
+        "cargo run --locked -p feature-graph-probe --no-default-features --features gaze-assembly-default (gaze-assembly default features)",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-types",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-types --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-recognizers",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-recognizers --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-audit",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-audit --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-pii",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-pii --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-assembly",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-assembly --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-inspection",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-inspection --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-model-setup",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-model-setup --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-mcp-core",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-mcp-core --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-mcp-rmcp",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-mcp-rmcp --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-document",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-document --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-mcp-bridge",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-mcp-bridge --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-proxy",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-proxy --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-proxy-dashboard",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-proxy-dashboard --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-token-bridge",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-token-bridge --no-default-features",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-cli",
+        "RUSTFLAGS='-D warnings' cargo check --locked -p gaze-cli --no-default-features",
+        "cargo test -p gaze-recognizers --no-default-features --test no_phone_parser_fail_closed",
+        "30 feature-matrix commands",
+        "cargo fmt --all -- --check",
+        "cargo clippy --workspace --all-features --all-targets -- -D warnings",
+        "cargo run -p xtask -- bundle-tokenization-drift --verify-ack",
+        "cargo run -p xtask -- cargo-metadata-audit-isolation",
+        "cargo run -p xtask -- class-map-override-safety",
+        "cargo run -p xtask -- fixture-citation-lint",
+        "cargo run -p xtask -- trybuild-fixture-hygiene",
+        "cargo run -p xtask -- family-policy-table-coherence",
+        "cargo run -p xtask -- locale-cue-bundle-coherence",
+        "cargo run -p xtask -- readme-version-check",
+        "cargo test -p gaze-recognizers --no-default-features",
+        "cargo test -p gaze-pii --no-default-features --lib",
+        "cargo test -p gaze-document --features mcp",
+        "cargo test -p gaze-cli",
+        "cargo test -p gaze-cli --no-default-features --test nym_no_feature",
+        "cargo test -p gaze-cli --features mcp",
+        "cargo test -p gaze-cli --features dashboard",
+        "cargo test -p gaze-proxy-dashboard",
+        "cargo run -p xtask -- dashboard-isolation",
+        "cargo run -p xtask -- mcp-tier-isolation",
+        "cargo run -p xtask -- no-tenant-knowledge",
+        "cargo run -p xtask -- safety-net-sanity",
+        "cargo run -p xtask -- tokenbridge-no-raw-index",
+        "cargo build -p gaze-token-bridge --features os-keychain",
+        "cargo test -p gaze-token-bridge --features os-keychain",
+        "cargo run -p xtask -- tokenbridge-encrypted-index",
+        "cargo run -p xtask -- symmetric-potemkin",
+        "cargo run -p xtask -- recognizer-composition-validator",
+        "cargo test --workspace --all-features"
+      ],
+      "interrupted_step": "cargo test --workspace --all-features",
+      "proof": "The unchanged matrix returns on the first nonzero child; reaching the interrupted step proves preceding steps passed. Neither final workspace suite is credited until rerun."
+    },
+    "between_suites_cleanup": {
+      "exit_code": 0,
+      "tail": "     Removed 6780 files, 7.0GiB total",
+      "log_sha256": "2513f0c6901457c269c386b29bf9ce11f587f800a172e7b09810dfaf43e4e99d"
+    },
+    "finished_at": "2026-10-28T14:07:54.402461+00:00"
+  },
+  "resource_pause": "first eleven gates passed; safety-net passed; full matrix reached its two final workspace suites before a resource guard stop. The unchanged fail-fast matrix proves preceding commands passed; both final workspace suites were then rerun fresh with dev cleanup between them. Interrupted attempts retain their nonzero exits.",
+  "cleanup_before_kib": 14170064,
+  "cleanup_after_kib": 1452676,
+  "dependency_status": "failed on main and candidate for the same pre-existing advisory; tracked separately; no dependency or deny-policy change"
+}

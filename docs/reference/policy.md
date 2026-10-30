@@ -1043,6 +1043,32 @@ Common idioms:
 - TOML literal strings (`'...'`) avoid double-escaping backslashes —
   prefer them over basic strings (`"..."`) for regex patterns.
 
+#### Invisible characters in a pattern match zero or more
+
+Gaze removes default-ignorable characters, such as U+200B ZERO WIDTH SPACE,
+U+2060 WORD JOINER and U+00AD SOFT HYPHEN, before matching, then maps each match
+back to the original bytes. So that adopter patterns keep working, an ignorable
+literal in a pattern matches **zero or more** ignorables, and so does a class
+that names one. For example, `ID\x{200B}\d{6}\b` matches `ID` + ZERO WIDTH
+SPACE + `123456`, and also plain `ID123456`. Do not rely on an invisible
+character to narrow a match; use a visible cue instead.
+
+The source-boundary transform has an **80 MiB compile budget per pattern**,
+separate from the original pattern's 10 MiB admission budget. There is no shared
+total budget across recognizers. Transformed patterns compile lazily on the first
+gap-bearing input that needs them, rather than at policy load. A custom pattern
+can therefore load successfully but exceed the transformed budget later. In that
+case, detection refuses the affected document with a recognizer error and returns
+no clean output; it never silently skips the pattern.
+
+The bundled IBAN recognizer accepts spaces and hyphens between its four-character
+groups, including U+2011 NON-BREAKING HYPHEN. Tokens retain the original bytes.
+An invalid international prefix starting with `+0` cannot supply a national phone suffix.
+
+Invisible gaps inside an email can also separate it from an ordinary word.
+When both interpretations are possible, Gaze protects the joined email. This can
+include a neighbouring word in the token.
+
 #### Pitfall: `\b` next to non-word characters (currency symbols, punctuation)
 
 `\b` requires a word/non-word transition. A boundary beside `€`, `$`, `£` or

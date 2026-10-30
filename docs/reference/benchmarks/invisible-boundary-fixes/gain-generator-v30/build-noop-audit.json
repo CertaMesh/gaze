@@ -1,0 +1,40 @@
+{
+  "canonical_build_preambles": [
+    {
+      "exit_code": 0,
+      "finished": true,
+      "recompiled": false,
+      "side": "base",
+      "stderr_sha256": "ff4586920875394843a19859650123dfec823013251726f928ad8987c878e0fd",
+      "stdout_sha256": "ccdd7e726796a5f8c34a54f0197affe203fc676b68c3775fa3bc84b442d48a57",
+      "tool": "cargo"
+    },
+    {
+      "exit_code": 0,
+      "finished": true,
+      "recompiled": false,
+      "side": "base",
+      "stderr_sha256": "343c13e7f6f2d320993b573f830525e33b59b3c32656ef426e015b1e30f3fdc2",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tool": "rustup"
+    },
+    {
+      "exit_code": 0,
+      "finished": true,
+      "recompiled": false,
+      "side": "candidate",
+      "stderr_sha256": "e0f7e5f03e5f9e1a44bad93c6accbe34bce8db42b19e10617c1cf525f90bc731",
+      "stdout_sha256": "13ac17cfd63177804db4b4840620d7848bd09dd4c1b79bd3cd5987ba214ffc2c",
+      "tool": "cargo"
+    },
+    {
+      "exit_code": 0,
+      "finished": true,
+      "recompiled": false,
+      "side": "candidate",
+      "stderr_sha256": "b92218080e31569c2f44b02bdc9ace265bbfaa9b9a1c00f95177120a7f0a3237",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tool": "rustup"
+    }
+  ]
+}

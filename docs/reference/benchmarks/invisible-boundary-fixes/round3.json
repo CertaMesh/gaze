@@ -1,0 +1,50 @@
+{
+  "schema": "gaze-invisible-separator-round3-v1",
+  "note": "Round-3 fix: a joined scan whose own validator passes is kept over a shorter valid hard-boundary value.",
+  "release_build": {
+    "base_sha": "3fb02d70e756102c871c51471cfd76d7ce6de4bc",
+    "candidate_sha": "775a114782aa17ef21f09a9537aeff332932e2d2",
+    "features": "gaze-cli default",
+    "binary_sha256": {
+      "base": "becb30fceacd481fb50f1a855f75d5516be749d03521244ab05debb629e2f389",
+      "candidate": "99ad817746aa187b030c3f7d1d075cad59b64d4ab5e7a69f9abb480149f1ad78"
+    }
+  },
+  "clean_equality": {
+    "report": "clean-equality-round3.json",
+    "cases": 2144,
+    "difference_count": 0
+  },
+  "card_code_matrix": {
+    "sha256": "ed82a75f3cc774338dd3f1436e30df552de11a77066a9f380de54fbfde4301dc",
+    "cells": 2068,
+    "coverage_regressions": [],
+    "removed_space_losses": [],
+    "visible_output_differences": [],
+    "approved_visible_output_differences": [
+      "prefix-50/pan-13/code-3/nonbreaking-hyphen",
+      "prefix-50/pan-15/code-3/nonbreaking-hyphen"
+    ],
+    "observation_differences_vs_committed_matrix": []
+  },
+  "mutations": {
+    "command": "python3 scripts/ci/invisible_separator_mutation_probe.py",
+    "source_sha": "72deb2c4e0",
+    "summary": "MUTATION DONE: 43 mutations rejected; source restored"
+  },
+  "split_probe": {
+    "inputs": "one ignorable (U+200B, U+200C, U+200D, U+00AD, U+2060) at every inner position of 10 de-DE and 13 en-US values, no policy",
+    "de-DE": {
+      "cases": 730,
+      "candidate_exposed": 0,
+      "base_exposed": 435
+    },
+    "en-US": {
+      "cases": 985,
+      "candidate_exposed": 0,
+      "base_exposed": 588
+    },
+    "note": "Base 3fb02d70 predates separator normalization; its exposures are U+200B, U+00AD and U+2060 only.",
+    "command": "python3 scripts/ci/probe_split_exposure.py --candidate <candidate gaze> --base <base gaze> --locale <de-DE|en-US>"
+  }
+}

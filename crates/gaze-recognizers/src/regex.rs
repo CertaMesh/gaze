@@ -27,7 +27,7 @@ impl NormalizerKind {
     pub fn normalize(self, input: &str) -> String {
         match self {
             Self::EmailCanonical => input.to_ascii_lowercase(),
-            Self::IbanCanonical => iban_canonicalize(input),
+            Self::IbanCanonical => gaze_types::iban_canonicalize(input),
         }
     }
 }
@@ -44,6 +44,9 @@ impl NormalizerKind {
 /// [`Candidate::span`]: gaze_types::Candidate::span
 pub struct RegexDetector {
     regex: Regex,
+    normalizes_ignorable_literals: bool,
+    source_regex: std::sync::OnceLock<std::result::Result<Regex, regex::Error>>,
+    source_prefilter: std::sync::OnceLock<crate::source_prefilter::Necessary>,
     class: PiiClass,
     source: String,
     locales: Vec<LocaleTag>,
@@ -113,6 +116,10 @@ impl RegexDetector {
 
         Ok(Self {
             regex,
+            normalizes_ignorable_literals: crate::source_regex::has_ignorable_literals(pattern)
+                .map_err(RecognizerError::InvalidRegex)?,
+            source_regex: std::sync::OnceLock::new(),
+            source_prefilter: std::sync::OnceLock::new(),
             class,
             source: source.to_string(),
             locales,
@@ -168,10 +175,29 @@ impl Detector for RegexDetector {
     }
 
     fn detect(&self, input: &str) -> Vec<Detection> {
-        self.spans(input, None)
+        self.spans(input)
             .into_iter()
             .map(|span| Detection::new(span, self.class.clone(), self.source.clone()))
             .collect()
+    }
+
+    fn try_detect_with_context(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Detection>, gaze_types::RecognizerRuntimeError> {
+        Ok(self
+            .scanned_spans(input, ctx.source_spans)
+            .map_err(|_| {
+                gaze_types::RecognizerRuntimeError::new(
+                    &self.source,
+                    "source-boundary detection failed",
+                )
+            })?
+            .into_iter()
+            .filter(|scan| !scan.rejected)
+            .map(|scan| Detection::new(scan.span, self.class.clone(), self.source.clone()))
+            .collect())
     }
 }
 
@@ -195,7 +221,7 @@ impl Recognizer for RegexDetector {
         ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         Ok(self
-            .candidates(input, ctx.source_spans)
+            .candidates(input, ctx.source_spans)?
             .into_iter()
             .filter(|candidate| !candidate.regex_guard_rejected)
             .collect())
@@ -206,7 +232,7 @@ impl Recognizer for RegexDetector {
         input: &str,
         ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
-        Ok(self.candidates(input, ctx.source_spans))
+        self.candidates(input, ctx.source_spans)
     }
 
     fn token_family(&self) -> &str {
@@ -236,8 +262,13 @@ impl Recognizer for RegexDetector {
 }
 
 impl RegexDetector {
-    fn candidates(&self, input: &str, source_spans: Option<&[(usize, usize)]>) -> Vec<Candidate> {
-        self.scanned_spans(input, source_spans)
+    fn candidates(
+        &self,
+        input: &str,
+        source_spans: Option<&[(usize, usize)]>,
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+        Ok(self
+            .scanned_spans(input, source_spans)?
             .into_iter()
             .filter_map(|scan| {
                 let matched = &input[scan.span.clone()];
@@ -265,7 +296,7 @@ impl RegexDetector {
                 candidate.regex_guard_rejected = scan.rejected;
                 candidate
             })
-            .collect()
+            .collect())
     }
 }
 
@@ -321,12 +352,8 @@ impl RegexDetector {
     /// The candidate spans in `input`: pattern matches that pass the boundary checks, or for a
     /// card-run recognizer the cards in each run plus the Luhn-failing pattern windows that hold
     /// none, so validator veto still records those.
-    fn spans(
-        &self,
-        input: &str,
-        source_spans: Option<&[(usize, usize)]>,
-    ) -> Vec<std::ops::Range<usize>> {
-        self.scanned_spans(input, source_spans)
+    fn spans(&self, input: &str) -> Vec<std::ops::Range<usize>> {
+        self.scanned_spans_in_view(input, None, None)
             .into_iter()
             .filter(|scan| !scan.rejected)
             .map(|scan| scan.span)
@@ -337,17 +364,218 @@ impl RegexDetector {
         &self,
         input: &str,
         source_spans: Option<&[(usize, usize)]>,
+    ) -> std::result::Result<Vec<LabelledValueScan>, gaze_types::DetectError> {
+        let mut scans = self.scanned_spans_with_recovery(input, source_spans);
+        if source_spans.is_some_and(|spans| {
+            self.normalizes_ignorable_literals || spans.windows(2).any(|pair| pair[0].1 < pair[1].0)
+        }) {
+            if self.source_regex.get().is_none() {
+                let prefilter = self
+                    .source_prefilter
+                    .get_or_init(|| crate::source_prefilter::Necessary::new(self.regex.as_str()));
+                if !prefilter.could_match(input) {
+                    return Ok(scans);
+                }
+            }
+            let regex = self
+                .source_regex
+                .get_or_init(|| crate::source_regex::compile(self.regex.as_str()))
+                .as_ref()
+                .map_err(|_| {
+                    gaze_types::DetectError::backend(
+                        &self.source,
+                        "source-boundary regex compilation failed",
+                    )
+                })?;
+            let additional = self.scanned_spans_in_view(input, source_spans, Some(regex));
+            merge_recovered_scans(&mut scans, &[], additional, false, || {});
+            if let Some(view) = crate::source_regex::View::with_boundary(
+                input,
+                source_spans,
+                crate::source_regex::MARKER,
+            ) {
+                // A marker-only capture has no value in the joined text, just as in
+                // the transformed view. Drop it before it can mark a valid boundary.
+                let mut boundaries: Vec<_> = self
+                    .scanned_spans_in_view(&view.text, None, None)
+                    .into_iter()
+                    .filter(|scan| !view.joined(scan.span.clone()).is_empty())
+                    .collect();
+                let mut starts = std::collections::BTreeMap::<usize, usize>::new();
+                let mut ends = std::collections::BTreeMap::<usize, usize>::new();
+                for scan in &mut boundaries {
+                    let valid = !scan.rejected
+                        && self.validator_kind != Some(ValidatorKind::EmailRfc)
+                        && self
+                            .validator_kind
+                            .is_some_and(|kind| kind.validates(&view.text[scan.span.clone()]));
+                    scan.span = view.joined(scan.span.clone());
+                    scan.capture = view.joined(scan.capture.clone());
+                    scan.extension = view.joined(scan.extension.clone());
+                    if valid {
+                        starts
+                            .entry(scan.span.start)
+                            .and_modify(|end| *end = (*end).min(scan.span.end))
+                            .or_insert(scan.span.end);
+                        ends.entry(scan.span.end)
+                            .and_modify(|start| *start = (*start).max(scan.span.start))
+                            .or_insert(scan.span.start);
+                    }
+                }
+                // A valid hard-boundary value must not absorb a neighbouring digit just
+                // because a consuming atom can skip that boundary in the joined view.
+                // A joined value that validates by itself stays: dropping it would ship
+                // its remainder raw, and over-redacting a glued digit beats a leak.
+                scans.retain(|scan| {
+                    let joined_valid = !scan.rejected
+                        && self.validator_kind != Some(ValidatorKind::EmailRfc)
+                        && self
+                            .validator_kind
+                            .is_some_and(|kind| kind.validates(&input[scan.span.clone()]));
+                    let preserves_card_union = self.validator_kind == Some(ValidatorKind::Luhn)
+                        && (ValidatorKind::Luhn.validates(&input[scan.span.clone()])
+                            || gaze_types::payment_card::scan_card_run(
+                                input,
+                                scan.span.clone(),
+                                source_spans,
+                            )
+                            .cards
+                            .contains(&scan.span));
+                    // A recorded card capture may include a verification code. Preserve
+                    // that matched suffix after a validated card, regardless of PAN length.
+                    let preserves_recorded_card_layout = self.validator_kind
+                        == Some(ValidatorKind::Luhn)
+                        && self.validator_on_fail == ValidatorOnFail::Record
+                        && starts.get(&scan.span.start).is_some_and(|&end| {
+                            if end >= scan.span.end {
+                                return false;
+                            }
+                            let suffix = input[end..scan.span.end]
+                                .trim_matches(|ch: char| ch.is_whitespace() || ch == '-');
+                            matches!(suffix.len(), 3 | 4)
+                                && suffix.bytes().all(|ch| ch.is_ascii_digit())
+                        });
+                    joined_valid
+                        || preserves_card_union
+                        || preserves_recorded_card_layout
+                        || (starts
+                            .get(&scan.span.start)
+                            .is_none_or(|&end| end >= scan.span.end)
+                            && ends
+                                .get(&scan.span.end)
+                                .is_none_or(|&start| start <= scan.span.start))
+                });
+                // Keep boundary candidates even inside a joined candidate: that larger
+                // candidate may subsequently fail its validator at the registry boundary.
+                scans.extend(boundaries);
+                scans.sort_by_key(|scan| (scan.span.start, scan.span.end));
+                scans.dedup_by(|left, right| {
+                    left.span == right.span && left.rejected == right.rejected
+                });
+            }
+        }
+        if self.phone_validator_enabled() && self.validator_on_fail == ValidatorOnFail::Veto {
+            for scan in &mut scans {
+                scan.rejected |= gaze_types::has_zero_country_phone_prefix(input, scan.span.start);
+            }
+        }
+        if self.source == "postal.gb" {
+            for scan in &mut scans {
+                scan.rejected |= gaze_types::word_run_extends_identifier(input, scan.span.end);
+            }
+        }
+        Ok(scans)
+    }
+
+    fn scanned_spans_with_recovery(
+        &self,
+        input: &str,
+        source_spans: Option<&[(usize, usize)]>,
     ) -> Vec<LabelledValueScan> {
+        let mut scans = self.scanned_spans_in_view(input, source_spans, None);
+        if !self.complete_labelled_value {
+            return scans;
+        }
+        let Some(source_spans) = source_spans else {
+            return scans;
+        };
+        let gaps: Vec<usize> = input
+            .char_indices()
+            .filter_map(|(at, ch)| {
+                (at > 0
+                    && ch.is_ascii_alphanumeric()
+                    && input.as_bytes()[at - 1].is_ascii_alphanumeric()
+                    && source_spans[at].0 > source_spans[at - 1].1)
+                    .then_some(at)
+            })
+            .collect();
+        if gaps.is_empty() {
+            return scans;
+        }
+
+        // Recover the regex's original group evidence when removed formatting made a group
+        // exceed its capture bound. The ordinary scanner then protects the whole value run.
+        let mut spaced = String::with_capacity(input.len() + gaps.len());
+        let mut offsets = Vec::with_capacity(input.len() + gaps.len() + 1);
+        offsets.push(0);
+        let mut gaps_iter = gaps.iter().peekable();
+        for (at, ch) in input.char_indices() {
+            if gaps_iter.peek() == Some(&&at) {
+                spaced.push(' ');
+                offsets.push(at);
+                gaps_iter.next();
+            }
+            spaced.push(ch);
+            offsets.extend((1..=ch.len_utf8()).map(|byte| at + byte));
+        }
+        let mapped = |range: std::ops::Range<usize>| offsets[range.start]..offsets[range.end];
+        let recovered = self
+            .scanned_spans_in_view(&spaced, None, None)
+            .into_iter()
+            .map(|mut scan| {
+                scan.span = mapped(scan.span);
+                scan.capture = mapped(scan.capture);
+                scan.extension = mapped(scan.extension);
+                scan.reason = Some(LabelledValueScanReason::JoinedRunLimitExceeded);
+                scan
+            })
+            .collect();
+        merge_recovered_scans(&mut scans, &gaps, recovered, true, || {});
+        scans
+    }
+
+    fn scanned_spans_in_view(
+        &self,
+        input: &str,
+        source_spans: Option<&[(usize, usize)]>,
+        source_regex: Option<&Regex>,
+    ) -> Vec<LabelledValueScan> {
+        let view = source_regex.and_then(|_| crate::source_regex::View::new(input, source_spans));
         let mut search_at = Some(0);
         let matches = std::iter::from_fn(|| {
             while let Some(at) = search_at {
-                let caps = self.regex.captures_at(input, at)?;
-                let full = caps.get(0)?;
-                let captured = self.span_from_captures(&caps);
+                let (regex, text, at) = match &view {
+                    Some(view) => (
+                        source_regex.expect("source view requires its compiled regex"),
+                        view.text.as_str(),
+                        view.marked(at),
+                    ),
+                    None => (source_regex.unwrap_or(&self.regex), input, at),
+                };
+                let caps = regex.captures_at(text, at)?;
+                let map = |range: std::ops::Range<usize>| match &view {
+                    Some(view) => view.joined(range),
+                    None => range,
+                };
+                let full = map(caps.get(0)?.range());
+                let captured = self
+                    .span_from_captures(&caps)
+                    .map(map)
+                    .filter(|span| view.is_none() || !span.is_empty());
                 let phone_parts = captured
                     .as_ref()
                     .filter(|_| self.phone_validator_enabled())
-                    .map(|span| self.phone_parts(input, span.clone(), full.start()));
+                    .map(|span| self.phone_parts(input, span.clone(), full.start));
                 let captured = phone_parts
                     .as_ref()
                     .and_then(|parts| Some(parts.first()?.start..parts.last()?.end))
@@ -373,24 +601,25 @@ impl RegexDetector {
                 });
                 // Resume at the capture end. The regex may have consumed the separator needed
                 // by the next match, and the scanner may have passed another labelled field.
-                let next = span.as_ref().map_or(full.end(), |scan| scan.span.end);
-                search_at = if next > full.start() {
+                let next = span.as_ref().map_or(full.end, |scan| scan.span.end);
+                search_at = if next > full.start {
                     Some(next)
                 } else {
-                    input[full.start()..]
+                    input[full.start..]
                         .chars()
                         .next()
-                        .map(|ch| full.start() + ch.len_utf8())
+                        .map(|ch| full.start + ch.len_utf8())
                 };
-                if let Some(mut span) = span.filter(|scan| self.boundary_accepts(input, &scan.span))
+                if let Some(mut span) =
+                    span.filter(|scan| self.boundary_accepts(input, &scan.span, source_spans))
                 {
                     // The guard judges only the regex evidence, never groups found later by the
                     // scanner. A rejected capture still reaches the audit veto path.
                     span.rejected = self.reject_match_regex.as_ref().is_some_and(|guard| {
                         let checked = if self.complete_labelled_value {
-                            &input[full.start()..span.capture.end]
+                            &input[full.start..span.capture.end]
                         } else {
-                            full.as_str()
+                            &input[full.clone()]
                         };
                         guard.is_match(checked)
                     });
@@ -717,13 +946,22 @@ impl RegexDetector {
         }
     }
 
-    fn boundary_accepts(&self, input: &str, span: &std::ops::Range<usize>) -> bool {
+    fn boundary_accepts(
+        &self,
+        input: &str,
+        span: &std::ops::Range<usize>,
+        source_spans: Option<&[(usize, usize)]>,
+    ) -> bool {
+        let gap = |at| crate::source_regex::is_gap(source_spans, at);
         if matches!(self.source.as_str(), "postal.de" | "postal.us")
+            && !gap(span.start)
             && has_sku_identifier_prefix(input, span.start)
         {
             return false;
         }
-        if self.identifier_run_boundary && gaze_types::word_run_extends_identifier(input, span.end)
+        if self.identifier_run_boundary
+            && !gap(span.end)
+            && gaze_types::word_run_extends_identifier(input, span.end)
         {
             return false;
         }
@@ -731,14 +969,16 @@ impl RegexDetector {
             return true;
         }
 
-        let previous_ok = input[..span.start]
-            .chars()
-            .next_back()
-            .is_none_or(|ch| !is_ascii_email_continuation(ch));
-        let next_ok = input[span.end..]
-            .chars()
-            .next()
-            .is_none_or(|ch| !is_ascii_email_continuation(ch));
+        let previous_ok = gap(span.start)
+            || input[..span.start]
+                .chars()
+                .next_back()
+                .is_none_or(|ch| !is_ascii_email_continuation(ch));
+        let next_ok = gap(span.end)
+            || input[span.end..]
+                .chars()
+                .next()
+                .is_none_or(|ch| !is_ascii_email_continuation(ch));
 
         previous_ok && next_ok
     }
@@ -781,6 +1021,51 @@ struct LabelledValueScan {
     span: std::ops::Range<usize>,
     reason: Option<LabelledValueScanReason>,
     rejected: bool,
+}
+
+fn merge_recovered_scans(
+    scans: &mut Vec<LabelledValueScan>,
+    gaps: &[usize],
+    mut recovered: Vec<LabelledValueScan>,
+    require_internal_gap: bool,
+    mut visit: impl FnMut(),
+) {
+    let mut existing = scans
+        .iter()
+        .map(|scan| scan.span.clone())
+        .collect::<Vec<_>>();
+    existing.sort_by(|a, b| {
+        visit();
+        a.start.cmp(&b.start)
+    });
+    recovered.sort_by(|a, b| {
+        visit();
+        a.span
+            .start
+            .cmp(&b.span.start)
+            .then_with(|| b.span.end.cmp(&a.span.end))
+    });
+    let mut next = 0;
+    let mut max_end = 0;
+    for scan in recovered {
+        let gap = gaps.partition_point(|&at| {
+            visit();
+            at <= scan.span.start
+        });
+        if require_internal_gap && gaps.get(gap).is_none_or(|&at| at >= scan.span.end) {
+            continue;
+        }
+        while next < existing.len() && existing[next].start <= scan.span.start {
+            visit();
+            max_end = max_end.max(existing[next].end);
+            next += 1;
+        }
+        visit();
+        if max_end < scan.span.end {
+            max_end = scan.span.end;
+            scans.push(scan);
+        }
+    }
 }
 
 fn scan_labelled_value(
@@ -945,14 +1230,6 @@ fn labelled_value_over_limit(value: &str) -> bool {
             > 4
 }
 
-fn iban_canonicalize(input: &str) -> String {
-    input
-        .chars()
-        .filter(|ch| !ch.is_ascii_whitespace())
-        .flat_map(char::to_uppercase)
-        .collect()
-}
-
 fn is_ascii_email_continuation(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
@@ -960,6 +1237,124 @@ fn is_ascii_email_continuation(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn with_failed_source_regex_compilation(detector: RegexDetector) -> RegexDetector {
+        // Inject the compile error into this detector's lazy cache; other tests are unaffected.
+        let failure = crate::source_regex::compile("(");
+        assert!(failure.is_err());
+        detector.source_regex.set(failure).unwrap();
+        detector
+    }
+
+    #[test]
+    fn source_regex_compile_failure_refuses_the_document() {
+        use gaze::{Action, ClassRule, Pipeline, RawDocument, Scope, Session};
+
+        let detector = with_failed_source_regex_compilation(RegexDetector::emails().unwrap());
+        let pipeline = Pipeline::builder()
+            .recognizer(detector)
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let result = pipeline.redact(
+            &session,
+            RawDocument::Text("Contact cedar\u{200b}@example.invalid".to_owned()),
+        );
+        let error =
+            result.expect_err("a failed source regex must refuse, never return clean output");
+        assert!(matches!(error, gaze::Error::RecognizerDetect(_)));
+        assert!(error
+            .to_string()
+            .contains("source-boundary regex compilation failed"));
+        assert!(session.snapshot_entries().is_empty());
+    }
+
+    #[test]
+    fn source_regex_compiles_only_after_a_document_has_source_gaps() {
+        let detector =
+            RegexDetector::new(r"\b[0-9]{16}\b", PiiClass::custom("credit_card").unwrap()).unwrap();
+        assert!(detector.source_regex.get().is_none());
+        assert!(detector.source_prefilter.get().is_none());
+        let input = "word4111111111111111";
+        assert!(detector.scanned_spans(input, None).unwrap().is_empty());
+        assert!(detector.source_regex.get().is_none());
+        assert!(detector.source_prefilter.get().is_none());
+        let spans = (0..input.len())
+            .map(|at| {
+                let raw = at + if at >= 4 { 3 } else { 0 };
+                (raw, raw + 1)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            detector.scanned_spans(input, Some(&spans)).unwrap().len(),
+            1
+        );
+        assert!(detector.source_regex.get().unwrap().is_ok());
+    }
+
+    #[test]
+    fn joined_recovery_uses_source_gaps_for_bounded_captures() {
+        let input = "ID: AB12 CD3456XYZ123456";
+        let gap = "ID: AB12 CD3456".len();
+        let spans = (0..input.len())
+            .map(|at| {
+                let raw = at + if at >= gap { 3 } else { 0 };
+                (raw, raw + 1)
+            })
+            .collect::<Vec<_>>();
+        let mut detector = RegexDetector::new(
+            r"ID: ([A-Z0-9]{2,6} +[A-Z0-9]{2,8})\b",
+            PiiClass::custom("id_card").unwrap(),
+        )
+        .unwrap()
+        .with_complete_labelled_value(true);
+        detector.capture_groups = Some(vec![1]);
+        let scans = detector.scanned_spans(input, Some(&spans)).unwrap();
+        assert_eq!(scans.len(), 1);
+        assert_eq!(scans[0].span, 4..input.len());
+        assert_eq!(
+            scans[0].reason,
+            Some(LabelledValueScanReason::JoinedRunLimitExceeded)
+        );
+    }
+
+    #[test]
+    fn joined_recovery_containment_work_is_bounded() {
+        let scan = |span: std::ops::Range<usize>| LabelledValueScan {
+            capture: span.clone(),
+            extension: span.clone(),
+            span,
+            reason: Some(LabelledValueScanReason::JoinedRunLimitExceeded),
+            rejected: false,
+        };
+        for count in [128usize, 4096, 16384] {
+            let mut existing = (0..count)
+                .map(|i| scan(8 * i..8 * i + 2))
+                .collect::<Vec<_>>();
+            let recovered = (0..count)
+                .rev()
+                .flat_map(|i| [scan(8 * i..8 * i + 2), scan(8 * i + 3..8 * i + 7)])
+                .collect();
+            let gaps = (0..count)
+                .flat_map(|i| [8 * i + 1, 8 * i + 5])
+                .collect::<Vec<_>>();
+            let mut work = 0;
+            merge_recovered_scans(&mut existing, &gaps, recovered, true, || work += 1);
+            assert_eq!(existing.len(), 2 * count);
+            assert!(
+                work < (8 * count.ilog2() as usize + 32) * count,
+                "{count} scans required {work} visits"
+            );
+        }
+        let mut existing = vec![scan(0..100)];
+        let recovered = vec![scan(50..80), scan(10..90), scan(100..120), scan(101..119)];
+        merge_recovered_scans(&mut existing, &[20, 60, 110], recovered, true, || {});
+        assert_eq!(
+            existing.iter().map(|s| s.span.clone()).collect::<Vec<_>>(),
+            vec![0..100, 100..120]
+        );
+    }
 
     #[test]
     fn numeric_postal_rules_ignore_sku_identifier_suffixes() {
@@ -978,7 +1373,7 @@ mod tests {
                 "(SKU-WIDGET-54321)",
                 "SKU-PART12-54321-6789",
             ] {
-                assert!(detector.spans(text, None).is_empty(), "{id}: {text}");
+                assert!(detector.spans(text).is_empty(), "{id}: {text}");
             }
         }
     }
@@ -1010,11 +1405,7 @@ mod tests {
                 "ÄNDERUNG-ARTIKEL-54321",
             ] {
                 let start = text.find("54321").unwrap();
-                assert_eq!(
-                    detector.spans(text, None),
-                    vec![start..start + 5],
-                    "{id}: {text}"
-                );
+                assert_eq!(detector.spans(text), vec![start..start + 5], "{id}: {text}");
             }
         }
         let us = RegexDetector::with_source(
@@ -1023,7 +1414,7 @@ mod tests {
             "postal.us",
         )
         .unwrap();
-        assert_eq!(us.spans("US-54321-6789", None), vec![3..13]);
+        assert_eq!(us.spans("US-54321-6789"), vec![3..13]);
     }
 
     #[test]
@@ -1034,7 +1425,7 @@ mod tests {
             "adopter.inventory",
         )
         .unwrap();
-        assert_eq!(detector.spans("SKU-WIDGET-54321", None), vec![11..16]);
+        assert_eq!(detector.spans("SKU-WIDGET-54321"), vec![11..16]);
     }
 
     #[test]
@@ -1093,7 +1484,7 @@ mod tests {
         .with_rejection_pattern(Some("XYZ123456"))
         .unwrap();
         let input = "Tax number: AB12 CD3456 XYZ123456";
-        let scans = detector.scanned_spans(input, None);
+        let scans = detector.scanned_spans(input, None).unwrap();
         assert_eq!(scans.len(), 1);
         assert_eq!(&input[scans[0].capture.clone()], "AB12 CD3456");
         assert_eq!(&input[scans[0].span.clone()], "AB12 CD3456 XYZ123456");
@@ -1146,7 +1537,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(detector.spans("id1 id2 id3", None), vec![0..3, 4..7, 8..11]);
+        assert_eq!(detector.spans("id1 id2 id3"), vec![0..3, 4..7, 8..11]);
     }
 
     #[test]
@@ -1165,7 +1556,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(detector.spans("id1. id2.", None), vec![0..3, 5..8]);
+        assert_eq!(detector.spans("id1. id2."), vec![0..3, 5..8]);
     }
 
     #[test]
@@ -1176,7 +1567,7 @@ mod tests {
             "synthetic.boundary",
         )
         .unwrap();
-        assert_eq!(detector.spans("a b", None), vec![0..0, 1..1, 2..2, 3..3]);
+        assert_eq!(detector.spans("a b"), vec![0..0, 1..1, 2..2, 3..3]);
     }
 
     #[test]

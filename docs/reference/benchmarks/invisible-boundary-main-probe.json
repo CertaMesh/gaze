@@ -1,0 +1,112 @@
+{
+  "source_sha": "26de9f7116eb16bb839139e1bd4f2b6b67a4eee2",
+  "script_sha256": "da6db29075e9f7088b28de8cc259ee9d4749ce49847de9694c6ec137cb6816fc",
+  "binary_sha256": "45d393d379f4395c09d0cc91de95a625823af58fc4e1c31e7ac1b8c1fc46b9b0",
+  "cases": [
+    {
+      "family": "card",
+      "separator": "200b",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "iban",
+      "separator": "200b",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "eth",
+      "separator": "200b",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "email",
+      "separator": "200b",
+      "unchanged": false,
+      "whole_value_raw": false,
+      "tokens": 1
+    },
+    {
+      "family": "phone",
+      "separator": "200b",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "card",
+      "separator": "34f",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "iban",
+      "separator": "34f",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "eth",
+      "separator": "34f",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "email",
+      "separator": "34f",
+      "unchanged": false,
+      "whole_value_raw": false,
+      "tokens": 1
+    },
+    {
+      "family": "phone",
+      "separator": "34f",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "card",
+      "separator": "2067",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "iban",
+      "separator": "2067",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "eth",
+      "separator": "2067",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    },
+    {
+      "family": "email",
+      "separator": "2067",
+      "unchanged": false,
+      "whole_value_raw": false,
+      "tokens": 1
+    },
+    {
+      "family": "phone",
+      "separator": "2067",
+      "unchanged": true,
+      "whole_value_raw": true,
+      "tokens": 0
+    }
+  ]
+}

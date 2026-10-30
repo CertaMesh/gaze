@@ -134,23 +134,53 @@ impl Recognizer for AnchoredMatchRecognizer {
     fn detect(
         &self,
         input: &str,
-        _ctx: &DetectContext<'_>,
+        ctx: &DetectContext<'_>,
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         if !matches!(self.name_shape, NameShape::PersonName) {
             return Ok(Vec::new());
         }
 
+        let boundary_view = crate::source_regex::View::with_boundary(input, ctx.source_spans, ' ');
         let mut candidates = Vec::new();
         for cue in &self.folded_cues {
-            for cue_range in find_cue_ranges(input, cue) {
+            for cue_range in find_cue_ranges_with_source(input, cue, ctx.source_spans) {
                 let span = match self.cue_position {
                     CuePosition::Before => self.candidate_after_cue(input, cue_range.end),
                     CuePosition::After => self.candidate_before_cue(input, cue_range.start),
                 };
+                let span = span.or_else(|| {
+                    let view = boundary_view.as_ref()?;
+                    let span = match self.cue_position {
+                        CuePosition::Before => {
+                            self.candidate_after_cue(&view.text, view.marked(cue_range.end))
+                        }
+                        CuePosition::After => {
+                            self.candidate_before_cue(&view.text, view.marked(cue_range.start))
+                        }
+                    }?;
+                    let mut span = view.joined(span);
+                    // A source gap inside a component can look like whitespace to
+                    // the name grammar. Keep its joined suffix protected as well.
+                    if crate::source_regex::is_gap(ctx.source_spans, span.end) {
+                        span.end += input[span.end..]
+                            .chars()
+                            .take_while(|ch| {
+                                ch.is_alphabetic()
+                                    || matches!(ch, '\'' | '-' | '\u{2019}')
+                                    || unicode_normalization::char::canonical_combining_class(*ch)
+                                        != 0
+                            })
+                            .map(char::len_utf8)
+                            .sum::<usize>();
+                    }
+                    Some(span)
+                });
                 let Some(span) = span else {
                     continue;
                 };
-                if !self.boundary_allows(input, &span) {
+                if !crate::source_regex::is_gap(ctx.source_spans, span.end)
+                    && !self.boundary_allows(input, &span)
+                {
                     continue;
                 }
                 candidates.push(Candidate::new(
@@ -369,7 +399,16 @@ fn fold_char(ch: char) -> impl Iterator<Item = char> {
 /// is not length-preserving (`İ` → `i̇` grows by one byte, `ẞ` → `ß` and the
 /// Kelvin sign `K` → `k` shrink), so offsets taken from such a copy drift for
 /// the rest of the document and can land inside a multi-byte char.
+#[cfg(test)]
 fn find_cue_ranges(input: &str, folded_cue: &str) -> Vec<std::ops::Range<usize>> {
+    find_cue_ranges_with_source(input, folded_cue, None)
+}
+
+fn find_cue_ranges_with_source(
+    input: &str,
+    folded_cue: &str,
+    source_spans: Option<&[(usize, usize)]>,
+) -> Vec<std::ops::Range<usize>> {
     let mut ranges = Vec::new();
     if folded_cue.is_empty() {
         return ranges;
@@ -377,7 +416,11 @@ fn find_cue_ranges(input: &str, folded_cue: &str) -> Vec<std::ops::Range<usize>>
     let mut cursor = 0;
     while cursor < input.len() {
         if let Some(end) = folded_prefix_end(input, cursor, folded_cue) {
-            if is_boundary(input, cursor, true) && is_boundary(input, end, false) {
+            if (crate::source_regex::is_gap(source_spans, cursor)
+                || is_boundary(input, cursor, true))
+                && (crate::source_regex::is_gap(source_spans, end)
+                    || is_boundary(input, end, false))
+            {
                 ranges.push(cursor..end);
             }
             cursor = end;
@@ -442,6 +485,59 @@ mod tests {
     use gaze_types::{DictionaryBundle, LocaleTag};
 
     use super::*;
+
+    #[test]
+    fn source_gaps_separate_name_components_without_losing_an_inner_suffix() {
+        let input = "noticeFrom: Dr.Schmidt;";
+        let gaps = [
+            "notice".len(),
+            "noticeFrom: Dr.".len(),
+            "noticeFrom: Dr.Sch".len(),
+        ];
+        let spans = (0..input.len())
+            .map(|at| {
+                let raw = at + 3 * gaps.iter().filter(|&&gap| gap <= at).count();
+                (raw, raw + 1)
+            })
+            .collect::<Vec<_>>();
+        let recognizer = test_recognizer(
+            "test.from",
+            vec!["from"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "from",
+        );
+        let mut context = ctx();
+        context.source_spans = Some(&spans);
+        let hits = recognizer.detect(input, &context).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(&input[hits[0].span.clone()], "Dr.Schmidt");
+    }
+
+    #[test]
+    fn source_gaps_license_glued_cues_without_breaking_inner_name_bytes() {
+        let input = "noticeFrom: Dr Schmidt;";
+        let gaps = ["notice".len(), "noticeFrom: Dr Sch".len()];
+        let spans = (0..input.len())
+            .map(|at| {
+                let raw = at + 3 * gaps.iter().filter(|&&gap| gap <= at).count();
+                (raw, raw + 1)
+            })
+            .collect::<Vec<_>>();
+        let recognizer = test_recognizer(
+            "test.from",
+            vec!["from"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "from",
+        );
+        assert!(recognizer.detect(input, &ctx()).unwrap().is_empty());
+        let mut context = ctx();
+        context.source_spans = Some(&spans);
+        let hits = recognizer.detect(input, &context).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(&input[hits[0].span.clone()], "Dr Schmidt");
+    }
 
     #[test]
     fn person_name_shape_accepts_required_matches() {

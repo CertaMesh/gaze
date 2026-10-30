@@ -751,6 +751,26 @@ fn labelled_value_limit_is_audited_without_refusing_the_value() {
 }
 
 #[test]
+fn joined_labelled_value_limit_has_a_typed_audit_reason() {
+    let input = "ID card: AB12 CD3456\u{200b}XYZ123456";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], input);
+    for group in ["AB12", "CD3456", "XYZ123456"] {
+        assert!(
+            !without_gaze_tokens(&cleaned).contains(group),
+            "{cleaned:?}"
+        );
+    }
+    assert!(
+        entries.iter().any(|entry| {
+            !entry.conflict_loser
+                && entry.labelled_value_scan_reason
+                    == Some(LabelledValueScanReason::JoinedRunLimitExceeded)
+        }),
+        "missing typed joined-run limit reason: {entries:?}"
+    );
+}
+
+#[test]
 fn date_after_labelled_identifier_never_vetoes_the_identifier() {
     let chain = [LocaleTag::Global];
     let pipeline = pipeline_for(&chain);

@@ -1,0 +1,263 @@
+{
+  "schema": "gaze-pr-ritual-v1",
+  "source_sha": "5b90e12ff748fa001fe7de4610e45509141aff46",
+  "script_sha256": "6f69213653f0c058422401ae43a990a3e80c83c7f8ae3b150b51256d390ef0fc",
+  "started_at": "2026-10-28T14:17:10.230091+00:00",
+  "environment": {
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0",
+    "RUSTUP_TOOLCHAIN": "1.96.0",
+    "GAZE_DISABLE_OS_KEYSTORE": "1"
+  },
+  "commands": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "started_at": "2026-10-28T14:17:10.517669+00:00",
+      "finished_at": "2026-10-28T14:17:12.759045+00:00",
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    },
+    {
+      "name": "types-outcomes",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-types",
+        "--all-features",
+        "--lib",
+        "outcome::"
+      ],
+      "started_at": "2026-10-28T14:17:12.972038+00:00",
+      "finished_at": "2026-10-28T14:18:19.094637+00:00",
+      "exit_code": 0,
+      "log_sha256": "6582de3a001a245b165db948a9208aabc2b4e1946ea5cba222b47610a044eba9",
+      "tail": "   Compiling postcard v1.1.3\n   Compiling quick-xml v0.38.4\n   Compiling linked-hash-map v0.5.6\n   Compiling zmij v1.0.21\n   Compiling heck v0.5.0\n   Compiling strum_macros v0.27.2\n   Compiling phonenumber v0.3.9+9.0.21\n   Compiling lru-cache v0.1.2\n   Compiling cpufeatures v0.2.17\n   Compiling block-buffer v0.10.4\n   Compiling crypto-common v0.1.7\n   Compiling regex-syntax v0.6.29\n   Compiling thiserror v1.0.69\n   Compiling serde_json v1.0.149\n   Compiling tinyvec_macros v0.1.1\n   Compiling minimal-lexical v0.2.1\n   Compiling oncemutex v0.1.1\n   Compiling nom v7.1.3\n   Compiling regex-cache v0.2.1\n   Compiling tinyvec v1.11.0\n   Compiling digest v0.10.7\n   Compiling keccak v0.1.6\n   Compiling strum v0.27.2\n   Compiling thiserror-impl v1.0.69\n   Compiling fnv v1.0.7\n   Compiling once_cell v1.21.4\n   Compiling either v1.15.0\n   Compiling itoa v1.0.18\n   Compiling sha3 v0.10.9\n   Compiling unicode-normalization v0.1.25\n   Compiling gaze-types v0.17.0 (<worktree>/crates/gaze-types)\n    Finished `test` profile [unoptimized] target(s) in 1m 04s\n     Running unittests src/lib.rs (target/debug/deps/gaze_types-2dbaf4d5e2d59b59)\n\nrunning 6 tests\ntest outcome::tests::audit_accessor_accepts_only_matching_outcome_reason_pairs ... ok\ntest outcome::tests::scalar_types_and_evidence_round_trip ... ok\ntest outcome::tests::unknown_wire_variants_are_rejected_instead_of_becoming_protected ... ok\ntest outcome::tests::every_outcome_reason_has_stable_value_free_serialization_and_diagnostics ... ok\ntest outcome::tests::path_preserves_unescaped_segments_but_hides_them_in_diagnostics ... ok\ntest outcome::tests::field_path_children_borrow_ancestors_and_drop_deep_paths_safely ... ok\n\ntest result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 74 filtered out; finished in 0.02s\n\nVerified 6 passing Rust tests"
+    },
+    {
+      "name": "policy-outcomes",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-pii",
+        "--all-features",
+        "--lib",
+        "outcomes_"
+      ],
+      "started_at": "2026-10-28T14:18:19.524225+00:00",
+      "finished_at": "2026-10-28T14:19:43.669982+00:00",
+      "exit_code": 0,
+      "log_sha256": "7a9670779f254a328372398519820a9d702068b8c93f43ff0191e0db7c335dcb",
+      "tail": "   Compiling winnow v0.7.15\n   Compiling fallible-streaming-iterator v0.1.9\n   Compiling bit-vec v0.8.0\n   Compiling scopeguard v1.2.0\n   Compiling unicode_categories v0.1.1\n   Compiling tokenizers v0.22.2\n   Compiling toml_edit v0.22.27\n   Compiling lock_api v0.4.14\n   Compiling bit-set v0.8.0\n   Compiling rusqlite v0.32.1\n   Compiling toml v1.1.2+spec-1.1.0\n   Compiling rusty-fork v0.3.1\n   Compiling ed25519 v2.2.3\n   Compiling ort v2.0.0-rc.12\n   Compiling rand_chacha v0.3.1\n   Compiling ndarray v0.16.1\n   Compiling rand_xorshift v0.4.0\n   Compiling tokio-macros v2.7.0\n   Compiling unarray v0.1.4\n   Compiling termcolor v1.4.1\n   Compiling hex v0.4.3\n   Compiling unicode-casefold v0.2.0\n   Compiling unicase v2.10.0\n   Compiling glob v0.3.3\n   Compiling trybuild v1.0.116\n   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n   Compiling proptest v1.11.0\n   Compiling tokio v1.54.1\n   Compiling dashmap v6.1.0\n   Compiling rand v0.8.6\n   Compiling ed25519-dalek v2.2.0\n   Compiling gaze-audit v0.17.0 (<worktree>/crates/gaze-audit)\n   Compiling toml v0.8.23\n   Compiling hmac v0.12.1\n   Compiling secrecy v0.10.3\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n    Finished `test` profile [unoptimized] target(s) in 1m 22s\n     Running unittests src/lib.rs (target/debug/deps/gaze-5df81ba83400449f)\n\nrunning 1 test\ntest policy::tests::outcomes_default_to_protect_and_reject_unknown_keys ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 529 filtered out; finished in 0.00s\n\nVerified 1 passing Rust tests"
+    },
+    {
+      "name": "wire-closed-reasons",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-mcp-core",
+        "-p",
+        "gaze-mcp-rmcp",
+        "-p",
+        "gaze-proxy",
+        "--all-features",
+        "--lib",
+        "untransformable"
+      ],
+      "started_at": "2026-10-28T14:19:43.875294+00:00",
+      "finished_at": "2026-10-28T14:21:05.436816+00:00",
+      "exit_code": 0,
+      "log_sha256": "89c1f4b1d7739059ad71ae294ba4655565da56d7f06671e59d219fc5a82622ce",
+      "tail": "   Compiling dirs-sys v0.5.0\n   Compiling tracing-subscriber v0.3.23\n   Compiling futures v0.3.32\n   Compiling rand v0.10.1\n   Compiling rmcp-macros v2.2.0\n   Compiling tower-http v0.6.10\n   Compiling hyper-rustls v0.27.9\n   Compiling rustix v1.1.4\n   Compiling sse-stream v0.2.3\n   Compiling crossbeam-channel v0.5.15\n   Compiling pastey v0.2.2\n   Compiling symlink v0.1.0\n   Compiling trybuild v1.0.116\n   Compiling tempfile v3.27.0\n   Compiling tracing-appender v0.2.5\n   Compiling reqwest v0.12.28\n   Compiling dirs v6.0.0\n   Compiling gaze-mcp-core v0.17.0 (<worktree>/crates/gaze-mcp-core)\n   Compiling gaze-inspection v0.17.0 (<worktree>/crates/gaze-inspection)\n   Compiling fs2 v0.4.3\n   Compiling same-file v1.0.6\n   Compiling gaze-proxy v0.17.0 (<worktree>/crates/gaze-proxy)\n   Compiling gaze-mcp-rmcp v0.17.0 (<worktree>/crates/gaze-mcp-rmcp)\n    Finished `test` profile [unoptimized] target(s) in 1m 18s\n     Running unittests src/lib.rs (target/debug/deps/gaze_mcp_core-b3f419e244dd43af)\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s\n\n     Running unittests src/lib.rs (target/debug/deps/gaze_mcp_rmcp-695ea323791b0781)\n\nrunning 1 test\ntest frontend::tests::untransformable_returns_closed_reason_without_field_path ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s\n\n     Running unittests src/lib.rs (target/debug/deps/gaze_proxy-8d2da9cc8722ac43)\n\nrunning 1 test\ntest server::tests::untransformable_refusal_reports_closed_reason_on_both_profiles ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 122 filtered out; finished in 0.00s\n\nVerified 2 passing Rust tests"
+    },
+    {
+      "name": "cli-closed-reasons",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-cli",
+        "--all-features",
+        "--bin",
+        "gaze",
+        "untransformable"
+      ],
+      "started_at": "2026-10-28T14:21:05.830086+00:00",
+      "finished_at": "2026-10-28T14:23:28.146219+00:00",
+      "exit_code": 0,
+      "log_sha256": "1347586eee48ee99b981799c542493a14361dcdc34ff041279c6cb84017f91d0",
+      "tail": "   Compiling maybe-owned v0.3.4\n   Compiling clap_lex v1.1.0\n   Compiling gaze-mcp-rmcp v0.17.0 (<worktree>/crates/gaze-mcp-rmcp)\n   Compiling clap_builder v4.6.0\n   Compiling rusqlite v0.32.1\n   Compiling predicates-tree v1.0.13\n   Compiling axum v0.8.9\n   Compiling predicates v3.1.4\n   Compiling tempfile v3.27.0\n   Compiling scc v2.4.0\n   Compiling ureq v3.3.0\n   Compiling reqwest v0.12.28\n   Compiling dirs v6.0.0\n   Compiling uuid v1.23.1\n   Compiling parking_lot v0.12.5\n   Compiling bstr v1.12.1\n   Compiling clap_derive v4.6.1\n   Compiling dirs-sys-next v0.1.2\n   Compiling wait-timeout v0.2.1\n   Compiling fslock v0.2.1\n   Compiling fs2 v0.4.3\n   Compiling serial_test_derive v3.4.0\n   Compiling gaze-proxy v0.17.0 (<worktree>/crates/gaze-proxy)\n   Compiling clap v4.6.1\n   Compiling serial_test v3.4.0\n   Compiling directories-next v2.0.0\n   Compiling gaze-model-setup v0.17.0 (<worktree>/crates/gaze-model-setup)\n   Compiling gaze-document v0.17.0 (<worktree>/crates/gaze-document)\n   Compiling gaze-audit v0.17.0 (<worktree>/crates/gaze-audit)\n   Compiling gaze-mcp-bridge v0.17.0 (<worktree>/crates/gaze-mcp-bridge)\n   Compiling gaze-proxy-dashboard v0.17.0 (<worktree>/crates/gaze-proxy-dashboard)\n   Compiling gaze-token-bridge v0.17.0 (<worktree>/crates/gaze-token-bridge)\n   Compiling gaze-cli v0.17.0 (<worktree>/crates/gaze-cli)\n    Finished `test` profile [unoptimized] target(s) in 2m 20s\n     Running unittests src/main.rs (target/debug/deps/gaze-f3fc65ada2306ea1)\n\nrunning 4 tests\ntest error::tests::untransformable_is_exit_eight_with_only_the_closed_reason ... ok\ntest pipeline::build::tests::untransformable_maps_to_exit_eight_through_every_pipeline_mapper ... ok\ntest commands::daemon::residual_wire_tests::untransformable_daemon_error_carries_only_the_closed_reason ... ok\ntest commands::daemon::v2::tests::untransformable_failure_reports_the_closed_reason ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 125 filtered out; finished in 0.27s\n\nVerified 4 passing Rust tests"
+    },
+    {
+      "name": "cli-error-bytes",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-cli",
+        "--all-features",
+        "--bin",
+        "gaze",
+        "stderr_line_keeps_existing_error_bytes"
+      ],
+      "started_at": "2026-10-28T14:23:28.365229+00:00",
+      "finished_at": "2026-10-28T14:23:29.567202+00:00",
+      "exit_code": 0,
+      "log_sha256": "1bac49b67cbd24723db7a7ca2cd62bd8fba4fbe4f2fdc825104d1c355a379122",
+      "tail": "    Finished `test` profile [unoptimized] target(s) in 0.78s\n     Running unittests src/main.rs (target/debug/deps/gaze-f3fc65ada2306ea1)\n\nrunning 1 test\ntest error::tests::stderr_line_keeps_existing_error_bytes ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 128 filtered out; finished in 0.00s\n\nVerified 1 passing Rust tests"
+    },
+    {
+      "name": "cli-outcomes-policy",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-cli",
+        "--all-features",
+        "--test",
+        "cli_pipe",
+        "outcomes_policy_"
+      ],
+      "started_at": "2026-10-28T14:23:30.244185+00:00",
+      "finished_at": "2026-10-28T14:23:50.818445+00:00",
+      "exit_code": 0,
+      "log_sha256": "8ee2ff63f2db8ecb0d0240df4767b6f4e4d8d1969918e4ab4b79dfccd6f77114",
+      "tail": "   Compiling gaze-cli v0.17.0 (<worktree>/crates/gaze-cli)\n    Finished `test` profile [unoptimized] target(s) in 12.33s\n     Running tests/cli_pipe.rs (target/debug/deps/cli_pipe-3a2c4cb156e039dd)\n\nrunning 2 tests\ntest outcomes_policy_rejects_unknown_values_and_untransformable_knob ... ok\ntest outcomes_policy_parses_without_changing_clean_output ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 152 filtered out; finished in 5.96s\n\nVerified 2 passing Rust tests"
+    },
+    {
+      "name": "field-geometry",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-recognizers",
+        "--all-features",
+        "--test",
+        "explicit_fields"
+      ],
+      "started_at": "2026-10-28T14:23:51.966118+00:00",
+      "finished_at": "2026-10-28T14:28:26.726862+00:00",
+      "exit_code": 0,
+      "log_sha256": "364ce14aecc13c9a26607bd18cc0767abc17d42f8f1d94f976cf6dc60103e432",
+      "tail": "   Compiling rand v0.8.6\n   Compiling itertools v0.10.5\n   Compiling cast v0.3.0\n   Compiling walkdir v2.5.0\n   Compiling criterion-plot v0.5.0\n   Compiling gaze-pii v0.17.0 (<worktree>/crates/gaze)\n   Compiling ciborium v0.2.2\n   Compiling plotters v0.3.7\n   Compiling futures-executor v0.3.32\n   Compiling clap v4.6.1\n   Compiling parking_lot v0.12.5\n   Compiling tinytemplate v1.2.1\n   Compiling is-terminal v0.4.17\n   Compiling serial_test_derive v3.4.0\n   Compiling fslock v0.2.1\n   Compiling anes v0.1.6\n   Compiling oorandom v11.1.5\n   Compiling criterion v0.5.1\n   Compiling gaze-assembly v0.17.0 (<worktree>/crates/gaze-assembly)\n   Compiling proptest v1.11.0\n   Compiling serial_test v3.4.0\n   Compiling syn v2.0.117\n    Finished `test` profile [unoptimized] target(s) in 4m 16s\n     Running tests/explicit_fields.rs (target/debug/deps/explicit_fields-d64e0adcbff78f99)\n\nrunning 15 tests\ntest dates_require_complete_shapes_and_suffixes ... ok\ntest grammar_units_bound_full_values_without_prefix_fallback ... ok\ntest foreign_token_spelling_is_not_owned_field_protection ... ok\ntest staged_clean_net_error_requires_discard_and_never_publishes_mappings ... ok\ntest malformed_or_unrelated_records_add_no_field_candidate ... ok\ntest exact_cues_case_quotes_and_record_boundaries ... ok\ntest actual_core_captures_declared_values_and_restores_original_bytes ... ok\ntest repeated_fields_live_staged_trace_and_owned_replay_restore_exact_bytes ... ok\ntest actual_assembly_normalization_exposes_source_boundaries_and_raw_size_limitations ... ok\ntest same_span_email_winner_selects_email_policy_instead_of_password_policy ... ok\ntest builtin_container_and_custom_competitor_order_preserve_existing_arbitration ... ok\ntest configured_fake_net_sees_final_fields_and_stage_errors_publish_nothing ... ok\ntest caller_actions_remain_authoritative_and_strict_does_not_promise_no_new_denials ... ok\ntest validator_veto_belongs_to_card_or_phone_not_declared_password ... ok\ntest actual_assembly_nested_builtin_and_custom_fragments_keep_full_field_source ... ok\n\ntest result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.26s\n\nVerified 15 passing Rust tests"
+    },
+    {
+      "name": "legacy-source-boundaries",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-recognizers",
+        "--all-features",
+        "--test",
+        "legacy_source_boundaries"
+      ],
+      "started_at": "2026-10-28T14:28:27.581379+00:00",
+      "finished_at": "2026-10-28T14:28:33.543754+00:00",
+      "exit_code": 0,
+      "log_sha256": "33b71f0c8079e83a1767bfd1a254b8396fcb7656cff05b199d3619d5474170a8",
+      "tail": "   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n    Finished `test` profile [unoptimized] target(s) in 4.11s\n     Running tests/legacy_source_boundaries.rs (target/debug/deps/legacy_source_boundaries-7f53bfec3ba6e240)\n\nrunning 4 tests\ntest legacy_regex_detectors_keep_glued_and_internal_source_boundaries ... ok\ntest hard_boundary_marker_only_captures_do_not_hide_real_values ... ok\ntest adopter_ignorable_edge_literals_match_without_interior_gaps ... ok\ntest adopter_ignorable_literals_and_class_members_keep_matching ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s\n\nVerified 4 passing Rust tests"
+    },
+    {
+      "name": "hard-boundary-preference",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-recognizers",
+        "--all-features",
+        "--test",
+        "validators",
+        "hard_boundary_"
+      ],
+      "started_at": "2026-10-28T14:28:34.252036+00:00",
+      "finished_at": "2026-10-28T14:30:56.064168+00:00",
+      "exit_code": 0,
+      "log_sha256": "11d9000a146822dc5d59b700b3bdf6726620483d34f0eff4ca0e73a001e6069e",
+      "tail": "   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n    Finished `test` profile [unoptimized] target(s) in 3.11s\n     Running tests/validators.rs (target/debug/deps/validators-badc045118ee5851)\n\nrunning 5 tests\ntest hard_boundary_value_survives_enclosing_joined_validator_failure ... ok\ntest hard_boundary_and_joined_valid_candidates_emit_one_token ... ok\ntest hard_boundary_preserves_recorded_card_and_verification_code ... ok\ntest hard_boundary_preserves_overlapping_valid_card_windows ... ok\ntest hard_boundary_recorded_codes_preserve_all_lengths_and_separators has been running for over 60 seconds\ntest hard_boundary_recorded_codes_preserve_all_lengths_and_separators ... ok\n\ntest result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 137.77s\n\nVerified 5 passing Rust tests"
+    },
+    {
+      "name": "regex-differential",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-recognizers",
+        "--all-features",
+        "--lib",
+        "regex::tests::"
+      ],
+      "started_at": "2026-10-28T14:30:56.760615+00:00",
+      "finished_at": "2026-10-28T14:32:47.877820+00:00",
+      "exit_code": 0,
+      "log_sha256": "ddf1500662e70a040a7a235fc72c4d749cae643970e1ffeb8360f8e0a1be2ecd",
+      "tail": "   Compiling gaze-recognizers v0.17.0 (<worktree>/crates/gaze-recognizers)\n    Finished `test` profile [unoptimized] target(s) in 13.91s\n     Running unittests src/lib.rs (target/debug/deps/gaze_recognizers-95cb67f139e9abf2)\n\nrunning 26 tests\ntest regex::tests::captured_values_reuse_a_two_character_suffix_guard ... ok\ntest regex::tests::email_rfc_validator_kind_populates_canonical_form ... ok\ntest regex::tests::bundled_email_detector_rejects_ascii_continuation_suffix ... ok\ntest regex::tests::regex_recognizer_uses_first_non_empty_capture_group ... ok\ntest regex::tests::direct_detection_hides_guard_vetoes_but_registry_can_audit_them ... ok\ntest regex::tests::bundled_email_detector_matches_before_non_ascii_letter ... ok\ntest regex::tests::numeric_postal_rules_keep_country_address_and_label_prefixes ... ok\ntest regex::tests::bundled_email_detector_keeps_leading_delimiters_out_of_span ... ok\ntest regex::tests::bundled_email_detector_accepts_ascii_punctuation_suffixes ... ok\ntest regex::tests::captured_values_reuse_a_consumed_separator_for_the_next_match ... ok\ntest regex::tests::bundled_email_detector_matches_after_non_ascii_letter ... ok\ntest regex::tests::bundled_email_detector_matches_comma_separated_addresses ... ok\ntest regex::tests::is_excluded_is_ascii_case_insensitive_for_both_branches_and_cased_exclusion_values ... ok\ntest regex::tests::sku_prefix_scan_keeps_detection_when_its_work_budget_is_exhausted ... ok\ntest regex::tests::sku_postal_boundary_does_not_change_adopter_regexes ... ok\ntest regex::tests::zero_width_matches_advance_through_the_input_and_stop_at_the_end ... ok\ntest regex::tests::numeric_postal_rules_ignore_sku_identifier_suffixes ... ok\ntest regex::tests::source_regex_compiles_only_after_a_document_has_source_gaps ... ok\ntest regex::tests::joined_recovery_uses_source_gaps_for_bounded_captures ... ok\ntest regex::tests::scanner_never_cuts_a_proven_capture_at_any_internal_boundary ... ok\ntest regex::tests::rejection_guard_checks_capture_instead_of_scanner_extension ... ok\ntest regex::tests::uppercase_field_boundary_waits_for_a_verified_next_value ... ok\ntest source_regex::tests::necessary_cue_evidence_preserves_unicode_fold_and_normalization_edges ... ok\ntest regex::tests::joined_recovery_containment_work_is_bounded ... ok\ntest regex::tests::national_phone_validator_kind_accepts_safe_fixtures ... ok\ntest source_regex::tests::all_rulepack_regexes_preserve_captures_without_source_gaps has been running for over 60 seconds\ntest source_regex::tests::all_rulepack_regexes_preserve_captures_without_source_gaps ... ok\n\ntest result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 190 filtered out; finished in 94.30s\n\nVerified 26 passing Rust tests"
+    },
+    {
+      "name": "validator-neighbours",
+      "command": [
+        "python3",
+        "scripts/anvil/test_nonempty.py",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "gaze-recognizers",
+        "--all-features",
+        "--test",
+        "validators",
+        "validator_classes_keep_gap_neighbours_outside_valid_values"
+      ],
+      "started_at": "2026-10-28T14:32:48.387781+00:00",
+      "finished_at": "2026-10-28T14:32:50.904561+00:00",
+      "exit_code": 0,
+      "log_sha256": "8f4490d40df742337d52f86de15808288d9572b5c418da3b9216575aefac6278",
+      "tail": "    Finished `test` profile [unoptimized] target(s) in 0.93s\n     Running tests/validators.rs (target/debug/deps/validators-badc045118ee5851)\n\nrunning 1 test\ntest validator_classes_keep_gap_neighbours_outside_valid_values ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.83s\n\nVerified 1 passing Rust tests"
+    }
+  ],
+  "planned_commands": 12,
+  "completed": true,
+  "finished_at": "2026-10-28T14:32:50.906721+00:00"
+}

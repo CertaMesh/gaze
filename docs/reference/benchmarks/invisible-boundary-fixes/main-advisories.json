@@ -1,0 +1,45 @@
+{
+  "schema": "gaze-main-advisory-comparison-v1",
+  "base_sha": "3b3808c66a528a308b293b5d6bfd1e4924a637c1",
+  "candidate_sha": "a27c78a6efb4b9da55119bb04a4fda4e70137dd1",
+  "command": [
+    "cargo",
+    "deny",
+    "check",
+    "advisories"
+  ],
+  "base_exit_code": 1,
+  "candidate_exit_code": 1,
+  "base": {
+    "advisory_ids": [
+      "RUSTSEC-2026-0414"
+    ],
+    "errors": [
+      "error[vulnerability]: Exponential event growth with `ENABLE_WIKILINKS`"
+    ],
+    "log_sha256": "800e11e3d5879073b59a59555fe20ff277a27850c041cebe3c4dcce035bd4156"
+  },
+  "candidate": {
+    "advisory_ids": [
+      "RUSTSEC-2026-0414"
+    ],
+    "errors": [
+      "error[vulnerability]: Exponential event growth with `ENABLE_WIKILINKS`"
+    ],
+    "log_sha256": "5415f5e28621307500322bedf871c55a27c50729c6eab2cd1bad8786fcb54097"
+  },
+  "identical_failing_advisories": true,
+  "package": [
+    {
+      "name": "pulldown-cmark",
+      "version": "0.13.4",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "e9f068eba8e7071c5f9511831b44f32c740d5adf574e990f946ddb53db2f314e",
+      "dependencies": [
+        "bitflags",
+        "memchr",
+        "unicase"
+      ]
+    }
+  ]
+}

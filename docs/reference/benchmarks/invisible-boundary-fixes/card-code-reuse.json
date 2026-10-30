@@ -1,0 +1,11 @@
+{
+  "schema": "gaze-card-code-reuse-v1",
+  "candidate_sha": "9e87f4df7bef7b23db1824c8224d2fe78dc37bb3",
+  "measured_source_sha": "1437439be3810ae43f1e958654ac41e7bd42b0a1",
+  "report_sha256": "cb8f85c51fb75ad8f0ca63dd39e5df3ecbaea1d98dca6a8bb4c636beaceea387",
+  "binary_sha256": {
+    "base": "5c38c4a4b33ab204f985ed75956045860fad59e6fb84ce1004fad84dd3dcafa5",
+    "candidate": "9a1e0c6743b5d7f10cdfb38b0b58de8a22000a10f9003d8b178b89116a860932"
+  },
+  "cells_revalidated": 2068
+}
