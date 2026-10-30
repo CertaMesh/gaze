@@ -73,11 +73,11 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(outcomes.result()["fp_refusals"], {"documents": 2})
 
     def test_refusal_codes_do_not_collide_with_existing_pipeline_failures(self):
-        self.assertFalse(
+        self.assertTrue(
             (oc.UNTRANSFORMABLE_CODES | {oc.POSSIBLY_SENSITIVE_REFUSED_CODE})
-            & score.PIPELINE_FAILURE_REASONS
+            <= score.PIPELINE_FAILURE_REASONS
         )
-        for reason in score.PIPELINE_FAILURE_REASONS:
+        for reason in score.PIPELINE_FAILURE_REASONS - oc.UNTRANSFORMABLE_CODES - {oc.POSSIBLY_SENSITIVE_REFUSED_CODE}:
             self.assertEqual(oc.refusal_kind(reason), "fail_closed")
 
 

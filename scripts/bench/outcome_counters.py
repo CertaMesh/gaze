@@ -31,21 +31,8 @@ from pathlib import Path
 
 import gaze_bench_score as score
 
-# Bench wire codes for the refusals the `[outcomes]` policy contract defines.
-# Each untransformable code carries the closed `UntransformableReason` spelling.
-# The scorer's closed `PIPELINE_FAILURE_REASONS` admits them together with the
-# first emitter: `gaze_bench_score.py` is digest-pinned by published competitor
-# rows, so it changes only with a measured benchmark that re-pins them.
-UNTRANSFORMABLE_REASONS = (
-    "json_number_no_text_only_path",
-    "encoded_carrier",
-    "no_safe_rendering",
-    "caller_value_too_short",
-)
+from refusal_contract import UNTRANSFORMABLE_REASONS, UNTRANSFORMABLE_CODES
 UNTRANSFORMABLE_CODE_PREFIX = "untransformable_"
-UNTRANSFORMABLE_CODES = frozenset(
-    UNTRANSFORMABLE_CODE_PREFIX + reason for reason in UNTRANSFORMABLE_REASONS
-)
 POSSIBLY_SENSITIVE_REFUSED_CODE = "possibly_sensitive_refused"
 
 # A precedence tie or a missing mandatory anchor emits one family-level token:
@@ -113,7 +100,7 @@ class OutcomeAccumulator:
         self.non_pii_bytes += non_pii
         self.refused_non_pii_bytes += non_pii
 
-    def add_scored(self, document: score.Document, predictions: Sequence[score.Span]) -> None:
+    def add_scored(self, document: score.Document, predictions: Sequence[score.Span], outcomes=None) -> None:
         self.attempted_documents += 1
         gold, ignored, scored = score.contract_scoring_view(document, predictions)
         false_positive_kinds = set()
@@ -122,7 +109,9 @@ class OutcomeAccumulator:
             # Each span is judged by its own non-gold bytes, so a value that
             # runs past its gold counts as a false positive too.
             false_positive = _false_positive_bytes([(span.start, span.end)], gold, ignored) > 0
-            ambiguous = is_ambiguous_class(span.label)
+            typed = (outcomes or {}).get((span.start, span.end, span.label))
+            ambiguous = (isinstance(typed, dict) and "possibly_sensitive" in typed
+                         if typed is not None else is_ambiguous_class(span.label))
             (self.possibly_sensitive if ambiguous else self.confirmed).add(
                 overlaps_gold, false_positive
             )
@@ -215,7 +204,10 @@ def group_counters(
         if "pipeline_error_code" in response:
             outcomes.add_refused(document, str(response["pipeline_error_code"]))
         else:
-            outcomes.add_scored(document, score.final_trace_predictions(document, response))
+            outcomes.add_scored(document, score.final_trace_predictions(document, response), {
+                (item["raw_start"], item["raw_end"], item["class"]): item["protection_outcome"]
+                for item in response["final_protection_trace"] if "protection_outcome" in item
+            })
     return outcomes.result()
 
 

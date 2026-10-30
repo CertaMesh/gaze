@@ -429,6 +429,7 @@ pub struct SafetyNetResult {
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GazeLocalProtectionTraceItem {
+    protection_outcome: gaze_types::ProtectionOutcome,
     raw_span: Range<usize>,
     class: PiiClass,
     kind: GazeLocalProtectionTraceKind,
@@ -438,6 +439,11 @@ pub struct GazeLocalProtectionTraceItem {
 }
 
 impl GazeLocalProtectionTraceItem {
+    /// Typed sensitivity evidence, independent of the emitted class name.
+    pub fn protection_outcome(&self) -> gaze_types::ProtectionOutcome {
+        self.protection_outcome
+    }
+
     pub fn raw_start(&self) -> usize {
         self.raw_span.start
     }
@@ -1518,6 +1524,12 @@ impl Pipeline {
                         GazeLocalProtectionTraceKind::PrimaryPolicyTokenize,
                         detection.trace_source_ids.clone(),
                         lineages[selection].clone(),
+                        trace_outcome(
+                            ledger.segment().selections[selection]
+                                .members
+                                .iter()
+                                .filter_map(|&id| ledger.segment().originals[id].outcome),
+                        ),
                     )?;
                 }
             }
@@ -1691,6 +1703,11 @@ impl Pipeline {
                         GazeLocalProtectionTraceKind::ResidualPolicyTokenize { segment, residual },
                         sources,
                         lineage,
+                        trace_outcome(
+                            cell.parents
+                                .iter()
+                                .filter_map(|&id| ledger.segment().originals[id].outcome),
+                        ),
                     )?;
                 }
             }
@@ -2766,6 +2783,7 @@ impl Pipeline {
                 GazeLocalProtectionTraceKind::SafetyNetResolveTokenize,
                 ids,
                 lineage,
+                gaze_types::ProtectionOutcome::Protected,
             )?;
         }
         Ok(())
@@ -3094,6 +3112,7 @@ impl Pipeline {
                     },
                     source_ids,
                     lineage,
+                    gaze_types::ProtectionOutcome::Protected,
                 )?;
             }
         }
@@ -3399,6 +3418,15 @@ struct PlannedSafetyNetRedaction<'a> {
     raw_span: Range<usize>,
 }
 
+fn trace_outcome(
+    mut outcomes: impl Iterator<Item = gaze_types::ProtectionOutcome>,
+) -> gaze_types::ProtectionOutcome {
+    // Keep uncertainty when any contributing recognizer could not confirm the binding.
+    outcomes
+        .find(|outcome| matches!(outcome, gaze_types::ProtectionOutcome::PossiblySensitive(_)))
+        .unwrap_or(gaze_types::ProtectionOutcome::Protected)
+}
+
 struct ProtectionTraceCollector<'a> {
     raw_text: &'a str,
     items: Vec<GazeLocalProtectionTraceItem>,
@@ -3422,6 +3450,7 @@ impl<'a> ProtectionTraceCollector<'a> {
         kind: GazeLocalProtectionTraceKind,
         mut source_ids: Vec<String>,
         lineage: lineage::Lineage,
+        protection_outcome: gaze_types::ProtectionOutcome,
     ) -> Result<()> {
         if raw_span.start >= raw_span.end
             || raw_span.end > self.raw_text.len()
@@ -3448,6 +3477,7 @@ impl<'a> ProtectionTraceCollector<'a> {
         self.items
             .retain(|existing| !ranges_overlap(&existing.raw_span, &raw_span));
         self.items.push(GazeLocalProtectionTraceItem {
+            protection_outcome,
             raw_span,
             class,
             kind,

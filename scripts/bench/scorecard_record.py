@@ -378,6 +378,7 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
             "fixture_id": response["fixture_id"],
             "pipeline_error_code": response["pipeline_error_code"],
             "pipeline_error_stage": response["pipeline_error_stage"],
+            **({"refusal_evidence": response["refusal_evidence"]} if "refusal_evidence" in response else {}),
             "refused": True,
             "fallback_redact": False,
         }
@@ -390,7 +391,7 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
             for item in response["final_protection_trace"]
         ),
         "final_protection_trace": [
-            {key: item[key] for key in ("raw_start", "raw_end", "class", "action", "provenance")}
+            {key: item[key] for key in ("raw_start", "raw_end", "class", "action", "provenance", "protection_outcome") if key in item}
             for item in response["final_protection_trace"]
         ],
         **({"candidate_events": response["candidate_events"]}
@@ -692,6 +693,22 @@ def _read(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
         _contract_from_row(header.get("layer_contract"))
     elif header.get("layer_identity") is not None:
         raise RecordError("layer identity without generated layers")
+    import refusal_contract
+    inventory = {row["id"]: row for row in documents}
+    for row in observations:
+        try:
+            document = _document_from_row(inventory[row["document_id"]])
+            response = row["response"]
+            if "pipeline_error_code" in response:
+                validate_refusal(response, document)
+            else:
+                trace = response.get("final_protection_trace", [])
+                typed = any("protection_outcome" in item for item in trace)
+                if typed:
+                    for item in trace:
+                        refusal_contract.validate_outcome(item["protection_outcome"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise RecordError("invalid typed response evidence") from error
     return header, observations
 
 
@@ -736,6 +753,19 @@ def pin_template(
     _write_rows(output, [header, *observations])
 
 
+def validate_refusal(response, document):
+    import refusal_contract
+    if (not isinstance(response.get("pipeline_error_code"), str)
+            or not isinstance(response.get("pipeline_error_stage"), str)
+            or response["pipeline_error_code"] not in score.PIPELINE_FAILURE_REASONS
+            or response["pipeline_error_stage"] not in score.PIPELINE_FAILURE_STAGES):
+        raise RecordError("unknown typed refusal code or stage")
+    try:
+        refusal_contract.validate_evidence(response, len(document.text.encode("utf-8")))
+    except (TypeError, ValueError) as error:
+        raise RecordError("invalid typed refusal evidence") from error
+
+
 def validate_replay_adapter(header, observations):
     """Re-enforce adapter semantics from retained value-free response metadata."""
     adapter = header.get("response_validation")
@@ -758,6 +788,7 @@ def validate_replay_adapter(header, observations):
         for row in observations:
             response = row["response"]
             if "pipeline_error_code" in response:
+                validate_refusal(response, documents[row["document_id"]])
                 continue
             manifest = response["manifest_spans"]
             for i, span in enumerate(manifest):
@@ -793,6 +824,8 @@ def _replay_group(request):
             raise RecordError(f"{document.uid}: response ID mismatch")
         if response.get("refused") is not ("pipeline_error_code" in response):
             raise RecordError(f"{document.uid}: refusal flag mismatch")
+        if "pipeline_error_code" in response:
+            validate_refusal(response, document)
         if "pipeline_error_code" not in response:
             fallback = any(
                 item["provenance"]["decision"] == "fallback_redact"

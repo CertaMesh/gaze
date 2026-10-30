@@ -2095,7 +2095,8 @@ class GateTests(unittest.TestCase):
     def test_refusal_fix_can_pass_and_refusal_rise_keeps_its_reason(self) -> None:
         base = _scorecard(self.BASE, self.FP, refused={"C": 1})
         candidate = _scorecard({**self.BASE, "C": 98}, self.FP)
-        self.assertEqual(agentic.gate(base, candidate)["verdict"], "pass")
+        self.assertEqual(agentic.gate(base, candidate, refusal_contract_version=1)["verdict"], "pass")
+        self.assertEqual(agentic.gate(base, candidate)["verdict"], "fail")  # v2 needs bound records.
         result = agentic.gate(candidate, base)
         self.assertEqual(result["verdict"], "fail")
         self.assertIn("failed-closed documents rose", result["reason"])

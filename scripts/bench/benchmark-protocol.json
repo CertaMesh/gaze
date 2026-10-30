@@ -28,5 +28,10 @@
     "mode": "canonical-once",
     "corpus_contract": "all-corpus-labels-v1",
     "generated_contract": "committed generated-label contract"
+  },
+  "refusal_contract": {
+    "version": 2,
+    "semantics": "Only typed untransformable refusals whose every refused span exactly matches ownership-labelled confirmed-ID gold are blocked operations. Benign/non-gold refusals fail. Compare common unblocked operations for bytes, exact restore and valid manifest; refusing creates no gain.",
+    "legacy_version": 1
   }
 }

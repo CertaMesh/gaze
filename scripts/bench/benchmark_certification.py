@@ -189,6 +189,16 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
         # was independently reconstructed from its pinned observation record.
         result = agentic.compare_layers(cards['base', number], cards['candidate', number],
                                          policy_delta=delta)
+        refusal_version = spec['inputs']['protocol'].get('refusal_contract', {}).get('version', 1)
+        if refusal_version not in (1, 2):
+            raise CertificationError('unknown_refusal_contract')
+        if refusal_version == 2 and result['verdict'] != 'not_comparable':
+            import refusal_gate
+            result = {**result, **refusal_gate.compare(
+                (cards['base', number], cards['candidate', number]),
+                (record_paths['base'], record_paths['candidate']), result['config'],
+                agentic.decide, agentic.layer_totals)}
+        result['refusal_contract_version'] = refusal_version
         if result['verdict'] != 'pass':
             raise CertificationError('gate_refused')
         results[str(number)] = result

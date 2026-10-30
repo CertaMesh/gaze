@@ -14,6 +14,7 @@ import compare
 import finalize_report
 import render
 import row_sources
+import scorer_compatibility
 import render_benchmark_doc as history_render
 from comparison_availability import REASON, digest
 
@@ -551,3 +552,11 @@ def test_composition_requires_the_original_opf_unavailable_receipt(inputs, monke
     with pytest.raises(ValueError, match="original OPF unavailable receipt"):
         compose_cli(inputs, monkeypatch)
     assert not inputs[-1].exists()
+
+
+def test_validation_only_scorer_compatibility_requires_exact_proof():
+    proof = json.loads((render.REPO / 'docs/reference/benchmarks/refusal-contract-v2-history-proof.json').read_text())
+    before, after = proof['baseline_scorer_sha256'], proof['candidate_scorer_sha256']
+    assert scorer_compatibility.scorer_is_compatible(before, after)
+    assert not scorer_compatibility.scorer_is_compatible('0' * 64, after)
+    assert not scorer_compatibility.scorer_is_compatible(before, '0' * 64)

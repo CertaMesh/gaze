@@ -27,6 +27,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+import refusal_contract
+
 from bench_subprocess import BenchSubprocess, producer_boundary
 
 
@@ -35,7 +37,8 @@ READABLE_SCORECARD_SCHEMA_VERSIONS = frozenset({3, SCORECARD_SCHEMA_VERSION})
 DEFAULT_SAMPLE_SEED = 20_260_710
 SAMPLING_STRATEGY = "deterministic-stratified-language-region-v1"
 PIPELINE_FAILURE_STAGES = frozenset({"clean", "post_policy_scan"})
-PIPELINE_FAILURE_REASONS = frozenset(
+PIPELINE_FAILURE_REASONS = (refusal_contract.UNTRANSFORMABLE_CODES
+    | refusal_contract.PROTECTION_CODES | {"possibly_sensitive_refused"}) | frozenset(
     {
         "invalid_regex",
         "unknown_token",
@@ -1068,9 +1071,16 @@ def _validate_final_protection_trace(
     protected_raw_values: list[str] = []
     source_identifiers: list[tuple[str, str]] = []
 
+    typed_outcomes = any(isinstance(item, dict) and "protection_outcome" in item for item in trace)
     for index, raw_item in enumerate(trace):
         context = f"final_protection_trace[{index}]"
-        item = _expect_exact_keys(raw_item, FINAL_PROTECTION_TRACE_FIELDS, context)
+        fields = FINAL_PROTECTION_TRACE_FIELDS | ({"protection_outcome"} if typed_outcomes else set())
+        item = _expect_exact_keys(raw_item, fields, context)
+        if "protection_outcome" in item:
+            try:
+                refusal_contract.validate_outcome(item["protection_outcome"])
+            except (TypeError, ValueError) as error:
+                raise ResponseValidationError("invalid protection outcome") from error
         raw_start = _expect_int(item["raw_start"], f"{context}.raw_start")
         raw_end = _expect_int(item["raw_end"], f"{context}.raw_end")
         pii_class = _expect_string(item["class"], f"{context}.class")
@@ -1187,7 +1197,7 @@ def validate_response(
     if "pipeline_error_code" in response:
         response = _expect_exact_keys(
             response,
-            PIPELINE_ERROR_RESPONSE_FIELDS,
+            PIPELINE_ERROR_RESPONSE_FIELDS | ({"refusal_evidence"} if "refusal_evidence" in response else set()),
             f"{document.uid}: pipeline error response",
         )
         fixture_id = _expect_string(response["fixture_id"], "fixture_id")
@@ -1201,6 +1211,11 @@ def validate_response(
             raise ResponseValidationError(
                 f"pipeline_error_code: unknown closed reason {reason!r}"
             )
+        try:
+            refusal_contract.validate_evidence(response, len(document.text.encode("utf-8")),
+                                               frozenset(char_to_byte_offsets(document.text)))
+        except (TypeError, ValueError) as error:
+            raise ResponseValidationError("invalid typed refusal evidence") from error
         timing = _expect_exact_keys(
             response["timing"], frozenset({"total_ms"}), "pipeline error timing"
         )

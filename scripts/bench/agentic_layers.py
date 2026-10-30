@@ -5730,6 +5730,7 @@ def gate(
     allow_legacy_policy_inputs: bool = False,
     *, scorecard_paths: tuple[Path, Path] | None = None,
     record_paths: tuple[Path, Path] | None = None,
+    refusal_contract_version: int = 2,
 ) -> dict[str, object]:
     """Admit capture artifacts before comparing their scored layer totals."""
     import stage_timing as stages
@@ -5738,7 +5739,27 @@ def gate(
             stages.validate_execution(card, path)
         except ValueError as error:
             raise LayerError(str(error)) from error
+    if refusal_contract_version not in (1, 2):
+        raise LayerError("unknown refusal contract version")
     result = compare_layers(base, candidate, config, policy_delta, allow_legacy_policy_inputs)
+    if result["verdict"] != "not_comparable" and refusal_contract_version == 2:
+        config = result["config"]
+        if record_paths is None and scorecard_paths and all(c.get("observation_record") for c in (base, candidate)):
+            names = [c["observation_record"]["file"] for c in (base, candidate)]
+            if any(not isinstance(n, str) or Path(n).name != n for n in names):
+                raise LayerError("invalid observation record filename")
+            record_paths = tuple(p.parent / n for p, n in zip(scorecard_paths, names, strict=True))
+        if record_paths is not None:
+            import refusal_gate
+            try:
+                revised = refusal_gate.compare((base, candidate), record_paths, config, decide, layer_totals)
+            except (ValueError, KeyError, TypeError, OSError) as error:
+                raise LayerError("refusal contract evidence rejected") from error
+            result = {**result, **revised}
+        elif any(row["failed_closed_candidate"] or row["failed_closed_base"] for row in result["layers"].values()):
+            if result["verdict"] != "fail":
+                result.update(verdict="fail", reason="refusal contract v2 requires bound observation records")
+    result["refusal_contract_version"] = refusal_contract_version
     return _with_leak_diff(result, base, candidate, scorecard_paths, record_paths)
 
 
@@ -5815,13 +5836,15 @@ def gate_frozen_records(
     config: str | None = None, policy_delta: Path | None = None,
     allow_legacy_policy_inputs: bool = False,
     *, scorecard_paths: tuple[Path, Path] | None = None,
+    refusal_contract_version: int = 2,
 ) -> dict[str, object]:
     """Explicit base oracle plus candidate-oracle sensitivity; ordinary gate stays strict."""
     import scorecard_record as record
     kwargs = {"config": config, "policy_delta": policy_delta,
               "allow_legacy_policy_inputs": allow_legacy_policy_inputs}
     raw = gate(base, candidate, scorecard_paths=scorecard_paths,
-               record_paths=(base_record, candidate_record), **kwargs)
+               record_paths=(base_record, candidate_record),
+               refusal_contract_version=refusal_contract_version, **kwargs)
     if raw["verdict"] == "not_comparable" and raw["differing"] != ["layer_c_gold_validity"]:
         return raw
     try:
@@ -5844,6 +5867,13 @@ def gate_frozen_records(
                                     gold_verdict_reference=reference)
                      for path in (base_record, candidate_record)]
             views[oracle] = compare_layers(*cards, **kwargs)
+            if refusal_contract_version == 2 and views[oracle]["verdict"] != "not_comparable":
+                import refusal_gate
+                revised = refusal_gate.compare(cards, (base_record, candidate_record),
+                    config or production_config(candidate), decide, layer_totals,
+                    gold_verdict_reference=reference)
+                views[oracle] = {**views[oracle], **revised}
+            views[oracle]["refusal_contract_version"] = refusal_contract_version
             changed[oracle] = {side: card["frozen_gold_verdicts"]["changed_verdicts"]
                                for side, card in zip(("base", "candidate"), cards, strict=True)}
     except record.RecordError as error:
@@ -5896,6 +5926,18 @@ def gate_markdown(result: Mapping[str, object]) -> str:
                   "Phone has no layer A family; layer C credits all five newer labels without a cue split; "
                   "the excluded bytes are reported in the twin columns. "
                   "The gate is necessary, not sufficient: review still judges precision."]
+    if result.get("operation_outcomes"):
+        lines += ["", f"Refusal contract v{result['refusal_contract_version']}. Rates include numerator/denominator.",
+                  "", "| Layer | Blocked base | Blocked candidate | False refusal base | False refusal candidate | Excluded from both byte/restore denominators |",
+                  "| --- | ---: | ---: | ---: | ---: | ---: |"]
+        for layer, counts in result["operation_outcomes"].items():
+            rates = []
+            for key in ("blocked_operation_rate", "false_refusal_rate"):
+                for side in ("base", "candidate"):
+                    rate = counts[side][key]
+                    rates.append(f"{rate['numerator']}/{rate['denominator']}")
+            lines.append(f"| {layer} | " + " | ".join(rates) +
+                         f" | {counts['excluded_from_both_byte_and_restore_denominators']} |")
     if result.get('leak_diff'):
         import leak_diff
         lines += ['', leak_diff.markdown(result['leak_diff']).rstrip()]
@@ -6052,6 +6094,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                           help="compare two historical scorecards without policy-dependency identity")
     gate_cmd.add_argument("--freeze-gold-verdicts", choices=["base"],
                           help="explicitly rescore both records with base verdicts and report candidate view")
+    gate_cmd.add_argument("--refusal-contract", type=int, choices=(1, 2), default=2,
+                          help="v2 reports proven gold blocks; v1 reproduces the historical refusal gate")
     gate_cmd.add_argument("--base-record", type=Path)
     gate_cmd.add_argument("--candidate-record", type=Path)
     gate_cmd.add_argument("--scored-labels", type=Path, help="record replay contract (default: v1)")
@@ -6083,7 +6127,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = gate_frozen_records(base, candidate, args.base_record, args.candidate_record,
                                              contract, args.config, args.policy_delta,
                                              args.allow_legacy_policy_inputs,
-                                             scorecard_paths=(args.base, args.candidate))
+                                             scorecard_paths=(args.base, args.candidate),
+                                             refusal_contract_version=args.refusal_contract)
             else:
                 if bool(args.base_record) != bool(args.candidate_record):
                     raise LayerError("new-exposure report requires both --base-record and --candidate-record")
@@ -6091,7 +6136,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise LayerError("--scored-labels requires --freeze-gold-verdicts base")
                 result = gate(base, candidate, args.config, args.policy_delta, args.allow_legacy_policy_inputs,
                               scorecard_paths=(args.base, args.candidate),
-                              record_paths=(args.base_record, args.candidate_record) if args.base_record else None)
+                              record_paths=(args.base_record, args.candidate_record) if args.base_record else None,
+                              refusal_contract_version=args.refusal_contract)
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
