@@ -261,7 +261,11 @@ fn all_rulepack_regexes_preserve_captures_without_source_gaps() {
         let original_size = regex_automata::meta::Regex::new(&pattern)
             .unwrap()
             .memory_usage();
-        let transformed_size = regex_automata::meta::Regex::new(transformed.as_str())
+        let transformed_size = regex_automata::meta::Regex::builder()
+            .configure(
+                regex_automata::meta::Regex::config().nfa_size_limit(Some(COMPILED_SIZE_LIMIT)),
+            )
+            .build(transformed.as_str())
             .unwrap()
             .memory_usage();
         let ratio = transformed_size as f64 / original_size as f64;

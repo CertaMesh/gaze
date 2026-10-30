@@ -9,6 +9,9 @@ use regex_syntax::ast::{parse::Parser, Ast};
 use std::ops::Range;
 
 pub(super) const MARKER: char = '\u{2060}';
+// Accepted original patterns use regex's 10 MiB cap; boundary expansion gets
+// the same bounded eightfold allowance enforced by the differential suite.
+const COMPILED_SIZE_LIMIT: usize = 8 * 10 * (1 << 20);
 
 // Dot and broad classes retain their consuming-atom cardinality.
 fn normalize_literals(ast: &mut Ast, marker: bool) -> Result<(), regex::Error> {
@@ -168,7 +171,9 @@ pub(super) fn compile(pattern: &str) -> Result<Regex, regex::Error> {
         .map_err(|err| regex::Error::Syntax(err.to_string()))?;
     normalize_literals(&mut ast, true)?;
     augment(&mut ast)?;
-    let regex = Regex::new(&ast.to_string())?;
+    let regex = regex::RegexBuilder::new(&ast.to_string())
+        .size_limit(COMPILED_SIZE_LIMIT)
+        .build()?;
     #[cfg(feature = "test-support")]
     {
         let elapsed = started.elapsed().as_nanos() as u64;

@@ -29,7 +29,7 @@ def main():
     args = parser.parse_args()
     seen = set()
     completed = 0
-    total = len(set(args.probe)) or len(CODEPOINTS) + 31
+    total = len(set(args.probe)) or len(CODEPOINTS) + 32
     paths = (SOURCE, REGEX_SOURCE, SOURCE_REGEX, ANCHOR_SOURCE, PIPELINE_SOURCE, DICTIONARY_SOURCE, VETO_SOURCE, PAYMENT_SOURCE, CORE_SOURCE, TYPES_SOURCE, SESSION_SOURCE)
     originals = {path: path.read_bytes() for path in paths}
     for path, original in originals.items():
@@ -70,6 +70,9 @@ def main():
             path.write_bytes(originals[path])
 
     try:
+        reject("source_regex_size_budget", SOURCE_REGEX,
+               ".size_limit(COMPILED_SIZE_LIMIT)", ".size_limit(10 * (1 << 20))",
+               "private_pem_source_gaps_keep_the_complete_value_and_restore", "bare_credentials")
         for cp in CODEPOINTS:
             before = "fn is_default_ignorable(ch: char) -> bool {"
             reject(f"mapping_{cp:x}", SOURCE, before,
