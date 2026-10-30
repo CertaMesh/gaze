@@ -1981,7 +1981,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/3450bc2f92b1e9fa847c247890c9d3c928cf9a44b6dbbed88023f18bc5231871.json) pins these inputs.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/1f519a4b7f01f59a51b2204cd649315b7ba7dd280645f7a8f1eefdde2a521c63.json) pins these inputs.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts

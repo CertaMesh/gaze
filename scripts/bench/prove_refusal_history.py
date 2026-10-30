@@ -19,7 +19,7 @@ def digest(path):
 
 
 REPLAY = '''
-import hashlib,json,sys
+import dataclasses,hashlib,json,sys
 from pathlib import Path
 sys.path.insert(0,sys.argv[1])
 import gaze_bench_score as s
@@ -28,6 +28,8 @@ p=Path(sys.argv[2]); root=Path(sys.argv[3])
 result={}
 for version in (1,2,3,4):
     c=s.SCORED_LABEL_CONTRACT_V1 if version==1 else s.load_scored_label_contract(root/f'scored-labels-v{version}.json')
+    if version != 1:
+        c=dataclasses.replace(c,path=f'docs/reference/benchmarks/scored-labels-v{version}.json')
     card=r.rescore(p,c,max_workers=1)
     result[str(version)]=hashlib.sha256(json.dumps(card,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 print(json.dumps(result,sort_keys=True))
