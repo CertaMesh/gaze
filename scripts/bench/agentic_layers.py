@@ -56,7 +56,7 @@ import invisible_separator_cells as invisible_separators
 import issuer_credential_cells as issuer_credentials
 
 
-GENERATOR_VERSION = 29
+GENERATOR_VERSION = 30
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4470,7 +4470,8 @@ def _coverage_records(partition: str) -> list[Record]:
 
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one, with
-# the v16 BSN label and v18 personal-ID gold corrections reversed.
+# the v16 BSN label, v18 personal-ID gold and v30 card-twin corrections
+# reversed.
 GENERATOR_ADDITIONS = {
     4: "adjacent_",
     5: "lookalike_",
@@ -4525,11 +4526,23 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
             and record.surface in ("log_kv", "tool_json") else record
             for record in selected
         ]
+    if version < invisible_separators.PHONE_FREE_CARD_TWIN_SINCE:
+        legacy = {
+            record.uid: record
+            for partition in sorted({record.partition for record in selected
+                                     if record.family == "invisible_card_twin"})
+            for record in invisible_separators.records(sys.modules[__name__], partition,
+                                                       phone_free_card_twins=False)
+            if record.family == "invisible_card_twin"
+        }
+        selected = [legacy.get(record.uid, record) if record.family == "invisible_card_twin" else record
+                    for record in selected]
     return selected
 
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    29: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v29.json"),
     28: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v28.json"),
     27: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v27.json"),
     26: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v26.json"),

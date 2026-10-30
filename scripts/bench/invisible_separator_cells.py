@@ -10,9 +10,31 @@ CUED_SURFACES = {"invisible_" + separator + "_" + surface
                  for separator in SEPARATORS for surface in ("prose", "json")}
 JOINERS = {**{name: value for name, value in SEPARATORS.items() if name != "nb_hyphen"},
            "zwj": "\u200d", "zwnj": "\u200c"}
+# Generator v30 made the card twins phone-free; older corpora keep the
+# original twins (see `agentic_layers.records_as_of`).
+PHONE_FREE_CARD_TWIN_SINCE = 30
 
 
-def records(api, partition):
+def card_twin_digits(api, card, phone_free=True):
+    """A Luhn-invalid twin of `card`: the check digit moved by one.
+
+    A group that starts with 0 reads as a national trunk prefix plus area
+    code (`0771 4620`), and the phone rules rightly protect such a fragment
+    inside a longer digit run, separated by spaces or invisible characters
+    alike. The phone-free twin starts every group with 9 instead, so only a
+    checksum relaxation can protect it.
+    """
+    digits = card[:-1] + str((int(card[-1]) + 1) % 10)
+    if not phone_free:
+        return digits
+    digits = "".join("9" + group[1:] if group.startswith("0") else group for group in api._by_four(digits))
+    if api.luhn_valid(digits):
+        # Changing one digit always breaks a passing Luhn sum.
+        digits = digits[:-1] + str((int(digits[-1]) + 1) % 10)
+    return digits
+
+
+def records(api, partition, phone_free_card_twins=True):
     result = []
     rng = api.Rng(api.PARTITION_SEEDS[partition], "invisible-separators")
     cues = {"dev": ("Tax ID", "IBAN", "Phone", "Card", "Email"),
@@ -74,8 +96,7 @@ def records(api, partition):
             # Format-matched benign twins remain invalid after any mapping:
             # an unassignable country code, unknown IBAN prefix, wrong card
             # checksum, numeric schema placeholder and incomplete mailbox.
-            card = "".join(values[3][1])
-            wrong_card = card[:-1] + str((int(card[-1]) + 1) % 10)
+            wrong_card = card_twin_digits(api, "".join(values[3][1]), phone_free_card_twins)
             twins = {
                 "invisible_card_twin": separator.join(api._by_four(wrong_card)),
                 "invisible_tax_twin": separator.join(("000", "000", "0000")),
