@@ -1068,7 +1068,7 @@ mod tests {
                 ch.len_utf8(),
             ));
         }
-        let bundle = dictionary_bundle_from_context(&context);
+        let bundle = dictionary_bundle_from_context(&context).unwrap();
         let ctx = DetectContext::new(&[LocaleTag::Global], &bundle).with_source_spans(&spans);
         let recognizer =
             DictionaryRecognizer::new("context/name", PiiClass::Name, &own, true, "counter")
