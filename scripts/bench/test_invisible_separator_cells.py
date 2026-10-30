@@ -1,7 +1,13 @@
 """Model-free provenance checks for the invisible-separator extension."""
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import os
 from pathlib import Path
+import re
+import subprocess
+import tempfile
+import tomllib
 import unittest
 
 import agentic_layers as agentic
@@ -43,7 +49,8 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
             self.assertTrue(agentic.invalid_twin_credited("TAXNUM", surface))
 
     def test_integrated_history_reconstructs_byte_identically(self):
-        # v25/v26 are the existing corpus pins; v27/v28 also include structured_.
+        # v25/v26 are the existing corpus pins; v27/v28 also include structured_;
+        # v29 keeps the card twins v30 made phone-free.
         pins = {
             25: ("a88025bd7c995e3633738debf8b8bab45c8c7232bf222a4d72a9af36fc67ca59",
                  "133f8452d01fd517c77087e539ba9dc253e30a1886668bfab3e1631cc9ff6c32"),
@@ -53,6 +60,8 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
                  "dbee6dc0184c49df384b9f2949b29af81e58c14ae1db0043df8aadc8f1c41a81"),
             28: ("ad447042cd7403b599b217c40b77851f8c07dc59c99d19bddd7a21586ca55c99",
                  "db979087d95fce766e649ba0f4bc701a62b4c6b2e3975767348e163e942e8b9f"),
+            29: ("75ff131ba6a7588a5baf71b9ed5a7dd3d44dbcbe41993bd8c2d0d8c0404ddf59",
+                 "ef3a457a3c1a273cd8d64f9dbb5be2010014cc40d6664f7fdff531ff9bbdb03b"),
         }
         root = Path(__file__).resolve().parents[2]
         for index, partition in enumerate(("dev", "test")):
@@ -73,12 +82,31 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
                          & {span.value for row in test for span in row.gold})
 
     def test_imported_cells_and_dev_phone_correction_are_pinned(self):
-        pins = {"dev": "d0ddf954642df5e32612286d9efd418447ee7ca7831754adf258cfb9b06e4f0d",
-                "test": "c16e596db95282e23fd72c02f4d04aab1de8da0afd94e532462311a56605f22f"}
-        for partition, digest in pins.items():
-            rows = cells.records(agentic, partition)
-            self.assertEqual(len(rows), 12530)
-            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(rows)).hexdigest(), digest)
+        # v30 changes only the card twins; the v29 cells stay reproducible.
+        pins = {True: {"dev": "fb5095cb78b0befa55733313b7846592ae6423bed176758bf2fcb1c3d060e31e",
+                       "test": "5bd68b46a8c4ab4dfd0afae70c70653464d5386186790b3a06cccdc80758afa1"},
+                False: {"dev": "d0ddf954642df5e32612286d9efd418447ee7ca7831754adf258cfb9b06e4f0d",
+                        "test": "c16e596db95282e23fd72c02f4d04aab1de8da0afd94e532462311a56605f22f"}}
+        for phone_free, digests in pins.items():
+            for partition, digest in digests.items():
+                rows = cells.records(agentic, partition, phone_free_card_twins=phone_free)
+                self.assertEqual(len(rows), 12530)
+                self.assertEqual(hashlib.sha256(agentic.corpus_bytes(rows)).hexdigest(), digest)
+
+    def test_phone_free_card_twins_differ_only_where_a_group_started_with_zero(self):
+        for partition in agentic.PARTITIONS:
+            current = cells.records(agentic, partition)
+            legacy = {row.uid: row for row in cells.records(agentic, partition, phone_free_card_twins=False)}
+            changed = [row for row in current if row != legacy[row.uid]]
+            self.assertTrue(changed)
+            self.assertEqual({row.family for row in changed}, {"invisible_card_twin"})
+            for row in current:
+                if row.family == "invisible_card_twin":
+                    groups = re.findall(r"\d{4}", row.text)
+                    self.assertEqual(len(groups), 4)
+                    self.assertFalse(any(group.startswith("0") for group in groups), row.uid)
+                    self.assertEqual(row in changed,
+                                     any(group.startswith("0") for group in re.findall(r"\d{4}", legacy[row.uid].text)))
 
     def test_bom_counterweights_include_leading_and_embedded_code(self):
         for partition in agentic.PARTITIONS:
@@ -160,3 +188,67 @@ class InvisibleSeparatorCellsTests(unittest.TestCase):
                 # Formatting inside the value is gold, not merely present nearby.
                 controls = [c for c in gold.value if not c.isascii()]
                 self.assertEqual(len(controls), int(shape in {"inside", "mixed"}), row.uid)
+
+
+ROOT = Path(__file__).resolve().parents[2]
+# An explicit path must exist; only the default build location may be absent.
+CLI = Path(os.environ.get("GAZE_CLI_BINARY", ROOT / "target/debug/gaze"))
+
+
+def model_free_setup_policy():
+    """The `gaze setup` policy without its model sections: every embedded
+    rulepack, and the locale chain setup derives from them in pack order."""
+    source = (ROOT / "crates/gaze-recognizers/src/lib.rs").read_text()
+    packs = re.findall(r'\("([a-z-]+)", include_str!\("\.\./embedded/\1\.toml"\)\)', source)
+    locales = ["en-US"]
+    for pack in packs:
+        rulepack = tomllib.loads((ROOT / f"crates/gaze-recognizers/embedded/{pack}.toml").read_text())
+        for locale in (*rulepack.get("default_locales", ()),
+                       *(tag for recognizer in rulepack.get("recognizers", ()) for tag in recognizer.get("locales", ()))):
+            if locale != "global" and locale not in locales:
+                locales.append(locale)
+    return (f'schema_version = "0.1.0"\n\n[session]\nscope = "conversation"\n\n'
+            f"[locale]\nactive = {json.dumps(locales)}\n\n[address_blocks]\nenabled = true\n\n"
+            f"[policy.rulepacks]\nbundled = {json.dumps(packs)}\n\n"
+            '[[rule]]\nkind = "default"\naction = "tokenize"\n')
+
+
+@unittest.skipUnless(CLI.is_file() or "GAZE_CLI_BINARY" in os.environ, "build the gaze CLI to run this proof")
+class CardTwinDetectorTests(unittest.TestCase):
+    """The card twin guards checksum relaxation, so nothing else may claim it."""
+
+    def detections(self, texts):
+        with tempfile.TemporaryDirectory() as temporary:
+            policy = Path(temporary) / "policy.toml"
+            policy.write_text(model_free_setup_policy())
+
+            def clean(text):
+                result = subprocess.run([str(CLI), "clean", "--policy", str(policy)], input=text.encode(),
+                                        capture_output=True, check=True)
+                return [entry["class"] for entry in json.loads(result.stdout)["entries"]]
+
+            with ThreadPoolExecutor(4) as pool:
+                return dict(zip(texts, pool.map(clean, texts)))
+
+    @staticmethod
+    def twin_texts(version):
+        texts = set()
+        for partition in agentic.PARTITIONS:
+            for row in agentic.records_as_of(version, agentic.generate(partition)):
+                if row.family == "invisible_card_twin":
+                    separator = cells.SEPARATORS[row.surface.split("_invisible_card_twin")[0].removeprefix("invisible_")]
+                    # The ASCII-space form is what a pipeline that reads
+                    # invisible separators as spaces sees.
+                    texts |= {row.text, row.text.replace(separator, " ")}
+        return sorted(texts)
+
+    def test_no_rule_protects_any_part_of_a_card_twin(self):
+        self.assertEqual(len(self.twin_texts(agentic.GENERATOR_VERSION)), 2 * agentic.DOCS_PER_FAMILY * 6)
+        found = {text: classes for text, classes in self.detections(self.twin_texts(agentic.GENERATOR_VERSION)).items()
+                 if classes}
+        self.assertEqual(found, {})
+
+    def test_the_v29_twins_carried_a_phone_fragment(self):
+        # The detector sees the hazard this version removed: `0771 4620`.
+        found = self.detections(self.twin_texts(cells.PHONE_FREE_CARD_TWIN_SINCE - 1))
+        self.assertIn("Custom:phone", found["Public format fixture = 5234 7762 0771 4620. Not assigned."])

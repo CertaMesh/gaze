@@ -445,7 +445,7 @@ digests and counts for those private inputs and live differences.
 writes an admitted aggregate Markdown table.
 
 The retained tuned comparison uses generator v20. It cannot be assigned the
-current generator v29 specification. Rebuild matching comparison, production and
+current generator v30 specification. Rebuild matching comparison, production and
 selection inputs before installed-model tuned qualification. Historical aggregate
 rows remain historical and receive no reuse eligibility.
 

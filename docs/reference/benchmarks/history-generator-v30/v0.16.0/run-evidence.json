@@ -1,0 +1,148 @@
+{
+  "schema_version": 2,
+  "outcome": "completed",
+  "cache": {
+    "status": "disabled",
+    "key_sha256": null,
+    "reason": "explicit_no_cache"
+  },
+  "artifacts": {
+    "scorecard": {
+      "file": "capture.json",
+      "sha256": "9e4c7d7c4947d75a1956451fbd7e15698e91a37bd9c7c27e9ff71c4359a3a266"
+    },
+    "record": {
+      "file": "observations-v1.jsonl.gz",
+      "sha256": "1e5505b2705ea90764b530ad0f32ac8007fdef734b77301512abcd934806d632"
+    }
+  },
+  "timing_semantics": "inclusive spans; native stages use child process CPU; scoring excludes transport",
+  "stages": [
+    {
+      "stage": "build",
+      "role": "validator",
+      "wall_seconds": 0.38481904100626707,
+      "cpu_self_seconds": 0.007389999999986685,
+      "cpu_children_seconds": 0.23905400000057853,
+      "cpu_seconds": 0.2464440000005652
+    },
+    {
+      "stage": "native_profile",
+      "status": "unavailable"
+    },
+    {
+      "stage": "validator_measurements",
+      "layer": "A",
+      "wall_seconds": 6.159079125151038,
+      "cpu_self_seconds": 2.3368219999999837,
+      "cpu_children_seconds": 3.5290159999985917,
+      "cpu_seconds": 5.8658379999985755
+    },
+    {
+      "stage": "validator_measurements",
+      "layer": "R",
+      "wall_seconds": 5.868113958043978,
+      "cpu_self_seconds": 2.3962789999999927,
+      "cpu_children_seconds": 3.308639000000767,
+      "cpu_seconds": 5.7049180000007595
+    },
+    {
+      "stage": "native_profile",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "status": "unavailable"
+    },
+    {
+      "stage": "scoring",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 4.165420691948384,
+      "cpu_self_seconds": 4.0819340000011834,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 4.0819340000011834
+    },
+    {
+      "stage": "layer_capture",
+      "layer": "A",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 1267.8962560410146,
+      "cpu_self_seconds": 10.935936999999996,
+      "cpu_children_seconds": 1932.203748,
+      "cpu_seconds": 1943.1396849999999
+    },
+    {
+      "stage": "native_profile",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "status": "unavailable"
+    },
+    {
+      "stage": "scoring",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 1.5237122690305114,
+      "cpu_self_seconds": 1.5016029999972602,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.5016029999972602
+    },
+    {
+      "stage": "layer_capture",
+      "layer": "D",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 579.3537757499143,
+      "cpu_self_seconds": 4.735477000000003,
+      "cpu_children_seconds": 936.8765700000004,
+      "cpu_seconds": 941.6120470000003
+    },
+    {
+      "stage": "native_profile",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "status": "unavailable"
+    },
+    {
+      "stage": "scoring",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "mode": "capture_accounting",
+      "wall_seconds": 3.0343087532091886,
+      "cpu_self_seconds": 3.006109000001345,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 3.006109000001345
+    },
+    {
+      "stage": "layer_capture",
+      "layer": "R",
+      "config": "policy-file",
+      "repetition": 1,
+      "wall_seconds": 1503.5513927910943,
+      "cpu_self_seconds": 8.36515399999999,
+      "cpu_children_seconds": 2219.572270999999,
+      "cpu_seconds": 2227.937424999999
+    },
+    {
+      "stage": "artifact_write_compress",
+      "wall_seconds": 1.581818083068356,
+      "cpu_self_seconds": 1.5704369999999983,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 1.5704369999999983
+    },
+    {
+      "stage": "artifact_write",
+      "wall_seconds": 0.02997820801101625,
+      "cpu_self_seconds": 0.0297339999999906,
+      "cpu_children_seconds": 0.0,
+      "cpu_seconds": 0.0297339999999906
+    }
+  ]
+}
