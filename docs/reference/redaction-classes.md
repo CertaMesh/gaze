@@ -116,6 +116,8 @@ Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
 | `secrets` | `password.hash` | `regex` | Whole bcrypt, PHC Argon2 v19, scrypt/yescrypt, SHA-crypt, MD5-crypt, phpass and Django password encodings, without a field cue | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
 | `secrets` | `password.code` | `regex` | Complete nonempty single-line quoted literals after EN/DE password keys; PHP arrays supported; bare keys require code punctuation, preserving line-record ownership; source escapes stay literal | `custom:password` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
 | `secrets` | `security_token.code` | `regex` | Complete quoted credential literals after `api_token`, `remember_token`, `security_token`, `access_token`, `auth_token`, `authorization_token`, or `api_key` | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 100 |
+| `secrets` | `security_token.bare` | `regex` | Bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes; all prefixes require a leading boundary that rejects lowercase ASCII letters and digits | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
+| `secrets` | `security_token.pem` | `regex` | Complete or truncated private, RSA, EC, DSA, OpenSSH, encrypted-private and PGP private-key armour, including source framing | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.95 | 100 |
 <!-- redaction-classes-gate:recognizers:end -->
 
 The three `*.labelled` rows are safe-default `core` rules. Their captured value,
@@ -132,6 +134,106 @@ describes its stop and audit rules. The `redaction_classes_doc` test pins these
 rows and the 54-spec inventory to the loaded rulepack. The
 `bundle-tokenization-drift --verify-ack` gate separately checks the bundled
 output against its committed corpus snapshot.
+
+### Bare credentials and private-key PEM
+
+The setup-default `secrets` bundle protects bare issuer credentials as
+`custom:security_token`. Library callers select this bundle explicitly.
+The rules recognize source spelling without contacting the issuer or checking
+whether a credential can authenticate. Minimum widths provide structural
+attribution; there is no upper length rejection.
+
+| Prefix | Suffix alphabet | Minimum suffix length |
+|---|---|---|
+| `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_` | ASCII letters, digits, underscore, hyphen | 36 |
+| `github_pat_` | ASCII letters, digits, underscore, hyphen | 82 |
+| `ghs_` with application identifier and JWT | Identifier then `_eyJ`; three base64url JWT segments | 5 after `eyJ`, then 5 per segment |
+| `sk-` | 32 alphanumeric characters, then optional ASCII letters, digits, underscore, hyphen | 32 |
+| `sk-proj-`, `sk-svcacct-`, `sk-admin-`, `sk-None-`, `sk-ant-` | ASCII letters, digits, underscore, hyphen | 32 |
+| `xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`, `xapp-`, `xoxe-`, `xoxe.xoxp-` | Alphanumeric first character, then ASCII letters, digits, hyphen | 10 |
+| `sk_live_`, `rk_live_`, `sk_test_`, `rk_test_`, `whsec_` | ASCII letters, digits, underscore, hyphen | 24 |
+| `AIzaSy` | ASCII letters, digits, underscore, hyphen | 33 |
+
+Every bare arm also requires a suffix digit and 16 contiguous units of its
+issuer body alphabet. The distinctive `sk-proj-`, `sk-svcacct-`, `sk-admin-`,
+`sk-None-`, `sk-ant-`/`api03`, `AIzaSy` and structured `ghs_APPID_JWT` arms use
+base64url, including `_` and `-`. Other components use `[A-Za-z0-9]` runs.
+Slack hyphens separate components. Generic `sk-` keeps its existing 32 initial
+alphanumeric characters; it does not gain the base64url relaxation.
+Anthropic's fixed `api03` prefix marker does not supply digit evidence.
+The existing candidate length floors remain policy bounds, not issuer validity checks.
+The rulepack comments cite each shape's source.
+
+Letter-only snake, kebab, camel and uppercase word tails remain raw. A camel
+word containing a digit can match. Named base64url arms can also match digit-bearing
+snake and kebab words, an accepted residual class. Generic text such as
+`sk-learn-model-v2-config` stays raw. Real credentials without a suffix digit
+remain raw. Explicit credential code fields and cue-anchored rules retain their grammar.
+
+For a uniform independent alphanumeric body of length `n`, the probability of no
+digit is `q(n) = (52/62)^n`. Base64url bodies use `r(n) = (54/64)^n`.
+These models describe the digit condition, not measured issuer distributions.
+For a complete base64url body of at least 16 units, `_` and `-` do not break its run.
+
+| Format | No-digit probability under the stated model |
+|---|---|
+| GitHub classic 36-character body | `q(36) = 0.00177836` |
+| Fine-grained GitHub `22_59` body | `q(81) = 0.000000649448` |
+| Stateless GitHub installation token with numeric application ID | `0`, because the application ID supplies digits |
+| OpenAI bodies containing `T3BlbkFJ` | `0`, because the fixed marker supplies a digit |
+| Other supported `sk-*` bodies at the 32-character floor | `q(32) = 0.00359396`, or `r(32)` for base64url |
+| Anthropic `api03` with 93 random base64url characters and fixed `AA` | `r(93) = 0.000000137367` |
+| Slack formats with numeric components | `0`, because those components supply digits |
+| Stripe secret/restricted keys at the 24-character floor | `q(24) = 0.0146784` |
+| Stripe webhook secret with a 32-character alphanumeric body | `q(32) = 0.00359396` |
+| Google body with 33 base64url characters after `AIzaSy` | `r(33) = 0.00367329` |
+
+[GitHub documents its token prefixes](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github)
+and [stateless installation tokens](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/).
+The JWT rule protects the full `ghs_APPID_JWT` spelling, including both dots.
+[Anthropic documents `sk-ant-`](https://platform.claude.com/docs/en/get-api-key),
+[Slack documents bot and user prefixes](https://api.slack.com/concepts/token-types),
+and [Stripe documents secret and restricted keys](https://docs.stripe.com/keys).
+[Gitleaks' OpenAI rule](https://github.com/gitleaks/gitleaks/blob/master/cmd/generate/config/rules/openai.go)
+records OpenAI key prefixes. Invalid credentials with these shapes receive the
+same protection. Every bare prefix requires a leading boundary that rejects a
+preceding lowercase ASCII letter or digit. Uppercase variable names, Unicode
+prose, JSON escapes and URL-encoded separators qualify. Lowercase identifiers
+such as `network_test_handles_missing_bundle_gracefully` remain raw. In
+`wordxoxe.xoxp-` followed by a qualifying suffix, the inner `xoxp-` credential
+is protected, and `wordxoxe.` stays outside the token.
+Suffixes include trailing hyphens and have no upper bound. The opaque `ghs_`
+alternative cannot protect only the first segment of a longer JWT.
+An opaque `ghs_` body followed by a dot and a letter, such as `.Next`, stays raw;
+only the structured application-ID/JWT arm accepts credential-internal dots.
+
+The PEM rule owns the BEGIN line and contiguous base64/whitespace run after at
+least 16 contiguous base64 source units, with no interleaved whitespace. It includes an available END line, even if its
+private-key label differs. Supported BEGIN labels are `PRIVATE KEY`,
+`RSA PRIVATE KEY`, `EC PRIVATE KEY`, `DSA PRIVATE KEY`, `OPENSSH PRIVATE KEY`,
+`ENCRYPTED PRIVATE KEY`, and `PGP PRIVATE KEY BLOCK`. It preserves LF, CRLF,
+single/double JSON escapes, Unicode newline escapes, space-joined blocks,
+comma-separated strings, URL-encoded labels/newlines/base64, string concatenation,
+comment/blockquote prefixes, line-number and editor gutters, markdown bullets,
+HTML breaks and numeric newline entities, shell continuations, escaped slashes,
+OpenSSL headers and PGP headers/checksum in one restorable token.
+Literal LF/CRLF armour headers accept extension names and arbitrary line values,
+including quotes, apostrophes and angle brackets, following
+RFC 9580's armour-header guidance (section 6.2.2).
+Serialized headers stop at quote, markup and escape boundaries. Quoted arrays
+of lines without newline escapes remain raw. Extending comma framing to those
+arrays also protects long tutorial placeholders, so this form remains a limit.
+[RFC 7468](https://www.rfc-editor.org/rfc/rfc7468) defines PKCS#8 private-key labels.
+Tutorial prose after a BEGIN label stays raw unless it provides the required
+contiguous evidence. Public keys, certificates and placeholder bodies such as `...` or
+`<your key here>` remain raw. Long alphabetic placeholders such as
+`YourPrivateKeyGoesHere` satisfy the same base64 evidence and can be protected.
+After a truncated private key, letters-only prose
+can join the protected span until punctuation; this is a deliberate fail-closed
+tradeoff. Quotes stop a span unless they form a source-string continuation.
+
+`crates/gaze-recognizers/tests/bare_credentials.rs` pins whole-span ownership,
+exact restoration, adjacent credentials, and benign counterexamples.
 
 ### Cue shapes and group separators
 
