@@ -157,6 +157,7 @@
       "auth-denied",
       "backend-failure",
       "backend-unavailable",
+      "host-context-rejected",
       "internal",
       "invalid-args",
       "invalid-session-id",
@@ -164,7 +165,8 @@
       "manifest-persistence-failed",
       "not-found",
       "redaction-failed",
-      "response-serialization-failed"
+      "response-serialization-failed",
+      "untransformable"
     ],
     "COUNTING_GRADES": [
       "egress_reconstructed",
@@ -199,6 +201,7 @@
       "auth-denied",
       "backend-failure",
       "backend-unavailable",
+      "host-context-rejected",
       "internal",
       "invalid-args",
       "invalid-session-id",
@@ -206,7 +209,8 @@
       "manifest-persistence-failed",
       "not-found",
       "redaction-failed",
-      "response-serialization-failed"
+      "response-serialization-failed",
+      "untransformable"
     ],
     "FEATURE_GRAPH_IDS": [
       "workspace.all_features",
