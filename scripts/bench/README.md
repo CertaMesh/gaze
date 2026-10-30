@@ -693,8 +693,8 @@ binds native-capture reuse admission. The
 [bounded-reuse specification](../../docs/reference/benchmarks/specifications/5b09cd287f0453aadc605a8136219378b56bacdfe4eb57a49bc01b53d9c785be.json)
 also includes the bounded inference-equivalence and key-mutation tools in the
 measuring source closure. The
-[current specification](../../docs/reference/benchmarks/specifications/1f519a4b7f01f59a51b2204cd649315b7ba7dd280645f7a8f1eefdde2a521c63.json)
-also binds complete typed refusal evidence and the versioned refusal gate.
+[current specification](../../docs/reference/benchmarks/specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json)
+also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
