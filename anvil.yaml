@@ -158,6 +158,15 @@ checks:
     toolchain: [rustc -Vv, cargo -V]
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/invisible_separator_release.py --card-codes-only
+  json-tree-utf8:
+    description: Real parser tests and raw UTF-8 revalidation type-guard mutations
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/gate/json-tree-utf8-mutation-probe.py, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V, python3 --version]
+    commands:
+      - python3 scripts/gate/json-tree-utf8-mutation-probe.py
   fmt:
     reusable: true
     inputs: &rust-inputs [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/anvil, .github/workflows, anvil.yaml]

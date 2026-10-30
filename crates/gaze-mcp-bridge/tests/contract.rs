@@ -156,6 +156,16 @@ async fn host_with_fake_and_limits(
     audit: Arc<dyn BridgeAuditSink>,
     limits: LimitCfg,
 ) -> (gaze_mcp_bridge::BridgeHost, Arc<BridgeSessionStore>) {
+    host_with_pipeline(client, policy, audit, limits, None).await
+}
+
+async fn host_with_pipeline(
+    client: Arc<FakeClient>,
+    policy: PolicyConfig,
+    audit: Arc<dyn BridgeAuditSink>,
+    limits: LimitCfg,
+    pipeline: Option<gaze::Pipeline>,
+) -> (gaze_mcp_bridge::BridgeHost, Arc<BridgeSessionStore>) {
     let tool = NamespacedTool {
         namespaced_name: "mail.send".to_string(),
         server: "mail".to_string(),
@@ -168,12 +178,14 @@ async fn host_with_fake_and_limits(
     };
     let registry = Arc::new(BridgeRegistry::from_tools(vec![tool]).expect("registry"));
     let store = Arc::new(BridgeSessionStore::ephemeral());
-    let host = BridgeHostBuilder::new(registry, Arc::clone(&store), audit)
+    let mut builder = BridgeHostBuilder::new(registry, Arc::clone(&store), audit)
         .auth(Arc::new(AllowAuth))
         .policy(policy)
-        .limits(limits)
-        .build();
-    (host, store)
+        .limits(limits);
+    if let Some(pipeline) = pipeline {
+        builder = builder.pipeline(pipeline, vec![gaze::LocaleTag::Global]);
+    }
+    (builder.build(), store)
 }
 
 async fn seed_email_token(store: &BridgeSessionStore, sid: &str) -> String {
@@ -1755,4 +1767,334 @@ async fn eviction_retains_weak_only_candidate_until_handle_release() {
         store.get(SID_A).await.unwrap().lock().await.restore(&token),
         Some(RAW_EMAIL.to_string())
     );
+}
+
+// This recognizer stands in for a configured field-aware detector. The bridge must
+// supply parsed provenance rather than inventing its own sensitive-label vocabulary.
+struct LabelledScalar;
+
+struct OverlappingScalar(bool);
+
+impl gaze::Detector for OverlappingScalar {
+    fn detect(&self, input: &str) -> Vec<gaze::Detection> {
+        let Some(start) = input.find("731284") else {
+            return Vec::new();
+        };
+        let range = if self.0 {
+            start + 1..start + 5
+        } else {
+            start - 1..start + 7
+        };
+        vec![gaze::Detection::new(range, PiiClass::Name, "test.overlap")]
+    }
+}
+
+#[tokio::test]
+async fn partial_scalar_overlap_refuses_before_downstream() {
+    for (pipeline, args) in [
+        (
+            Some(
+                gaze::Pipeline::builder()
+                    .detector(OverlappingScalar(true))
+                    .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
+                    .build()
+                    .unwrap(),
+            ),
+            json!({"n":731284}),
+        ),
+        (
+            Some(
+                gaze::Pipeline::builder()
+                    .detector(OverlappingScalar(false))
+                    .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
+                    .build()
+                    .unwrap(),
+            ),
+            json!({"n":731284}),
+        ),
+        (None, json!({"n":-4111111111111111_i64})),
+    ] {
+        let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            pipeline,
+        )
+        .await;
+        let error = host
+            .dispatch(
+                &Principal::new("agent"),
+                "mail.send",
+                args,
+                Some(SID_A),
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
+            .await
+            .expect_err("partial scalar overlap must refuse");
+        assert_eq!(
+            error.untransformable_reason(),
+            Some("json_number_no_text_only_path")
+        );
+        assert!(client.calls().await.is_empty());
+    }
+}
+
+struct MarkerNet(&'static str);
+
+struct MarkerDetector(&'static str);
+
+impl gaze::Detector for MarkerDetector {
+    fn detect(&self, input: &str) -> Vec<gaze::Detection> {
+        input
+            .find(self.0)
+            .map(|start| {
+                gaze::Detection::new(start..start + self.0.len(), PiiClass::Name, "test.marker")
+            })
+            .into_iter()
+            .collect()
+    }
+}
+
+impl gaze::SafetyNet for MarkerNet {
+    fn id(&self) -> &str {
+        "test.marker"
+    }
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+    fn check(
+        &self,
+        text: &str,
+        _: gaze::SafetyNetContext<'_>,
+    ) -> Result<Vec<gaze::LeakSuspect>, gaze::SafetyNetError> {
+        Ok(text
+            .find(self.0)
+            .map(|start| {
+                gaze::LeakSuspect::new(
+                    start..start + self.0.len(),
+                    PiiClass::Name,
+                    self.id(),
+                    Some(1.0),
+                    gaze::LeakKind::Uncovered,
+                    "synthetic",
+                    None,
+                )
+            })
+            .into_iter()
+            .collect())
+    }
+}
+
+#[tokio::test]
+async fn string_residual_is_independent_of_unrelated_scalar() {
+    for args in [
+        json!({"text":"residual-marker"}),
+        json!({"text":"residual-marker", "n":12}),
+    ] {
+        let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+        let pipeline = gaze::Pipeline::builder()
+            .register_safety_net(MarkerNet("residual-marker"))
+            .build()
+            .unwrap();
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            Some(pipeline),
+        )
+        .await;
+        host.dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            args.clone(),
+            Some(SID_A),
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
+        .await
+        .expect("strings retain existing observer-only behavior");
+        assert_eq!(client.calls().await, vec![args]);
+    }
+}
+
+#[tokio::test]
+async fn scalar_residual_refuses_before_downstream() {
+    for marker in [
+        "maskme",
+        "synthetic marker long enough to shrink when replaced by a token",
+    ] {
+        let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+        let pipeline = gaze::Pipeline::builder()
+            .detector(MarkerDetector(marker))
+            .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
+            .register_safety_net(MarkerNet("731284"))
+            .build()
+            .unwrap();
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            Some(pipeline),
+        )
+        .await;
+        let error = host
+            .dispatch(
+                &Principal::new("agent"),
+                "mail.send",
+                json!({"a":marker, "n":731284}),
+                Some(SID_A),
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
+            .await
+            .expect_err("scalar residual must refuse");
+        assert!(matches!(
+            error,
+            DispatchError::Protection(gaze::ProtectionError::Residual)
+        ));
+        assert!(client.calls().await.is_empty());
+    }
+}
+
+impl gaze::Recognizer for LabelledScalar {
+    fn id(&self) -> &str {
+        "test.labelled_scalar"
+    }
+    fn supported_class(&self) -> &PiiClass {
+        &PiiClass::Name
+    }
+    fn token_family(&self) -> &str {
+        "counter"
+    }
+    fn detect(
+        &self,
+        _input: &str,
+        ctx: &gaze::DetectContext<'_>,
+    ) -> Result<Vec<gaze::Candidate>, gaze_types::DetectError> {
+        let Some(gaze_types::FieldContext::Spans(fields)) = ctx.fields else {
+            return Ok(Vec::new());
+        };
+        Ok(fields
+            .iter()
+            .filter(|(_, field)| field.path.segments().last() == Some(&"customer_id"))
+            .map(|(range, _)| {
+                gaze::Candidate::new(
+                    range.clone(),
+                    PiiClass::Name,
+                    self.id(),
+                    1.0,
+                    100,
+                    None,
+                    "counter",
+                    "test",
+                    gaze::ConflictTier::None,
+                    Vec::new(),
+                )
+            })
+            .collect())
+    }
+}
+
+#[tokio::test]
+async fn labelled_scalar_args_refuse_before_downstream_and_unlabelled_pass() {
+    for (args, expected) in [
+        (
+            json!({"nested":[{"customer_id":731284}]}),
+            Some("json_number_no_text_only_path"),
+        ),
+        (
+            json!({"nested":[{"customer_id":true}]}),
+            Some("no_safe_rendering"),
+        ),
+        (
+            json!({"nested":[{"quantity":731284,"enabled":true,"empty":null}]}),
+            None,
+        ),
+    ] {
+        let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+        let pipeline = gaze::Pipeline::builder()
+            .recognizer(LabelledScalar)
+            .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
+            .build()
+            .unwrap();
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            Some(pipeline),
+        )
+        .await;
+        let result = host
+            .dispatch(
+                &Principal::new("agent"),
+                "mail.send",
+                args.clone(),
+                Some(SID_A),
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
+            .await;
+        match expected {
+            Some(reason) => {
+                assert_eq!(
+                    result
+                        .expect_err("labelled scalar must refuse")
+                        .untransformable_reason(),
+                    Some(reason)
+                );
+                assert!(client.calls().await.is_empty());
+            }
+            None => {
+                result.expect("unlabelled scalars pass");
+                assert_eq!(client.calls().await, vec![args]);
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn labelled_scalar_results_refuse_and_unlabelled_results_preserve_types() {
+    for value in [
+        json!({"rows":[{"customer_id":731284}]}),
+        json!({"rows":[{"customer_id":false}]}),
+        json!({"rows":[{"quantity":731284,"enabled":false,"empty":null}]}),
+    ] {
+        let mut response = result_text("sent");
+        response.structured_content = Some(value.clone());
+        let client = FakeClient::new(FakeResponse::Result(response));
+        let pipeline = gaze::Pipeline::builder()
+            .recognizer(LabelledScalar)
+            .rule(gaze::DefaultRule::new(gaze::Action::Tokenize))
+            .build()
+            .unwrap();
+        let (host, _) = host_with_pipeline(
+            client.clone(),
+            PolicyConfig::default(),
+            Arc::new(MemoryAudit::default()),
+            LimitCfg::default(),
+            Some(pipeline),
+        )
+        .await;
+        let result = host
+            .dispatch(
+                &Principal::new("agent"),
+                "mail.send",
+                json!({}),
+                Some(SID_A),
+                gaze_mcp_core::HostContextSelection::Absent,
+            )
+            .await;
+        if value["rows"][0].get("customer_id").is_some() {
+            let error = result.expect_err("labelled result must refuse");
+            assert!(error.untransformable_reason().is_some());
+            assert!(!format!("{error:?}").contains("customer_id"));
+        } else {
+            assert_eq!(
+                result.expect("benign result").payload["structuredContent"],
+                value
+            );
+        }
+    }
 }
