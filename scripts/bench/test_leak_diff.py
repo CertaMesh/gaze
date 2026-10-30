@@ -41,7 +41,8 @@ class LeakDiffTests(unittest.TestCase):
                         final_protection_trace=[dict(raw_start=a, raw_end=b, action='tokenize', provenance={},
                                                      **{'class': prediction_class}) for a, b in spans])
         if refused:
-            response['pipeline_error_code'] = 'synthetic-refusal'
+            response['pipeline_error_code'] = 'policy'
+            response['pipeline_error_stage'] = 'clean'
             response.pop('final_protection_trace')
         observation = dict(kind='observation', layer='C', config='production',
                            document_id=document['id'], response=response)

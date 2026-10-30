@@ -1,4 +1,4 @@
-"""Prove the benign-refusal gate branch is required by the behavioral oracle."""
+"""Prove benign and concealed refusal guards are required by behavioral oracles."""
 import inspect
 import io
 import json
@@ -10,22 +10,29 @@ from test_refusal_contract import PairedGateTests
 
 
 def check():
-    test = "test_benign_refusals_fail_even_when_unchanged_and_another_layer_improves"
-    def run():
+    def run(test):
         return unittest.TextTestRunner(stream=io.StringIO()).run(
             unittest.TestSuite([PairedGateTests(test)]))
-    if not run().wasSuccessful():
-        raise RuntimeError("baseline refusal oracle failed")
     source = inspect.getsource(refusal_gate.compare)
-    if source.count("if bad:") != 1:
-        raise RuntimeError("refusal guard mutation anchor changed")
-    namespace = dict(refusal_gate.__dict__)
-    exec(compile(source.replace("if bad:", "if False:"), "<benign-refusal-mutant>", "exec"), namespace)
-    with mock.patch.object(refusal_gate, "compare", namespace["compare"]):
-        result = run()
-    if len(result.failures) != 1 or result.errors:
-        raise RuntimeError("benign refusal guard mutant survived or oracle errored")
-    return {"baseline": "pass", "disabled_benign_refusal_guard": "killed"}
+    results = {"baseline": "pass"}
+    for name, anchor, test in (
+        ("disabled_benign_refusal_guard", "if bad:",
+         "test_benign_refusals_fail_even_when_unchanged_and_another_layer_improves"),
+        ("disabled_concealed_refusal_guard", "if concealed:",
+         "test_base_ordinary_refusal_cannot_inherit_candidate_block"),
+    ):
+        if not run(test).wasSuccessful():
+            raise RuntimeError("baseline refusal oracle failed")
+        if source.count(anchor) != 1:
+            raise RuntimeError("refusal guard mutation anchor changed")
+        namespace = dict(refusal_gate.__dict__)
+        exec(compile(source.replace(anchor, "if False:"), "<refusal-mutant>", "exec"), namespace)
+        with mock.patch.object(refusal_gate, "compare", namespace["compare"]):
+            result = run(test)
+        if len(result.failures) != 1 or result.errors:
+            raise RuntimeError("refusal guard mutant survived or oracle errored")
+        results[name] = "killed"
+    return results
 
 
 if __name__ == "__main__":

@@ -5742,7 +5742,9 @@ def gate(
     if refusal_contract_version not in (1, 2):
         raise LayerError("unknown refusal contract version")
     result = compare_layers(base, candidate, config, policy_delta, allow_legacy_policy_inputs)
-    if result["verdict"] != "not_comparable" and refusal_contract_version == 2:
+    if (result["verdict"] != "not_comparable" and refusal_contract_version == 2
+            and any(row["failed_closed_candidate"] or row["failed_closed_base"]
+                    for row in result["layers"].values())):
         config = result["config"]
         if record_paths is None and scorecard_paths and all(c.get("observation_record") for c in (base, candidate)):
             names = [c["observation_record"]["file"] for c in (base, candidate)]

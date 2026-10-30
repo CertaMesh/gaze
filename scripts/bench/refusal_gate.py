@@ -7,6 +7,7 @@ import copy
 from collections import Counter
 
 import gaze_bench_score as score
+import benchmark_spec
 import refusal_contract as refusal
 import scorecard_record as records
 
@@ -41,6 +42,11 @@ def inventory(documents, responses):
 
 
 def compare(cards, paths, config, decide, layer_totals, *, gold_verdict_reference=None):
+    totals = [layer_totals(card, config) for card in cards]
+    refused_layers = {layer for layer in ("C", "A", "D", "R")
+                      if any(side[layer]["failed_closed"] for side in totals)}
+    if not refused_layers:
+        return decide(*totals)
     loaded = []
     for card, path in zip(cards, paths, strict=True):
         pointer = card.get("observation_record")
@@ -60,6 +66,8 @@ def compare(cards, paths, config, decide, layer_totals, *, gold_verdict_referenc
     views = [copy.deepcopy(c) for c in cards]
     reports = {}
     for layer in ("C", "A", "D", "R"):
+        if layer not in refused_layers:
+            continue
         sides = []
         for card, (header, rows) in zip(cards, loaded, strict=True):
             selected = [r for r in rows if r["layer"] == layer and r["config"] == config]
@@ -73,7 +81,8 @@ def compare(cards, paths, config, decide, layer_totals, *, gold_verdict_referenc
         if {r["document_id"] for r in sides[0][1]} != {r["document_id"] for r in sides[1][1]}:
             raise records.RecordError("refusal gate attempted populations differ")
         # Gold ownership and input identities must agree independently of the subject.
-        if sides[0][2] != sides[1][2]:
+        if (benchmark_spec.descriptor_digest(sides[0][2].values())
+                != benchmark_spec.descriptor_digest(sides[1][2].values())):
             raise records.RecordError("refusal gate document inventories differ")
         excluded = sides[0][0]["blocked"] | sides[1][0]["blocked"]
         # An ordinary refusal at an operation blocked on the other side must

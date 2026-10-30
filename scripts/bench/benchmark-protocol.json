@@ -31,7 +31,7 @@
   },
   "refusal_contract": {
     "version": 2,
-    "semantics": "Only typed untransformable refusals whose every refused span exactly matches ownership-labelled confirmed-ID gold are blocked operations. Benign/non-gold refusals fail. Compare common unblocked operations for bytes, exact restore and valid manifest; refusing creates no gain.",
+    "semantics": "Only typed untransformable refusals with producer-proven evidence_complete=true covering every refused path, whose every refused span exactly matches ownership-labelled confirmed-ID gold, are blocked operations. Single-path first-error evidence and unsupported encoded carriers are ineligible. Benign/non-gold refusals fail. Layers without refusals retain legacy arithmetic. Compare common unblocked operations for bytes, exact restore and valid manifest; refusing creates no gain.",
     "legacy_version": 1
   }
 }

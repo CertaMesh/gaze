@@ -379,6 +379,7 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
             "pipeline_error_code": response["pipeline_error_code"],
             "pipeline_error_stage": response["pipeline_error_stage"],
             **({"refusal_evidence": response["refusal_evidence"]} if "refusal_evidence" in response else {}),
+            **({"evidence_complete": response["evidence_complete"]} if "evidence_complete" in response else {}),
             "refused": True,
             "fallback_redact": False,
         }

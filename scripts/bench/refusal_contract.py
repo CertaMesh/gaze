@@ -30,7 +30,11 @@ def validate_outcome(value):
 def validate_evidence(response: Mapping, byte_length: int, boundaries=None):
     code = response.get("pipeline_error_code")
     evidence = response.get("refusal_evidence")
+    if "evidence_complete" in response and type(response["evidence_complete"]) is not bool:
+        raise ValueError("invalid refusal completeness")
     if evidence is None:
+        if response.get("evidence_complete") is True:
+            raise ValueError("complete refusal without evidence")
         return  # Old records and failures without located evidence remain ordinary refusals.
     if code not in UNTRANSFORMABLE_CODES or not isinstance(evidence, list) or not evidence:
         raise ValueError("invalid typed refusal evidence")
@@ -56,7 +60,9 @@ def eligible(document, response):
     """
     validate_evidence(response, len(document.text.encode("utf-8")))
     evidence = response.get("refusal_evidence")
-    if response.get("pipeline_error_code") not in UNTRANSFORMABLE_CODES or not evidence:
+    if (response.get("pipeline_error_code") not in UNTRANSFORMABLE_CODES or not evidence
+            or response.get("evidence_complete") is not True
+            or response["pipeline_error_code"] == "untransformable_encoded_carrier"):
         return False
     gold = {(s.start, s.end) for s in document.spans if s.label in CONFIRMED_ID_LABELS}
     return all((s["raw_start"], s["raw_end"]) in gold for s in evidence)

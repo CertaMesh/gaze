@@ -1197,7 +1197,7 @@ def validate_response(
     if "pipeline_error_code" in response:
         response = _expect_exact_keys(
             response,
-            PIPELINE_ERROR_RESPONSE_FIELDS | ({"refusal_evidence"} if "refusal_evidence" in response else set()),
+            PIPELINE_ERROR_RESPONSE_FIELDS | (response.keys() & {"refusal_evidence", "evidence_complete"}),
             f"{document.uid}: pipeline error response",
         )
         fixture_id = _expect_string(response["fixture_id"], "fixture_id")

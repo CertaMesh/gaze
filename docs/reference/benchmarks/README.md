@@ -1941,12 +1941,27 @@ Refusal contract v2 is the default, independently of scored-label contracts v2
 and v1. A typed `untransformable_*` refusal is a blocked operation only when
 every refused span exactly matches ownership-labelled `CUSTOMER_ID`,
 `EMPLOYEE_ID`, or `RECORD_ID` gold. The closed reason and source byte ranges
-travel in value-free `refusal_evidence`. Missing evidence, unknown reasons,
+travel in value-free `refusal_evidence`. The producer must explicitly assert
+`evidence_complete: true`, covering every refused path in the document. A
+single first-error path cannot establish completeness, even when its span is
+gold and an unlisted benign sibling also cannot be transformed. Missing evidence, unknown reasons,
 partial gold matches, and contextual gold do not qualify. A benign or non-gold
 refusal fails, including a benign refused value beside unrelated gold.
 
-The gate verifies scorecard-bound observation records before applying the
-exception. Operations blocked on either side leave **both** sides' byte,
+The current producer's `ProtectionError::Untransformable` carries only one
+path, so the bench example never emits `evidence_complete: true`. No current
+producer qualifies for the blocked-operation exception. PR6 must add an
+end-to-end completeness test: real pipeline → typed refusal with every refused
+path → blocked operation, including a benign untransformable sibling that
+must fail. Only that tested producer path may assert completeness. Encoded
+carriers (JSON inside a string) have no supported raw-path mapping and remain
+ineligible, even with a completeness assertion and an outer node at the same path.
+
+Layers with no refusals use the historical arithmetic without loading refusal
+evidence. Optional missing or broken leak-diff records cannot change that verdict.
+For layers with refusals, the gate verifies scorecard-bound observation records
+and compares canonical input/gold descriptors, excluding subject validator verdicts.
+Operations blocked on either side leave **both** sides' byte,
 exact-restore, and valid-manifest denominators. The remaining common population
 must meet every existing gain and integrity check. Refusing a leaky operation
 cannot earn a gain. Ordinary refusals cannot inherit the other side's exception.
@@ -1954,7 +1969,7 @@ A newly completed operation that was blocked at base must protect its gold and
 pass restore and manifest checks. The certificate checker applies the refusal
 contract pinned in its specification. Missing or impossible counts exit `2`.
 
-`operation_outcomes` reports each layer's blocked-operation rate over attempted
+`operation_outcomes` reports each refused layer's blocked-operation rate over attempted
 operations and false-refusal rate over benign operations, with numerators and
 denominators. A benign operation has no scored gold. Mixed documents with a
 non-gold refused span are reported separately in `false_refusal_documents` and
@@ -1973,11 +1988,14 @@ from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
 separately from confirmed protection even when both emit `custom:customer_id`.
 Historical evidence without this field retains its original family-class
 reporting. Live scoring and replay enforce the same closed outcome vocabulary.
+Retained refusal rows also require a closed code and stage; stale synthetic
+fixtures use that vocabulary rather than weakening replay validation.
 
 The committed [history proof](refusal-contract-v2-history-proof.json) replays
 both v30 release records under scored-label contracts v1 through v4 with the
 base and candidate scorers. Both records contain zero refusals. The complete
 scorecards remain identical, so this change needs no new historical captures.
+Proof hashes use repository-relative contract paths and reproduce across checkout locations.
 The proof does not relabel the old records with the new specification. Its
 scorer hashes and AST comparison also admit this exact validation-only successor
 for the competitor renderer. The measured rows retain their original scorer

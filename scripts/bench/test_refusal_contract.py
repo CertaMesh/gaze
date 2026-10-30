@@ -20,12 +20,39 @@ def document(uid="d", gold=True):
 
 def refusal(spans=((15, 21),), code="untransformable_json_number_no_text_only_path"):
     return {"fixture_id": "d", "pipeline_error_stage": "clean", "pipeline_error_code": code,
-            "timing": {"total_ms": 1.0}, "refusal_evidence": [
+            "timing": {"total_ms": 1.0}, "evidence_complete": True, "refusal_evidence": [
                 {"raw_start": a, "raw_end": b, "outcome": "confirmed_untransformable",
                  "reason": code.removeprefix("untransformable_")} for a, b in spans]}
 
 
 class RefusalContractTests(unittest.TestCase):
+    def test_first_error_with_unlisted_benign_sibling_is_ordinary(self):
+        # The sibling limit is untransformable too; a first-error path cannot
+        # prove that every refused value belongs to confirmed-ID gold.
+        for complete in (None, False):
+            response = refusal()
+            response.pop("evidence_complete")
+            if complete is not None:
+                response["evidence_complete"] = complete
+            result = refusal_gate.inventory([document()], {"d": response})
+            self.assertEqual(result["blocked"], set())
+            self.assertEqual(result["ordinary"], {"d"})
+
+    def test_encoded_carrier_cannot_borrow_an_outer_node_path(self):
+        response = refusal(code="untransformable_encoded_carrier")
+        d = document()
+        d = score.Document(**{**d.__dict__, "text":
+            r'{"customer_id":812345,"payload":"{\"customer_id\":812345}"}'})
+        self.assertFalse(contract.eligible(d, response))
+
+    def test_zero_refusals_do_not_open_optional_records(self):
+        totals = {layer: {"failed_closed": 0} for layer in ("C", "A", "D", "R")}
+        expected = {"verdict": "pass", "historical": True}
+        with mock.patch.object(record, "_read", side_effect=AssertionError("optional record opened")):
+            result = refusal_gate.compare(({}, {}), (Path("missing"), Path("broken")),
+                                          "test", lambda *args: expected, lambda *args: totals)
+        self.assertEqual(result, expected)
+
     def test_gold_labelled_typed_refusal_is_blocked_operation(self):
         result = refusal_gate.inventory([document()], {"d": refusal()})
         self.assertEqual(result["blocked"], {"d"})
@@ -47,6 +74,7 @@ class RefusalContractTests(unittest.TestCase):
         for response in (refusal(), {"fixture_id": "d", "pipeline_error_stage": "clean",
                                     "pipeline_error_code": "policy"}):
             response.pop("refusal_evidence", None)
+            response.pop("evidence_complete", None)
             self.assertFalse(contract.eligible(document(), response))
 
     def test_contextual_gold_is_not_confirmed_id_gold(self):
@@ -64,10 +92,12 @@ class RefusalContractTests(unittest.TestCase):
             score.validate_response(document(), response)
             compact = record._compact_response(response)
             self.assertEqual(compact["refusal_evidence"], response["refusal_evidence"])
+            self.assertIs(compact["evidence_complete"], True)
             record.validate_refusal(compact, document())
         for code in contract.PROTECTION_CODES | {"possibly_sensitive_refused"}:
             response = refusal(code=code)
             response.pop("refusal_evidence")
+            response.pop("evidence_complete")
             score.validate_response(document(), response)
             record.validate_refusal(record._compact_response(response), document())
 
@@ -80,6 +110,9 @@ class RefusalContractTests(unittest.TestCase):
             lambda r: r["refusal_evidence"][0].update(outcome="possibly_sensitive"),
             lambda r: r["refusal_evidence"][0].update(value="forbidden"),
             lambda r: r.update(refusal_evidence=[]),
+            lambda r: r.update(evidence_complete=1),
+            lambda r: r.update(evidence_complete="true"),
+            lambda r: r.pop("refusal_evidence"),
         ):
             response = refusal()
             mutate(response)
@@ -134,7 +167,8 @@ class RefusalContractTests(unittest.TestCase):
 
 
 class PairedGateTests(unittest.TestCase):
-    def compare(self, *, benign=False, independent_gain=True, refuse_base=False, refuse_candidate=True):
+    def compare(self, *, benign=False, independent_gain=True, refuse_base=False, refuse_candidate=True,
+                ordinary_base=False, incomplete_candidate=False, change_gold=False):
         """Real replay and gate arithmetic over small independently authored records."""
         cards, headers, observations = [], [], []
         for side in (0, 1):
@@ -149,12 +183,18 @@ class PairedGateTests(unittest.TestCase):
                 responses = {d.uid: _success_response(d) for d in docs}
                 if layer == "A" and ((side and refuse_candidate) or (not side and refuse_base)):
                     responses[first.uid] = {**refusal(), "fixture_id": first.uid}
+                    if (not side and ordinary_base) or (side and incomplete_candidate):
+                        responses[first.uid].pop("evidence_complete")
                 if layer == "C" and side and independent_gain:
                     responses[other.uid]["final_protection_trace"] = [{
                         "raw_start": 15, "raw_end": 21, "class": "custom:customer_id", "action": "tokenize",
                         "provenance": {"stage": "primary_pipeline", "decision": "policy", "source_ids": ["customer.id"]}}]
                 for d in docs:
                     descriptor = {**record._document_row(d), "layer": layer}
+                    if d == first:
+                        descriptor["validator"] = {"subject_verdict": side}
+                    if side and change_gold and layer == "A" and d == first:
+                        descriptor["gold"] = []
                     header["documents"].append(descriptor)
                     rows.append({"layer": layer, "config": "test", "document_id": d.uid,
                                  "response": record._compact_response(responses[d.uid])})
@@ -210,6 +250,18 @@ class PairedGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "fail")
         self.assertEqual(result["summary"]["leaked_bytes_decrease"], 0)
 
+    def test_base_ordinary_refusal_cannot_inherit_candidate_block(self):
+        with self.assertRaisesRegex(record.RecordError, "ordinary refusal cannot inherit"):
+            self.compare(refuse_base=True, ordinary_base=True)
+
+    def test_first_error_evidence_cannot_turn_a_refusal_into_a_gain(self):
+        result = self.compare(incomplete_candidate=True)
+        self.assertEqual(result["verdict"], "fail")
+
+    def test_gold_identity_changes_remain_rejected(self):
+        with self.assertRaisesRegex(record.RecordError, "document inventories differ"):
+            self.compare(change_gold=True)
+
     def test_benign_refusals_fail_even_when_unchanged_and_another_layer_improves(self):
         result = self.compare(benign=True, refuse_base=True)
         self.assertEqual(result["verdict"], "fail")
@@ -219,7 +271,8 @@ class PairedGateTests(unittest.TestCase):
 class RefusalMutationTests(unittest.TestCase):
     def test_benign_refusal_guard_mutant_is_killed(self):
         from check_refusal_gate_mutation import check
-        self.assertEqual(check(), {"baseline": "pass", "disabled_benign_refusal_guard": "killed"})
+        self.assertEqual(check(), {"baseline": "pass", "disabled_benign_refusal_guard": "killed",
+                                   "disabled_concealed_refusal_guard": "killed"})
 
 
 if __name__ == "__main__":
