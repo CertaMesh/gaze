@@ -23,11 +23,13 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-# These exact files contain the reviewed test/docs follow-up, not production changes.
+# These exact files contain reviewed test/docs follow-ups and a detached probe
+# lock repair. Captures use the base harness's probe; its inputs are unchanged.
 REVIEWED_POST_CAPTURE_FILES = {
     "crates/gaze-recognizers/src/regex.rs": "b86b747a5a9581f60a183b0ff59ad66c5bff5baf6992d0ff2e6af23fb379f244",
     "docs/reference/policy.md": "9cb1f6505a521725f186694c138581b4ccfe2c5ff7b2aad94b0c4e70b331a166",
     "scripts/ci/invisible_separator_mutation_probe.py": "18b47be00df62a86d1aac8b99d23aba144b98ca983b149142c3fb8d75f6c126d",
+    "scripts/bench/validator_recall_probe/Cargo.lock": "b4426cde5d06024a053137069cac1f1d9485e5c5cab1479f78d8ae44ea6d0cfa",
     "scripts/ci/full-inputs.json": "97c3f8997b8172072c812b1948780778e68604a4ef1a1f640e1d13851894eeb6"
 }
 
