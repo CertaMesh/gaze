@@ -1937,9 +1937,57 @@ python3 scripts/bench/agentic_layers.py gate \
 The gate checks the production arm of layers C, A, D and R. It checks leaked
 bytes twice: on the gated bytes below, and on the headline leaked bytes over
 all gold, so a regression cannot hide inside gold the gate leaves out.
-It also checks exact restores and valid manifests per layer against the same
-attempted-document population. Fewer refusals may not raise a layer's
-restore-failure or invalid-manifest count; missing or impossible counts exit `2`.
+Refusal contract v2 is the default, independently of scored-label contracts v2
+and v1. A typed `untransformable_*` refusal is a blocked operation only when
+every refused span exactly matches ownership-labelled `CUSTOMER_ID`,
+`EMPLOYEE_ID`, or `RECORD_ID` gold. The closed reason and source byte ranges
+travel in value-free `refusal_evidence`. Missing evidence, unknown reasons,
+partial gold matches, and contextual gold do not qualify. A benign or non-gold
+refusal fails, including a benign refused value beside unrelated gold.
+
+The gate verifies scorecard-bound observation records before applying the
+exception. Operations blocked on either side leave **both** sides' byte,
+exact-restore, and valid-manifest denominators. The remaining common population
+must meet every existing gain and integrity check. Refusing a leaky operation
+cannot earn a gain. Ordinary refusals cannot inherit the other side's exception.
+A newly completed operation that was blocked at base must protect its gold and
+pass restore and manifest checks. The certificate checker applies the refusal
+contract pinned in its specification. Missing or impossible counts exit `2`.
+
+`operation_outcomes` reports each layer's blocked-operation rate over attempted
+operations and false-refusal rate over benign operations, with numerators and
+denominators. A benign operation has no scored gold. Mixed documents with a
+non-gold refused span are reported separately in `false_refusal_documents` and
+still fail. Excluded operations appear in
+`excluded_from_both_byte_and_restore_denominators`. The gate's existing rows
+report exact restores and valid manifests for the common population.
+
+`--refusal-contract 1` reproduces the historical gate: every refusal rise and
+every exact-restore or valid-manifest count drop fails. This option does not
+change scored-label contracts. Generator v30 keeps the same corpus; the
+versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/3450bc2f92b1e9fa847c247890c9d3c928cf9a44b6dbbed88023f18bc5231871.json) pins these inputs.
+
+Final protection evidence optionally carries `protection_outcome`, serialized
+from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
+separately from confirmed protection even when both emit `custom:customer_id`.
+Historical evidence without this field retains its original family-class
+reporting. Live scoring and replay enforce the same closed outcome vocabulary.
+
+The committed [history proof](refusal-contract-v2-history-proof.json) replays
+both v30 release records under scored-label contracts v1 through v4 with the
+base and candidate scorers. Both records contain zero refusals. The complete
+scorecards remain identical, so this change needs no new historical captures.
+The proof does not relabel the old records with the new specification. Its
+scorer hashes and AST comparison also admit this exact validation-only successor
+for the competitor renderer. The measured rows retain their original scorer
+provenance. Any other scorer change still requires new evidence.
+
+```bash
+uv run --project scripts/bench python scripts/bench/prove_refusal_history.py \
+  --baseline-root <prepared-base-checkout> --output <proof.json>
+uv run --project scripts/bench python scripts/bench/check_refusal_gate_mutation.py
+```
 
 Gold-validity changes are `not_comparable` by default. A validator change can
 be evaluated explicitly with frozen verdicts, using the original observation

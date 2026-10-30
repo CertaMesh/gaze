@@ -216,5 +216,11 @@ class PairedGateTests(unittest.TestCase):
         self.assertIn("benign/non-gold", result["reason"])
 
 
+class RefusalMutationTests(unittest.TestCase):
+    def test_benign_refusal_guard_mutant_is_killed(self):
+        from check_refusal_gate_mutation import check
+        self.assertEqual(check(), {"baseline": "pass", "disabled_benign_refusal_guard": "killed"})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -185,9 +185,14 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
    leads with the latest headline contract; switching the gated contracts requires a separate
    decision.
 3. Merge rule. Checked separately under each scored-label contract. No layer's leaked bytes rise, on
-   gated gold or on headline (all-gold) bytes. No layer's refusals rise, no layer's exact-restore or
-   valid-manifest document count falls, and no layer's restore-failure or invalid-manifest count
-   rises. At least one layer's leaked bytes fall, and the false-positive bytes added across all
+   gated gold or on headline (all-gold) bytes. Under refusal contract v2, typed untransformable refusals qualify as blocked
+   operations only when every refused span exactly matches ownership-labelled confirmed-ID gold.
+   Benign or non-gold refusals still fail. The gate removes blocked operations from both sides'
+   byte, exact-restore and valid-manifest denominators, reports blocked-operation and false-refusal
+   rates with denominators, and requires an independent gain. Ordinary refusals may not rise.
+   On the common comparison population, no layer's exact-restore or valid-manifest count falls,
+   and no layer's restore-failure or invalid-manifest count rises. Refusal contract v1 remains
+   available for historical reproduction with its original unconditional guards. At least one layer's leaked bytes fall, and the false-positive bytes added across all
    layers are fewer than the leaked bytes removed across all layers. Refused documents leave the
    leak count, so increased refusals hide leaks. State false-positive bytes per layer. A
    false-positive-only fix passes when false-positive bytes fall and no layer's leaked bytes or

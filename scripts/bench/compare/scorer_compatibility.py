@@ -22,4 +22,3 @@ def scorer_is_compatible(recorded: str, current: str) -> bool:
             and all(r.get("complete_scorecards_identical") is True and r.get("refusals") == 0
                     and set(r.get("contracts", {})) == {"1", "2", "3", "4"}
                     for r in proof["releases"].values()))
-
