@@ -1,0 +1,27 @@
+schema_version = "0.1.0"
+
+[session]
+scope = "conversation"
+
+[locale]
+active = ["en-US", "de-DE", "de-AT", "de-CH", "en-GB", "en-IE", "en-AU", "en-CA", "en-IN", "hi-IN", "fr-FR", "es-ES", "nl-NL", "pt-BR"]
+
+[ner]
+model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
+threshold = 0.3
+
+[safety_net]
+backend = "nym"
+
+[safety_net.nym]
+model_dir = "~/.local/share/gaze/models/nym-small-int8"
+
+[address_blocks]
+enabled = true
+
+[policy.rulepacks]
+bundled = ["core", "locale-de", "locale-en", "locale-br", "locale-fr", "locale-in", "locale-nl", "locale-uk", "secrets"]
+
+[[rule]]
+kind = "default"
+action = "tokenize"

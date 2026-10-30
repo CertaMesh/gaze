@@ -1,0 +1,66 @@
+{
+  "candidate": "5df6f47ad4d6a54de44db150e345b699ff722aee",
+  "cargo_jobs": 2,
+  "ci_input_audit": {
+    "paths_at_measured_head": 929,
+    "result": "pass"
+  },
+  "clippy_workspace_all_features_all_targets_deny_warnings": "pass",
+  "default_policy_equivalence": {
+    "differences": 0,
+    "documents": 6,
+    "source": "54fe02ae9a92b52d412abd7f4560bfbca30c9d15"
+  },
+  "fmt": "pass",
+  "full_python_benchmark_suite": {
+    "passed": 2748,
+    "rerun_after_final_main_merge": false,
+    "skipped": 11,
+    "source": "54fe02ae9a92b52d412abd7f4560bfbca30c9d15",
+    "subtests_passed": 4436
+  },
+  "niceness": 10,
+  "parent_normalization_parity": {
+    "branch_scalars": 1112064,
+    "unchanged_main_scalars": 1107889
+  },
+  "pem_source_boundary_regression": {
+    "failed_before": true,
+    "passed_after": true
+  },
+  "post_main_cli_parity": {
+    "no_policy": {
+      "completed": 1072,
+      "differences": 0
+    },
+    "setup_policy": {
+      "complete": false,
+      "completed_at_least": 28,
+      "differences_observed": 0
+    },
+    "status": "setup_policy_diagnostic_interrupted; full release gain pair retained"
+  },
+  "python_ci": {
+    "result": "pass",
+    "run": 59,
+    "skipped": 2
+  },
+  "regex_differential": {
+    "capture_differences": 0,
+    "comparisons": 4844399,
+    "memory_growth_limit_unchanged": 8,
+    "patterns": 103,
+    "source": "54fe02ae9a92b52d412abd7f4560bfbca30c9d15"
+  },
+  "separator_mutations": {
+    "rejected": 51,
+    "source_restored": true
+  },
+  "toolchain": "Rust 1.96.0",
+  "workspace_all_feature_tests": {
+    "failed": 0,
+    "ignored": 33,
+    "passed": 3616,
+    "suites": 245
+  }
+}
