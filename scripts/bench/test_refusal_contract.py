@@ -1,4 +1,5 @@
 """Behavioral oracles for typed refusals, including mixed gold/benign values."""
+import json
 from pathlib import Path
 import unittest
 import tempfile
@@ -18,14 +19,50 @@ def document(uid="d", gold=True):
                           (score.Span(15, 21, "CUSTOMER_ID"),) if gold else ())
 
 
+# Stands in for a producer that has landed with its end-to-end completeness test.
+TESTED_PRODUCER = "synthetic-complete-evidence-producer"
+
+
+def pin_tested_producer(test):
+    patcher = mock.patch.object(contract, "COMPLETE_EVIDENCE_PRODUCERS", frozenset({TESTED_PRODUCER}))
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
+
 def refusal(spans=((15, 21),), code="untransformable_json_number_no_text_only_path"):
     return {"fixture_id": "d", "pipeline_error_stage": "clean", "pipeline_error_code": code,
-            "timing": {"total_ms": 1.0}, "evidence_complete": True, "refusal_evidence": [
+            "timing": {"total_ms": 1.0}, "evidence_complete": True,
+            "evidence_producer": TESTED_PRODUCER, "refusal_evidence": [
                 {"raw_start": a, "raw_end": b, "outcome": "confirmed_untransformable",
                  "reason": code.removeprefix("untransformable_")} for a, b in spans]}
 
 
+class ShippedProducerPinTests(unittest.TestCase):
+    def test_shipped_pin_is_empty_and_matches_the_protocol(self):
+        # No producer has an end-to-end completeness test yet, so a subject
+        # asserting completeness, under any producer identity, is ordinary.
+        self.assertEqual(contract.COMPLETE_EVIDENCE_PRODUCERS, frozenset())
+        self.assertFalse(contract.eligible(document(), refusal()))
+        self.assertEqual(refusal_gate.inventory([document()], {"d": refusal()})["ordinary"], {"d"})
+        protocol = json.loads((Path(__file__).parent / "benchmark-protocol.json").read_text())
+        self.assertEqual(protocol["refusal_contract"]["complete_evidence_producers"],
+                         sorted(contract.COMPLETE_EVIDENCE_PRODUCERS))
+
+
 class RefusalContractTests(unittest.TestCase):
+    def setUp(self):
+        pin_tested_producer(self)
+
+    def test_complete_evidence_from_an_unpinned_producer_is_ordinary(self):
+        for producer in (None, "clean_for_bench", TESTED_PRODUCER + "-other"):
+            response = refusal()
+            if producer is None:
+                response.pop("evidence_producer")
+            else:
+                response["evidence_producer"] = producer
+            result = refusal_gate.inventory([document()], {"d": response})
+            self.assertEqual((result["blocked"], result["ordinary"]), (set(), {"d"}), producer)
+
     def test_first_error_with_unlisted_benign_sibling_is_ordinary(self):
         # The sibling limit is untransformable too; a first-error path cannot
         # prove that every refused value belongs to confirmed-ID gold.
@@ -93,6 +130,7 @@ class RefusalContractTests(unittest.TestCase):
             compact = record._compact_response(response)
             self.assertEqual(compact["refusal_evidence"], response["refusal_evidence"])
             self.assertIs(compact["evidence_complete"], True)
+            self.assertEqual(compact["evidence_producer"], TESTED_PRODUCER)
             record.validate_refusal(compact, document())
         for code in contract.PROTECTION_CODES | {"possibly_sensitive_refused"}:
             response = refusal(code=code)
@@ -112,6 +150,8 @@ class RefusalContractTests(unittest.TestCase):
             lambda r: r.update(refusal_evidence=[]),
             lambda r: r.update(evidence_complete=1),
             lambda r: r.update(evidence_complete="true"),
+            lambda r: r.update(evidence_producer=1),
+            lambda r: r.update(evidence_producer=""),
             lambda r: r.pop("refusal_evidence"),
         ):
             response = refusal()
@@ -167,6 +207,9 @@ class RefusalContractTests(unittest.TestCase):
 
 
 class PairedGateTests(unittest.TestCase):
+    def setUp(self):
+        pin_tested_producer(self)
+
     def compare(self, *, benign=False, independent_gain=True, refuse_base=False, refuse_candidate=True,
                 ordinary_base=False, incomplete_candidate=False, change_gold=False):
         """Real replay and gate arithmetic over small independently authored records."""
@@ -256,6 +299,11 @@ class PairedGateTests(unittest.TestCase):
 
     def test_first_error_evidence_cannot_turn_a_refusal_into_a_gain(self):
         result = self.compare(incomplete_candidate=True)
+        self.assertEqual(result["verdict"], "fail")
+
+    def test_complete_evidence_from_an_unpinned_producer_cannot_become_a_gain(self):
+        with mock.patch.object(contract, "COMPLETE_EVIDENCE_PRODUCERS", frozenset()):
+            result = self.compare()
         self.assertEqual(result["verdict"], "fail")
 
     def test_gold_identity_changes_remain_rejected(self):

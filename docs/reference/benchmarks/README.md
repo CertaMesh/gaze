@@ -1953,11 +1953,18 @@ path, so the bench example never emits `evidence_complete: true`. No current
 producer qualifies for the blocked-operation exception. PR6 must add an
 end-to-end completeness test: real pipeline → typed refusal with every refused
 path → blocked operation, including a benign untransformable sibling that
-must fail. Only that tested producer path may assert completeness. Encoded
+must fail. Only that tested producer path may assert completeness. The
+harness enforces this: `evidence_complete` counts only when the response's
+`evidence_producer` is listed in `COMPLETE_EVIDENCE_PRODUCERS`
+(`scripts/bench/refusal_contract.py`) and in the protocol's
+`complete_evidence_producers`. Both lists are empty, and adding an identity
+changes the measuring harness, so it requires a new pinned specification. PR6
+adds its producer identity together with its completeness test. Encoded
 carriers (JSON inside a string) have no supported raw-path mapping and remain
 ineligible, even with a completeness assertion and an outer node at the same path.
 
-Layers with no refusals use the historical arithmetic without loading refusal
+Layers with no refusals, and the dictionary-sequence layers K and B, which the
+refusal contract never replays, use the historical arithmetic without loading refusal
 evidence. Optional missing or broken leak-diff records cannot change that verdict.
 For layers with refusals, the gate verifies scorecard-bound observation records
 and compares canonical input/gold descriptors, excluding subject validator verdicts.

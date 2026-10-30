@@ -15,6 +15,10 @@ PROTECTION_CODES = frozenset("protection_" + r for r in (
 ))
 # Increment 1's independent ownership-labelled gold, never detector class names.
 CONFIRMED_ID_LABELS = frozenset({"CUSTOMER_ID", "EMPLOYEE_ID", "RECORD_ID"})
+# Producers whose `evidence_complete` is honoured. A subject flag alone proves
+# nothing: an identity joins this pin, and benchmark-protocol.json, only in the
+# change that adds its end-to-end completeness test. Empty: no live refusal is blocked.
+COMPLETE_EVIDENCE_PRODUCERS = frozenset()
 
 
 def validate_outcome(value):
@@ -32,6 +36,9 @@ def validate_evidence(response: Mapping, byte_length: int, boundaries=None):
     evidence = response.get("refusal_evidence")
     if "evidence_complete" in response and type(response["evidence_complete"]) is not bool:
         raise ValueError("invalid refusal completeness")
+    if "evidence_producer" in response and (
+            not isinstance(response["evidence_producer"], str) or not response["evidence_producer"]):
+        raise ValueError("invalid refusal evidence producer")
     if evidence is None:
         if response.get("evidence_complete") is True:
             raise ValueError("complete refusal without evidence")
@@ -62,6 +69,7 @@ def eligible(document, response):
     evidence = response.get("refusal_evidence")
     if (response.get("pipeline_error_code") not in UNTRANSFORMABLE_CODES or not evidence
             or response.get("evidence_complete") is not True
+            or response.get("evidence_producer") not in COMPLETE_EVIDENCE_PRODUCERS
             or response["pipeline_error_code"] == "untransformable_encoded_carrier"):
         return False
     gold = {(s.start, s.end) for s in document.spans if s.label in CONFIRMED_ID_LABELS}

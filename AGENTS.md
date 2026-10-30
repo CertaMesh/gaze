@@ -186,7 +186,8 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
    decision.
 3. Merge rule. Checked separately under each scored-label contract. No layer's leaked bytes rise, on
    gated gold or on headline (all-gold) bytes. Under refusal contract v2, typed untransformable refusals qualify as blocked
-   operations only with producer-proven `evidence_complete: true` covering every refused path,
+   operations only with `evidence_complete: true` covering every refused path, emitted by a producer
+   pinned in `COMPLETE_EVIDENCE_PRODUCERS` (empty until a producer lands with its completeness test),
    and every refused span exactly matching ownership-labelled confirmed-ID gold. Single-path
    first-error evidence and unsupported encoded-carrier evidence are ineligible.
    Benign or non-gold refusals still fail. The gate removes blocked operations from both sides'

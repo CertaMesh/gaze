@@ -193,8 +193,7 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
         if refusal_version not in (1, 2):
             raise CertificationError('unknown_refusal_contract')
         if (refusal_version == 2 and result['verdict'] != 'not_comparable'
-                and any(row['failed_closed_candidate'] or row['failed_closed_base']
-                        for row in result['layers'].values())):
+                and agentic.has_gated_refusal(result)):
             import refusal_gate
             result = {**result, **refusal_gate.compare(
                 (cards['base', number], cards['candidate', number]),

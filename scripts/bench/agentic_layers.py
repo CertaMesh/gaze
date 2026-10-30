@@ -5724,6 +5724,16 @@ def _dependency_difference(
     return differing
 
 
+def has_gated_refusal(result: Mapping[str, object]) -> bool:
+    """Whether refusal contract v2 applies: the layers `refusal_gate` replays.
+
+    Dictionary-sequence layers K/B keep legacy arithmetic, as `refusal_gate`
+    never inspects them.
+    """
+    return any(result["layers"][layer]["failed_closed_candidate"] or result["layers"][layer]["failed_closed_base"]
+               for layer in GATE_LAYERS if layer in result["layers"])
+
+
 def gate(
     base: Mapping[str, object], candidate: Mapping[str, object], config: str | None = None,
     policy_delta: Path | None = None,
@@ -5743,8 +5753,7 @@ def gate(
         raise LayerError("unknown refusal contract version")
     result = compare_layers(base, candidate, config, policy_delta, allow_legacy_policy_inputs)
     if (result["verdict"] != "not_comparable" and refusal_contract_version == 2
-            and any(row["failed_closed_candidate"] or row["failed_closed_base"]
-                    for row in result["layers"].values())):
+            and has_gated_refusal(result)):
         config = result["config"]
         if record_paths is None and scorecard_paths and all(c.get("observation_record") for c in (base, candidate)):
             names = [c["observation_record"]["file"] for c in (base, candidate)]
@@ -5758,9 +5767,8 @@ def gate(
             except (ValueError, KeyError, TypeError, OSError) as error:
                 raise LayerError("refusal contract evidence rejected") from error
             result = {**result, **revised}
-        elif any(row["failed_closed_candidate"] or row["failed_closed_base"] for row in result["layers"].values()):
-            if result["verdict"] != "fail":
-                result.update(verdict="fail", reason="refusal contract v2 requires bound observation records")
+        elif result["verdict"] != "fail":
+            result.update(verdict="fail", reason="refusal contract v2 requires bound observation records")
     result["refusal_contract_version"] = refusal_contract_version
     return _with_leak_diff(result, base, candidate, scorecard_paths, record_paths)
 
