@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A labelled JSON number now refuses, typed, instead of leaking or becoming an
+  unquoted token: `Untransformable` with `json_number_no_text_only_path` (CLI
+  exit 8, no output). A repeat of a bound ID that lands exactly on a JSON number
+  or object key refuses the same way (`no_safe_rendering` for a key).
+- Anthropic `tool_use.input` numbers are admitted when nothing detects them and
+  forwarded with their original spelling; previously every number refused with
+  `UnsupportedRequestSurface`. Other detections in a number still refuse.
+- `[outcomes] possibly_sensitive` now takes effect: a labelled string that is
+  not identifier-shaped is protected by default, refused, or passed with an
+  audit row. Audit rows record the outcome, its reason and the field's depth and
+  evidence for field-bound winners, refusals and passes.
+- `ProtectionError::Untransformable` gains `others`, every further refused field
+  in document order. Exhaustive constructions must add it (0.x breaking).
+- The library `pseudonymize` text path passes the same document field context
+  as every text clean.
 - Caller record values too short for safe matching now refuse the entire call
   in `gaze clean`, daemon v1 and v2, embedded MCP host context, and Rust library
   assembly. Library enforcement is the default and returns the typed
@@ -37,9 +52,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
   0.2.0. Its existing fixture detections remain unchanged.
 
-
 ### Security
 
+- Person-linked record IDs in structured fields no longer leak. Bundled `core`
+  now ships `customer_id.field`, `employee_id.field` and `record_id.field`, the
+  first `field_labelled` rules: they bind a scalar by its JSON key or
+  caller-declared field (`customer_id`, `customerNumber`, `Kundennummer`,
+  `staffNumber`, `contactId`, `{"customer": {"id": …}}`), never by prose. An
+  identifier-shaped string is tokenized as a whole leaf in `gaze clean`, the
+  daemon, the library, the proxy (Anthropic and Gemini structured tool calls and
+  results) and MCP arguments.
 - The setup-default `secrets` bundle protects whole private-key PEM blocks and
   bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes.
   Truncated private-key bodies fail closed, including DSA and PGP armour,
