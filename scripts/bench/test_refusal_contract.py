@@ -38,15 +38,35 @@ def refusal(spans=((15, 21),), code="untransformable_json_number_no_text_only_pa
 
 
 class ShippedProducerPinTests(unittest.TestCase):
-    def test_shipped_pin_is_empty_and_matches_the_protocol(self):
-        # No producer has an end-to-end completeness test yet, so a subject
-        # asserting completeness, under any producer identity, is ordinary.
-        self.assertEqual(contract.COMPLETE_EVIDENCE_PRODUCERS, frozenset())
-        self.assertFalse(contract.eligible(document(), refusal()))
-        self.assertEqual(refusal_gate.inventory([document()], {"d": refusal()})["ordinary"], {"d"})
+    PIPELINE = "gaze-pipeline-typed-refusal-v1"
+
+    def test_shipped_pin_is_the_pipeline_producer_and_matches_the_protocol(self):
+        self.assertEqual(contract.COMPLETE_EVIDENCE_PRODUCERS, frozenset({self.PIPELINE}))
         protocol = json.loads((Path(__file__).parent / "benchmark-protocol.json").read_text())
         self.assertEqual(protocol["refusal_contract"]["complete_evidence_producers"],
                          sorted(contract.COMPLETE_EVIDENCE_PRODUCERS))
+
+    def test_pinned_pipeline_evidence_blocks_only_complete_gold_refusals(self):
+        response = refusal()
+        response["evidence_producer"] = self.PIPELINE
+        self.assertTrue(contract.eligible(document(), response))
+        self.assertEqual(refusal_gate.inventory([document()], {"d": response})["blocked"], {"d"})
+        # The same identity without completeness, or on a benign document, stays
+        # ordinary: the pin licenses nothing the contract forbids.
+        for case, doc in (("incomplete", document()), ("benign", document(gold=False))):
+            candidate = dict(response, evidence_complete=case != "incomplete")
+            self.assertFalse(contract.eligible(doc, candidate), case)
+            self.assertEqual(refusal_gate.inventory([doc], {"d": candidate})["ordinary"], {"d"})
+        # A complete list naming the benign `limit` sibling is not all-gold.
+        sibling = refusal(spans=((15, 21), (30, 31)))
+        sibling["evidence_producer"] = self.PIPELINE
+        self.assertFalse(contract.eligible(document(), sibling))
+
+    def test_no_other_identity_is_pinned(self):
+        for producer in ("clean_for_bench", self.PIPELINE + "-v2", self.PIPELINE.upper()):
+            response = refusal()
+            response["evidence_producer"] = producer
+            self.assertFalse(contract.eligible(document(), response), producer)
 
 
 class RefusalContractTests(unittest.TestCase):
