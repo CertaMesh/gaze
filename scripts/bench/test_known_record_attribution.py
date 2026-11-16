@@ -165,3 +165,8 @@ def test_eligible_reconciliation_counts_overlapping_gold_spans() -> None:
     )["rows"][0]
     assert row["gold_recovered_bytes"] == 5
     assert row["eligible_recovered_bytes"] == 8
+
+
+def test_normalized_record_terms_keep_exact_attribution():
+    for raw, text in [("Ｑx７Lm２Rt", "Qx7Lm2Rt"), ("Qx\u200b7Lm2Rt", "Qx7Lm2Rt"), ("Qx7\u2011Lm2Rt", "Qx7-Lm2Rt"), ("Qx7\u2007Lm2Rt", "Qx7 Lm2Rt")]:
+        assert attribution.match_group_and_kind(text, "custom:passport", raw, frozenset()) == ("custom:passport", "exact")
