@@ -64,7 +64,7 @@ MUTANTS = (
     ("boundary_refusal_mapping_lost", PROTECTION,
      "                Error::Protection(error @ ProtectionError::Untransformable { .. }) => error,\n",
      "",
-     PROXY_TEST, "anthropic_structured_calls_protect_strings_and_refuse_labelled_numbers"),
+     ASSEMBLY_TEST, "leaf_protection_keeps_typed_refusals_at_the_boundary"),
     ("anthropic_number_unscanned", CODEC,
      "if ctx.protect_field(spelling, &field)? == spelling {",
      "if { let _ = &field; true } {",

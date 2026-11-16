@@ -275,6 +275,44 @@ fn possibly_sensitive_values_follow_the_outcomes_disposition() {
     assert_eq!(protected(&pass, &active, input), input);
 }
 
+/// Structured leaf protection (MCP tool arguments) passes one decoded string with its field
+/// context through `protect_text_transaction`. A refusal there must keep its reason and field
+/// rather than collapse into an opaque primary failure, so callers can report it typed.
+#[test]
+fn leaf_protection_keeps_typed_refusals_at_the_boundary() {
+    let (refuse, active) = pipeline(
+        "[outcomes]\npossibly_sensitive = \"refuse\"\n",
+        r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
+    );
+    let field = gaze_types::FieldProvenance::new(
+        path(&["customer_id"]),
+        gaze_types::JsonScalarType::String,
+        gaze_types::FieldEvidence::ValidatedParse,
+    );
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let mut transaction = session.begin_transaction();
+    let dictionaries = DictionaryBundle::default();
+    let context = gaze::ProtectionContext::strict(active.as_slice(), &dictionaries);
+    match refuse.protect_text_transaction(
+        &mut transaction,
+        "pending review",
+        context.with_field(&field),
+    ) {
+        Err(ProtectionError::Untransformable {
+            reason, field_path, ..
+        }) => {
+            assert_eq!(reason, UntransformableReason::NoSafeRendering);
+            assert_eq!(field_path, path(&["customer_id"]));
+        }
+        other => panic!("typed leaf refusal expected, got {other:?}"),
+    }
+    // An identifier-shaped leaf under the same label still protects.
+    let protected = refuse
+        .protect_text_transaction(&mut transaction, "C-731284", context.with_field(&field))
+        .expect("identifier leaf protects");
+    assert!(!protected.contains("731284"), "{protected}");
+}
+
 #[test]
 fn caller_declared_fields_bind_in_prose_and_refuse_in_numbers() {
     let (pipeline, active) = pipeline(
