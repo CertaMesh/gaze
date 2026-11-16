@@ -373,3 +373,53 @@ fn pipeline_for_probe(outcomes: &str) -> (Pipeline, LocaleChain) {
         r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
     )
 }
+
+/// D6 cost: a bound all-digit ID that coincides with an unlabelled quantity, page, year or
+/// six-digit number in the same document. The sweep's digit-run floor (six digits) keeps
+/// short shapes from ever refusing; six-digit coincidences refuse, typed. Counts are printed
+/// by document and by affected value for the PR evidence and pinned here.
+#[test]
+fn coincident_unlabelled_numbers_refuse_only_at_the_sweep_floor() {
+    let (pipeline, active) = stock();
+    let shapes: [(&str, Vec<u64>); 4] = [
+        ("quantity", (1..=60).collect()),
+        ("page", (1..=60).map(|page| page * 7).collect()),
+        ("year", (1990..=2049).collect()),
+        (
+            "six_digit",
+            (0..60).map(|step| 100_000 + step * 14_983).collect(),
+        ),
+    ];
+    for (shape, values) in shapes {
+        let (mut documents, mut refused_documents, mut refused_values) = (0, 0, 0);
+        for value in &values {
+            let input = format!(
+                r#"{{"customer_id":"{value}","{shape}":{value},"page_size":{value},"note":"ok"}}"#
+            );
+            documents += 1;
+            let session = Session::new(Scope::Ephemeral).expect("session");
+            match clean(&pipeline, &active, &session, &input) {
+                Err(Error::Protection(ProtectionError::Untransformable { others, .. })) => {
+                    refused_documents += 1;
+                    refused_values += 1 + others.len();
+                }
+                Ok(cleaned) => {
+                    serde_json::from_str::<Value>(&cleaned).expect("stays JSON");
+                }
+                Err(other) => panic!("{shape} {value}: {other:?}"),
+            }
+        }
+        println!(
+            "D6_COST shape={shape} documents={documents} refused_documents={refused_documents} \
+             benign_values={} refused_values={refused_values}",
+            documents * 2
+        );
+        let expected = if shape == "six_digit" { documents } else { 0 };
+        assert_eq!(refused_documents, expected, "{shape}");
+        assert_eq!(
+            refused_values,
+            expected * 2,
+            "{shape}: both coincident values refuse"
+        );
+    }
+}
