@@ -1,4 +1,9 @@
-//! Executing known-failure captures for labelled IDs; loopback fixtures only, no provider calls.
+//! Labelled record IDs across real provider routes; loopback fixtures only, no provider calls.
+//!
+//! The bundled `field_labelled` rules protect labelled string leaves of structured carriers
+//! and refuse labelled JSON numbers, typed, before anything is forwarded. Prose and
+//! JSON-encoded carriers (a JSON document inside a string) have no field context, so there
+//! only the calibrated adopter rule acts, with its legacy numeric rendering.
 
 #[path = "support/structured_record_ids.rs"]
 mod record_ids;
@@ -123,8 +128,18 @@ fn assembled() -> gaze_assembly::CorePipeline {
         .unwrap()
 }
 
+/// Whether a typed labelled-number refusal is the expected outcome for this route.
+fn refuses(provider: Provider, carrier: &str, case: &record_ids::Case) -> bool {
+    case.numeric
+        && matches!(
+            (provider, carrier),
+            (Provider::Anthropic | Provider::Gemini, "call")
+                | (Provider::Gemini, "result-structured")
+        )
+}
+
 #[test]
-fn labelled_rule_calibrates_prose_and_whole_json_but_stock_main_has_no_record_id_rule() {
+fn whole_json_fields_bind_and_prose_stays_with_the_calibrated_rule() {
     for (core, stock) in [
         (assembled(), false),
         (CorePipelineConfig::new().build().unwrap(), true),
@@ -135,19 +150,41 @@ fn labelled_rule_calibrates_prose_and_whole_json_but_stock_main_has_no_record_id
                 ("whole-json", case.document().to_string()),
             ] {
                 let session = Session::new(Scope::Ephemeral).unwrap();
-                let CleanDocument::Text(clean) = core.pseudonymize_text(&session, text).unwrap()
-                else {
-                    panic!("text expected")
-                };
-                record_ids::check(
-                    &case,
-                    &format!(
-                        "{}/{kind}",
-                        if stock { "stock-main" } else { "calibration" }
-                    ),
-                    &clean,
-                    stock,
+                let surface = format!(
+                    "{}/{kind}",
+                    if stock { "stock-core" } else { "calibration" }
                 );
+                match core.pseudonymize_text(&session, text.clone()) {
+                    Err(gaze::Error::Protection(gaze::ProtectionError::Untransformable {
+                        reason,
+                        ..
+                    })) => {
+                        assert!(kind == "whole-json" && case.numeric, "{surface} {case:?}");
+                        assert_eq!(
+                            reason,
+                            gaze::UntransformableReason::JsonNumberNoTextOnlyPath
+                        );
+                        println!("RECORD_ID {surface} {case:?} REFUSED");
+                    }
+                    Ok(CleanDocument::Text(clean)) => {
+                        assert!(
+                            !(kind == "whole-json" && case.numeric),
+                            "{surface} {case:?}"
+                        );
+                        // No free-text label guessing: stock prose keeps its known leak.
+                        record_ids::check(&case, &surface, &clean, stock && kind == "prose");
+                        if kind == "whole-json" {
+                            let parsed: Value = serde_json::from_str(&clean).unwrap();
+                            assert_eq!(
+                                session.restore_strict_text(&clean).unwrap(),
+                                text,
+                                "{surface} {case:?} restore"
+                            );
+                            assert!(parsed.is_object());
+                        }
+                    }
+                    other => panic!("{surface} {case:?}: unexpected {other:?}"),
+                }
             }
         }
     }
@@ -191,15 +228,19 @@ async fn captures(provider: Provider) {
                 .send()
                 .await
                 .unwrap();
-            if matches!(provider, Provider::Anthropic) && carrier == "call" && case.numeric {
-                assert!(!response.status().is_success());
-                let error: Value = response.json().await.unwrap();
+            if refuses(provider, carrier, &case) {
                 assert!(
-                    error["error"]["code"] == "InvalidRequestFormat",
-                    "Anthropic/call {case:?}: expected InvalidRequestFormat at /error/code"
+                    !response.status().is_success(),
+                    "{provider:?}/{carrier} {case:?}"
                 );
-                assert!(forwarded.lock().await.is_empty());
-                println!("RECORD_ID Anthropic/call {case:?} N/A fail-closed numeric input");
+                let body = response.text().await.unwrap();
+                assert!(
+                    body.contains("json_number_no_text_only_path"),
+                    "{provider:?}/{carrier} {case:?}: typed reason expected, got {body}"
+                );
+                assert!(!body.contains("731284"), "refusal body is value-free");
+                assert!(forwarded.lock().await.is_empty(), "nothing forwarded");
+                println!("RECORD_ID {provider:?}/{carrier} {case:?} REFUSED");
                 continue;
             }
             assert!(
@@ -211,36 +252,34 @@ async fn captures(provider: Provider) {
                 .await
                 .pop()
                 .expect("request must reach capture upstream");
-            let known_failure = matches!(
-                (provider, carrier),
-                (Provider::Anthropic | Provider::Gemini, "call")
-                    | (Provider::Gemini, "result-structured")
-            );
             record_ids::check(
                 &case,
                 &format!("{provider:?}/{carrier}"),
                 &captured.to_string(),
-                known_failure,
+                false,
             );
-            if carrier != "prose" && !known_failure {
-                let pointer = match (provider, carrier) {
-                    (Provider::Anthropic, "result-string") => "/messages/1/content/0/content",
-                    (Provider::Anthropic, "result-blocks") => {
-                        "/messages/1/content/0/content/0/text"
-                    }
-                    (Provider::OpenAi, "call") => "/messages/1/tool_calls/0/function/arguments",
-                    (Provider::OpenAi, "result-string") => "/messages/1/content",
-                    (Provider::OpenAi, "result-blocks") => "/messages/1/content/0/text",
-                    (Provider::Gemini, "result-string") => {
-                        "/contents/1/parts/0/functionResponse/response/result"
-                    }
-                    _ => unreachable!("all protected JSON carriers are listed"),
-                };
+            let encoded = match (provider, carrier) {
+                (Provider::Anthropic, "result-string") => Some("/messages/1/content/0/content"),
+                (Provider::Anthropic, "result-blocks") => {
+                    Some("/messages/1/content/0/content/0/text")
+                }
+                (Provider::OpenAi, "call") => Some("/messages/1/tool_calls/0/function/arguments"),
+                (Provider::OpenAi, "result-string") => Some("/messages/1/content"),
+                (Provider::OpenAi, "result-blocks") => Some("/messages/1/content/0/text"),
+                (Provider::Gemini, "result-string") => {
+                    Some("/contents/1/parts/0/functionResponse/response/result")
+                }
+                _ => None,
+            };
+            if let Some(pointer) = encoded {
+                // JSON inside a string carries no field context: the calibrated prose rule
+                // still renders a number as an unquoted token, the legacy defect this change
+                // leaves to the encoded-carrier increment.
                 let text = captured.pointer(pointer).and_then(Value::as_str).unwrap();
                 assert_eq!(
                     serde_json::from_str::<Value>(text).is_ok(),
                     !case.numeric,
-                    "numeric JSON rendering is a known failure at {pointer}; promote when fixed"
+                    "encoded-carrier numeric rendering changed at {pointer}; promote when fixed"
                 );
             }
         }
@@ -258,13 +297,14 @@ async fn captures(provider: Provider) {
             .send()
             .await
             .unwrap();
-        if matches!(provider, Provider::Anthropic) && carrier == "call" {
-            assert!(!response.status().is_success());
-            assert!(forwarded.lock().await.is_empty());
-            println!("CONTROL Anthropic/call unlabelled number N/A fail-closed numeric input");
-            continue;
+        // D3: unlabelled numbers pass unchanged on every route, Anthropic tool input included.
+        let status = response.status();
+        if !status.is_success() {
+            panic!(
+                "{provider:?}/{carrier} control: {}",
+                response.text().await.unwrap()
+            );
         }
-        assert!(response.status().is_success());
         let captured = forwarded.lock().await.pop().unwrap();
         assert!(
             captured == request,
@@ -276,11 +316,11 @@ async fn captures(provider: Provider) {
 }
 
 #[tokio::test]
-async fn anthropic_structured_call_known_failure_and_protected_text_controls() {
+async fn anthropic_structured_calls_protect_strings_and_refuse_labelled_numbers() {
     captures(Provider::Anthropic).await;
 }
 #[tokio::test]
-async fn gemini_structured_call_and_response_known_failures_and_protected_text_controls() {
+async fn gemini_structured_calls_and_responses_protect_strings_and_refuse_labelled_numbers() {
     captures(Provider::Gemini).await;
 }
 #[tokio::test]

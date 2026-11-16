@@ -812,14 +812,24 @@ impl Pipeline {
                 )
                 .map(CleanDocument::Structured)
             }
-            RawDocument::Text(text) => Ok(CleanDocument::Text(self.pseudonymize_text(
-                target,
-                &text,
-                None,
-                DocumentKind::Text,
-                locale_chain,
-                dictionaries,
-            )?)),
+            RawDocument::Text(text) => {
+                // The same field context every text clean passes: a whole-JSON document's
+                // labelled fields bind here too.
+                let fields = document_field_spans(&text, &self.caller_fields);
+                Ok(CleanDocument::Text(
+                    self.redact_text_with_manifest_uncached(
+                        target,
+                        &text,
+                        None,
+                        DocumentKind::Text,
+                        locale_chain,
+                        dictionaries,
+                        None,
+                        (!fields.is_empty()).then_some(gaze_types::FieldContext::Spans(&fields)),
+                    )?
+                    .text,
+                ))
+            }
             _ => Err(Error::UnsupportedRawDocumentVariant),
         }
     }

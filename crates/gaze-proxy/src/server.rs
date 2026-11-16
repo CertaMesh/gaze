@@ -3473,6 +3473,37 @@ impl RequestResidualScan<'_, '_> {
             .all(|hit| rule_hit_is_covered(&expanded, &covered, hit.span)))
     }
 
+    /// A JSON number is a whole scalar leaf: scan it with its field path so a labelled
+    /// identifier refuses with the typed `Untransformable` reason before forwarding. Any other
+    /// detection is left to [`Self::probe`], which refuses a number that would change.
+    fn admit_labelled_number(
+        &self,
+        field: &gaze_types::FieldPath,
+        spelling: &str,
+    ) -> Result<(), ProxyError> {
+        let provenance = gaze_types::FieldProvenance::new(
+            field.clone(),
+            gaze_types::JsonScalarType::Number,
+            gaze_types::FieldEvidence::ValidatedParse,
+        );
+        let session =
+            Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
+        let mut transaction = session.begin_transaction();
+        match self.pipeline.resolve_boundary_text_transaction_in_context(
+            &mut transaction,
+            spelling,
+            gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries)
+                .with_field(&provenance),
+        ) {
+            Err(refusal)
+                if matches!(refusal.error, gaze::ProtectionError::Untransformable { .. }) =>
+            {
+                Err(ProxyError::Refused { refusal })
+            }
+            _ => Ok(()),
+        }
+    }
+
     fn probe(
         &self,
         field_path: &crate::adapter::CoveragePath,
@@ -3511,6 +3542,7 @@ impl RequestResidualScan<'_, '_> {
         let Value::Object(root) = body else {
             return self.walk(
                 &crate::adapter::CoveragePath::default(),
+                &gaze_types::FieldPath::default(),
                 "",
                 body,
                 false,
@@ -3523,6 +3555,7 @@ impl RequestResidualScan<'_, '_> {
                 (true, "model", Value::String(text)) => visit(&key.as_str().into(), text, true)?,
                 _ => self.walk(
                     &key.as_str().into(),
+                    &gaze_types::FieldPath::default().child(key.clone()),
                     key,
                     value,
                     CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
@@ -3540,9 +3573,11 @@ impl RequestResidualScan<'_, '_> {
     /// field paths. An empty JSON key or one containing `.` or `[` can make distinct nodes
     /// render the same path string. Such subtrees stop trusting path equality and are probed
     /// unconditionally. Extra probing is safe: a surfaced position is already clean.
+    #[allow(clippy::too_many_arguments)]
     fn walk(
         &self,
         path: &crate::adapter::CoveragePath,
+        field: &gaze_types::FieldPath,
         leaf_key: &str,
         value: &Value,
         in_carrier_subtree: bool,
@@ -3557,13 +3592,16 @@ impl RequestResidualScan<'_, '_> {
             }
             Value::Number(number) => {
                 if in_carrier_subtree || !NON_CARRIER_NUMERIC_KEYS.contains(&leaf_key) {
-                    visit(path, &number.to_string(), false)?;
+                    let spelling = number.to_string();
+                    self.admit_labelled_number(field, &spelling)?;
+                    visit(path, &spelling, false)?;
                 }
             }
             Value::Array(items) => {
                 for (index, item) in items.iter().enumerate() {
                     self.walk(
                         &path.index(index),
+                        &field.child(index.to_string()),
                         leaf_key,
                         item,
                         in_carrier_subtree,
@@ -3577,6 +3615,7 @@ impl RequestResidualScan<'_, '_> {
                     let child_path = path.member(key);
                     self.walk(
                         &child_path,
+                        &field.child(key.clone()),
                         key,
                         child,
                         in_carrier_subtree || CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
@@ -5068,6 +5107,7 @@ mod tests {
         gaze::ProtectionError::Untransformable {
             reason: gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath,
             field_path: gaze_types::FieldPath::new(["synthetic-key@example.invalid".into()]),
+            others: Vec::new(),
         }
         .into()
     }
