@@ -62,7 +62,7 @@ def normalized_match_text(text: str) -> str:
     folded = []
     for ch in text:
         codepoint = ord(ch)
-        if codepoint in (0x200C, 0x200D):
+        if codepoint in (0x200B, 0x200C, 0x200D):
             continue
         if (
             codepoint in (0x00A0, 0x1680, 0x202F, 0x205F, 0x3000)
@@ -71,6 +71,8 @@ def normalized_match_text(text: str) -> str:
             ch = " "
         elif 0xFF01 <= codepoint <= 0xFF5E:
             ch = chr(codepoint - 0xFEE0)
+        if codepoint == 0x2011:
+            ch = "-"
         folded.append(unicodedata.normalize("NFC", ch))
     return "".join(folded)
 
@@ -78,7 +80,7 @@ def normalized_match_text(text: str) -> str:
 def match_group_and_kind(
     text: str, record_class: str, raw: str, common_words: frozenset[str]
 ) -> tuple[str, str]:
-    canonical = " ".join(raw.split())
+    canonical = " ".join(normalized_match_text(raw).split())
     matched = normalized_match_text(text)
     collapsed = " ".join(matched.split())
     if collapsed.casefold() != canonical.casefold():

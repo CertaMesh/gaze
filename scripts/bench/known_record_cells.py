@@ -36,7 +36,7 @@ from unittest.mock import patch
 import agentic_layers as agentic
 import gaze_bench_score as score
 
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 SEED = 2026092901
 LAYER = "K"
 SOURCE_POSITIVE = "known-record-kind-cells"
@@ -74,6 +74,7 @@ class ControlKind(str, Enum):
     EXACT_UNLISTED_NAME = "control_exact_unlisted_name"
     # Gaze folds NBSP-class separators to a space before detection, so these
     # are exact or case-folded matches, not whitespace-flexible ones.
+    EXACT_AFTER_TERM_FOLDING = "control_exact_after_term_folding"
     EXACT_AFTER_SPACE_FOLDING = "control_exact_after_space_folding"
     CASE_FOLDED_AFTER_SPACE_FOLDING = "control_case_folded_after_space_folding"
 
@@ -84,6 +85,7 @@ CONTROL_MEASURED_KIND = {
     ControlKind.UNMATCHED_COMPACT_RECORD: "unmatched_term",
     ControlKind.EXACT_CANONICAL_RECORD: "exact",
     ControlKind.EXACT_UNLISTED_NAME: "exact",
+    ControlKind.EXACT_AFTER_TERM_FOLDING: "exact",
     ControlKind.EXACT_AFTER_SPACE_FOLDING: "exact",
     ControlKind.CASE_FOLDED_AFTER_SPACE_FOLDING: "case_folded",
 }
@@ -659,6 +661,7 @@ VARIANTS: dict[Bucket, tuple[str, ...]] = {
     ControlKind.UNMATCHED_COMPACT_RECORD: ("iban_compact_record",),
     ControlKind.EXACT_CANONICAL_RECORD: ("name_record_irregular",),
     ControlKind.EXACT_UNLISTED_NAME: ("unlisted_alone",),
+    ControlKind.EXACT_AFTER_TERM_FOLDING: ("term_fullwidth", "term_zwsp", "term_nonbreaking_hyphen", "term_unicode_space"),
     ControlKind.EXACT_AFTER_SPACE_FOLDING: ("steuer_id_nbsp", "card_narrow_nbsp"),
     ControlKind.CASE_FOLDED_AFTER_SPACE_FOLDING: ("name_lower_nbsp",),
 }
@@ -674,7 +677,41 @@ def _english_only(variant: str) -> bool:
     return variant in CORROBORATED_VARIANTS or variant == "unlisted_alone"
 
 
+def _term_variant(variant: str) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
+    """Synthetic passport references, with normalization on the private term side.
+
+    Text is ASCII so these cells isolate term preparation from source mapping.
+    A one-digit-off public fixture with the same shape is its precision twin.
+    """
+    rendered = "Qx7Lm2Rt"
+    if variant == "term_fullwidth":
+        raw = "Ｑx７Lm２Rt"
+    elif variant == "term_zwsp":
+        raw = "Qx\u200b7Lm2Rt"
+    elif variant == "term_nonbreaking_hyphen":
+        raw, rendered = "Qx7\u2011Lm2Rt", "Qx7-Lm2Rt"
+    else:
+        raw, rendered = "Qx7\u2007Lm2Rt", "Qx7 Lm2Rt"
+    kind = ("custom:passport", "exact")
+
+    def positive(b: Builder) -> list[Target]:
+        b.add("Synthetic private passport reference: ")
+        span = b.gold_span(rendered, "PASSPORTID")
+        b.add(".")
+        return [_target(span, 0, kind, True)]
+
+    def counterweight(b: Builder) -> list[Target]:
+        b.add("Public fixture reference: ")
+        span = b.add(rendered.replace("7", "8"))
+        b.add(".")
+        return [_target(span, 0, kind, False)]
+
+    return positive, counterweight, (RecordField("custom:passport", raw),)
+
+
 def _variant_fills(variant: str, language: str, index: int, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
+    if variant.startswith("term_"):
+        return _term_variant(variant)
     if _english_only(variant):
         return _corroborated_variant(variant, index, rng)
     if variant.startswith(("iban", "phone", "card", "steuer_id", "bsn", "nhs")):
@@ -716,12 +753,14 @@ def gaze_fold(text: str) -> str:
     """
     out = []
     for char in text:
-        if char in "\u200c\u200d":
+        if char in "\u200b\u200c\u200d":
             continue
         if unicodedata.category(char) == "Zs":
             char = " "
         elif "\uff01" <= char <= "\uff5e":
             char = chr(ord(char) - 0xFEE0)
+        if char == "\u2011":
+            char = "-"
         out.append(unicodedata.normalize("NFC", char))
     return "".join(out)
 
@@ -734,7 +773,7 @@ def matcher_kind(text: str, record_class: str, raw: str) -> str:
     round-3 recorder compares the unfolded text with the raw value instead.
     """
     text = gaze_fold(text)
-    term = " ".join(raw.split())
+    term = " ".join(gaze_fold(raw).split())
     collapsed = " ".join(text.split())
     fold = record_class == "Name"
     if collapsed != term and not (fold and collapsed.casefold() == term.casefold()):
@@ -793,7 +832,7 @@ def _normalize(text: str, fold: bool) -> tuple[str, list[int], list[int]]:
 
 def _occurrences(text: str, term: str, fold: bool) -> list[tuple[int, int]]:
     normalized, starts, ends = _normalize(text, fold)
-    needle = " ".join(term.split())
+    needle = " ".join(gaze_fold(term).split())
     needle = needle.casefold() if fold else needle
     found = []
     at = normalized.find(needle)

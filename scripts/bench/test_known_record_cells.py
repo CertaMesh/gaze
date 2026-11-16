@@ -16,8 +16,8 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "9e1bb24c206a90b7978423ab9adaaa2bac11a7241b75ea5a0c9a59a85dffad45"
-PAIRS = 84
+PINNED_CORPUS_SHA256 = "3ec31ef2b5ef674633673121d3ab2ef8933c6b932e999fd68614f16737e0a6e1"
+PAIRS = 100
 
 
 def recorder_kind(text: str, raw: str) -> str:
@@ -68,6 +68,22 @@ class KnownRecordCellTests(unittest.TestCase):
         for pair in self.pairs:
             self.assertIs(pair.positive.role, cells.Role.POSITIVE)
             self.assertIs(pair.counterweight.role, cells.Role.COUNTERWEIGHT)
+
+    def test_term_normalization_controls_have_precision_twins(self) -> None:
+        pairs = [p for p in self.pairs if p.positive.variant.startswith("term_")]
+        self.assertEqual(len(pairs), 16)
+        for pair in pairs:
+            positive, twin = pair.positive, pair.counterweight
+            self.assertEqual(positive.measured_kind(), "exact")
+            self.assertEqual(positive.record, twin.record)
+            self.assertEqual(positive.targets[0].attribution, ("custom:passport", "exact"))
+            self.assertTrue(positive.targets[0].expect_match)
+            self.assertFalse(twin.targets[0].expect_match)
+            self.assertEqual(cells.model_matches(twin.text, twin.record), [])
+            self.assertFalse(twin.gold)
+            raw = positive.record[0].raw
+            self.assertNotEqual(raw, cells.gaze_fold(raw))
+            self.assertIn(cells.gaze_fold(raw), positive.text)
 
     def test_generation_is_deterministic_and_pinned(self) -> None:
         again = cells.generate()
