@@ -248,7 +248,7 @@ enum Outcome {
         fixture_id: String,
         stage: &'static str,
         reason: PipelineFailureReason,
-        refusal_evidence: Vec<RefusalEvidence>,
+        refusal_evidence: RefusalReport,
         total_ms: f64,
     },
 }
@@ -489,7 +489,10 @@ fn handle_request_with_policy(
                         fixture_id: request.fixture_id,
                         stage: "post_policy_scan",
                         reason,
-                        refusal_evidence: Vec::new(),
+                        refusal_evidence: RefusalReport {
+                            evidence: Vec::new(),
+                            complete: false,
+                        },
                         total_ms: clean_ms,
                     });
                 }
@@ -593,41 +596,81 @@ struct RefusalEvidence {
     reason: gaze_types::UntransformableReason,
 }
 
-fn refusal_evidence(text: &str, error: &gaze::Error) -> Vec<RefusalEvidence> {
+/// The pinned producer identity of complete typed refusal evidence
+/// (`scripts/bench/refusal_contract.py`, `benchmark-protocol.json`).
+const TYPED_REFUSAL_PRODUCER: &str = "gaze-pipeline-typed-refusal-v1";
+
+/// Located, value-free spans for a typed refusal, and whether they are complete.
+#[derive(Debug)]
+struct RefusalReport {
+    evidence: Vec<RefusalEvidence>,
+    complete: bool,
+}
+
+/// Locate every field `ProtectionError::Untransformable` names in the source document.
+///
+/// Completeness is asserted only when the pipeline refused JSON numbers alone and each named
+/// path resolves to a number literal: a key refusal shares its value's path and could be
+/// mislocated, so any other reason yields ordinary evidence. Spans carry only the first
+/// reason, which the response code also names.
+fn refusal_evidence(text: &str, error: &gaze::Error) -> RefusalReport {
     use gaze_types::json_tree::{self, JsonKind, JsonTreeLimits};
-    let gaze::Error::Protection(gaze::ProtectionError::Untransformable { reason, field_path }) =
-        error
+    use gaze_types::UntransformableReason;
+    let none = RefusalReport {
+        evidence: Vec::new(),
+        complete: false,
+    };
+    let gaze::Error::Protection(gaze::ProtectionError::Untransformable {
+        reason,
+        field_path,
+        others,
+    }) = error
     else {
-        return Vec::new();
+        return none;
     };
     let Ok(tree) = json_tree::parse(text.as_bytes(), JsonTreeLimits::default()) else {
-        return Vec::new();
+        return none;
     };
+    let refused = std::iter::once((*reason, field_path)).chain(others.iter().map(|(r, p)| (*r, p)));
+    let mut scalars = Vec::new();
     let mut pending = vec![tree.root];
     while let Some(node) = pending.pop() {
         match node.kind {
             JsonKind::Object(members) => pending.extend(members.into_iter().map(|m| m.value)),
             JsonKind::Array(values) => pending.extend(values),
-            scalar if node.path == *field_path => {
+            scalar => {
+                let is_number = matches!(scalar, JsonKind::Number(_));
                 let span = if matches!(scalar, JsonKind::String(_)) {
                     node.span.start + 1..node.span.end - 1
                 } else {
                     node.span
                 };
-                if span.is_empty() {
-                    return Vec::new();
-                }
-                return vec![RefusalEvidence {
+                scalars.push((node.path, span, is_number));
+            }
+        }
+    }
+    let mut complete = true;
+    let mut evidence = Vec::new();
+    for (refused_reason, path) in refused {
+        let located = scalars.iter().find(|(scalar, ..)| scalar == path);
+        complete &= refused_reason == UntransformableReason::JsonNumberNoTextOnlyPath
+            && located.is_some_and(|(_, _, is_number)| *is_number);
+        match located {
+            Some((_, span, _)) if refused_reason == *reason && !span.is_empty() => {
+                evidence.push(RefusalEvidence {
                     raw_start: span.start,
                     raw_end: span.end,
                     outcome: "confirmed_untransformable",
                     reason: *reason,
-                }];
+                })
             }
             _ => {}
         }
     }
-    Vec::new()
+    evidence.sort_by_key(|span| (span.raw_start, span.raw_end));
+    evidence.dedup_by_key(|span| (span.raw_start, span.raw_end));
+    let complete = complete && !evidence.is_empty();
+    RefusalReport { evidence, complete }
 }
 
 #[derive(Debug, Serialize)]
@@ -637,6 +680,10 @@ struct PipelineErrorResponse<'a> {
     pipeline_error_code: &'a str,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     refusal_evidence: Vec<RefusalEvidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    evidence_complete: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    evidence_producer: Option<&'static str>,
     timing: PipelineErrorTiming,
 }
 
@@ -650,7 +697,7 @@ fn write_pipeline_error(
     fixture_id: &str,
     stage: &str,
     reason: PipelineFailureReason,
-    refusal_evidence: Vec<RefusalEvidence>,
+    refusal: RefusalReport,
     total_ms: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     serde_json::to_writer(
@@ -659,7 +706,9 @@ fn write_pipeline_error(
             fixture_id,
             pipeline_error_stage: stage,
             pipeline_error_code: reason.as_str(),
-            refusal_evidence,
+            evidence_complete: refusal.complete.then_some(true),
+            evidence_producer: refusal.complete.then_some(TYPED_REFUSAL_PRODUCER),
+            refusal_evidence: refusal.evidence,
             timing: PipelineErrorTiming { total_ms },
         },
     )?;
@@ -2498,7 +2547,13 @@ mod tests {
                 code.as_str(),
                 format!("untransformable_{}", reason.as_str())
             );
-            let evidence = refusal_evidence(text, &error);
+            let report = refusal_evidence(text, &error);
+            // Only an all-number refusal can be complete; others stay ordinary evidence.
+            assert_eq!(
+                report.complete,
+                reason == UntransformableReason::JsonNumberNoTextOnlyPath
+            );
+            let evidence = report.evidence;
             assert_eq!(evidence.len(), 1);
             let value = serde_json::to_value(&evidence).unwrap();
             assert_eq!(value[0]["raw_start"], 25);
@@ -2506,8 +2561,108 @@ mod tests {
             let serialized = serde_json::to_string(&evidence).unwrap();
             assert!(!serialized.contains("812345"));
             assert!(!serialized.contains("customer_id"));
-            assert!(refusal_evidence("not JSON", &error).is_empty());
+            let unparsed = refusal_evidence("not JSON", &error);
+            assert!(unparsed.evidence.is_empty() && !unparsed.complete);
         }
+    }
+
+    /// End-to-end completeness for the pinned producer: the real `core` rule floor refuses
+    /// labelled JSON numbers, and the written response names every refused span. The
+    /// committed fixture is the input of `scripts/bench/test_typed_refusal_producer.py`,
+    /// which proves the gold document is a blocked operation and the document whose second
+    /// refused value is benign stays an ordinary, failing refusal.
+    /// `GAZE_BLESS_TYPED_REFUSAL_FIXTURE=1` rewrites the fixture.
+    #[test]
+    fn typed_refusal_producer_names_every_refused_span_end_to_end() {
+        let full = assemble_rule_floor(BenchConfig::RuleFloorCore, None).expect("core floor");
+        let cases = [
+            (
+                "gold-single",
+                r#"{"customer_id":812345,"limit":7}"#,
+                vec![(15, 21, "CUSTOMER_ID")],
+            ),
+            (
+                "gold-two",
+                r#"{"customer_id":812345,"items":[{"employeeId":44190}],"page":2}"#,
+                vec![(15, 21, "CUSTOMER_ID"), (45, 50, "EMPLOYEE_ID")],
+            ),
+            (
+                "benign-sibling",
+                r#"{"customer_id":812345,"customer_number":7}"#,
+                vec![(15, 21, "CUSTOMER_ID")],
+            ),
+        ];
+        let mut rows = Vec::new();
+        for (id, text, gold) in cases {
+            let outcome = handle_request(
+                BenchConfig::RuleFloorCore,
+                &full,
+                Request {
+                    fixture_id: id.to_string(),
+                    locale_chain: vec!["global".to_string()],
+                    text: text.to_string(),
+                    context_json: None,
+                    session_hex: None,
+                },
+            )
+            .expect("request");
+            let Outcome::PipelineError {
+                fixture_id,
+                stage,
+                reason,
+                refusal_evidence,
+                ..
+            } = outcome
+            else {
+                panic!("{id} must refuse");
+            };
+            let mut output = Vec::new();
+            write_pipeline_error(
+                &mut output,
+                &fixture_id,
+                stage,
+                reason,
+                refusal_evidence,
+                1.0,
+            )
+            .expect("write");
+            let response: serde_json::Value = serde_json::from_slice(&output).unwrap();
+            assert_eq!(response["evidence_complete"], true, "{id}: {response}");
+            assert_eq!(response["evidence_producer"], TYPED_REFUSAL_PRODUCER);
+            assert!(!output.windows(6).any(|w| w == b"812345"), "value-free");
+            rows.push(serde_json::json!({
+                "id": id,
+                "text": text,
+                "gold": gold.iter().map(|(a, b, l)| serde_json::json!([a, b, l])).collect::<Vec<_>>(),
+                "response": response,
+            }));
+        }
+        let spans = |row: &serde_json::Value| {
+            row["response"]["refusal_evidence"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|span| {
+                    (
+                        span["raw_start"].as_u64().unwrap(),
+                        span["raw_end"].as_u64().unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(spans(&rows[1]), vec![(15, 21), (45, 50)]);
+        assert_eq!(spans(&rows[2]), vec![(15, 21), (40, 41)]);
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/typed_refusal_producer.json");
+        let rendered = serde_json::to_string_pretty(&rows).unwrap() + "\n";
+        if std::env::var_os("GAZE_BLESS_TYPED_REFUSAL_FIXTURE").is_some() {
+            std::fs::write(&fixture, &rendered).unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(&fixture).expect("committed fixture"),
+            rendered,
+            "producer output drifted from the fixture the harness test reads"
+        );
     }
 
     #[test]
@@ -2517,6 +2672,8 @@ mod tests {
             pipeline_error_stage: "clean",
             pipeline_error_code: "safety_net_runtime_subprocess_timeout",
             refusal_evidence: Vec::new(),
+            evidence_complete: None,
+            evidence_producer: None,
             timing: PipelineErrorTiming { total_ms: 12.5 },
         };
         let serialized = serde_json::to_string(&response).expect("error response should serialize");
@@ -2551,7 +2708,10 @@ mod tests {
             "failure-1",
             "clean",
             PipelineFailureReason::SafetyNetRuntimeSubprocessTimeout,
-            Vec::new(),
+            RefusalReport {
+                evidence: Vec::new(),
+                complete: false,
+            },
             12.5,
         )
         .expect("error response should be written");

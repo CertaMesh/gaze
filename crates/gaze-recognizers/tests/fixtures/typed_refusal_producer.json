@@ -1,0 +1,106 @@
+[
+  {
+    "gold": [
+      [
+        15,
+        21,
+        "CUSTOMER_ID"
+      ]
+    ],
+    "id": "gold-single",
+    "response": {
+      "evidence_complete": true,
+      "evidence_producer": "gaze-pipeline-typed-refusal-v1",
+      "fixture_id": "gold-single",
+      "pipeline_error_code": "untransformable_json_number_no_text_only_path",
+      "pipeline_error_stage": "clean",
+      "refusal_evidence": [
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 21,
+          "raw_start": 15,
+          "reason": "json_number_no_text_only_path"
+        }
+      ],
+      "timing": {
+        "total_ms": 1.0
+      }
+    },
+    "text": "{\"customer_id\":812345,\"limit\":7}"
+  },
+  {
+    "gold": [
+      [
+        15,
+        21,
+        "CUSTOMER_ID"
+      ],
+      [
+        45,
+        50,
+        "EMPLOYEE_ID"
+      ]
+    ],
+    "id": "gold-two",
+    "response": {
+      "evidence_complete": true,
+      "evidence_producer": "gaze-pipeline-typed-refusal-v1",
+      "fixture_id": "gold-two",
+      "pipeline_error_code": "untransformable_json_number_no_text_only_path",
+      "pipeline_error_stage": "clean",
+      "refusal_evidence": [
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 21,
+          "raw_start": 15,
+          "reason": "json_number_no_text_only_path"
+        },
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 50,
+          "raw_start": 45,
+          "reason": "json_number_no_text_only_path"
+        }
+      ],
+      "timing": {
+        "total_ms": 1.0
+      }
+    },
+    "text": "{\"customer_id\":812345,\"items\":[{\"employeeId\":44190}],\"page\":2}"
+  },
+  {
+    "gold": [
+      [
+        15,
+        21,
+        "CUSTOMER_ID"
+      ]
+    ],
+    "id": "benign-sibling",
+    "response": {
+      "evidence_complete": true,
+      "evidence_producer": "gaze-pipeline-typed-refusal-v1",
+      "fixture_id": "benign-sibling",
+      "pipeline_error_code": "untransformable_json_number_no_text_only_path",
+      "pipeline_error_stage": "clean",
+      "refusal_evidence": [
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 21,
+          "raw_start": 15,
+          "reason": "json_number_no_text_only_path"
+        },
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 41,
+          "raw_start": 40,
+          "reason": "json_number_no_text_only_path"
+        }
+      ],
+      "timing": {
+        "total_ms": 1.0
+      }
+    },
+    "text": "{\"customer_id\":812345,\"customer_number\":7}"
+  }
+]
