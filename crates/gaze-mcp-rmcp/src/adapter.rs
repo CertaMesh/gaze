@@ -135,6 +135,7 @@ fn json_value_to_object(value: &Value) -> JsonObject {
 mod tests {
     use super::*;
     use gaze_mcp_core::ResponseRedaction;
+    use rmcp::model::{CallToolResponse, ResultType, ServerResult};
     use serde_json::json;
 
     fn make_descriptor() -> ToolDescriptor {
@@ -230,6 +231,7 @@ mod tests {
     fn response_string_payload_becomes_text_content() {
         let resp = ToolResponse::text("[EMAIL_1]");
         let out = response_to_rmcp_call_tool_result(resp).unwrap();
+        assert_eq!(out.result_type, Some(ResultType::COMPLETE));
         assert_eq!(out.is_error, Some(false));
         assert_eq!(out.content.len(), 1);
         let text = out.content[0]
@@ -244,6 +246,7 @@ mod tests {
     fn response_object_payload_becomes_json_text_content() {
         let resp = ToolResponse::json(json!({ "redacted": "[NAME_1]" }));
         let out = response_to_rmcp_call_tool_result(resp).unwrap();
+        assert_eq!(out.result_type, Some(ResultType::COMPLETE));
         assert_eq!(out.is_error, Some(false));
         // ContentBlock::json serializes the value into a text frame; assert
         // the round-trip survives by parsing the embedded JSON back.
@@ -271,10 +274,26 @@ mod tests {
         ];
         for (error, class) in cases {
             let result = error_to_rmcp_call_tool_result(error);
+            assert_eq!(result.result_type, Some(ResultType::COMPLETE));
             let wire = serde_json::to_value(&result).expect("result serializes");
             assert!(!wire.to_string().contains(detail), "leaked {class} detail");
             assert_eq!(
                 wire,
+                json!({
+                    "resultType": "complete",
+                    "content": [{ "type": "text", "text": class }],
+                    "isError": true
+                })
+            );
+            let mut response = ServerResult::from(CallToolResponse::from(result));
+            assert_eq!(
+                serde_json::to_value(&response).expect("server result serializes"),
+                wire
+            );
+            // rmcp applies this conversion for pre-2026-07-28 peers.
+            response.strip_result_type_for_legacy_peer();
+            assert_eq!(
+                serde_json::to_value(&response).expect("legacy result serializes"),
                 json!({
                     "content": [{ "type": "text", "text": class }],
                     "isError": true
