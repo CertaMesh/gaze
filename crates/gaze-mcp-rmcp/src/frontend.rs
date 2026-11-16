@@ -16,8 +16,8 @@ use gaze_mcp_core::{
 };
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ContentBlock, ErrorData, Implementation,
-    ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ErrorData,
+    Implementation, ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig,
 };
 use rmcp::service::{RequestContext, RoleServer};
 #[cfg(feature = "transport-stdio")]
@@ -255,8 +255,8 @@ impl RmcpServer {
 }
 
 impl ServerHandler for RmcpServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
             Implementation::new("gaze-mcp-rmcp", env!("CARGO_PKG_VERSION")),
         )
     }
@@ -283,7 +283,7 @@ impl ServerHandler for RmcpServer {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, ErrorData> {
+    ) -> Result<CallToolResponse, ErrorData> {
         let principal = self.principal(&context).await?;
         let host = host_call_context(&context.extensions);
         let dispatch_args = rmcp_args_to_dispatch_args(request);
@@ -298,10 +298,11 @@ impl ServerHandler for RmcpServer {
             )
             .await;
 
-        match response {
+        let result = match response {
             Ok(response) => response_to_rmcp_call_tool_result(response).map_err(rmcp_error_to_mcp),
             Err(err) => Ok(dispatch_error_to_tool_result(err)),
-        }
+        }?;
+        Ok(result.into())
     }
 }
 

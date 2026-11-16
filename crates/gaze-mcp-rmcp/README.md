@@ -50,6 +50,11 @@ Tool failures return `isError: true` with a single text frame containing only
 `backend-unavailable`, `backend-failure`, or `internal`. Error payloads and
 source messages are never included, including for future error variants.
 
+Results carry the fixed `resultType: "complete"` discriminator for MCP protocol
+2026-07-28 and newer. Direct serialization of adapter results includes it too.
+The rmcp server removes it for older negotiated versions, preserving their
+existing wire shape without requiring clients to accept an unknown field.
+
 Operation expansion-budget refusals return `isError: true` with the single text
 class `resource_limit`, without input values or internal details.
 

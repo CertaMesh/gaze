@@ -355,6 +355,7 @@ pub(crate) fn no_payload_surfaces(r: &CallToolResult) -> bool {
         [code] => *code != "untransformable" && CONTROL_REFUSAL_CODES.contains(code),
         _ => false,
     };
+    // This harness uses the legacy initialize protocol: rmcp strips resultType.
     // Equality closes every serialized data-bearing surface, including future fields.
     closed
         && must(serde_json::to_value(r))
