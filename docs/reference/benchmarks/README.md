@@ -1968,9 +1968,10 @@ detection change emits the identity, no live refusal is blocked. All four
 current guard cases complete on the `core` floor, so today's proof is the
 fabricated path: the same checking functions reject fabricated first-path-only,
 unflagged, renamed and case-variant outputs, and
-`scripts/bench/check_typed_refusal_guard_mutation.py` fails the suite when the
-live check is disconnected, the checker compares only the first span, the
-completeness assertion is removed or the live test is skipped. A test also binds
+`scripts/bench/check_typed_refusal_guard_mutation.py`, its own CI step, requires
+the intended test to fail when the live check is disconnected, the live response
+is discarded, the checker compares only the first span or the completeness
+assertion is removed, and the live test to be reported skipped when skipped. A test also binds
 the registered current specification to this tree's measuring sources. Encoded
 carriers (JSON inside a string) have no supported raw-path mapping and remain
 ineligible, even with a completeness assertion and an outer node at the same path.
@@ -2000,7 +2001,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [current specification](specifications/ab615325643fc3ace0b3b09f47297258f0015b5d7efef0fc532750a965c5d870.json) adds the pipeline producer pin.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [current specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts

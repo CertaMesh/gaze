@@ -708,7 +708,7 @@ also includes the bounded inference-equivalence and key-mutation tools in the
 measuring source closure. The
 [refusal contract specification](../../docs/reference/benchmarks/specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json)
 also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
-The [current specification](../../docs/reference/benchmarks/specifications/ab615325643fc3ace0b3b09f47297258f0015b5d7efef0fc532750a965c5d870.json)
+The [current specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
 pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,

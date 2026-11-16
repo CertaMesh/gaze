@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:ab615325643fc3ace0b3b09f47297258f0015b5d7efef0fc532750a965c5d870",
+  "id": "gaze-benchmark-v1:c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -45,7 +45,7 @@
       "scripts/bench/check_policy_equivalence.py": "9d9c7da4ae1b2b1ccba0ff7757cb50d0d0564b50d87e6879774375f8660a9464",
       "scripts/bench/check_record_id_boundaries.py": "9ad5d633926aa6b3d711ad63868990e6d58520e89c3cc07a477b8cb73f0931be",
       "scripts/bench/check_refusal_gate_mutation.py": "802de2c74dbbb94e566292b3cef7e71d588f24cef97fb37034456ebff9428c45",
-      "scripts/bench/check_typed_refusal_guard_mutation.py": "890c6b20421ae2b161be485a045dd441c1ef985ab3f42c0a8e7141fa09554fb1",
+      "scripts/bench/check_typed_refusal_guard_mutation.py": "af16d267194a1a8d0f3bbba85087eaece8f4889f6b103ef00958a48903a92c76",
       "scripts/bench/checked_daemon_batch.py": "c920a60c35211a6e5fe661a4e58bbb1e69d23fc6fb73db095e412b64e9b41c1e",
       "scripts/bench/checksum_record_enumeration.py": "8f9feb39bce3a9185ce272e20ef3bfa00d647e364ce86a19fc8dbb8cfd5fd1ad",
       "scripts/bench/clean_scaling.py": "43c7c63ea2b2ade3e584d26ad2b5e5ed7ad42ae3b0789e6f4a49f905c18cb8f8",

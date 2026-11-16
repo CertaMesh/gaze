@@ -112,21 +112,34 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
         self.assertEqual((checked, first_path_failures, mixed_ordinary, rejected),
                          (4, 3, 2, 16))
 
-    def test_live_fixture_test_routes_every_row_through_check_row(self):
-        # The live test must reach check_row for every fixture row; a disconnected
-        # or emptied live test fails here even though no row refuses today.
+    def test_live_fixture_test_checks_each_rows_own_response(self):
+        # Drive the live test with controlled payloads: each row's own response
+        # object must reach check_row, and incomplete live evidence must fail it.
+        rows = load()
+        for row in rows:
+            row["response"] = complete_response(row, row["expected_refused_ranges"])
+        sent = [(row["id"], row["response"]) for row in rows]
         seen = []
         real = check_row
 
         def spy(test, row, response):
-            seen.append(row["id"])
+            seen.append((row["id"], response))
             return real(test, row, response)
 
-        with mock.patch(f"{__name__}.check_row", spy):
+        with mock.patch(f"{__name__}.load", lambda: rows), \
+                mock.patch(f"{__name__}.check_row", spy):
             self.test_identity_rows_name_every_refused_range_and_round_trip()
-        self.assertEqual(seen, [row["id"] for row in load()])
+        self.assertEqual([row_id for row_id, _ in seen], [row_id for row_id, _ in sent])
         self.assertEqual(len(seen), 4)
+        for (_, got), (row_id, payload) in zip(seen, sent):
+            self.assertIs(got, payload, row_id)
 
+        incomplete = load()
+        for row in incomplete:
+            row["response"] = complete_response(row, row["expected_refused_ranges"][:1])
+        with mock.patch(f"{__name__}.load", lambda: incomplete):
+            with self.assertRaises(AssertionError):
+                self.test_identity_rows_name_every_refused_range_and_round_trip()
 
 def broken_identity_responses(row, expected):
     """Pinned-identity outputs that a complete-evidence guard must reject."""
@@ -168,7 +181,8 @@ class TypedRefusalGuardMutationTests(unittest.TestCase):
         self.assertEqual(check(), {
             "baseline": "pass", "completeness_assertion_removed": "killed",
             "first_span_only_checker": "killed", "live_check_disconnected": "killed",
-            "live_test_skipped": "killed", "live_test_skipped_if_fixture_missing": "killed"})
+            "live_response_discarded": "killed", "live_test_skipped": "killed",
+            "live_test_skipped_if_fixture_missing": "killed"})
 
 
 if __name__ == "__main__":
