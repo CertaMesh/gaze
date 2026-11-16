@@ -272,6 +272,8 @@ async fn assert_tool_error_egress(reject_failure: bool) {
             .await
             .expect("tool error is an MCP result, not a protocol error");
         let wire = serde_json::to_value(&result).expect("result serializes");
+        // The default rmcp client negotiates the legacy initialize protocol.
+        assert_eq!(result.result_type, None);
         assert!(
             !wire.to_string().contains(ERROR_DETAIL),
             "leaked {class} detail"

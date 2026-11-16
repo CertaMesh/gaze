@@ -575,7 +575,7 @@ async fn is_error_text_structured_and_meta_are_redacted() {
     let mut result =
         CallToolResult::error(vec![ContentBlock::text(format!("missing {RAW_EMAIL}"))]);
     result.structured_content = Some(json!({"owner": RAW_EMAIL}));
-    result.meta = Some(rmcp::model::Meta({
+    result.meta = Some(rmcp::model::MetaObject({
         let mut map = rmcp::model::JsonObject::new();
         map.insert("trace".to_string(), json!(RAW_EMAIL));
         map
