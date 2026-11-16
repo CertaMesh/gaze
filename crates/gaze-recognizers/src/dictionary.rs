@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
@@ -250,6 +250,7 @@ impl Recognizer for DictionaryRecognizer {
                 .collect::<Vec<_>>()
         };
 
+        let mut emitted_spans = HashSet::new();
         Ok(matches
             .into_iter()
             .filter(|(start, end, _)| {
@@ -280,6 +281,7 @@ impl Recognizer for DictionaryRecognizer {
                             &self.dictionary_name,
                         ))
             })
+            .filter(|(start, end, _)| emitted_spans.insert((*start, *end)))
             .map(|(start, end, index)| {
                 Candidate::new(
                     start..end,
@@ -1454,5 +1456,57 @@ mod normalization_tests {
         let hits = recognizer.detect("QX7LM2RT", &context).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 0..8);
+    }
+}
+
+#[cfg(test)]
+mod normalized_duplicate_tests {
+    use super::*;
+    use gaze_types::{DictionaryBundle, DictionarySource};
+
+    #[test]
+    fn normalization_collisions_keep_original_term_indices() {
+        let entry = DictionaryEntry::new(
+            "tag",
+            vec!["Ｑx7Lm2Rt".into(), "Qx7Lm2Rt".into(), "Qx7Lm2Ru".into()],
+            true,
+            DictionarySource::Cli,
+        )
+        .unwrap();
+        let dictionaries = DictionaryBundle::from_entries([("tag".into(), entry)]);
+        let context = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+        let recognizer = DictionaryRecognizer::new(
+            "tag",
+            PiiClass::Custom("tag".into()),
+            "tag",
+            true,
+            "counter",
+        );
+        let hits = recognizer
+            .detect("Qx7Lm2Rt then Qx7Lm2Ru", &context)
+            .unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].source, "dictionary:tag[#0]");
+        assert_eq!(hits[1].source, "dictionary:tag[#2]");
+    }
+
+    #[test]
+    fn ineligible_duplicate_cannot_hide_an_eligible_match_kind() {
+        let entry = DictionaryEntry::new(
+            "tag",
+            vec!["ＱORVEX".into(), "qorvex".into()],
+            true,
+            DictionarySource::Cli,
+        )
+        .unwrap();
+        let dictionaries = DictionaryBundle::from_entries([("tag".into(), entry)]);
+        let context = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+        let recognizer = DictionaryRecognizer::new("tag", PiiClass::Name, "tag", true, "counter")
+            .with_unicode_case_insensitive()
+            .with_record_allowed_kinds([RecordMatchKind::CaseFolded].into_iter().collect());
+        let hits = recognizer.detect("QORVEX", &context).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].span, 0..6);
+        assert_eq!(hits[0].source, "dictionary:tag[#1]");
     }
 }

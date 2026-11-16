@@ -363,6 +363,7 @@ checks:
     commands:
       - uv run --project scripts/bench --python 3.13 --locked python scripts/ci/known_record_normalization_mutations.py
       - cargo test -p gaze-assembly --test core_pipeline_dictionaries --test record_context
+      - 'cargo test -p gaze-recognizers --all-features --lib dictionary::'
       - cargo test -p gaze-recognizers --lib normalization_tests
       - 'cargo test -p gaze-recognizers --lib record_guess::'
       - cargo test -p gaze-cli --no-default-features --test cli_pipe normalized_context_
