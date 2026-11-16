@@ -725,3 +725,33 @@ def test_history_verification_binds_each_contract_to_subject(tmp_path, evidence,
                name: capture_identity.file_digest(folder / name) for name in
                ('capture.json', 'observations-v1.jsonl.gz', 'scorecard-v1.json', 'scorecard-v2.json')}}
     assert not history.verified(row, folder, evidence['benchmark_spec'], job)
+
+
+def test_registered_current_specification_matches_the_measuring_tree():
+    # The current registration must describe this tree's measuring sources; a
+    # harness change without a new specification fails here. Historical
+    # manifests are immutable records and stay exempt.
+    import re
+
+    root = Path(__file__).resolve().parents[2]
+    readme = (root / "scripts/bench/README.md").read_text(encoding="utf-8")
+    current = re.findall(
+        r"The \[current specification\]\(\.\./\.\./docs/reference/benchmarks/"
+        r"specifications/([0-9a-f]{64})\.json\)", readme)
+    assert len(current) == 1
+    docs = (root / "docs/reference/benchmarks/README.md").read_text(encoding="utf-8")
+    assert re.findall(r"the \[current specification\]\(specifications/([0-9a-f]{64})\.json\)",
+                      docs) == current
+    path = root / f"docs/reference/benchmarks/specifications/{current[0]}.json"
+    manifest = specs.validate(json.loads(path.read_text(encoding="utf-8")))
+    assert manifest["id"] == f"gaze-benchmark-v1:{current[0]}"
+    inputs = manifest["inputs"]
+    measured = specs.measuring_inputs(root)
+    assert inputs["harness"] == measured["harness"]
+    assert inputs["validation_vocabulary"] == measured["validation_vocabulary"]
+    assert inputs["record_schema"] == sorted(records.READABLE_SCHEMA_VERSIONS)
+    protocol = json.loads((root / specs.PROTOCOL).read_text(encoding="utf-8"))
+    assert {k: v for k, v in inputs["protocol"].items() if k != "execution"} == protocol
+    labels = {path.stem: specs.file_digest(path) for path in
+              (root / "docs/reference/benchmarks").glob("scored-labels-v*.json")}
+    assert {k: v for k, v in inputs["contracts"].items() if k.startswith("scored-labels-")} == labels
