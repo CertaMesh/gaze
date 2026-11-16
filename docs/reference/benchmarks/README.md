@@ -1954,12 +1954,17 @@ The harness honours `evidence_complete` only when the response's
 `complete_evidence_producers`. Adding an identity changes the measuring
 harness, so it requires a new pinned specification, and lands before the
 detection change that emits it. Both lists pin one identity,
-`gaze-pipeline-typed-refusal-v1`: the bench example's report of the pipeline's typed refusal,
-where `ProtectionError::Untransformable` names every refused field. The
-detection change that first emits it must carry an end-to-end completeness
-test: real pipeline → typed refusal with every refused path → blocked
-operation, including a benign untransformable sibling that must fail. Until
-then no subject emits the identity, so no live refusal is blocked. Encoded
+`gaze-pipeline-typed-refusal-v1`: the bench example's report of the pipeline's typed refusal.
+Today `ProtectionError::Untransformable` names only the first refused field,
+so the emitter must enumerate every refused field before it emits the
+identity. A model-free guard enforces this in CI: the bench example test
+`typed_refusal_producer_guard_requires_every_refused_span` drives the real
+`core` rule floor on multi-field all-gold and mixed gold/benign documents, and
+fails any response that carries the identity without naming every refused
+span. Its committed fixture feeds `scripts/bench/test_typed_refusal_producer.py`,
+which round-trips those responses through this contract: all-gold refusals
+block, and a benign untransformable sibling keeps the refusal ordinary. Until a
+detection change emits the identity, no live refusal is blocked. Encoded
 carriers (JSON inside a string) have no supported raw-path mapping and remain
 ineligible, even with a completeness assertion and an outer node at the same path.
 
@@ -1988,7 +1993,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [current specification](specifications/1aa54eb045ef04a0fbf34932449e7beb38969c37f24cf5f7f29517fecaff04c9.json) adds the pipeline producer pin.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [current specification](specifications/d87dbf6b18d6a0cac6f20466c0ea58e0f0c87e07f2ce1a991ba99a1f608967a5.json) adds the pipeline producer pin.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts

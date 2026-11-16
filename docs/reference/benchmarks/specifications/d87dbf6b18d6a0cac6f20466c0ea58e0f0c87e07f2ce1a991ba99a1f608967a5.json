@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:1aa54eb045ef04a0fbf34932449e7beb38969c37f24cf5f7f29517fecaff04c9",
+  "id": "gaze-benchmark-v1:d87dbf6b18d6a0cac6f20466c0ea58e0f0c87e07f2ce1a991ba99a1f608967a5",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -134,7 +134,7 @@
       "scripts/bench/record_id_cells.py": "52c25e1a287cb629645d1fbb8bf69eff82110bf80e568c969f468c72b22cb996",
       "scripts/bench/record_id_ownership_cells.py": "8f4664f1638e51a0fe055059b986acd277353a9262fb8a1093a8ab1ef1071ace",
       "scripts/bench/record_id_syntax_cells.py": "2109f837245ced9e2c5d52ef8771979acebb8913df5446fa93f22099d898d07f",
-      "scripts/bench/refusal_contract.py": "cc177254dce5254aae19add4f523afa09b19b762f07bdb2c5b5b617baea61f77",
+      "scripts/bench/refusal_contract.py": "a8638dd58fe7b81ebf8c4b30e9e97853ebaad11a8f3b3e8ea8afab580d2b58a2",
       "scripts/bench/refusal_gate.py": "706fdf0cfc34fb59b7334b1c495f4eb05e7da0ba83d0df00d83a8671b5cdbb7e",
       "scripts/bench/registry_contract.py": "71d1746d88e4e5b03bb545ff101284e7aacadf7510394da4899fc33d7b3b19a5",
       "scripts/bench/render_agentic_adjacency_doc.py": "fd1b7e3734087f96cc89244ce6cfccd3c0406927c2be7151d26466192bc9909b",
@@ -204,7 +204,7 @@
       "scripts/bench/compare/tuned_presidio/tune.py": "e8de52f8c5bb6ca343adc8de50699f9f4ca3249d4988d4f8c30359f90c963533",
       "scripts/bench/compare/tuned_presidio/verdict.py": "82f4d129c91ca3938d3976cf64e2bb5f6c839f49ec051f5f9bdb7cea691ad01f",
       "scripts/bench/compare/tuned_presidio/versus_gaze.py": "80a1323b0e1bbba5ae91bb0329cfd7e91921717396df8a36c4ac2ca6b07fce81",
-      "scripts/bench/benchmark-protocol.json": "c6f32e4bb9ea7a34c41ba5c8b46e875badcdf9868ad7e85febe007cc5fbbe002",
+      "scripts/bench/benchmark-protocol.json": "e61cd1f2406397408c53d6070edf56192b8b390b634252eedfaf1f314761dcd9",
       "scripts/bench/lookalike_cue_vocabulary.json": "d99343195ac44a78fd726f061b29569de8425923379043db70b315cc52a18eb1",
       "scripts/bench/perf-lifecycle-source-identity.json": "ea43ae4827500b7b07d469944c853af3aa94823dd49376013af1dfffe023973a",
       "scripts/bench/perf-lifecycle-synthetic-proof.json": "dcd1d28965c82c5178729407b2fe7834df7dbbcf38599d2fcbef22e850f547b8",
@@ -325,7 +325,7 @@
       },
       "refusal_contract": {
         "version": 2,
-        "semantics": "Only typed untransformable refusals with evidence_complete=true covering every refused path, emitted by a producer listed in complete_evidence_producers (each added only with its end-to-end completeness test), whose every refused span exactly matches ownership-labelled confirmed-ID gold, are blocked operations. Single-path first-error evidence and unsupported encoded carriers are ineligible. Benign/non-gold refusals fail. Layers C/A/D/R without refusals, and dictionary-sequence layers K/B, retain legacy arithmetic. Compare common unblocked operations for bytes, exact restore and valid manifest; refusing creates no gain.",
+        "semantics": "Only typed untransformable refusals with evidence_complete=true covering every refused path, emitted by a producer listed in complete_evidence_producers (pinned ahead of its emitter; a model-free end-to-end guard fails any response carrying the identity unless it names every refused path, so the emitter must enumerate every refused field before emitting it), whose every refused span exactly matches ownership-labelled confirmed-ID gold, are blocked operations. Single-path first-error evidence and unsupported encoded carriers are ineligible. Benign/non-gold refusals fail. Layers C/A/D/R without refusals, and dictionary-sequence layers K/B, retain legacy arithmetic. Compare common unblocked operations for bytes, exact restore and valid manifest; refusing creates no gain.",
         "legacy_version": 1,
         "complete_evidence_producers": [
           "gaze-pipeline-typed-refusal-v1"

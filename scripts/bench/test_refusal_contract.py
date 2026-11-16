@@ -19,7 +19,7 @@ def document(uid="d", gold=True):
                           (score.Span(15, 21, "CUSTOMER_ID"),) if gold else ())
 
 
-# Stands in for a producer that has landed with its end-to-end completeness test.
+# Stands in for a pinned producer whose completeness guard holds.
 TESTED_PRODUCER = "synthetic-complete-evidence-producer"
 
 
@@ -63,7 +63,9 @@ class ShippedProducerPinTests(unittest.TestCase):
         self.assertFalse(contract.eligible(document(), sibling))
 
     def test_no_other_identity_is_pinned(self):
-        for producer in ("clean_for_bench", self.PIPELINE + "-v2", self.PIPELINE.upper()):
+        for producer in ("clean_for_bench", self.PIPELINE + "-v2", self.PIPELINE.upper(),
+                         " " + self.PIPELINE, self.PIPELINE + " ", self.PIPELINE + "\n",
+                         "\n" + self.PIPELINE):
             response = refusal()
             response["evidence_producer"] = producer
             self.assertFalse(contract.eligible(document(), response), producer)
