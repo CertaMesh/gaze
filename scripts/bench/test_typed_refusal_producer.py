@@ -84,25 +84,49 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
 
     def test_identity_rows_name_every_refused_range_and_round_trip(self):
         # Zero identity rows is the pre-emitter state; any identity row is fully checked.
-        for row in load():
-            response = row["response"]
-            if response == "completed":
-                continue
-            self.assertIsInstance(response, dict, row["id"])
-            if "evidence_producer" not in response:
-                # Legacy unqualified refusal: never complete, never blocked.
-                self.assertNotIn("evidence_complete", response, row["id"])
-                self.assertEqual(classify(row, response), "ordinary", row["id"])
-                continue
-            self.assertEqual(response["evidence_producer"], PIPELINE, row["id"])
-            self.assertIn(response["evidence_producer"], contract.COMPLETE_EVIDENCE_PRODUCERS)
-            self.assertIs(response["evidence_complete"], True, row["id"])
-            self.assertEqual(spans(response), row["expected_refused_ranges"], row["id"])
-            contract.validate_evidence(response, len(row["text"].encode("utf-8")))
-            self.assertEqual(classify(row, response), row["expected_verdict"], row["id"])
-            self.assertEqual(contract.eligible(row["document"], response),
-                             row["expected_verdict"] == "blocked", row["id"])
+        rows = load()
+        self.assertEqual(len(rows), 4)
+        for row in rows:
+            check_row(self, row, row["response"])
 
+    def test_guard_rejects_fabricated_incomplete_emitters(self):
+        # On main no fixture row refuses, so feed the same check_row the live
+        # fixture uses with fabricated pinned-identity outputs.
+        checked = first_path_failures = mixed_ordinary = 0
+        for row in load():
+            expected = row["expected_refused_ranges"]
+            self.assertEqual(check_row(self, row, complete_response(row, expected)),
+                             row["expected_verdict"], row["id"])
+            checked += 1
+            if row["expected_verdict"] == "ordinary":
+                mixed_ordinary += 1
+            if len(expected) > 1:
+                with self.assertRaises(AssertionError, msg=row["id"]):
+                    check_row(self, row, complete_response(row, expected[:1]))
+                first_path_failures += 1
+        self.assertEqual((checked, first_path_failures, mixed_ordinary), (4, 3, 2))
+
+
+def check_row(test, row, response):
+    """The guard's single checking rule; returns the verdict it classified."""
+    if response == "completed":
+        return "completed"
+    test.assertIsInstance(response, dict, row["id"])
+    if "evidence_producer" not in response:
+        # Legacy unqualified refusal: never complete, never blocked.
+        test.assertNotIn("evidence_complete", response, row["id"])
+        test.assertEqual(classify(row, response), "ordinary", row["id"])
+        return "ordinary"
+    test.assertEqual(response["evidence_producer"], PIPELINE, row["id"])
+    test.assertIn(response["evidence_producer"], contract.COMPLETE_EVIDENCE_PRODUCERS)
+    test.assertIs(response["evidence_complete"], True, row["id"])
+    test.assertEqual(spans(response), row["expected_refused_ranges"], row["id"])
+    contract.validate_evidence(response, len(row["text"].encode("utf-8")))
+    verdict = classify(row, response)
+    test.assertEqual(verdict, row["expected_verdict"], row["id"])
+    test.assertEqual(contract.eligible(row["document"], response),
+                     row["expected_verdict"] == "blocked", row["id"])
+    return verdict
 
 if __name__ == "__main__":
     unittest.main()
