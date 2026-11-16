@@ -11,6 +11,7 @@ benign sibling is refused.
 import json
 from pathlib import Path
 import unittest
+from unittest import mock
 
 import gaze_bench_score as score
 import refusal_contract as contract
@@ -92,7 +93,7 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
     def test_guard_rejects_fabricated_incomplete_emitters(self):
         # On main no fixture row refuses, so feed the same check_row the live
         # fixture uses with fabricated pinned-identity outputs.
-        checked = first_path_failures = mixed_ordinary = 0
+        checked = first_path_failures = mixed_ordinary = rejected = 0
         for row in load():
             expected = row["expected_refused_ranges"]
             self.assertEqual(check_row(self, row, complete_response(row, expected)),
@@ -104,7 +105,38 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
                 with self.assertRaises(AssertionError, msg=row["id"]):
                     check_row(self, row, complete_response(row, expected[:1]))
                 first_path_failures += 1
-        self.assertEqual((checked, first_path_failures, mixed_ordinary), (4, 3, 2))
+            for broken in broken_identity_responses(row, expected):
+                with self.assertRaises(AssertionError, msg=row["id"]):
+                    check_row(self, row, broken)
+                rejected += 1
+        self.assertEqual((checked, first_path_failures, mixed_ordinary, rejected),
+                         (4, 3, 2, 16))
+
+    def test_live_fixture_test_routes_every_row_through_check_row(self):
+        # The live test must reach check_row for every fixture row; a disconnected
+        # or emptied live test fails here even though no row refuses today.
+        seen = []
+        real = check_row
+
+        def spy(test, row, response):
+            seen.append(row["id"])
+            return real(test, row, response)
+
+        with mock.patch(f"{__name__}.check_row", spy):
+            self.test_identity_rows_name_every_refused_range_and_round_trip()
+        self.assertEqual(seen, [row["id"] for row in load()])
+        self.assertEqual(len(seen), 4)
+
+
+def broken_identity_responses(row, expected):
+    """Pinned-identity outputs that a complete-evidence guard must reject."""
+    missing = complete_response(row, expected)
+    del missing["evidence_complete"]
+    unflagged = {**complete_response(row, expected), "evidence_complete": False}
+    renamed = {**complete_response(row, expected),
+               "evidence_producer": "gaze-pipeline-typed-refusal-v2"}
+    case_variant = {**complete_response(row, expected), "evidence_producer": PIPELINE.upper()}
+    return (missing, unflagged, renamed, case_variant)
 
 
 def check_row(test, row, response):
@@ -119,7 +151,7 @@ def check_row(test, row, response):
         return "ordinary"
     test.assertEqual(response["evidence_producer"], PIPELINE, row["id"])
     test.assertIn(response["evidence_producer"], contract.COMPLETE_EVIDENCE_PRODUCERS)
-    test.assertIs(response["evidence_complete"], True, row["id"])
+    test.assertIs(response.get("evidence_complete"), True, row["id"])
     test.assertEqual(spans(response), row["expected_refused_ranges"], row["id"])
     contract.validate_evidence(response, len(row["text"].encode("utf-8")))
     verdict = classify(row, response)
@@ -127,6 +159,17 @@ def check_row(test, row, response):
     test.assertEqual(contract.eligible(row["document"], response),
                      row["expected_verdict"] == "blocked", row["id"])
     return verdict
+
+
+
+class TypedRefusalGuardMutationTests(unittest.TestCase):
+    def test_every_guard_mutant_fails_the_guard_suite(self):
+        from check_typed_refusal_guard_mutation import check
+        self.assertEqual(check(), {
+            "baseline": "pass", "completeness_assertion_removed": "killed",
+            "first_span_only_checker": "killed", "live_check_disconnected": "killed",
+            "live_test_skipped": "killed", "live_test_skipped_if_fixture_missing": "killed"})
+
 
 if __name__ == "__main__":
     unittest.main()
