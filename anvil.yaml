@@ -358,7 +358,7 @@ checks:
     expensive: true
     reusable: false
     locks: [workspace-build]
-    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/known_record_normalization_mutations.py, scripts/ci/known_record_normalization_probe.py, docs, anvil.yaml]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/known_record_normalization_mutations.py, scripts/ci/known_record_normalization_probe.py, scripts/ci/known_record_normalization_capture.py, docs, anvil.yaml]
     toolchain: [rustc -Vv, cargo -V, uv --version]
     commands:
       - uv run --project scripts/bench --python 3.13 --locked python scripts/ci/known_record_normalization_mutations.py
