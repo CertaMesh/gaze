@@ -8,6 +8,7 @@ Its observation record uses the standard single-population replay format;
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -76,7 +77,7 @@ def main():
            "policy_sha256": score.sha256_file(policy), "capture_once": True}
     arm["specification_sha256"] = hashlib.sha256(json.dumps(arm, sort_keys=True).encode()).hexdigest()
     card = {
-        "schema_version": 4, "generated_at": "record-once",
+        "schema_version": 4, "generated_at": datetime.now(timezone.utc).isoformat(),
         "gaze": score.git_metadata(subject), "subject_build": receipt, "arm": arm,
         "dataset": {"integrity": {"sha256": corpus_sha},
                     "validator_gold_census": score.validator_gold_census(documents, measurements)},
@@ -87,8 +88,8 @@ def main():
     record_path = output/"observations-v1.jsonl.gz"
     card["observation_record"] = writer.write(record_path, card, add_reference=True)
     (output/"capture.json").write_text(json.dumps(card, indent=2) + "\n")
-    for version in (1, 2):
-        contract = score.SCORED_LABEL_CONTRACT_V1 if version == 1 else score.load_scored_label_contract(ROOT/"docs/reference/benchmarks/scored-labels-v2.json")
+    for version in (1, 2, 4):
+        contract = score.SCORED_LABEL_CONTRACT_V1 if version == 1 else score.load_scored_label_contract(ROOT/f"docs/reference/benchmarks/scored-labels-v{version}.json")
         replayed = records.rescore(record_path, contract, max_workers=1)
         (output/f"scorecard-v{version}.json").write_text(json.dumps(replayed, indent=2) + "\n")
     print(json.dumps({"observations": len(writer.rows), "pairs": len(pairs), "record_sha256": card["observation_record"]["sha256"]}))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import time
 
@@ -43,7 +44,7 @@ def resource_preflight():
         free = re.search(r"System-wide memory free percentage: (\d+)%", result)
         if not free:
             raise RuntimeError("could not read free memory percentage")
-        if int(free[1]) >= 30 and not (Path.home()/".cache/root-coordinator/teyos-turn.active").exists():
+        if shutil.disk_usage("/System/Volumes/Data").free >= 105 * 1024**3 and int(free[1]) >= 30 and not (Path.home()/".cache/root-coordinator/teyos-turn.active").exists():
             return
         print("Waiting for shared build resources", flush=True)
         time.sleep(15)
