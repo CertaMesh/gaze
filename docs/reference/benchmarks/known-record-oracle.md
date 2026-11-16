@@ -45,6 +45,11 @@ precision choice after the layer D audit, with follow-up work to measure
 narrower versions. These results are an upper bound for an adopter who
 already knows the selected record values, not context-free performance.
 
+Generator v6 adds paired term-normalization controls, including gold spans
+that retain the original non-ASCII source bytes. The v5 attribution JSON below
+remains a historical snapshot under its original specification. It is not a v6
+measurement; any new v6 comparison requires fresh captures on both sides.
+
 ## v5 all-on attribution
 
 The full v5 producer and layer K measured each class and match kind at source

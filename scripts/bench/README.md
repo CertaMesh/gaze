@@ -442,7 +442,20 @@ from the text only in the way one match kind is for (`whitespace_flexible`,
 same record and shape. Kinds are derived after Gaze's own folding, which turns
 NBSP-class separators into spaces before detection, so an NBSP copy is an exact
 match. Such pairs, and the other pairs that exercise no probe kind, are typed
-controls in their own buckets. `python3 scripts/bench/known_record_cells.py`
+controls in their own buckets. Generator version 6 adds thirty-two normalization
+control pairs across all four surfaces: fullwidth characters, interior ZWSP,
+nonbreaking hyphens, and Unicode space separators in the declared record.
+Half use the equivalent ASCII text to isolate private-term preparation.
+The other half keep the same non-ASCII spelling in record and text, with gold
+spans covering the original UTF-8 bytes. Every pair has a one-digit-off public
+fixture reference as its benign twin. The pinned v6 corpus hash is
+`ead514a882f8a19dfac18a7f94cbf706eaeee32e78cd2d54342b84a515246b56`.
+The model-free tests pin all pre-existing v5 pairs byte for byte, including
+their match kinds and buckets. Keep historical v5 results under their original
+specification; compare each implementation against the same v6 cells.
+The committed v5 history and attribution JSON are historical snapshots, not v6
+measurements. Re-record both implementations with the v6 inputs before
+displaying a new comparison. This input-only change publishes no v6 result. `python3 scripts/bench/known_record_cells.py`
 prints the pinned manifest. `... known_record_cells.py prove --binary <clean_for_bench>
 --policy <policy> --model-dir <ner> --contract v2 --cross-check --output <json>` scores layer K
 three ways (no record, record with the default kinds, record with the probe kinds
