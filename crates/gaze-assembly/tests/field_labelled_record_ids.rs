@@ -298,3 +298,78 @@ fn caller_declared_fields_bind_in_prose_and_refuse_in_numbers() {
         }
     ));
 }
+
+#[derive(Clone, Default)]
+struct Rows(std::sync::Arc<std::sync::Mutex<Vec<gaze::RedactionEntry>>>);
+
+impl gaze::RedactionLogger for Rows {
+    fn log(&self, entry: &gaze::RedactionEntry) -> Result<(), gaze::RedactionLogError> {
+        self.0.lock().unwrap().push(entry.clone());
+        Ok(())
+    }
+}
+
+/// Field-bound winners, refusals and passes each write a value-free audit row with the
+/// outcome, its reason, and the field's depth and evidence.
+#[test]
+fn audit_rows_carry_outcomes_and_field_evidence() {
+    use gaze_types::{FieldEvidence, PossiblySensitiveReason, ProtectionOutcome};
+    let custom = |name: &str| gaze::PiiClass::custom(name).unwrap();
+    let rows = Rows::default();
+    let (pipeline, active) = stock();
+    let pipeline = pipeline.with_redaction_logger(rows.clone());
+    protected(
+        &pipeline,
+        &active,
+        r#"{"record":{"customer_id":"C-731284"}}"#,
+    );
+    refusal(&pipeline, &active, r#"{"employee_id":44190}"#);
+    let entries = std::mem::take(&mut *rows.0.lock().unwrap());
+    let winner = entries
+        .iter()
+        .find(|row| row.class == custom("customer_id") && !row.conflict_loser)
+        .expect("winner row");
+    assert_eq!(
+        winner.protection_outcome().unwrap(),
+        Some(ProtectionOutcome::Protected)
+    );
+    assert_eq!(winner.field_path_depth, Some(2));
+    assert_eq!(winner.field_evidence, Some(FieldEvidence::ValidatedParse));
+    let refused = entries
+        .iter()
+        .find(|row| row.class == custom("employee_id"))
+        .expect("refusal row");
+    assert_eq!(
+        refused.protection_outcome().unwrap(),
+        Some(ProtectionOutcome::ConfirmedUntransformable(
+            UntransformableReason::JsonNumberNoTextOnlyPath
+        ))
+    );
+    assert_eq!(refused.field_path_depth, Some(1));
+    let serialized = serde_json::to_string(&entries).unwrap();
+    assert!(!serialized.contains("731284") && !serialized.contains("44190"));
+
+    let rows = Rows::default();
+    let (pass, active) = pipeline_for_probe("[outcomes]\npossibly_sensitive = \"pass_audited\"\n");
+    let pass = pass.with_redaction_logger(rows.clone());
+    protected(&pass, &active, r#"{"customer_id":"pending review"}"#);
+    let entries = rows.0.lock().unwrap();
+    let passed = entries
+        .iter()
+        .find(|row| row.class == custom("customer_id"))
+        .expect("pass row");
+    assert_eq!(passed.action, gaze::Action::Preserve);
+    assert_eq!(
+        passed.protection_outcome().unwrap(),
+        Some(ProtectionOutcome::PossiblySensitive(
+            PossiblySensitiveReason::LabelValueShapeUnclear
+        ))
+    );
+}
+
+fn pipeline_for_probe(outcomes: &str) -> (Pipeline, LocaleChain) {
+    pipeline(
+        outcomes,
+        r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
+    )
+}
