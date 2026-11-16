@@ -74,6 +74,15 @@ pub enum RawMatch {
         name_shape: String,
         cue_position: String,
     },
+    /// Protect a structured field's scalar because its label names the identifier.
+    /// Reads only parsed or caller-declared field context, never prose.
+    FieldLabelled {
+        /// Field labels, compared after removing case, `_`, `-`, `.` and whitespace.
+        field_labels: Vec<String>,
+        /// Closed value shape; `identifier` is a digit-bearing value of at most 40 bytes and
+        /// four groups. Other values under the label are possibly sensitive.
+        value_shape: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -222,6 +231,8 @@ pub enum RulepackError {
     UnsupportedMatcher(String),
     #[error("unsupported anchored_match field '{field}' value '{value}'")]
     UnsupportedAnchoredMatch { field: String, value: String },
+    #[error("unsupported field_labelled field '{field}' value '{value}'")]
+    UnsupportedFieldLabelled { field: String, value: String },
     #[error("unsupported rulepack field '{field}' in B1; planned for {planned_version}")]
     UnsupportedField {
         field: String,
@@ -968,6 +979,40 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
             }
         }
         RawMatch::Ner { .. } => {}
+        RawMatch::FieldLabelled {
+            field_labels,
+            value_shape,
+        } => {
+            if value_shape != "identifier" {
+                return Err(RulepackError::UnsupportedFieldLabelled {
+                    field: "value_shape".to_string(),
+                    value: value_shape.clone(),
+                });
+            }
+            if field_labels.is_empty() {
+                return Err(RulepackError::UnsupportedFieldLabelled {
+                    field: "field_labels".to_string(),
+                    value: String::new(),
+                });
+            }
+            for label in field_labels {
+                // A bare generic key would bind every object's own id, public or not.
+                let folded = label
+                    .chars()
+                    .filter(|ch| !matches!(ch, '_' | '-' | '.') && !ch.is_whitespace())
+                    .flat_map(char::to_lowercase)
+                    .collect::<String>();
+                if matches!(
+                    folded.as_str(),
+                    "" | "id" | "value" | "number" | "no" | "nr" | "key" | "uuid"
+                ) {
+                    return Err(RulepackError::UnsupportedFieldLabelled {
+                        field: "field_labels".to_string(),
+                        value: label.clone(),
+                    });
+                }
+            }
+        }
     }
     Ok(())
 }

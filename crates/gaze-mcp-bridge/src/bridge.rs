@@ -805,7 +805,12 @@ fn reject_sensitive_scalars(
             .peek()
             .is_some_and(|span| span.raw_span.start < range.end)
         {
-            return Err(gaze::ProtectionError::Untransformable { reason, field_path }.into());
+            return Err(gaze::ProtectionError::Untransformable {
+                reason,
+                field_path,
+                others: Vec::new(),
+            }
+            .into());
         }
         // Suspects use clean coordinates; preceding string replacements can shift a scalar.
         let clean_start = clean_end + (range.start - raw_end);

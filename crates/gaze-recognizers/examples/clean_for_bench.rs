@@ -2491,6 +2491,7 @@ mod tests {
             let error = gaze::Error::Protection(gaze::ProtectionError::Untransformable {
                 reason,
                 field_path: path.clone(),
+                others: Vec::new(),
             });
             let code = pipeline_failure_reason(&error).expect("closed typed refusal");
             assert_eq!(

@@ -59,13 +59,17 @@ pub enum ProtectionError {
     Residual,
     #[error("token provenance or reversibility rejected")]
     Provenance,
-    /// A confirmed sensitive field has no safe reversible rendering. No producer yet.
+    /// A confirmed sensitive field has no safe reversible rendering. Raised before any token
+    /// is minted or output produced, by the bridge and by the pipeline's outcome enforcement.
     #[error("confirmed sensitive field cannot be transformed: {reason}")]
     Untransformable {
-        /// Closed reason without the sensitive value.
+        /// Closed reason for the first refused field, without the sensitive value.
         reason: gaze_types::UntransformableReason,
-        /// Structural location. Diagnostics hide its segments.
+        /// The first refused field's structural location. Diagnostics hide its segments.
         field_path: gaze_types::FieldPath,
+        /// Every further refused field of the same input, in document order. Together with
+        /// the first, the complete set the pipeline refused; empty when only one field did.
+        others: Vec<(gaze_types::UntransformableReason, gaze_types::FieldPath)>,
     },
 }
 
@@ -769,7 +773,11 @@ impl Pipeline {
                 None,
                 context.field,
             )
-            .map_err(|_| ProtectionError::Primary)?;
+            .map_err(|error| match error {
+                // A typed refusal keeps its reason and fields; anything else stays opaque.
+                Error::Protection(error @ ProtectionError::Untransformable { .. }) => error,
+                _ => ProtectionError::Primary,
+            })?;
         clean.push_str(&result.text);
         spans
             .append(result.manifest, raw_offset, clean_offset)

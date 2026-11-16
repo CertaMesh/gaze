@@ -147,6 +147,74 @@ fn parsed_field_spans(text: &str, spans: &mut Vec<(Range<usize>, FieldProvenance
     }
 }
 
+/// Carriers a token may not replace in a document that strictly parses as JSON: number
+/// literals, and object keys (the interior of the key literal, in source spelling). Each
+/// carries the path of the value it holds or names. `None` when the document does not parse.
+pub(crate) struct JsonCarriers {
+    pub(crate) numbers: Vec<(Range<usize>, FieldPath)>,
+    pub(crate) keys: Vec<(Range<usize>, FieldPath)>,
+}
+
+pub(crate) fn json_carriers(text: &str) -> Option<JsonCarriers> {
+    if !matches!(text.trim_start().as_bytes().first(), Some(b'{' | b'[')) {
+        return None;
+    }
+    let tree = json_tree::parse(text.as_bytes(), JsonTreeLimits::default()).ok()?;
+    let mut carriers = JsonCarriers {
+        numbers: Vec::new(),
+        keys: Vec::new(),
+    };
+    let mut pending = vec![tree.root];
+    while let Some(node) = pending.pop() {
+        match node.kind {
+            JsonKind::Object(members) => {
+                for member in members {
+                    if let Some(key) = key_interior(text.as_bytes(), member.value.span.start) {
+                        carriers.keys.push((key, member.value.path.clone()));
+                    }
+                    pending.push(member.value);
+                }
+            }
+            JsonKind::Array(values) => pending.extend(values),
+            JsonKind::Number(_) => carriers.numbers.push((node.span, node.path)),
+            _ => {}
+        }
+    }
+    Some(carriers)
+}
+
+/// The key literal's interior before a member value starting at `value_start`, walking back
+/// over `"key" :` in a document the strict parser accepted.
+fn key_interior(bytes: &[u8], value_start: usize) -> Option<Range<usize>> {
+    let mut at = value_start;
+    let skip_ws = |at: &mut usize| {
+        while *at > 0 && bytes[*at - 1].is_ascii_whitespace() {
+            *at -= 1;
+        }
+    };
+    skip_ws(&mut at);
+    (at > 0 && bytes[at - 1] == b':').then_some(())?;
+    at -= 1;
+    skip_ws(&mut at);
+    (at > 0 && bytes[at - 1] == b'"').then_some(())?;
+    let end = at - 1;
+    let mut start = end;
+    while start > 0 {
+        start -= 1;
+        if bytes[start] == b'"' {
+            let escapes = bytes[..start]
+                .iter()
+                .rev()
+                .take_while(|b| **b == b'\\')
+                .count();
+            if escapes % 2 == 0 {
+                return Some(start + 1..end);
+            }
+        }
+    }
+    None
+}
+
 /// Translate source ranges into a normalized view of the same text.
 ///
 /// `source_spans[i]` is the source range of normalized byte `i`; both ends are monotone. A
