@@ -954,7 +954,7 @@ fn approval_required_response(request: &ApprovalRequest) -> ToolResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::{Annotations, Meta, Role, TextContent};
+    use rmcp::model::{Annotations, MetaObject, Role, TextContent};
 
     /// Pins the guard to what rmcp serializes today: a text block carrying every
     /// optional field must pass, or ingress would block every annotated result.
@@ -962,7 +962,7 @@ mod tests {
     /// field needs a redaction decision before it is allowed.
     #[test]
     fn a_fully_populated_text_block_has_only_known_keys() {
-        let mut meta = Meta::new();
+        let mut meta = MetaObject::new();
         meta.0.insert("k".to_string(), serde_json::json!("v"));
         let mut text = TextContent::new("hello").with_meta(meta);
         text.annotations = Some(
