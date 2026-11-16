@@ -16,8 +16,8 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "3ec31ef2b5ef674633673121d3ab2ef8933c6b932e999fd68614f16737e0a6e1"
-PAIRS = 100
+PINNED_CORPUS_SHA256 = "ead514a882f8a19dfac18a7f94cbf706eaeee32e78cd2d54342b84a515246b56"
+PAIRS = 116
 
 
 def recorder_kind(text: str, raw: str) -> str:
@@ -71,7 +71,7 @@ class KnownRecordCellTests(unittest.TestCase):
 
     def test_term_normalization_controls_have_precision_twins(self) -> None:
         pairs = [p for p in self.pairs if p.positive.variant.startswith("term_")]
-        self.assertEqual(len(pairs), 16)
+        self.assertEqual(len(pairs), 32)
         for pair in pairs:
             positive, twin = pair.positive, pair.counterweight
             self.assertEqual(positive.measured_kind(), "exact")
@@ -83,7 +83,25 @@ class KnownRecordCellTests(unittest.TestCase):
             self.assertFalse(twin.gold)
             raw = positive.record[0].raw
             self.assertNotEqual(raw, cells.gaze_fold(raw))
-            self.assertIn(cells.gaze_fold(raw), positive.text)
+            self.assertIn(cells.gaze_fold(raw), cells.gaze_fold(positive.text))
+            if positive.variant.endswith("_source"):
+                target = positive.targets[0]
+                self.assertEqual(target_text(positive, target), raw)
+                self.assertEqual(positive.gold[0].value, raw)
+
+    def test_preexisting_v5_pairs_keep_identical_bytes_kinds_and_buckets(self) -> None:
+        import hashlib
+        legacy = [p for p in self.pairs if not p.positive.variant.startswith("term_")]
+        self.assertEqual(len(legacy), 84)
+        self.assertEqual(
+            hashlib.sha256(cells.corpus_bytes(legacy)).hexdigest(),
+            "9e1bb24c206a90b7978423ab9adaaa2bac11a7241b75ea5a0c9a59a85dffad45",
+        )
+        for pair in legacy:
+            positive = pair.positive
+            self.assertEqual(positive.measured_kind(), positive.targets[0].attribution[1])
+            expected = positive.probe_kind.value if positive.probe_kind else cells.CONTROL_MEASURED_KIND[positive.control_kind]
+            self.assertEqual(positive.measured_kind(), expected)
 
     def test_generation_is_deterministic_and_pinned(self) -> None:
         again = cells.generate()

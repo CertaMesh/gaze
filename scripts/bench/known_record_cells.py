@@ -35,6 +35,7 @@ from unittest.mock import patch
 
 import agentic_layers as agentic
 import gaze_bench_score as score
+from known_record_attribution import normalized_match_text
 
 GENERATOR_VERSION = 6
 SEED = 2026092901
@@ -661,9 +662,13 @@ VARIANTS: dict[Bucket, tuple[str, ...]] = {
     ControlKind.UNMATCHED_COMPACT_RECORD: ("iban_compact_record",),
     ControlKind.EXACT_CANONICAL_RECORD: ("name_record_irregular",),
     ControlKind.EXACT_UNLISTED_NAME: ("unlisted_alone",),
-    ControlKind.EXACT_AFTER_TERM_FOLDING: ("term_fullwidth", "term_zwsp", "term_nonbreaking_hyphen", "term_unicode_space"),
     ControlKind.EXACT_AFTER_SPACE_FOLDING: ("steuer_id_nbsp", "card_narrow_nbsp"),
     ControlKind.CASE_FOLDED_AFTER_SPACE_FOLDING: ("name_lower_nbsp",),
+    ControlKind.EXACT_AFTER_TERM_FOLDING: (
+        "term_fullwidth", "term_zwsp", "term_nonbreaking_hyphen", "term_unicode_space",
+        "term_fullwidth_source", "term_zwsp_source",
+        "term_nonbreaking_hyphen_source", "term_unicode_space_source",
+    ),
 }
 
 
@@ -680,9 +685,12 @@ def _english_only(variant: str) -> bool:
 def _term_variant(variant: str) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
     """Synthetic passport references, with normalization on the private term side.
 
-    Text is ASCII so these cells isolate term preparation from source mapping.
+    ASCII text isolates private-term preparation. Source variants use the
+    original non-ASCII spelling to measure source-byte coverage and restore.
     A one-digit-off public fixture with the same shape is its precision twin.
     """
+    source_spelling = variant.endswith("_source")
+    variant = variant.removesuffix("_source")
     rendered = "Qx7Lm2Rt"
     if variant == "term_fullwidth":
         raw = "Ｑx７Lm２Rt"
@@ -692,6 +700,8 @@ def _term_variant(variant: str) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
         raw, rendered = "Qx7\u2011Lm2Rt", "Qx7-Lm2Rt"
     else:
         raw, rendered = "Qx7\u2007Lm2Rt", "Qx7 Lm2Rt"
+    if source_spelling:
+        rendered = raw
     kind = ("custom:passport", "exact")
 
     def positive(b: Builder) -> list[Target]:
@@ -702,7 +712,7 @@ def _term_variant(variant: str) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
 
     def counterweight(b: Builder) -> list[Target]:
         b.add("Public fixture reference: ")
-        span = b.add(rendered.replace("7", "8"))
+        span = b.add(rendered.replace("7", "8").replace("７", "８"))
         b.add(".")
         return [_target(span, 0, kind, False)]
 
@@ -746,23 +756,8 @@ def generate() -> list[Pair]:
 
 
 def gaze_fold(text: str) -> str:
-    """Gaze's pre-detection folding (crates/gaze/src/normalize.rs).
-
-    Every Unicode space separator becomes an ASCII space and fullwidth ASCII
-    becomes ASCII, then NFC. Line breaks and tabs are not space separators.
-    """
-    out = []
-    for char in text:
-        if char in "\u200b\u200c\u200d":
-            continue
-        if unicodedata.category(char) == "Zs":
-            char = " "
-        elif "\uff01" <= char <= "\uff5e":
-            char = chr(ord(char) - 0xFEE0)
-        if char == "\u2011":
-            char = "-"
-        out.append(unicodedata.normalize("NFC", char))
-    return "".join(out)
+    """Shared Python mirror of gaze_types::normalize::normalize, per source scalar."""
+    return normalized_match_text(text)
 
 
 def matcher_kind(text: str, record_class: str, raw: str) -> str:
@@ -811,7 +806,10 @@ def _normalize(text: str, fold: bool) -> tuple[str, list[int], list[int]]:
     starts: list[int] = []
     ends: list[int] = []
     run = 0
-    for index, char in enumerate(text):
+    for index, source in enumerate(text):
+        char = gaze_fold(source)
+        if not char:
+            continue
         if char.isspace():
             run += 1
             if run == 1 or run == MAX_WHITESPACE_RUN + 1:
