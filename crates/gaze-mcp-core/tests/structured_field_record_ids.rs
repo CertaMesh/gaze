@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gaze::{
-    Action, CleanDocument, Context, LocaleChain, PiiClass, Policy, RawDocument, RuleSpec, Rulepack,
-    Scope, Session,
+    Action, CleanDocument, Context, LocaleChain, Policy, RawDocument, RuleSpec, Rulepack, Scope,
+    Session,
 };
 use gaze_mcp_core::*;
 use serde_json::{json, Value};
@@ -76,17 +76,11 @@ fn declare_members(value: &Value, path: &mut CarrierPath, members: &mut Vec<Carr
 }
 
 #[tokio::test]
-async fn mcp_labelled_string_leaves_known_failure_but_numbers_fail_closed() {
+async fn mcp_labelled_string_leaves_protect_and_numbers_fail_closed() {
     let mut policy = Policy::default();
-    policy.rules = vec![
-        RuleSpec::Class {
-            class: PiiClass::Custom("probe_record_id".into()),
-            action: Action::Tokenize,
-        },
-        RuleSpec::Default {
-            action: Action::Preserve,
-        },
-    ];
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
     let chain = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline = gaze_assembly::build_pipeline(
         &policy,
@@ -97,7 +91,14 @@ async fn mcp_labelled_string_leaves_known_failure_but_numbers_fail_closed() {
             record_match_kinds: Default::default(),
             record_value_rejections: Default::default(),
         },
-        &[Rulepack::parse(record_ids::RULEPACK).unwrap()],
+        // The bundled `core` pack binds labelled fields; the adopter rule calibrates prose.
+        &[
+            Rulepack::load(gaze::RulepackSource::Embedded(
+                gaze_recognizers::embedded("core").unwrap(),
+            ))
+            .unwrap(),
+            Rulepack::parse(record_ids::RULEPACK).unwrap(),
+        ],
         &chain,
         None,
     )
@@ -109,10 +110,25 @@ async fn mcp_labelled_string_leaves_known_failure_but_numbers_fail_closed() {
             ("whole-json", document.to_string()),
         ] {
             let session = Session::new(Scope::Ephemeral).unwrap();
-            let CleanDocument::Text(clean) = pipeline
-                .pseudonymize_with_context(&session, RawDocument::Text(text), chain.as_slice())
-                .unwrap()
-            else {
+            let result = pipeline.pseudonymize_with_context(
+                &session,
+                RawDocument::Text(text),
+                chain.as_slice(),
+            );
+            if kind == "whole-json" && case.numeric {
+                // A labelled JSON number has no reversible text rendering: typed refusal.
+                assert!(
+                    matches!(
+                        result,
+                        Err(gaze::Error::Protection(
+                            gaze::ProtectionError::Untransformable { .. }
+                        ))
+                    ),
+                    "{case:?}: whole-json labelled number must refuse"
+                );
+                continue;
+            }
+            let CleanDocument::Text(clean) = result.unwrap() else {
                 panic!("text expected")
             };
             record_ids::check(&case, &format!("MCP/calibration/{kind}"), &clean, false);
@@ -163,7 +179,7 @@ async fn mcp_labelled_string_leaves_known_failure_but_numbers_fail_closed() {
         } else {
             result.unwrap_or_else(|_| panic!("MCP/args {case:?}: expected successful dispatch"));
             let sent = captured.lock().unwrap().pop().expect("tool must execute");
-            record_ids::check(&case, "MCP/args", &sent.to_string(), true);
+            record_ids::check(&case, "MCP/args", &sent.to_string(), false);
         }
     }
 }
