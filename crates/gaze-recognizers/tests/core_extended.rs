@@ -17,8 +17,12 @@ fn core_extended() -> Rulepack {
         embedded("core-extended").expect("core-extended embedded rulepack"),
     ))
     .expect("core-extended loads");
+    // These suites drive regex rules over prose. Field-labelled rules read only
+    // structured fields, never prose, and have their own suites.
     rulepack.recognizers.retain(|recognizer| {
-        !recognizer.id.starts_with("email.") && !recognizer.id.starts_with("name.")
+        !recognizer.id.starts_with("email.")
+            && !recognizer.id.starts_with("name.")
+            && matches!(recognizer.matcher, RawMatch::Regex { .. })
     });
     rulepack
 }
@@ -238,6 +242,10 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "bsn.nl",
             "cnpj.br",
             "cpf.br",
+            // Field-labelled record IDs bind a structured field label, not document prose,
+            // so the label is the evidence at every locale.
+            "customer_id.field",
+            "employee_id.field",
             "nhs.uk",
             "nino.uk",
             "nir.fr",
@@ -249,6 +257,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "postal.ca",
             "postal.gb",
             "postal.ie",
+            "record_id.field",
             // Explicit expansion of the #414 promotion set: the German-cue SSN arm shares
             // `ssn.us`'s class and national identifier shape and replays A4-clean when run
             // everywhere, so it is a format-basis sibling rather than a document-gated cue rule.
@@ -259,7 +268,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 54);
+    assert_eq!(core.recognizers.len(), 57);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
