@@ -1422,3 +1422,21 @@ async fn host_context_pair_guesses_cover_documented_numeric_bound() {
         );
     }
 }
+
+
+#[tokio::test]
+async fn normalized_host_dictionary_terms_protect_response_and_preserve_guess_exclusion() {
+    for value in ["Ｑx7Lm2Rt", "Qx\u{200b}7Lm2Rt"] {
+        let selection = || HostContextSelection::present(json!({"dictionaries":{"tag":{"terms":[value],"case_sensitive":true}},"class_map":{"tag":"custom:tag"}}).to_string());
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let raw = format!("found {value} here");
+        let result = call(&session, json!({}), Some(json!(raw)), selection()).await.unwrap();
+        let clean = result.payload.as_str().unwrap();
+        assert!(clean.starts_with("found <"), "host declared source bytes leaked: {clean:?}");
+        assert!(clean.ends_with("> here"));
+        let guessed = Session::new(Scope::Ephemeral).unwrap();
+        let result = call(&guessed, json!({"guess":"Qx7Lm2Rt"}), Some(json!("found Qx7Lm2Rt here")), selection()).await.unwrap();
+        assert_eq!(result.payload, json!("found Qx7Lm2Rt here"));
+        assert!(guessed.tokens().is_empty(), "model-supplied guesses cannot become private evidence");
+    }
+}

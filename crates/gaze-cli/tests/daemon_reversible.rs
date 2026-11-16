@@ -762,3 +762,26 @@ fn context_requests_keep_resident_ner_and_its_learned_evidence_tier() {
         "caller-known rule evidence must propagate"
     );
 }
+
+
+#[test]
+fn normalized_context_terms_round_trip_and_propagate_in_daemon() {
+    let (dir, path) = policy();
+    let mut configured = fs::read_to_string(&path).unwrap();
+    configured = configured.replace("action = \"preserve\"", "action = \"tokenize\"");
+    fs::write(&path, configured).unwrap();
+    let mut daemon = Daemon::start(&path);
+    for (index, value) in ["Ｑx7Lm2Rt", "Qx\u{200b}7Lm2Rt"].into_iter().enumerate() {
+        let id = format!("normalized-{index}");
+        daemon.request(json!({"version":1,"op":"open","session_id":id}));
+        let raw = format!("found {value} here");
+        let protected = daemon.request(json!({"version":1,"op":"clean","session_id":id,"text":raw,"context":{"record":{"tag":value},"field_map":{"/tag":"custom:tag"},"record_match_kinds":{"custom:tag":["exact"]}}}));
+        let clean = protected["clean_text"].as_str().expect("successful clean");
+        assert!(clean.starts_with("found <"), "declared source bytes leaked: {clean:?}");
+        assert!(clean.ends_with("> here"));
+        assert_eq!(daemon.request(json!({"version":1,"op":"restore","session_id":id,"text":clean}))["text"], raw);
+        let later = daemon.request(json!({"version":1,"op":"clean","session_id":id,"text":raw}));
+        assert_eq!(later["clean_text"], clean);
+    }
+    drop(dir);
+}

@@ -6491,3 +6491,22 @@ fn attribution_default_build_ignores_opt_in() {
         .unwrap()
         .contains("alice@example.invalid"));
 }
+
+
+#[test]
+fn normalized_context_dictionary_and_record_terms_clean_original_bytes() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("context.json");
+    for value in ["Ｑx7Lm2Rt", "Qx\u{200b}7Lm2Rt", "Ｑx\u{200b}7Lm2Rt"] {
+        for context in [
+            json!({"record":{"tag":value},"field_map":{"/tag":"custom:tag"},"record_match_kinds":{"custom:tag":["exact"]}}),
+            json!({"dictionaries":{"tag":{"terms":[value],"case_sensitive":true}},"class_map":{"tag":"custom:tag"}}),
+        ] {
+            fs::write(&path, context.to_string()).unwrap();
+            let response = clean_json_with_args(&[&format!("--context-json={}", path.display())], &format!("found {value} here"));
+            let clean = response["clean_text"].as_str().unwrap();
+            assert!(clean.starts_with("found <"), "declared source bytes leaked: {clean:?}");
+            assert!(clean.ends_with("> here"));
+        }
+    }
+}
