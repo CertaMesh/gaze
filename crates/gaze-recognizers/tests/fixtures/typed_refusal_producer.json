@@ -1,5 +1,6 @@
 [
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         15,
@@ -36,6 +37,7 @@
     "text": "{\"customer_id\":812345,\"limit\":7}"
   },
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         15,
@@ -87,6 +89,7 @@
     "text": "{\"customer_id\":812345,\"items\":[{\"employeeId\":44190}],\"page\":2}"
   },
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         15,
@@ -133,6 +136,7 @@
     "text": "{\"customer_id\":812345,\"customer_number\":7}"
   },
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         19,
@@ -177,5 +181,62 @@
       }
     },
     "text": "{\"customer_number\":7,\"customer_id\":812345}"
+  },
+  {
+    "expected_protected_gold": [
+      [
+        37,
+        43
+      ]
+    ],
+    "expected_refused_ranges": [
+      [
+        15,
+        21
+      ],
+      [
+        51,
+        57
+      ]
+    ],
+    "expected_verdict": "ordinary",
+    "gold": [
+      [
+        15,
+        21,
+        "CUSTOMER_ID"
+      ],
+      [
+        37,
+        43,
+        "EMPLOYEE_ID"
+      ]
+    ],
+    "id": "mixed-direct-d6",
+    "response": {
+      "evidence_complete": true,
+      "evidence_producer": "gaze-pipeline-typed-refusal-v1",
+      "fixture_id": "mixed-direct-d6",
+      "pipeline_error_code": "untransformable_json_number_no_text_only_path",
+      "pipeline_error_stage": "clean",
+      "refusal_evidence": [
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 21,
+          "raw_start": 15,
+          "reason": "json_number_no_text_only_path"
+        },
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 57,
+          "raw_start": 51,
+          "reason": "json_number_no_text_only_path"
+        }
+      ],
+      "timing": {
+        "total_ms": 1.0
+      }
+    },
+    "text": "{\"customer_id\":731284,\"employee_id\":\"654321\",\"qty\":654321}"
   }
 ]
