@@ -38,7 +38,7 @@ gaze-recognizers = { path = "crates/gaze-recognizers", version = "0.17.0" }
 gaze-proxy = { path = "crates/gaze-proxy", version = "0.17.0" }
 gaze-proxy-dashboard = { path = "crates/gaze-proxy-dashboard", version = "0.17.0" }
 gaze-types = { path = "crates/gaze-types", version = "0.17.0" }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 serde = { version = "1" }
 serde_json = "1"
 thiserror = "1"

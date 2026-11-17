@@ -2094,11 +2094,7 @@ fn s4_audit_query_columns_are_restricted() {
         "default audit filter should not bind query values"
     );
     let stmt = conn.prepare(&sql).unwrap();
-    let column_names: Vec<String> = stmt
-        .column_names()
-        .into_iter()
-        .map(str::to_string)
-        .collect();
+    let column_names: Vec<String> = stmt.column_names().map(str::to_string).collect();
     let expected: Vec<String> = AUDIT_RESTRICTED_COLUMNS
         .iter()
         .map(|column| column.to_string())

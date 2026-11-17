@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- MCP tool results include the fixed `resultType: "complete"` discriminator
+  for protocol 2026-07-28 and newer. Direct serialization of rmcp results also
+  includes it; rmcp omits it for older negotiated protocol versions. Tool-error
+  content still exposes only the stable error class.
 - Caller record values too short for safe matching now refuse the entire call
   in `gaze clean`, daemon v1 and v2, embedded MCP host context, and Rust library
   assembly. Library enforcement is the default and returns the typed
@@ -39,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Security
+
+- Update bundled SQLite through `rusqlite` 0.41, `pulldown-cmark` to 0.13.6,
+  and `rmcp` to 3.9.0 to address RUSTSEC-2026-0459, RUSTSEC-2026-0433,
+  RUSTSEC-2026-0457, and RUSTSEC-2026-0462. Update `rustix` to 1.1.6
+  for RUSTSEC-2026-0486 in every lockfile that contains it.
 
 - The setup-default `secrets` bundle protects whole private-key PEM blocks and
   bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes.
