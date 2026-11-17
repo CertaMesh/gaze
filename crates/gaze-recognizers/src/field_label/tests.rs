@@ -75,7 +75,7 @@ fn label_spellings_and_bindings() {
     for unbound in [
         &["id"][..],
         &["customer"],
-        &["order_id"],
+        &["batch_id"],
         &["customer_id", "name"],
         &["customer_id", "0", "name"],
         &["customer", "value"],
@@ -88,7 +88,7 @@ fn label_spellings_and_bindings() {
         &["customer", "0", "value"],
         &["customer_id", "value", "id"],
         // Normalized benign keys stay benign.
-        &["\u{ff4f}\u{ff52}\u{ff44}\u{ff45}\u{ff52}\u{ff3f}\u{ff49}\u{ff44}"],
+        &["\u{ff42}\u{ff41}\u{ff54}\u{ff43}\u{ff48}\u{ff3f}\u{ff49}\u{ff44}"],
         &["customer\u{200b}s", "id"],
         &["customer_id\u{200b}_hash"],
         &[
@@ -102,7 +102,7 @@ fn label_spellings_and_bindings() {
 
 #[test]
 fn string_outcomes_follow_shape_and_evidence() {
-    let text = r#"{"customer_id":"C-731284","customer_number":"unknown","order_id":"O-1"}"#;
+    let text = r#"{"customer_id":"C-731284","customer_number":"unknown","batch_id":"O-1"}"#;
     let parse = FieldEvidence::ValidatedParse;
     let spans = spans_for(
         text,
@@ -114,7 +114,7 @@ fn string_outcomes_follow_shape_and_evidence() {
                 JsonScalarType::String,
                 parse,
             ),
-            ("O-1", &["order_id"], JsonScalarType::String, parse),
+            ("O-1", &["batch_id"], JsonScalarType::String, parse),
         ],
     );
     let found = detect(text, &spans);

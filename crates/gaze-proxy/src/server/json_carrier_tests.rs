@@ -87,7 +87,7 @@ fn labelled_numbers_in_arguments_refuse_typed_and_unlabelled_stay() {
         Ok(_) => panic!("typed refusal expected, got success"),
     }
 
-    let unlabelled = r#"{"count":731284,"order_id":"O-731284"}"#;
+    let unlabelled = r#"{"count":731284,"batch_id":"O-731284"}"#;
     let mut body = arguments_body(unlabelled);
     let staged = redact_surfaces(
         &pipeline,
