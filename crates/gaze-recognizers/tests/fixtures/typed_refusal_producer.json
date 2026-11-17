@@ -1,5 +1,6 @@
 [
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         15,
@@ -19,6 +20,7 @@
     "text": "{\"customer_id\":812345,\"limit\":7}"
   },
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         15,
@@ -47,6 +49,7 @@
     "text": "{\"customer_id\":812345,\"items\":[{\"employeeId\":44190}],\"page\":2}"
   },
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         15,
@@ -70,6 +73,7 @@
     "text": "{\"customer_id\":812345,\"customer_number\":7}"
   },
   {
+    "expected_protected_gold": [],
     "expected_refused_ranges": [
       [
         19,
@@ -91,5 +95,39 @@
     "id": "benign-first",
     "response": "completed",
     "text": "{\"customer_number\":7,\"customer_id\":812345}"
+  },
+  {
+    "expected_protected_gold": [
+      [
+        37,
+        43
+      ]
+    ],
+    "expected_refused_ranges": [
+      [
+        15,
+        21
+      ],
+      [
+        51,
+        57
+      ]
+    ],
+    "expected_verdict": "ordinary",
+    "gold": [
+      [
+        15,
+        21,
+        "CUSTOMER_ID"
+      ],
+      [
+        37,
+        43,
+        "EMPLOYEE_ID"
+      ]
+    ],
+    "id": "mixed-direct-d6",
+    "response": "completed",
+    "text": "{\"customer_id\":731284,\"employee_id\":\"654321\",\"qty\":654321}"
   }
 ]

@@ -2575,11 +2575,12 @@ mod tests {
         // On main no fixture row refuses, so the live guard checks no identity
         // yet. Feed the same checking rule fabricated emitter outputs so it
         // cannot be dormant.
-        let expectations: [Vec<(u64, u64)>; 4] = [
+        let expectations: [Vec<(u64, u64)>; 5] = [
             vec![(15, 21)],
             vec![(15, 21), (45, 50)],
             vec![(15, 21), (40, 41)],
             vec![(19, 20), (35, 41)],
+            vec![(15, 21), (51, 57)],
         ];
         let mut complete_checked = 0;
         let mut first_path_rejected = 0;
@@ -2607,20 +2608,30 @@ mod tests {
             check_typed_refusal_response(&legacy, &expectations[0]),
             Ok(false)
         );
-        assert_eq!((complete_checked, first_path_rejected), (4, 3));
+        assert_eq!((complete_checked, first_path_rejected), (5, 4));
     }
 
     #[test]
     fn typed_refusal_producer_guard_requires_every_refused_span() {
         type Range = (u64, u64);
         let full = assemble_rule_floor(BenchConfig::RuleFloorCore, None).expect("core floor");
-        // (id, text, gold, every range a complete producer must name, expected verdict)
-        let cases: [(&str, &str, Vec<(u64, u64, &str)>, Vec<Range>, &str); 4] = [
+        // (id, text, gold, every range a complete producer must name, gold a complete
+        // producer protects instead of refusing, expected verdict)
+        type Case = (
+            &'static str,
+            &'static str,
+            Vec<(u64, u64, &'static str)>,
+            Vec<Range>,
+            Vec<Range>,
+            &'static str,
+        );
+        let cases: [Case; 5] = [
             (
                 "gold-single",
                 r#"{"customer_id":812345,"limit":7}"#,
                 vec![(15, 21, "CUSTOMER_ID")],
                 vec![(15, 21)],
+                Vec::new(),
                 "blocked",
             ),
             (
@@ -2628,6 +2639,7 @@ mod tests {
                 r#"{"customer_id":812345,"items":[{"employeeId":44190}],"page":2}"#,
                 vec![(15, 21, "CUSTOMER_ID"), (45, 50, "EMPLOYEE_ID")],
                 vec![(15, 21), (45, 50)],
+                Vec::new(),
                 "blocked",
             ),
             (
@@ -2635,6 +2647,7 @@ mod tests {
                 r#"{"customer_id":812345,"customer_number":7}"#,
                 vec![(15, 21, "CUSTOMER_ID")],
                 vec![(15, 21), (40, 41)],
+                Vec::new(),
                 "ordinary",
             ),
             (
@@ -2642,11 +2655,23 @@ mod tests {
                 r#"{"customer_number":7,"customer_id":812345}"#,
                 vec![(35, 41, "CUSTOMER_ID")],
                 vec![(19, 20), (35, 41)],
+                Vec::new(),
+                "ordinary",
+            ),
+            (
+                // A direct labelled-number refusal beside a string ID whose repeat sits in a
+                // benign number: a complete producer names the repeat's refusal too (D6), so
+                // the operation is an ordinary false refusal, not a blocked one.
+                "mixed-direct-d6",
+                r#"{"customer_id":731284,"employee_id":"654321","qty":654321}"#,
+                vec![(15, 21, "CUSTOMER_ID"), (37, 43, "EMPLOYEE_ID")],
+                vec![(15, 21), (51, 57)],
+                vec![(37, 43)],
                 "ordinary",
             ),
         ];
         let mut rows = Vec::new();
-        for (id, text, gold, expected, verdict) in cases {
+        for (id, text, gold, expected, protected, verdict) in cases {
             let outcome = handle_request(
                 BenchConfig::RuleFloorCore,
                 &full,
@@ -2698,6 +2723,7 @@ mod tests {
                 "text": text,
                 "gold": gold.iter().map(|(a, b, l)| serde_json::json!([a, b, l])).collect::<Vec<_>>(),
                 "expected_refused_ranges": expected.iter().map(|(a, b)| serde_json::json!([a, b])).collect::<Vec<_>>(),
+                "expected_protected_gold": protected.iter().map(|(a, b)| serde_json::json!([a, b])).collect::<Vec<_>>(),
                 "expected_verdict": verdict,
                 "response": response,
             }));
