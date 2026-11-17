@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -12,10 +13,20 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run(args, cwd):
+def run(args, cwd, *, allowed=(0,), release_environment=False):
     if shutil.disk_usage("/System/Volumes/Data").free < 105 * 1024**3:
         raise SystemExit("disk headroom below 105 GiB; retry after cleanup")
-    subprocess.run(args, cwd=cwd, check=True)
+    free = re.search(r"System-wide memory free percentage: (\d+)%", subprocess.check_output(["memory_pressure"], text=True))
+    if free is None or int(free[1]) < 30 or (Path.home()/".cache/root-coordinator/teyos-turn.active").exists():
+        raise SystemExit("shared resource preflight failed; retry when memory/marker guard clears")
+    environment = {key: value for key, value in os.environ.items() if not key.startswith('GAZE_KR_')}
+    if release_environment:
+        for key in ('CARGO_INCREMENTAL', 'CARGO_PROFILE_DEV_DEBUG', 'CARGO_PROFILE_TEST_DEBUG'):
+            environment.pop(key, None)
+    result = subprocess.run(args, cwd=cwd, env=environment)
+    if result.returncode not in allowed:
+        raise SystemExit(result.returncode)
+    return result
 
 
 def main():
@@ -41,15 +52,30 @@ def main():
         python = [sys.executable]
         model = Path(os.environ.get('GAZE_NER_MODEL_DIR', str(Path.home()/'.local/share/gaze/models/davlan-mbert-ner-hrl')))
         if kind == 'full':
-            dataset = Path(os.environ['GAZE_KR_DATASET']).resolve()
-            run([*python, 'scripts/bench/rescore_past_release.py', '--release-root', str(subject), '--build',
-                 '--binary-profile', 'release', '--configs', 'policy-file', '--policy', str(policy),
-                 '--agentic-layers', '--seed', '20260710', '--dataset', str(dataset),
-                 '--model-dir', str(model), '--no-cache', '--output', str(output/'capture.json')], ROOT)
+            if subject != ROOT:
+                raise SystemExit('canonical full capture must run from its subject harness; reuse the shared base record')
+            sys.path.insert(0, str(ROOT/'scripts/bench'))
+            import dataiku_en_de_gaze_bench as dataiku
+            source = Path(os.environ['GAZE_KR_DATASET']).resolve()
+            dataset = ROOT/'target/bench-data/dataiku-en-de/test.parquet'
+            if not dataset.exists():
+                dataiku.verify_dataset(source)
+                dataset.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, dataset)
+            dataiku.verify_dataset(dataset)
+            output = ROOT/'target/bench-data/gate-candidate/full'
+            if (output/'observations-v1.jsonl.gz').exists():
+                raise SystemExit('candidate record already exists; verify/reuse instead of recapturing')
+            # Exact canonical invocation used by the shared main-corpus base.
+            # Exit 4 means the captured product is not release-ready; keep it.
+            run([*python, 'scripts/bench/run_no_opf_benchmark.py', 'full', '--seed', '20260710',
+                 '--no-download', '--release', '--policy', 'target/gate/policy.toml',
+                 '--output-dir', 'target/bench-data/gate-candidate'], ROOT,
+                allowed=(0, 4), release_environment=True)
             for version in (1, 2, 4):
                 contract = ROOT/f'docs/reference/benchmarks/scored-labels-v{version}.json'
                 args = [*python, 'scripts/bench/rescore.py', str(output/'observations-v1.jsonl.gz'),
-                        '--output', str(output/f'scorecard-v{version}.json')]
+                        '--output', str(output/f'scorecard-scored-labels-v{version}.json')]
                 if version != 1:
                     args += ['--scored-labels', str(contract)]
                 run(args, ROOT)

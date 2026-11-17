@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture the term-normalization cells once; replay every scored-label contract.
+"""Capture all known-record cells once; replay every scored-label contract.
 
 This auxiliary known-record arm supplements the full C/A/D/R gain gate.
 Its observation record uses the standard single-population replay format;
@@ -22,6 +22,7 @@ import gaze_bench_score as score
 import known_record_cells as cells
 import scorecard_record as records
 import subject_build
+import run_no_opf_benchmark as benchmark
 
 
 def main():
@@ -34,21 +35,13 @@ def main():
     subject, policy, output = args.subject.resolve(), args.policy.resolve(), args.output_dir.resolve()
     if score.git_metadata(subject)["dirty"]:
         raise SystemExit("subject must be clean before capture")
-    pairs = [p for p in cells.generate() if p.positive.variant.startswith("term_")]
+    pairs = cells.generate()
     documents, contexts = cells.documents(ROOT, "v1", pairs)
-    if not pairs or any(score.VALIDATOR_CLASSES_BY_LABEL.get(span.label) for doc in documents for span in doc.spans):
-        raise SystemExit("normalization cells require an updated validator measurement path")
+    if not pairs:
+        raise SystemExit("empty known-record layer")
     corpus_sha = hashlib.sha256(cells.corpus_bytes(pairs)).hexdigest()
-    # These synthetic passport values have no checksum validator. Keep the
-    # complete explicit inventory required by the standard observation replay.
-    measurements = {
-        "validator_kinds_by_class": {},
-        "documents": {doc.uid: {
-            "gold_validation": [{"start": s.start, "end": s.end, "label": s.label,
-                                 "applicable": False, "validator_passed": None} for s in doc.spans],
-            "predictions": None,
-        } for doc in documents},
-    }
+    probe = benchmark.build_validator_probe(ROOT, release=True)
+    measurements = score.collect_validator_measurements(probe, documents, (doc.uid for doc in documents))
     binary, receipt = subject_build.build(subject, ["policy-file"], release=True,
                                          builder=subject_build.cargo_build_binary)
     output.mkdir(parents=True, exist_ok=True)
@@ -74,7 +67,7 @@ def main():
         ROOT/"scripts/bench/scorecard_record.py",
     )}
     arm = {"layer": "K", "generator": cells.manifest(pairs), "harness": inputs,
-           "policy_sha256": score.sha256_file(policy), "capture_once": True}
+           "policy_sha256": score.sha256_file(policy), "validator_binary_sha256": score.sha256_file(probe), "capture_once": True}
     arm["specification_sha256"] = hashlib.sha256(json.dumps(arm, sort_keys=True).encode()).hexdigest()
     card = {
         "schema_version": 4, "generated_at": datetime.now(timezone.utc).isoformat(),
