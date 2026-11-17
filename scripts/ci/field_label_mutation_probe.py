@@ -22,6 +22,8 @@ PIPELINE = ROOT / "crates/gaze/src/pipeline.rs"
 FIELD_CONTEXT = ROOT / "crates/gaze/src/field_context.rs"
 CODEC = ROOT / "crates/gaze-proxy/src/codecs/anthropic.rs"
 SERVER = ROOT / "crates/gaze-proxy/src/server.rs"
+RULEPACK = ROOT / "crates/gaze/src/rulepack.rs"
+DISPATCH = ROOT / "crates/gaze-mcp-core/src/dispatch.rs"
 BENCH = ROOT / "crates/gaze-recognizers/examples/clean_for_bench.rs"
 FIXTURE = ROOT / "crates/gaze-recognizers/tests/fixtures/typed_refusal_producer.json"
 BENCH_TEST = ("gaze-recognizers", ["--example", "clean_for_bench"])
@@ -41,6 +43,9 @@ PYTHON_GUARD = ("test_typed_refusal_producer.TypedRefusalProducerGuardTests."
 BLESS = {"GAZE_BLESS_TYPED_REFUSAL_FIXTURE": "1"}
 ASSEMBLY_TEST = ("gaze-assembly", ["--test", "field_labelled_record_ids"])
 PROXY_TEST = ("gaze-proxy", ["--test", "structured_field_record_ids"])
+PROXY_LIB = ("gaze-proxy", ["--lib"])
+MCP_TEST = ("gaze-mcp-core", ["--test", "structured_field_record_ids"])
+RECOGNIZER_LIB = ("gaze-recognizers", ["--lib"])
 
 # name, file, before, after, (package, target), test
 # Producer mutants: name, file, edits, (package, target), test, extra environment,
@@ -59,8 +64,8 @@ MUTANTS = (
     ("hint_promoted", RECOGNIZER,
      "FieldEvidence::ValidatedParse | FieldEvidence::CallerDeclared\n        );",
      "FieldEvidence::ValidatedParse | FieldEvidence::CallerDeclared | FieldEvidence::Hint(_)\n        );",
-     ("gaze-recognizers", ["--lib"]),
-     "field_label::tests::hints_never_protect_and_fragments_never_bind"),
+     RECOGNIZER_LIB,
+     "field_label::tests::hints_never_protect_and_fragments_never_prove_a_complete_id"),
     ("number_rendered_as_string", RECOGNIZER,
      "        JsonScalarType::Number => Carrier::Number,\n        JsonScalarType::Bool | JsonScalarType::Null => Carrier::Literal,\n        _ => Carrier::Text(parsed),",
      "        JsonScalarType::Bool | JsonScalarType::Null => Carrier::Literal,\n        _ => Carrier::Text(parsed),",
@@ -101,6 +106,65 @@ MUTANTS = (
      "                    self.admit_labelled_number(field, &spelling)?;\n",
      "",
      PROXY_TEST, "gemini_structured_calls_and_responses_protect_strings_and_refuse_labelled_numbers"),
+    # Field keys compare through the shared detection normalization (fullwidth, U+200B).
+    ("label_normalization_bypassed", RECOGNIZER,
+     "    gaze_types::normalize::normalize(label)\n        .text\n        .chars()",
+     "    label\n        .chars()",
+     ASSEMBLY_TEST, "normalized_key_spellings_bind_and_benign_ones_do_not"),
+    ("generic_label_validation_unnormalized", RULEPACK,
+     "gaze_types::normalize::normalize(label)\n                    .text\n                    .chars()",
+     "label\n                    .chars()",
+     ("gaze-pii", ["--lib"]),
+     "rulepack::tests::field_labelled_rejects_generic_labels_in_every_normalized_spelling"),
+    # Array indices are transparent between a bound parent and its value key.
+    ("array_index_binds_as_key", RECOGNIZER,
+     ".filter(|segment| !is_index(segment))",
+     ".filter(|segment| !segment.is_empty())",
+     ASSEMBLY_TEST, "arrays_between_a_label_and_its_value_keep_the_binding"),
+    # An owned token splitting a labelled leaf never exposes the rest of the identifier,
+    # and a fragment is never promoted to a proven complete identifier.
+    ("fragment_ignored", RECOGNIZER,
+     "Some(FieldContext::Fragment { field, .. }) => {",
+     "Some(FieldContext::Fragment { field, .. }) if false => {",
+     ASSEMBLY_TEST, "owned_tokens_in_a_labelled_leaf_never_expose_the_rest"),
+    ("fragment_promoted", RECOGNIZER,
+     "let shaped = complete\n",
+     "let shaped = (complete || true)\n",
+     RECOGNIZER_LIB,
+     "field_label::tests::fragments_of_a_bound_leaf_cover_their_sensitive_bytes_only"),
+    # Every pre-output refusal, direct and repeat (D6), is named in one error.
+    ("direct_refusal_before_sweep", OUTCOMES,
+     "        Ok((crate::resolver::CandidatePool::new(kept), Refusals(refused)))",
+     "        if !refused.is_empty() {\n"
+     "            return Err(self.refuse(target, refused, field_name, document_kind));\n"
+     "        }\n"
+     "        Ok((crate::resolver::CandidatePool::new(kept), Refusals(refused)))",
+     ASSEMBLY_TEST, "direct_and_repeat_refusals_are_named_together"),
+    ("possible_refusal_audited_as_confirmed", OUTCOMES,
+     "if candidate.outcome.is_none() {",
+     "if true {",
+     ASSEMBLY_TEST, "refused_possible_values_keep_their_outcome_in_the_audit"),
+    # JSON-text carriers (OpenAI `arguments`, MCP string arguments) bind their own fields.
+    ("proxy_json_text_unbound", SERVER,
+     "let field = if embedded.is_empty() { field } else { None };",
+     "let field = if embedded.is_empty() { field } else { None };\n"
+     "        let embedded: Vec<(std::ops::Range<usize>, gaze_types::FieldProvenance)> = Vec::new();",
+     PROXY_TEST, "openai_serialized_arguments_and_tool_results_are_protected"),
+    ("proxy_json_text_fragment_dropped", SERVER,
+     "gaze::FieldPiece::Fragment { field, offset } => {\n"
+     "                    Some(gaze_types::FieldContext::Fragment {\n"
+     "                        field,\n"
+     "                        offset: *offset,\n"
+     "                    })",
+     "gaze::FieldPiece::Fragment { field, offset } => {\n"
+     "                    let _ = (field, offset);\n"
+     "                    None",
+     PROXY_LIB,
+     "server::json_carrier_tests::owned_token_in_a_labelled_argument_never_exposes_the_rest"),
+    ("mcp_json_text_unbound", DISPATCH,
+     "gaze::json_text_field_spans(text, path)",
+     "{ let _ = path; Vec::new() }",
+     MCP_TEST, "mcp_owned_tokens_and_json_text_arguments_bind_with_stock_core"),
 )
 ALL = tuple((name, path, ((before, after),), target, test, {}, None)
             for name, path, before, after, target, test in MUTANTS) + PRODUCER_MUTANTS
@@ -121,7 +185,7 @@ def main():
     parser.add_argument("--probe", action="append", default=[],
                         help="Run only this named mutation (repeatable)")
     args = parser.parse_args()
-    if len(ALL) != 14:
+    if len(ALL) != 24:
         raise SystemExit("mutant roster changed")
     unknown = set(args.probe) - {mutant[0] for mutant in ALL}
     if unknown:
