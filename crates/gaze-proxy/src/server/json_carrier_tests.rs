@@ -28,12 +28,15 @@ fn forwarded_arguments(body: &Value) -> String {
         .to_owned()
 }
 
+// fixture-cited(crates/gaze-proxy/src/server/json_carrier_tests.rs:server::json_carrier_tests::owned_token_in_a_labelled_argument_never_exposes_the_rest)
+const SYNTHETIC_EMAIL: &str = "synthetic@example.invalid";
+
 #[test]
 fn owned_token_in_a_labelled_argument_never_exposes_the_rest() {
     let (pipeline, locales) = stock();
     let session = Session::new(Scope::Conversation("synthetic-json-carrier".into())).unwrap();
     let owned = session
-        .tokenize(&gaze::PiiClass::Email, "synthetic@example.invalid")
+        .tokenize(&gaze::PiiClass::Email, SYNTHETIC_EMAIL)
         .unwrap();
     let adapter = crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
     let arguments = format!(r#"{{"customer_id":"{owned} C-731284","employee_id":"E-731285"}}"#);
@@ -58,7 +61,7 @@ fn owned_token_in_a_labelled_argument_never_exposes_the_rest() {
     // Restore expands every token, the owned one included, back to the raw arguments.
     assert_eq!(
         session.restore_strict_text(&clean).unwrap(),
-        arguments.replace(&owned, "synthetic@example.invalid")
+        arguments.replace(&owned, SYNTHETIC_EMAIL)
     );
 }
 
