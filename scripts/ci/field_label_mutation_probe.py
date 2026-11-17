@@ -110,7 +110,7 @@ ALL = tuple((name, path, ((before, after),), target, test, {}, None)
 def run_python_guard(test):
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
     return subprocess.run(
-        ["uv", "run", "--project", "scripts/bench", "--python", "3.13", "--locked",
+        ["uv", "run", "--project", ".", "--python", "3.13", "--locked",
          "python", "-m", "unittest", test],
         cwd=ROOT / "scripts/bench", env=environment,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
