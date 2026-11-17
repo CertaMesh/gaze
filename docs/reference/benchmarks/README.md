@@ -1948,18 +1948,31 @@ gold and an unlisted benign sibling also cannot be transformed. Missing evidence
 partial gold matches, and contextual gold do not qualify. A benign or non-gold
 refusal fails, including a benign refused value beside unrelated gold.
 
-The current producer's `ProtectionError::Untransformable` carries only one
-path, so the bench example never emits `evidence_complete: true`. No current
-producer qualifies for the blocked-operation exception. PR6 must add an
-end-to-end completeness test: real pipeline → typed refusal with every refused
-path → blocked operation, including a benign untransformable sibling that
-must fail. Only that tested producer path may assert completeness. The
-harness enforces this: `evidence_complete` counts only when the response's
+The harness honours `evidence_complete` only when the response's
 `evidence_producer` is listed in `COMPLETE_EVIDENCE_PRODUCERS`
 (`scripts/bench/refusal_contract.py`) and in the protocol's
-`complete_evidence_producers`. Both lists are empty, and adding an identity
-changes the measuring harness, so it requires a new pinned specification. PR6
-adds its producer identity together with its completeness test. Encoded
+`complete_evidence_producers`. Adding an identity changes the measuring
+harness, so it requires a new pinned specification, and lands before the
+detection change that emits it. Both lists pin one identity,
+`gaze-pipeline-typed-refusal-v1`: the bench example's report of the pipeline's typed refusal.
+Today `ProtectionError::Untransformable` names only the first refused field,
+so the emitter must enumerate every refused field before it emits the
+identity. A model-free guard enforces this in CI: the bench example test
+`typed_refusal_producer_guard_requires_every_refused_span` drives the real
+`core` rule floor on multi-field all-gold and mixed gold/benign documents, and
+fails any response that carries the identity without naming every refused
+span. Its committed fixture feeds `scripts/bench/test_typed_refusal_producer.py`,
+which round-trips those responses through this contract: all-gold refusals
+block, and a benign untransformable sibling keeps the refusal ordinary. Until a
+detection change emits the identity, no live refusal is blocked. All four
+current guard cases complete on the `core` floor, so today's proof is the
+fabricated path: the same checking functions reject fabricated first-path-only,
+unflagged, renamed and case-variant outputs, and
+`scripts/bench/check_typed_refusal_guard_mutation.py`, its own CI step, requires
+the intended test to fail when the live check is disconnected, the live response
+is discarded, the checker compares only the first span or the completeness
+assertion is removed, and the live test to be reported skipped when skipped. A test also binds
+the registered current specification to this tree's measuring sources. Encoded
 carriers (JSON inside a string) have no supported raw-path mapping and remain
 ineligible, even with a completeness assertion and an outer node at the same path.
 
@@ -1988,7 +2001,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [current specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts

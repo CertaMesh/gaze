@@ -2509,6 +2509,212 @@ mod tests {
         }
     }
 
+    /// Completeness guard for the pinned `gaze-pipeline-typed-refusal-v1` producer.
+    ///
+    /// Drives the real `core` rule floor on multi-field documents. Whenever a response carries
+    /// the pinned identity, its spans must equal every refused field's range: a producer that
+    /// reports only the first refused path would turn the mixed gold/benign documents into
+    /// blocked operations. A document that completes, or refuses without the identity, is
+    /// tolerated, because no subject emits the identity until a detection change does.
+    /// The committed fixture feeds `scripts/bench/test_typed_refusal_producer.py`, which
+    /// round-trips identity rows through the shipped refusal contract.
+    /// `GAZE_BLESS_TYPED_REFUSAL_FIXTURE=1` rewrites the fixture.
+    /// The guard's single checking rule, shared by the live test and the
+    /// fabricated-emitter test. Ok(true) means a pinned-identity response named
+    /// exactly the expected spans; Ok(false) is a completed or legacy response.
+    fn check_typed_refusal_response(
+        response: &serde_json::Value,
+        expected: &[(u64, u64)],
+    ) -> Result<bool, String> {
+        let Some(producer) = response.get("evidence_producer") else {
+            return match response.get("evidence_complete") {
+                None => Ok(false),
+                Some(_) => Err("evidence_complete without a producer".to_string()),
+            };
+        };
+        if producer != "gaze-pipeline-typed-refusal-v1" {
+            return Err(format!("unpinned producer {producer}"));
+        }
+        if response.get("evidence_complete") != Some(&serde_json::Value::Bool(true)) {
+            return Err("pinned producer without evidence_complete: true".to_string());
+        }
+        let spans: Option<Vec<(u64, u64)>> = response
+            .get("refusal_evidence")
+            .and_then(|e| e.as_array())
+            .map(|e| {
+                e.iter()
+                    .filter_map(|s| Some((s["raw_start"].as_u64()?, s["raw_end"].as_u64()?)))
+                    .collect()
+            });
+        match spans {
+            Some(spans) if spans == expected => Ok(true),
+            other => Err(format!(
+                "identity requires every refused span: got {other:?}, want {expected:?}"
+            )),
+        }
+    }
+
+    fn fabricated_identity_response(ranges: &[(u64, u64)]) -> serde_json::Value {
+        serde_json::json!({
+            "fixture_id": "fabricated",
+            "pipeline_error_stage": "clean",
+            "pipeline_error_code": "untransformable_json_number_no_text_only_path",
+            "evidence_complete": true,
+            "evidence_producer": "gaze-pipeline-typed-refusal-v1",
+            "refusal_evidence": ranges.iter().map(|(a, b)| serde_json::json!({
+                "raw_start": a, "raw_end": b,
+                "outcome": "confirmed_untransformable",
+                "reason": "json_number_no_text_only_path",
+            })).collect::<Vec<_>>(),
+            "timing": {"total_ms": 1.0},
+        })
+    }
+
+    #[test]
+    fn typed_refusal_guard_rejects_fabricated_incomplete_emitters() {
+        // On main no fixture row refuses, so the live guard checks no identity
+        // yet. Feed the same checking rule fabricated emitter outputs so it
+        // cannot be dormant.
+        let expectations: [Vec<(u64, u64)>; 4] = [
+            vec![(15, 21)],
+            vec![(15, 21), (45, 50)],
+            vec![(15, 21), (40, 41)],
+            vec![(19, 20), (35, 41)],
+        ];
+        let mut complete_checked = 0;
+        let mut first_path_rejected = 0;
+        for expected in &expectations {
+            let complete = fabricated_identity_response(expected);
+            assert_eq!(check_typed_refusal_response(&complete, expected), Ok(true));
+            complete_checked += 1;
+            if expected.len() > 1 {
+                let first_only = fabricated_identity_response(&expected[..1]);
+                assert!(check_typed_refusal_response(&first_only, expected).is_err());
+                first_path_rejected += 1;
+            }
+            let mut unflagged = complete.clone();
+            unflagged["evidence_complete"] = serde_json::Value::Bool(false);
+            assert!(check_typed_refusal_response(&unflagged, expected).is_err());
+            let mut renamed = complete.clone();
+            renamed["evidence_producer"] = serde_json::json!("gaze-pipeline-typed-refusal-v2");
+            assert!(check_typed_refusal_response(&renamed, expected).is_err());
+        }
+        let mut legacy = fabricated_identity_response(&expectations[0]);
+        legacy.as_object_mut().unwrap().remove("evidence_producer");
+        assert!(check_typed_refusal_response(&legacy, &expectations[0]).is_err());
+        legacy.as_object_mut().unwrap().remove("evidence_complete");
+        assert_eq!(
+            check_typed_refusal_response(&legacy, &expectations[0]),
+            Ok(false)
+        );
+        assert_eq!((complete_checked, first_path_rejected), (4, 3));
+    }
+
+    #[test]
+    fn typed_refusal_producer_guard_requires_every_refused_span() {
+        type Range = (u64, u64);
+        let full = assemble_rule_floor(BenchConfig::RuleFloorCore, None).expect("core floor");
+        // (id, text, gold, every range a complete producer must name, expected verdict)
+        let cases: [(&str, &str, Vec<(u64, u64, &str)>, Vec<Range>, &str); 4] = [
+            (
+                "gold-single",
+                r#"{"customer_id":812345,"limit":7}"#,
+                vec![(15, 21, "CUSTOMER_ID")],
+                vec![(15, 21)],
+                "blocked",
+            ),
+            (
+                "gold-two",
+                r#"{"customer_id":812345,"items":[{"employeeId":44190}],"page":2}"#,
+                vec![(15, 21, "CUSTOMER_ID"), (45, 50, "EMPLOYEE_ID")],
+                vec![(15, 21), (45, 50)],
+                "blocked",
+            ),
+            (
+                "benign-sibling",
+                r#"{"customer_id":812345,"customer_number":7}"#,
+                vec![(15, 21, "CUSTOMER_ID")],
+                vec![(15, 21), (40, 41)],
+                "ordinary",
+            ),
+            (
+                "benign-first",
+                r#"{"customer_number":7,"customer_id":812345}"#,
+                vec![(35, 41, "CUSTOMER_ID")],
+                vec![(19, 20), (35, 41)],
+                "ordinary",
+            ),
+        ];
+        let mut rows = Vec::new();
+        for (id, text, gold, expected, verdict) in cases {
+            let outcome = handle_request(
+                BenchConfig::RuleFloorCore,
+                &full,
+                Request {
+                    fixture_id: id.to_string(),
+                    locale_chain: vec!["global".to_string()],
+                    text: text.to_string(),
+                    context_json: None,
+                    session_hex: None,
+                },
+            )
+            .expect("request");
+            let response = match outcome {
+                Outcome::Success(_) => serde_json::Value::String("completed".to_string()),
+                Outcome::PipelineError {
+                    fixture_id,
+                    stage,
+                    reason,
+                    refusal_evidence,
+                    ..
+                } => {
+                    let mut output = Vec::new();
+                    write_pipeline_error(
+                        &mut output,
+                        &fixture_id,
+                        stage,
+                        reason,
+                        refusal_evidence,
+                        1.0,
+                    )
+                    .expect("write");
+                    for (start, end, _) in &gold {
+                        let value = &text.as_bytes()[*start as usize..*end as usize];
+                        assert!(
+                            !output.windows(value.len()).any(|w| w == value),
+                            "{id}: refusal response must be value-free"
+                        );
+                    }
+                    serde_json::from_slice(&output).unwrap()
+                }
+            };
+            assert!(
+                check_typed_refusal_response(&response, &expected).is_ok(),
+                "{id}: {:?}",
+                check_typed_refusal_response(&response, &expected)
+            );
+            rows.push(serde_json::json!({
+                "id": id,
+                "text": text,
+                "gold": gold.iter().map(|(a, b, l)| serde_json::json!([a, b, l])).collect::<Vec<_>>(),
+                "expected_refused_ranges": expected.iter().map(|(a, b)| serde_json::json!([a, b])).collect::<Vec<_>>(),
+                "expected_verdict": verdict,
+                "response": response,
+            }));
+        }
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/typed_refusal_producer.json");
+        let rendered = serde_json::to_string_pretty(&rows).unwrap() + "\n";
+        if std::env::var_os("GAZE_BLESS_TYPED_REFUSAL_FIXTURE").is_some() {
+            std::fs::write(&fixture, &rendered).unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(&fixture).expect("committed fixture"),
+            rendered,
+            "producer output drifted from the fixture the harness test reads"
+        );
+    }
+
     #[test]
     fn pipeline_error_response_has_exact_jsonl_shape() {
         let response = PipelineErrorResponse {

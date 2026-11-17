@@ -16,9 +16,14 @@ PROTECTION_CODES = frozenset("protection_" + r for r in (
 # Increment 1's independent ownership-labelled gold, never detector class names.
 CONFIRMED_ID_LABELS = frozenset({"CUSTOMER_ID", "EMPLOYEE_ID", "RECORD_ID"})
 # Producers whose `evidence_complete` is honoured. A subject flag alone proves
-# nothing: an identity joins this pin, and benchmark-protocol.json, only in the
-# change that adds its end-to-end completeness test. Empty: no live refusal is blocked.
-COMPLETE_EVIDENCE_PRODUCERS = frozenset()
+# nothing: an identity is pinned here, and in benchmark-protocol.json, ahead of the
+# detection change that emits it. The bench example's completeness guard
+# (`typed_refusal_producer_guard_requires_every_refused_span`) fails any response
+# carrying the identity unless it names every refused field.
+# `gaze-pipeline-typed-refusal-v1`: the bench example's report of the pipeline's
+# `ProtectionError::Untransformable`. Today's error names only the first refused
+# field, so the emitter must enumerate every refused field before emitting it.
+COMPLETE_EVIDENCE_PRODUCERS = frozenset({"gaze-pipeline-typed-refusal-v1"})
 
 
 def validate_outcome(value):
