@@ -661,3 +661,84 @@ fn refused_possible_values_keep_their_outcome_in_the_audit() {
         Some("primary_pipeline.outcome_refusal")
     );
 }
+
+/// Finding-3 dispositions for the bytes beside an owned token in a labelled leaf. The default
+/// (`protect`) covers every remaining identifier byte and restores exactly; `pass_audited`
+/// forwards them raw but must write the possibly-sensitive audit row for that leaf. Even a
+/// remainder that is itself a complete identifier shape stays possibly sensitive: the owned
+/// token's raw value may be part of the identifier, so a fragment never proves the whole.
+#[test]
+fn owned_token_remainder_dispositions_are_explicit() {
+    use gaze_types::{PossiblySensitiveReason, ProtectionOutcome};
+    let field = gaze_types::FieldProvenance::new(
+        path(&["customer_id"]),
+        gaze_types::JsonScalarType::String,
+        gaze_types::FieldEvidence::ValidatedParse,
+    );
+    let dictionaries = DictionaryBundle::default();
+
+    // Default: the remainder becomes one token, separators stay, restore is byte-exact.
+    let (pipeline, active) = stock();
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let context = gaze::ProtectionContext::strict(active.as_slice(), &dictionaries);
+    let mut transaction = session.begin_transaction();
+    let email = pipeline
+        .protect_text_transaction(&mut transaction, "synthetic@example.invalid", context)
+        .expect("email protects");
+    let clean = pipeline
+        .protect_text_transaction(
+            &mut transaction,
+            &format!("{email} C-731284"),
+            context.with_field(&field),
+        )
+        .expect("labelled leaf protects");
+    let rest = clean
+        .strip_prefix(&format!("{email} "))
+        .unwrap_or_else(|| panic!("owned token and separator kept: {clean}"));
+    assert!(
+        rest.starts_with('<') && rest.ends_with('>') && !rest.contains(' '),
+        "every remaining identifier byte is one token: {clean}"
+    );
+    transaction.commit().expect("commit");
+    assert_eq!(
+        session.restore_strict_text(&clean).expect("restore"),
+        "synthetic@example.invalid C-731284"
+    );
+
+    // `pass_audited`: the remainder passes raw, with a possibly sensitive audit row.
+    let rows = Rows::default();
+    let (pass, active) = pipeline_for_probe("[outcomes]\npossibly_sensitive = \"pass_audited\"\n");
+    let pass = pass.with_redaction_logger(rows.clone());
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let context = gaze::ProtectionContext::strict(active.as_slice(), &dictionaries);
+    let mut transaction = session.begin_transaction();
+    let email = pass
+        .protect_text_transaction(&mut transaction, "synthetic@example.invalid", context)
+        .expect("email protects");
+    rows.0.lock().unwrap().clear();
+    let clean = pass
+        .protect_text_transaction(
+            &mut transaction,
+            &format!("{email} C-731284"),
+            context.with_field(&field),
+        )
+        .expect("labelled leaf passes");
+    assert_eq!(
+        clean,
+        format!("{email} C-731284"),
+        "known limit: passes raw"
+    );
+    let entries = rows.0.lock().unwrap();
+    let passed = entries
+        .iter()
+        .find(|row| row.class == gaze::PiiClass::custom("customer_id").unwrap())
+        .expect("pass_audited row for the labelled leaf");
+    assert_eq!(passed.action, gaze::Action::Preserve);
+    assert_eq!(
+        passed.protection_outcome().unwrap(),
+        Some(ProtectionOutcome::PossiblySensitive(
+            PossiblySensitiveReason::LabelValueShapeUnclear
+        ))
+    );
+    assert_eq!(passed.field_path_depth, Some(1));
+}

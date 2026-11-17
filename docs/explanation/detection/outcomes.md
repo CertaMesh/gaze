@@ -131,6 +131,12 @@ These are not protected surfaces. Each keeps today's legacy detection.
 - Escaped and decoded spellings. The repeat sweep matches the raw spelling, so
   an escaped copy (`C\u002D731284`) and a decoded copy (`C-731284`) of a bound
   value are not joined, in either direction.
+- Owned-token remainders under `pass_audited`. The bytes beside an owned token
+  in a labelled leaf are possibly sensitive, even when they form a complete
+  identifier shape, because the token's raw value may be part of the
+  identifier. The default `protect` tokenizes them, and `refuse` refuses; under
+  `possibly_sensitive = "pass_audited"` they are forwarded raw with a
+  `possibly_sensitive` audit row. Adopters who choose `pass_audited` accept that.
 - Repeats inside a split JSON-text carrier. When owned tokens split a JSON-text
   carrier, a repeat of a bound value inside one of its numbers is not refused:
   it is tokenized, which leaves that inner document invalid (never raw).
