@@ -21,7 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audit row. Audit rows record the outcome, its reason and the field's depth and
   evidence for field-bound winners, refusals and passes.
 - `ProtectionError::Untransformable` gains `others`, every further refused field
-  in document order. Exhaustive constructions must add it (0.x breaking).
+  in document order, direct and repeat refusals alike. Exhaustive constructions
+  must add it (0.x breaking).
+- A refused possibly sensitive value keeps its `possibly_sensitive` outcome and
+  reason in the audit row. Every refusal row carries
+  `provenance_stage = "primary_pipeline.outcome_refusal"`.
+- `field_labelled` rulepack validation rejects generic labels in any normalized
+  spelling, such as fullwidth `ｉｄ`.
 - The library `pseudonymize` text path passes the same document field context
   as every text clean.
 - MCP tool results include the fixed `resultType: "complete"` discriminator
@@ -64,8 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caller-declared field (`customer_id`, `customerNumber`, `Kundennummer`,
   `staffNumber`, `contactId`, `{"customer": {"id": …}}`), never by prose. An
   identifier-shaped string is tokenized as a whole leaf in `gaze clean`, the
-  daemon, the library, the proxy (Anthropic and Gemini structured tool calls and
-  results) and MCP arguments.
+  daemon, the library, the proxy (Anthropic, Gemini and OpenAI tool calls and
+  results) and MCP arguments. Keys bind in fullwidth and zero-width spellings
+  and through arrays (`{"customer_id": [{"value": …}]}`). A string whose whole
+  text is a JSON object or array, such as OpenAI `function.arguments` or a JSON
+  tool result, binds its own keys. An owned token inside a labelled value no
+  longer exposes the rest of the identifier. Known limits (JSON inside prose,
+  strict-parse fallback, escaped versus decoded repeats) are listed in
+  `docs/explanation/detection/outcomes.md`.
 - Update bundled SQLite through `rusqlite` 0.41, `pulldown-cmark` to 0.13.6,
   and `rmcp` to 3.9.0 to address RUSTSEC-2026-0459, RUSTSEC-2026-0433,
   RUSTSEC-2026-0457, and RUSTSEC-2026-0462. Update `rustix` to 1.1.6

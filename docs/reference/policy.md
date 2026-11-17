@@ -585,16 +585,22 @@ value_shape = "identifier"
 field_labels = ["member_id", "membership_number"]
 ```
 
-A label binds through the final key (array indices are ignored), a parent
-label followed by `id`, `value`, `number`, `no` or `nr`, or a parent and child
-that spell a label together (`{"member": {"id": …}}`). `value_shape` is closed:
+A label binds through the final key, a parent label followed by `id`, `value`,
+`number`, `no` or `nr`, or a parent and child that spell a label together
+(`{"member": {"id": …}}`). Array indices are ignored anywhere in the path, so
+`{"member_id": [{"value": …}]}` binds; the parent is always the nearest object
+key. Keys compare after the shared detection normalization (fullwidth folded,
+default-ignorable code points such as U+200B removed), then without case, `_`,
+`-`, `.` and whitespace. A string whose whole text strictly parses as one JSON
+object or array, such as an OpenAI tool call's `arguments`, binds its own keys
+the same way. `value_shape` is closed:
 `identifier` means at least one digit, at most 40 bytes and four alphanumeric
 groups. Such a string is `Protected` as a whole leaf; any other string under
 the label is possibly sensitive and follows [`[outcomes]`](#outcomes-optional);
 a JSON number refuses with `json_number_no_text_only_path`, because a token
 would change its type. Booleans and nulls produce nothing. An empty
 `field_labels` list, another `value_shape`, or a generic label (`id`, `value`,
-`number`, `no`, `nr`, `key`, `uuid`) fails at load. Bundled `core` ships
+`number`, `no`, `nr`, `key`, `uuid`, in any normalized spelling) fails at load. Bundled `core` ships
 `customer_id.field`, `employee_id.field` and `record_id.field`; see the
 [redaction classes reference](redaction-classes.md#embedded-recognizers).
 

@@ -139,11 +139,13 @@ rows and the 57-spec inventory to the loaded rulepack. The
 output against its committed corpus snapshot.
 
 The three `*.field` rows use the `field_labelled` matcher. They read only
-structured field context: the leaves of a document that strictly parses as one
-JSON object or array, and caller-declared context `fields`. A label binds through
-the final key, ignoring array indices, through a parent label followed by `id`,
-`value`, `number`, `no` or `nr`, or through a parent and child that spell a label
-together. A digit-bearing string of at most 40 bytes and four groups is
+structured field context: the leaves of a document, or of a string such as an
+OpenAI tool call's `arguments`, that strictly parses as one JSON object or array,
+and caller-declared context `fields`. A label binds through the final key,
+through a parent label followed by `id`, `value`, `number`, `no` or `nr`, or
+through a parent and child that spell a label together. Array indices are
+ignored anywhere in the path, and keys compare after the shared detection
+normalization, so fullwidth and zero-width spellings bind too. A digit-bearing string of at most 40 bytes and four groups is
 `Protected` as a whole leaf; any other string is `PossiblySensitive`, protected by
 default under `[outcomes]`; a JSON number refuses with
 `json_number_no_text_only_path`. See
