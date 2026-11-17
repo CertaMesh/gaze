@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Disable each field-labelled record-ID protection and require a behavioural test failure.
 
-Every mutant edits exactly one committed source site, runs one named test, and must make
-that test fail (exit 101 with `test result: FAILED`). Sources must match HEAD first, so a
-probe never runs over uncommitted fixes; every file is restored afterwards.
+Every mutant edits committed source sites, runs one named test, and must make that test
+fail (exit 101 with `test result: FAILED`). The two producer mutants run with the typed
+refusal fixture blessed, so the fixture drift check cannot kill them: the first-path-only
+emitter must fail the live Rust checker itself, and with that checker call also removed
+the Rust test passes, writes the incomplete fixture, and the Python guard must then fail
+on it with an assertion failure. Sources must match HEAD first, so a probe never runs over
+uncommitted fixes; every file is restored afterwards.
 """
 import argparse
 import os
@@ -19,10 +23,34 @@ FIELD_CONTEXT = ROOT / "crates/gaze/src/field_context.rs"
 CODEC = ROOT / "crates/gaze-proxy/src/codecs/anthropic.rs"
 SERVER = ROOT / "crates/gaze-proxy/src/server.rs"
 BENCH = ROOT / "crates/gaze-recognizers/examples/clean_for_bench.rs"
+FIXTURE = ROOT / "crates/gaze-recognizers/tests/fixtures/typed_refusal_producer.json"
+BENCH_TEST = ("gaze-recognizers", ["--example", "clean_for_bench"])
+LIVE_GUARD = "tests::typed_refusal_producer_guard_requires_every_refused_span"
+FIRST_PATH_ONLY = (
+    "std::iter::once((*reason, field_path)).chain(others.iter().map(|(r, p)| (*r, p)));",
+    "std::iter::once((*reason, field_path)).chain(others.iter().take(0).map(|(r, p)| (*r, p)));")
+LIVE_CHECK = (
+    """            assert_eq!(
+                check_typed_refusal_response(&response, &expected),
+                Ok(true),
+                "{id}: every case must refuse with complete pinned evidence"
+            );
+""", "")
+PYTHON_GUARD = ("test_typed_refusal_producer.TypedRefusalProducerGuardTests."
+                "test_identity_rows_name_every_refused_range_and_round_trip")
+BLESS = {"GAZE_BLESS_TYPED_REFUSAL_FIXTURE": "1"}
 ASSEMBLY_TEST = ("gaze-assembly", ["--test", "field_labelled_record_ids"])
 PROXY_TEST = ("gaze-proxy", ["--test", "structured_field_record_ids"])
 
 # name, file, before, after, (package, target), test
+# Producer mutants: name, file, edits, (package, target), test, extra environment,
+# and the Python guard test that must fail after a passing Rust run (None: Rust must fail).
+PRODUCER_MUTANTS = (
+    ("producer_lists_first_field_only", BENCH, (FIRST_PATH_ONLY,), BENCH_TEST, LIVE_GUARD,
+     BLESS, None),
+    ("producer_live_check_removed", BENCH, (FIRST_PATH_ONLY, LIVE_CHECK), BENCH_TEST, LIVE_GUARD,
+     BLESS, PYTHON_GUARD),
+)
 MUTANTS = (
     ("binder_disabled", RECOGNIZER,
      "if !self.binds(&field.path.segments()) {",
@@ -73,12 +101,19 @@ MUTANTS = (
      "                    self.admit_labelled_number(field, &spelling)?;\n",
      "",
      PROXY_TEST, "gemini_structured_calls_and_responses_protect_strings_and_refuse_labelled_numbers"),
-    ("producer_lists_first_field_only", BENCH,
-     "std::iter::once((*reason, field_path)).chain(others.iter().map(|(r, p)| (*r, p)));",
-     "std::iter::once((*reason, field_path)).chain(others.iter().take(0).map(|(r, p)| (*r, p)));",
-     ("gaze-recognizers", ["--example", "clean_for_bench"]),
-     "tests::typed_refusal_producer_names_every_refused_span_end_to_end"),
 )
+ALL = tuple((name, path, ((before, after),), target, test, {}, None)
+            for name, path, before, after, target, test in MUTANTS) + PRODUCER_MUTANTS
+
+
+
+def run_python_guard(test):
+    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    return subprocess.run(
+        ["uv", "run", "--project", "scripts/bench", "--python", "3.13", "--locked",
+         "python", "-m", "unittest", test],
+        cwd=ROOT / "scripts/bench", env=environment,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
 def main():
@@ -86,37 +121,63 @@ def main():
     parser.add_argument("--probe", action="append", default=[],
                         help="Run only this named mutation (repeatable)")
     args = parser.parse_args()
-    unknown = set(args.probe) - {mutant[0] for mutant in MUTANTS}
+    if len(ALL) != 14:
+        raise SystemExit("mutant roster changed")
+    unknown = set(args.probe) - {mutant[0] for mutant in ALL}
     if unknown:
         raise SystemExit(f"unknown probes: {sorted(unknown)}")
-    selected = [m for m in MUTANTS if not args.probe or m[0] in args.probe]
-    originals = {m[1]: m[1].read_bytes() for m in MUTANTS}
+    selected = [m for m in ALL if not args.probe or m[0] in args.probe]
+    originals = {path: path.read_bytes() for path in {m[1] for m in ALL} | {FIXTURE}}
     for path, original in originals.items():
         relative = path.relative_to(ROOT).as_posix()
         if original != subprocess.check_output(["git", "show", f"HEAD:{relative}"], cwd=ROOT):
             raise SystemExit(f"Commit {relative} before probing; source must match HEAD")
-    for name, path, before, _, _, _ in MUTANTS:
-        if originals[path].decode().count(before) != 1:
-            raise SystemExit(f"{name}: expected exactly one mutation site")
-    environment = dict(os.environ, RUSTUP_TOOLCHAIN="1.96.0", GAZE_DISABLE_OS_KEYSTORE="1")
-    environment.setdefault("CARGO_BUILD_JOBS", "2")
+    for name, path, edits, *_ in ALL:
+        for before, _ in edits:
+            if originals[path].decode().count(before) != 1:
+                raise SystemExit(f"{name}: expected exactly one mutation site")
+    base = dict(os.environ, RUSTUP_TOOLCHAIN="1.96.0", GAZE_DISABLE_OS_KEYSTORE="1")
+    base.setdefault("CARGO_BUILD_JOBS", "2")
+    for variable in BLESS:
+        base.pop(variable, None)
     output = ROOT / "target/field-label-checks/mutations"
     output.mkdir(parents=True, exist_ok=True)
-    for index, (name, path, before, after, (package, target), test) in enumerate(selected, 1):
+    for index, (name, path, edits, (package, target), test, extra, python) in enumerate(
+            selected, 1):
         print(f"MUTATION {index}/{len(selected)}: {name}", flush=True)
         source = originals[path].decode()
+        for before, after in edits:
+            source = source.replace(before, after, 1)
         try:
-            path.write_text(source.replace(before, after, 1))
+            path.write_text(source)
             result = subprocess.run(
                 ["nice", "-n", "10", "cargo", "test", "-p", package, *target, test,
                  "--", "--exact"],
-                cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                cwd=ROOT, env=dict(base, **extra),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             (output / f"{name}.log").write_bytes(result.stdout)
-            if result.returncode != 101 or b"test result: FAILED" not in result.stdout:
-                raise SystemExit(f"{name}: mutation did not fail its regression; inspect {output}")
+            if python is None:
+                if result.returncode != 101 or b"test result: FAILED" not in result.stdout:
+                    raise SystemExit(
+                        f"{name}: mutation did not fail its regression; inspect {output}")
+            else:
+                # The Rust run must pass and rewrite the fixture, proving the Python guard
+                # is the oracle that catches the incomplete producer.
+                if (result.returncode != 0
+                        or b"test result: ok. 1 passed" not in result.stdout
+                        or FIXTURE.read_bytes() == originals[FIXTURE]):
+                    raise SystemExit(
+                        f"{name}: Rust run did not pass and rewrite the fixture; inspect {output}")
+                guard = run_python_guard(python)
+                (output / f"{name}.python.log").write_bytes(guard.stdout)
+                if (guard.returncode != 1 or b"FAILED (failures=1)" not in guard.stdout
+                        or b"AssertionError" not in guard.stdout):
+                    raise SystemExit(
+                        f"{name}: Python guard did not fail with an assertion; inspect {output}")
             print(f"MUTATION {index}/{len(selected)}: {name} rejected", flush=True)
         finally:
             path.write_bytes(originals[path])
+            FIXTURE.write_bytes(originals[FIXTURE])
     print(f"FIELD_LABEL_MUTATIONS {len(selected)}/{len(selected)} rejected")
 
 

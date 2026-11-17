@@ -1,5 +1,12 @@
 [
   {
+    "expected_refused_ranges": [
+      [
+        15,
+        21
+      ]
+    ],
+    "expected_verdict": "blocked",
     "gold": [
       [
         15,
@@ -29,6 +36,17 @@
     "text": "{\"customer_id\":812345,\"limit\":7}"
   },
   {
+    "expected_refused_ranges": [
+      [
+        15,
+        21
+      ],
+      [
+        45,
+        50
+      ]
+    ],
+    "expected_verdict": "blocked",
     "gold": [
       [
         15,
@@ -69,6 +87,17 @@
     "text": "{\"customer_id\":812345,\"items\":[{\"employeeId\":44190}],\"page\":2}"
   },
   {
+    "expected_refused_ranges": [
+      [
+        15,
+        21
+      ],
+      [
+        40,
+        41
+      ]
+    ],
+    "expected_verdict": "ordinary",
     "gold": [
       [
         15,
@@ -102,5 +131,51 @@
       }
     },
     "text": "{\"customer_id\":812345,\"customer_number\":7}"
+  },
+  {
+    "expected_refused_ranges": [
+      [
+        19,
+        20
+      ],
+      [
+        35,
+        41
+      ]
+    ],
+    "expected_verdict": "ordinary",
+    "gold": [
+      [
+        35,
+        41,
+        "CUSTOMER_ID"
+      ]
+    ],
+    "id": "benign-first",
+    "response": {
+      "evidence_complete": true,
+      "evidence_producer": "gaze-pipeline-typed-refusal-v1",
+      "fixture_id": "benign-first",
+      "pipeline_error_code": "untransformable_json_number_no_text_only_path",
+      "pipeline_error_stage": "clean",
+      "refusal_evidence": [
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 20,
+          "raw_start": 19,
+          "reason": "json_number_no_text_only_path"
+        },
+        {
+          "outcome": "confirmed_untransformable",
+          "raw_end": 41,
+          "raw_start": 35,
+          "reason": "json_number_no_text_only_path"
+        }
+      ],
+      "timing": {
+        "total_ms": 1.0
+      }
+    },
+    "text": "{\"customer_number\":7,\"customer_id\":812345}"
   }
 ]

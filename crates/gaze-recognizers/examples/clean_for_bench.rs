@@ -2566,34 +2566,142 @@ mod tests {
         }
     }
 
-    /// End-to-end completeness for the pinned producer: the real `core` rule floor refuses
-    /// labelled JSON numbers, and the written response names every refused span. The
-    /// committed fixture is the input of `scripts/bench/test_typed_refusal_producer.py`,
-    /// which proves the gold document is a blocked operation and the document whose second
-    /// refused value is benign stays an ordinary, failing refusal.
+    /// The guard's single checking rule, shared by the live test and the
+    /// fabricated-emitter test. Ok(true) means a pinned-identity response named
+    /// exactly the expected spans; Ok(false) is a completed or legacy response.
+    fn check_typed_refusal_response(
+        response: &serde_json::Value,
+        expected: &[(u64, u64)],
+    ) -> Result<bool, String> {
+        let Some(producer) = response.get("evidence_producer") else {
+            return match response.get("evidence_complete") {
+                None => Ok(false),
+                Some(_) => Err("evidence_complete without a producer".to_string()),
+            };
+        };
+        if producer != "gaze-pipeline-typed-refusal-v1" {
+            return Err(format!("unpinned producer {producer}"));
+        }
+        if response.get("evidence_complete") != Some(&serde_json::Value::Bool(true)) {
+            return Err("pinned producer without evidence_complete: true".to_string());
+        }
+        let spans: Option<Vec<(u64, u64)>> = response
+            .get("refusal_evidence")
+            .and_then(|e| e.as_array())
+            .map(|e| {
+                e.iter()
+                    .filter_map(|s| Some((s["raw_start"].as_u64()?, s["raw_end"].as_u64()?)))
+                    .collect()
+            });
+        match spans {
+            Some(spans) if spans == expected => Ok(true),
+            other => Err(format!(
+                "identity requires every refused span: got {other:?}, want {expected:?}"
+            )),
+        }
+    }
+
+    fn fabricated_identity_response(ranges: &[(u64, u64)]) -> serde_json::Value {
+        serde_json::json!({
+            "fixture_id": "fabricated",
+            "pipeline_error_stage": "clean",
+            "pipeline_error_code": "untransformable_json_number_no_text_only_path",
+            "evidence_complete": true,
+            "evidence_producer": "gaze-pipeline-typed-refusal-v1",
+            "refusal_evidence": ranges.iter().map(|(a, b)| serde_json::json!({
+                "raw_start": a, "raw_end": b,
+                "outcome": "confirmed_untransformable",
+                "reason": "json_number_no_text_only_path",
+            })).collect::<Vec<_>>(),
+            "timing": {"total_ms": 1.0},
+        })
+    }
+
+    #[test]
+    fn typed_refusal_guard_rejects_fabricated_incomplete_emitters() {
+        // Feed the same checking rule fabricated emitter outputs, including
+        // shapes the live producer never writes, so no branch is dormant.
+        let expectations: [Vec<(u64, u64)>; 4] = [
+            vec![(15, 21)],
+            vec![(15, 21), (45, 50)],
+            vec![(15, 21), (40, 41)],
+            vec![(19, 20), (35, 41)],
+        ];
+        let mut complete_checked = 0;
+        let mut first_path_rejected = 0;
+        for expected in &expectations {
+            let complete = fabricated_identity_response(expected);
+            assert_eq!(check_typed_refusal_response(&complete, expected), Ok(true));
+            complete_checked += 1;
+            if expected.len() > 1 {
+                let first_only = fabricated_identity_response(&expected[..1]);
+                assert!(check_typed_refusal_response(&first_only, expected).is_err());
+                first_path_rejected += 1;
+            }
+            let mut unflagged = complete.clone();
+            unflagged["evidence_complete"] = serde_json::Value::Bool(false);
+            assert!(check_typed_refusal_response(&unflagged, expected).is_err());
+            let mut renamed = complete.clone();
+            renamed["evidence_producer"] = serde_json::json!("gaze-pipeline-typed-refusal-v2");
+            assert!(check_typed_refusal_response(&renamed, expected).is_err());
+        }
+        let mut legacy = fabricated_identity_response(&expectations[0]);
+        legacy.as_object_mut().unwrap().remove("evidence_producer");
+        assert!(check_typed_refusal_response(&legacy, &expectations[0]).is_err());
+        legacy.as_object_mut().unwrap().remove("evidence_complete");
+        assert_eq!(
+            check_typed_refusal_response(&legacy, &expectations[0]),
+            Ok(false)
+        );
+        assert_eq!((complete_checked, first_path_rejected), (4, 3));
+    }
+
+    /// Completeness guard for the pinned `gaze-pipeline-typed-refusal-v1` producer.
+    ///
+    /// Drives the real `core` rule floor on multi-field documents. Every case refuses its
+    /// labelled JSON numbers, and its response must carry the pinned identity with spans
+    /// equal to every refused field's range: a producer that reports only the first refused
+    /// path would turn the mixed gold/benign documents into blocked operations.
+    /// The committed fixture feeds `scripts/bench/test_typed_refusal_producer.py`, which
+    /// round-trips identity rows through the shipped refusal contract.
     /// `GAZE_BLESS_TYPED_REFUSAL_FIXTURE=1` rewrites the fixture.
     #[test]
-    fn typed_refusal_producer_names_every_refused_span_end_to_end() {
+    fn typed_refusal_producer_guard_requires_every_refused_span() {
+        type Range = (u64, u64);
         let full = assemble_rule_floor(BenchConfig::RuleFloorCore, None).expect("core floor");
-        let cases = [
+        // (id, text, gold, every range a complete producer must name, expected verdict)
+        let cases: [(&str, &str, Vec<(u64, u64, &str)>, Vec<Range>, &str); 4] = [
             (
                 "gold-single",
                 r#"{"customer_id":812345,"limit":7}"#,
                 vec![(15, 21, "CUSTOMER_ID")],
+                vec![(15, 21)],
+                "blocked",
             ),
             (
                 "gold-two",
                 r#"{"customer_id":812345,"items":[{"employeeId":44190}],"page":2}"#,
                 vec![(15, 21, "CUSTOMER_ID"), (45, 50, "EMPLOYEE_ID")],
+                vec![(15, 21), (45, 50)],
+                "blocked",
             ),
             (
                 "benign-sibling",
                 r#"{"customer_id":812345,"customer_number":7}"#,
                 vec![(15, 21, "CUSTOMER_ID")],
+                vec![(15, 21), (40, 41)],
+                "ordinary",
+            ),
+            (
+                "benign-first",
+                r#"{"customer_number":7,"customer_id":812345}"#,
+                vec![(35, 41, "CUSTOMER_ID")],
+                vec![(19, 20), (35, 41)],
+                "ordinary",
             ),
         ];
         let mut rows = Vec::new();
-        for (id, text, gold) in cases {
+        for (id, text, gold, expected, verdict) in cases {
             let outcome = handle_request(
                 BenchConfig::RuleFloorCore,
                 &full,
@@ -2606,52 +2714,49 @@ mod tests {
                 },
             )
             .expect("request");
-            let Outcome::PipelineError {
-                fixture_id,
-                stage,
-                reason,
-                refusal_evidence,
-                ..
-            } = outcome
-            else {
-                panic!("{id} must refuse");
+            let response = match outcome {
+                Outcome::Success(_) => serde_json::Value::String("completed".to_string()),
+                Outcome::PipelineError {
+                    fixture_id,
+                    stage,
+                    reason,
+                    refusal_evidence,
+                    ..
+                } => {
+                    let mut output = Vec::new();
+                    write_pipeline_error(
+                        &mut output,
+                        &fixture_id,
+                        stage,
+                        reason,
+                        refusal_evidence,
+                        1.0,
+                    )
+                    .expect("write");
+                    for (start, end, _) in &gold {
+                        let value = &text.as_bytes()[*start as usize..*end as usize];
+                        assert!(
+                            !output.windows(value.len()).any(|w| w == value),
+                            "{id}: refusal response must be value-free"
+                        );
+                    }
+                    serde_json::from_slice(&output).unwrap()
+                }
             };
-            let mut output = Vec::new();
-            write_pipeline_error(
-                &mut output,
-                &fixture_id,
-                stage,
-                reason,
-                refusal_evidence,
-                1.0,
-            )
-            .expect("write");
-            let response: serde_json::Value = serde_json::from_slice(&output).unwrap();
-            assert_eq!(response["evidence_complete"], true, "{id}: {response}");
-            assert_eq!(response["evidence_producer"], TYPED_REFUSAL_PRODUCER);
-            assert!(!output.windows(6).any(|w| w == b"812345"), "value-free");
+            assert_eq!(
+                check_typed_refusal_response(&response, &expected),
+                Ok(true),
+                "{id}: every case must refuse with complete pinned evidence"
+            );
             rows.push(serde_json::json!({
                 "id": id,
                 "text": text,
                 "gold": gold.iter().map(|(a, b, l)| serde_json::json!([a, b, l])).collect::<Vec<_>>(),
+                "expected_refused_ranges": expected.iter().map(|(a, b)| serde_json::json!([a, b])).collect::<Vec<_>>(),
+                "expected_verdict": verdict,
                 "response": response,
             }));
         }
-        let spans = |row: &serde_json::Value| {
-            row["response"]["refusal_evidence"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|span| {
-                    (
-                        span["raw_start"].as_u64().unwrap(),
-                        span["raw_end"].as_u64().unwrap(),
-                    )
-                })
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(spans(&rows[1]), vec![(15, 21), (45, 50)]);
-        assert_eq!(spans(&rows[2]), vec![(15, 21), (40, 41)]);
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/typed_refusal_producer.json");
         let rendered = serde_json::to_string_pretty(&rows).unwrap() + "\n";

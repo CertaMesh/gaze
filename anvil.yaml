@@ -90,7 +90,7 @@ checks:
     expensive: true
     reusable: false
     locks: [workspace-build]
-    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/field_label_mutation_probe.py, anvil.yaml]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/bench, scripts/ci/field_label_mutation_probe.py, anvil.yaml]
     toolchain: [rustc -Vv, cargo -V]
     commands:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/ci/field_label_mutation_probe.py
