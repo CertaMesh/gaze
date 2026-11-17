@@ -183,3 +183,124 @@ async fn mcp_labelled_string_leaves_protect_and_numbers_fail_closed() {
         }
     }
 }
+
+fn stock_pipeline() -> (gaze::Pipeline, LocaleChain) {
+    let mut policy = Policy::default();
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let chain = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline = gaze_assembly::build_pipeline(
+        &policy,
+        &Context {
+            dictionaries: Default::default(),
+            class_map: Default::default(),
+            fields: Default::default(),
+            record_match_kinds: Default::default(),
+            record_value_rejections: Default::default(),
+        },
+        // The shipped `core` pack alone: no adopter calibration rule.
+        &[Rulepack::load(gaze::RulepackSource::Embedded(
+            gaze_recognizers::embedded("core").unwrap(),
+        ))
+        .unwrap()],
+        &chain,
+        None,
+    )
+    .unwrap();
+    (pipeline, chain)
+}
+
+async fn dispatch_capture(
+    pipeline: &gaze::Pipeline,
+    chain: &LocaleChain,
+    session: &Session,
+    args: Value,
+) -> Result<Value, DispatchError> {
+    let mut members = vec![];
+    declare_members(&args, &mut vec![], &mut members);
+    let captured = Arc::new(Mutex::new(vec![]));
+    let mut registry = ToolRegistry::new();
+    registry
+        .register(Capture {
+            descriptor: ToolDescriptor::agent("lookup", json!({})).with_carriers(
+                CarrierDeclaration::new(members, vec![]),
+                CarrierDeclaration::default(),
+            ),
+            captured: captured.clone(),
+        })
+        .unwrap();
+    let session_policy = SessionIdPolicy::default_strict();
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &Auth,
+        &Store,
+        pipeline,
+        session,
+        chain.as_slice(),
+        &session_policy,
+    );
+    envelope
+        .dispatch(
+            &Principal::new("agent"),
+            "lookup",
+            args,
+            None,
+            gaze_mcp_core::HostContextSelection::Absent,
+        )
+        .await?;
+    let sent = captured.lock().unwrap().pop().expect("tool must execute");
+    Ok(sent)
+}
+
+/// MCP leaf path with the stock `core` activation: a session-owned token inside a labelled
+/// argument never exposes the rest of the identifier, and a string argument whose whole text
+/// is a JSON document binds its own labelled fields.
+#[tokio::test]
+async fn mcp_owned_tokens_and_json_text_arguments_bind_with_stock_core() {
+    let (pipeline, chain) = stock_pipeline();
+    let session = Session::new(Scope::Conversation("synthetic-mcp-json".into())).unwrap();
+    let owned = session
+        .tokenize(&gaze::PiiClass::Email, "synthetic@example.invalid")
+        .unwrap();
+    let sent = dispatch_capture(
+        &pipeline,
+        &chain,
+        &session,
+        json!({"customer_id": format!("{owned} C-731284")}),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("owned-token leaf: {error:?}"));
+    let leaf = sent["customer_id"].as_str().unwrap();
+    assert!(!leaf.contains("73128"), "{leaf}");
+    assert!(
+        leaf.contains(&owned),
+        "owned token keeps its authority: {leaf}"
+    );
+
+    let sent = dispatch_capture(
+        &pipeline,
+        &chain,
+        &session,
+        json!({"payload": r#"{"customer_id":"C-731284","note":"ok"}"#}),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("JSON-text argument: {error:?}"));
+    let payload = sent["payload"].as_str().unwrap();
+    assert!(!payload.contains("731284"), "{payload}");
+    let inner: Value = serde_json::from_str(payload).expect("payload stays JSON");
+    assert_eq!(inner["note"], "ok");
+
+    // Prose stays out of scope: no free-text label guessing. A fresh session, so no repeat
+    // of an earlier bound value applies.
+    let fresh = Session::new(Scope::Ephemeral).unwrap();
+    let sent = dispatch_capture(
+        &pipeline,
+        &chain,
+        &fresh,
+        json!({"payload": "customer_id: C-731284"}),
+    )
+    .await
+    .unwrap();
+    assert!(sent["payload"].as_str().unwrap().contains("C-731284"));
+}

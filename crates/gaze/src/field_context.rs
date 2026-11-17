@@ -108,6 +108,91 @@ pub(crate) fn document_field_spans(
     spans
 }
 
+/// Scalar leaves of a JSON document carried as text inside one field, such as an OpenAI tool
+/// call's `arguments`, in that text's byte coordinates. Each leaf's path is the carrier's path
+/// followed by the leaf's own, so a labelled key inside the carried document binds exactly as
+/// it would in a whole JSON document. Empty unless the text strictly parses as one JSON object
+/// or array: arbitrary prose that merely contains JSON is not a carrier.
+pub fn json_text_field_spans(
+    text: &str,
+    carrier: &FieldPath,
+) -> Vec<(Range<usize>, FieldProvenance)> {
+    let mut spans = Vec::new();
+    parsed_field_spans(text, &mut spans);
+    let prefix = carrier.segments();
+    for (_, provenance) in &mut spans {
+        provenance.path = FieldPath::new(
+            prefix
+                .iter()
+                .chain(provenance.path.segments().iter())
+                .map(|segment| (*segment).to_owned()),
+        );
+    }
+    spans
+}
+
+/// The field context of one stretch of a leaf, from [`field_pieces`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldPiece {
+    /// The complete scalars inside this piece, in piece coordinates; possibly none.
+    Spans(Vec<(Range<usize>, FieldProvenance)>),
+    /// The part of one scalar that an owned token cuts. It cannot prove the whole value.
+    Fragment {
+        /// The cut scalar's provenance.
+        field: FieldProvenance,
+        /// Byte offset of this part inside the scalar.
+        offset: usize,
+    },
+}
+
+/// Split `gap` (a stretch of a leaf between owned tokens) so each piece carries one honest
+/// field context: scalars wholly inside the gap stay complete spans, and the part of a scalar
+/// that an owned token cuts becomes its own fragment piece. `spans` are disjoint, in leaf
+/// coordinates, as [`json_text_field_spans`] returns them. Empty pieces are omitted.
+pub fn field_pieces(
+    gap: Range<usize>,
+    spans: &[(Range<usize>, FieldProvenance)],
+) -> Vec<(Range<usize>, FieldPiece)> {
+    let mut pieces = Vec::new();
+    let mut cursor = gap.start;
+    let mut contained: Vec<(Range<usize>, FieldProvenance)> = Vec::new();
+    let flush = |pieces: &mut Vec<_>,
+                 contained: &mut Vec<(Range<usize>, FieldProvenance)>,
+                 start: usize,
+                 end: usize| {
+        if start < end {
+            let spans = contained
+                .drain(..)
+                .map(|(range, provenance)| (range.start - start..range.end - start, provenance))
+                .collect();
+            pieces.push((start..end, FieldPiece::Spans(spans)));
+        }
+    };
+    let mut ordered: Vec<_> = spans.iter().collect();
+    ordered.sort_by_key(|(range, _)| (range.start, range.end));
+    for (range, provenance) in ordered {
+        if range.is_empty() || range.end <= gap.start || gap.end <= range.start {
+            continue;
+        }
+        if gap.start <= range.start && range.end <= gap.end {
+            contained.push((range.clone(), provenance.clone()));
+            continue;
+        }
+        let cut = range.start.max(gap.start)..range.end.min(gap.end);
+        flush(&mut pieces, &mut contained, cursor, cut.start);
+        pieces.push((
+            cut.clone(),
+            FieldPiece::Fragment {
+                field: provenance.clone(),
+                offset: cut.start - range.start,
+            },
+        ));
+        cursor = cut.end;
+    }
+    flush(&mut pieces, &mut contained, cursor, gap.end);
+    pieces
+}
+
 /// Scalar leaves of a document that strictly parses as one JSON object or array.
 /// A string's range is its literal's interior, still in source (escaped) spelling.
 fn parsed_field_spans(text: &str, spans: &mut Vec<(Range<usize>, FieldProvenance)>) {

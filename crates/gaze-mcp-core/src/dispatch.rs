@@ -846,8 +846,15 @@ fn protect_json_leaves(
                 gaze_types::JsonScalarType::String,
                 gaze_types::FieldEvidence::ValidatedParse,
             );
-            let primary =
-                pipeline.protect_text_transaction(transaction, text, context.with_field(&field))?;
+            // A string whose whole text strictly parses as one JSON object or array carries
+            // its own fields; bind them as a whole-document clean does.
+            let embedded = gaze::json_text_field_spans(text, path);
+            let leaf = if embedded.is_empty() {
+                context.with_field(&field)
+            } else {
+                context.with_field_spans(&embedded)
+            };
+            let primary = pipeline.protect_text_transaction(transaction, text, leaf)?;
             let protected =
                 rule_coverage::cover_rule_repeats(pipeline, transaction, text, &primary)?;
             if rule_coverage::expand_owned_bounded(

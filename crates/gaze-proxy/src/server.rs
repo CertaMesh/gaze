@@ -1366,6 +1366,7 @@ impl<'pipeline, 'context, 'transaction, 'session>
             Some(gaze_types::FieldContext::Fragment { field, offset }) => {
                 context.with_field_fragment(field, offset)
             }
+            Some(gaze_types::FieldContext::Spans(spans)) => context.with_field_spans(spans),
             _ => context,
         };
         let result = self.pipeline.resolve_boundary_text_transaction_in_context(
@@ -1451,7 +1452,16 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         prefix_cache_write_mode: PrefixCacheWriteMode,
         field: Option<&gaze_types::FieldProvenance>,
     ) -> Result<String, CodecErrorCode> {
-        let output = self.protect_preserving_tokens(input, prefix_cache_write_mode, field)?;
+        // A leaf whose whole text strictly parses as one JSON object or array (a tool call's
+        // `arguments`, a JSON tool result) carries its own fields: bind them exactly as a
+        // whole-document clean does. Prose that merely contains JSON gets no field context.
+        let embedded = gaze::json_text_field_spans(
+            input,
+            &field.map(|field| field.path.clone()).unwrap_or_default(),
+        );
+        let field = if embedded.is_empty() { field } else { None };
+        let output =
+            self.protect_preserving_tokens(input, prefix_cache_write_mode, field, &embedded)?;
         let resolved = self.pipeline.resolve_staged_owned_text(
             self.transaction,
             &output,
@@ -1603,6 +1613,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         input: &str,
         prefix_cache_write_mode: PrefixCacheWriteMode,
         field: Option<&gaze_types::FieldProvenance>,
+        embedded: &[(std::ops::Range<usize>, gaze_types::FieldProvenance)],
     ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
         let original = self
@@ -1628,20 +1639,24 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             })
         };
         for range in &ranges {
-            prepared.push_str(&self.protect_unstaged_segment(
-                &input[cursor..range.start],
+            prepared.push_str(&self.protect_gap_pieces(
+                input,
+                cursor..range.start,
                 prefix_cache_write_mode,
                 field_context(cursor),
+                embedded,
             )?);
             let start = prepared.len();
             prepared.push_str(&input[range.clone()]);
             caller_owned.insert((start, prepared.len()));
             cursor = range.end;
         }
-        prepared.push_str(&self.protect_unstaged_segment(
-            &input[cursor..],
+        prepared.push_str(&self.protect_gap_pieces(
+            input,
+            cursor..input.len(),
             prefix_cache_write_mode,
             field_context(cursor),
+            embedded,
         )?);
         let prepared = self.coalesce_unpublished_rule_tokens(&prepared, &caller_owned)?;
         if self
@@ -1653,6 +1668,41 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             return Err(CodecErrorCode::ProtectionFailedClosed);
         }
         Ok(prepared)
+    }
+
+    /// One gap between owned tokens. With a carried JSON document's scalars, a scalar wholly
+    /// inside the gap keeps complete context and the part an owned token cuts is a fragment.
+    fn protect_gap_pieces(
+        &mut self,
+        input: &str,
+        gap: std::ops::Range<usize>,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+        field: Option<gaze_types::FieldContext<'_>>,
+        embedded: &[(std::ops::Range<usize>, gaze_types::FieldProvenance)],
+    ) -> Result<String, CodecErrorCode> {
+        if embedded.is_empty() {
+            return self.protect_unstaged_segment(&input[gap], prefix_cache_write_mode, field);
+        }
+        let mut output = String::with_capacity(gap.len());
+        for (piece, kind) in gaze::field_pieces(gap, embedded) {
+            let field = match &kind {
+                gaze::FieldPiece::Spans(spans) => {
+                    (!spans.is_empty()).then_some(gaze_types::FieldContext::Spans(spans))
+                }
+                gaze::FieldPiece::Fragment { field, offset } => {
+                    Some(gaze_types::FieldContext::Fragment {
+                        field,
+                        offset: *offset,
+                    })
+                }
+            };
+            output.push_str(&self.protect_unstaged_segment(
+                &input[piece],
+                prefix_cache_write_mode,
+                field,
+            )?);
+        }
+        Ok(output)
     }
 }
 
@@ -7008,3 +7058,7 @@ mod tests {
 #[cfg(test)]
 #[path = "server/repeat_coverage_tests.rs"]
 mod repeat_coverage_tests;
+
+#[cfg(test)]
+#[path = "server/json_carrier_tests.rs"]
+mod json_carrier_tests;

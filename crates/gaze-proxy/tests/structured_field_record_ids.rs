@@ -1,9 +1,11 @@
 //! Labelled record IDs across real provider routes; loopback fixtures only, no provider calls.
 //!
 //! The bundled `field_labelled` rules protect labelled string leaves of structured carriers
-//! and refuse labelled JSON numbers, typed, before anything is forwarded. Prose and
-//! JSON-encoded carriers (a JSON document inside a string) have no field context, so there
-//! only the calibrated adopter rule acts, with its legacy numeric rendering.
+//! and refuse labelled JSON numbers, typed, before anything is forwarded. A string whose whole
+//! text strictly parses as one JSON object or array (OpenAI `arguments`, a JSON tool result)
+//! carries its own fields and binds the same way. Prose has no field context: there only the
+//! calibrated adopter rule acts. Every route runs with the stock `core` activation alone; the
+//! calibrated runs are kept as separate legacy evidence.
 
 #[path = "support/structured_record_ids.rs"]
 mod record_ids;
@@ -128,14 +130,10 @@ fn assembled() -> gaze_assembly::CorePipeline {
         .unwrap()
 }
 
-/// Whether a typed labelled-number refusal is the expected outcome for this route.
-fn refuses(provider: Provider, carrier: &str, case: &record_ids::Case) -> bool {
-    case.numeric
-        && matches!(
-            (provider, carrier),
-            (Provider::Anthropic | Provider::Gemini, "call")
-                | (Provider::Gemini, "result-structured")
-        )
+/// Whether a typed labelled-number refusal is the expected outcome for this route: every
+/// structured or JSON-text carrier refuses a labelled number; prose has no field to bind.
+fn refuses(carrier: &str, case: &record_ids::Case) -> bool {
+    case.numeric && carrier != "prose"
 }
 
 #[test]
@@ -190,10 +188,16 @@ fn whole_json_fields_bind_and_prose_stays_with_the_calibrated_rule() {
     }
 }
 
-async fn captures(provider: Provider) {
+async fn captures(provider: Provider, stock: bool) {
     let (upstream, forwarded, upstream_task) =
         support::spawn_json_upstream(move |_| provider.response()).await;
-    let core = assembled();
+    // Stock: the shipped `core` activation alone, no adopter rule.
+    let core = if stock {
+        CorePipelineConfig::new().build().unwrap()
+    } else {
+        assembled()
+    };
+    let label = if stock { "stock-core" } else { "calibration" };
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let bind = listener.local_addr().unwrap();
     let config = ProxyConfig::new(bind, vec![provider.adapter(upstream)])
@@ -228,7 +232,7 @@ async fn captures(provider: Provider) {
                 .send()
                 .await
                 .unwrap();
-            if refuses(provider, carrier, &case) {
+            if refuses(carrier, &case) {
                 assert!(
                     !response.status().is_success(),
                     "{provider:?}/{carrier} {case:?}"
@@ -240,7 +244,7 @@ async fn captures(provider: Provider) {
                 );
                 assert!(!body.contains("731284"), "refusal body is value-free");
                 assert!(forwarded.lock().await.is_empty(), "nothing forwarded");
-                println!("RECORD_ID {provider:?}/{carrier} {case:?} REFUSED");
+                println!("RECORD_ID {label} {provider:?}/{carrier} {case:?} REFUSED");
                 continue;
             }
             assert!(
@@ -252,11 +256,12 @@ async fn captures(provider: Provider) {
                 .await
                 .pop()
                 .expect("request must reach capture upstream");
+            // No free-text label guessing: stock prose keeps its known leak.
             record_ids::check(
                 &case,
-                &format!("{provider:?}/{carrier}"),
+                &format!("{label} {provider:?}/{carrier}"),
                 &captured.to_string(),
-                false,
+                stock && carrier == "prose",
             );
             let encoded = match (provider, carrier) {
                 (Provider::Anthropic, "result-string") => Some("/messages/1/content/0/content"),
@@ -272,15 +277,13 @@ async fn captures(provider: Provider) {
                 _ => None,
             };
             if let Some(pointer) = encoded {
-                // JSON inside a string carries no field context: the calibrated prose rule
-                // still renders a number as an unquoted token, the legacy defect this change
-                // leaves to the encoded-carrier increment.
+                // A JSON-text carrier keeps a valid inner document: labelled numbers refused
+                // above, so only string leaves were tokenized, inside their quotes.
                 let text = captured.pointer(pointer).and_then(Value::as_str).unwrap();
-                assert_eq!(
-                    serde_json::from_str::<Value>(text).is_ok(),
-                    !case.numeric,
-                    "encoded-carrier numeric rendering changed at {pointer}; promote when fixed"
-                );
+                let inner: Value = serde_json::from_str(text).unwrap_or_else(|error| {
+                    panic!("{label} {provider:?}/{carrier} {case:?}: invalid inner JSON {error}")
+                });
+                assert!(inner.is_object(), "{pointer}");
             }
         }
     }
@@ -317,13 +320,27 @@ async fn captures(provider: Provider) {
 
 #[tokio::test]
 async fn anthropic_structured_calls_protect_strings_and_refuse_labelled_numbers() {
-    captures(Provider::Anthropic).await;
+    captures(Provider::Anthropic, true).await;
 }
 #[tokio::test]
 async fn gemini_structured_calls_and_responses_protect_strings_and_refuse_labelled_numbers() {
-    captures(Provider::Gemini).await;
+    captures(Provider::Gemini, true).await;
 }
 #[tokio::test]
 async fn openai_serialized_arguments_and_tool_results_are_protected() {
-    captures(Provider::OpenAi).await;
+    captures(Provider::OpenAi, true).await;
+}
+
+// Legacy evidence: the same routes with the calibrated adopter rule loaded on top.
+#[tokio::test]
+async fn anthropic_routes_with_the_calibration_rule() {
+    captures(Provider::Anthropic, false).await;
+}
+#[tokio::test]
+async fn gemini_routes_with_the_calibration_rule() {
+    captures(Provider::Gemini, false).await;
+}
+#[tokio::test]
+async fn openai_routes_with_the_calibration_rule() {
+    captures(Provider::OpenAi, false).await;
 }
