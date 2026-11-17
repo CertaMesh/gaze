@@ -1716,6 +1716,15 @@ impl RecognizerRegistry {
         &self.address_grammar
     }
 
+    /// Classes emitted by a recognizer that binds structured field labels.
+    pub(crate) fn field_bound_classes(&self) -> BTreeSet<PiiClass> {
+        self.entries
+            .iter()
+            .filter(|recognizer| recognizer.binds_structured_fields())
+            .map(|recognizer| recognizer.supported_class().clone())
+            .collect()
+    }
+
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
         self.recognizers_by_id.get(id)
     }

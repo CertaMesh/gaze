@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A labelled JSON number now refuses, typed, instead of leaking or becoming an
+  unquoted token: `Untransformable` with `json_number_no_text_only_path` (CLI
+  exit 8, no output). A repeat of a bound ID that lands exactly on a JSON number
+  or object key refuses the same way (`no_safe_rendering` for a key).
+- Anthropic `tool_use.input` numbers are admitted when nothing detects them and
+  forwarded with their original spelling; previously every number refused with
+  `UnsupportedRequestSurface`. Other detections in a number still refuse.
+- `[outcomes] possibly_sensitive` now takes effect: a labelled string that is
+  not identifier-shaped is protected by default, refused, or passed with an
+  audit row. Audit rows record the outcome, its reason and the field's depth and
+  evidence for field-bound winners, refusals and passes.
+- `ProtectionError::Untransformable` gains `others`, every further refused field
+  in document order, direct and repeat refusals alike. Exhaustive constructions
+  must add it (0.x breaking).
+- A refused possibly sensitive value keeps its `possibly_sensitive` outcome and
+  reason in the audit row. Every refusal row carries
+  `provenance_stage = "primary_pipeline.outcome_refusal"`.
+- `field_labelled` rulepack validation rejects generic labels in any normalized
+  spelling, such as fullwidth `ｉｄ`.
+- The library `pseudonymize` text path passes the same document field context
+  as every text clean.
 - MCP tool results include the fixed `resultType: "complete"` discriminator
   for protocol 2026-07-28 and newer. Direct serialization of rmcp results also
   includes it; rmcp omits it for older negotiated protocol versions. Tool-error
@@ -41,14 +62,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
   0.2.0. Its existing fixture detections remain unchanged.
 
-
 ### Security
 
+- Person-linked record IDs in structured fields no longer leak. Bundled `core`
+  now ships `customer_id.field`, `employee_id.field` and `record_id.field`, the
+  first `field_labelled` rules: they bind a scalar by its JSON key or
+  caller-declared field (`customer_id`, `customerNumber`, `Kundennummer`,
+  `staffNumber`, `contactId`, `{"customer": {"id": …}}`), never by prose. An
+  identifier-shaped string is tokenized as a whole leaf in `gaze clean`, the
+  daemon, the library, the proxy (Anthropic, Gemini and OpenAI tool calls and
+  results) and MCP arguments. Keys bind in fullwidth and zero-width spellings
+  and through arrays (`{"customer_id": [{"value": …}]}`). A string whose whole
+  text is a JSON object or array, such as OpenAI `function.arguments` or a JSON
+  tool result, binds its own keys. An owned token inside a labelled value no
+  longer exposes the rest of the identifier. Known limits (JSON inside prose,
+  strict-parse fallback, escaped versus decoded repeats) are listed in
+  `docs/explanation/detection/outcomes.md`.
 - Update bundled SQLite through `rusqlite` 0.41, `pulldown-cmark` to 0.13.6,
   and `rmcp` to 3.9.0 to address RUSTSEC-2026-0459, RUSTSEC-2026-0433,
   RUSTSEC-2026-0457, and RUSTSEC-2026-0462. Update `rustix` to 1.1.6
   for RUSTSEC-2026-0486 in every lockfile that contains it.
-
 - The setup-default `secrets` bundle protects whole private-key PEM blocks and
   bare GitHub, OpenAI, Anthropic, Slack, Stripe and Google credential shapes.
   Truncated private-key bodies fail closed, including DSA and PGP armour,

@@ -509,6 +509,17 @@ jobs:
       # leak ledger's pool-dump pins (normalizer copy vs the pipeline trace) live here.
       - name: Run bench producer example tests
         run: cargo test --locked -p gaze-recognizers --all-features --example clean_for_bench
+      # Each field-labelled record-ID protection must be required by a behavioural test. Runs
+      # here because this job already builds the bench producer and holds the locked uv
+      # environment the producer mutant's Python guard needs. The count line is the evidence.
+      - name: Prove every field-labelled protection fails a test when disabled
+        env:
+          CARGO_BUILD_JOBS: "4"
+        run: |
+          set -o pipefail
+          mkdir -p target
+          python3 scripts/ci/field_label_mutation_probe.py | tee target/field-label-mutations.log
+          grep -Fx "FIELD_LABEL_MUTATIONS 24/24 rejected" target/field-label-mutations.log
       - name: Check policy and CLI equivalence on committed sample
         run: uv run --project scripts/bench --python 3.13 --group comparison-test python scripts/bench/check_policy_equivalence.py --self-check
 

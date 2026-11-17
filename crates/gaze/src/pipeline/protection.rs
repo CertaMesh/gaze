@@ -25,6 +25,15 @@ impl<'a> ProtectionContext<'a> {
         self.field = Some(gaze_types::FieldContext::WholeInput(field));
         self
     }
+    /// Attach the complete scalars of a JSON document carried as this leaf's text, such as a
+    /// tool call's `arguments` ([`crate::json_text_field_spans`]). Ranges are leaf byte offsets.
+    pub fn with_field_spans(
+        mut self,
+        spans: &'a [(std::ops::Range<usize>, gaze_types::FieldProvenance)],
+    ) -> Self {
+        self.field = Some(gaze_types::FieldContext::Spans(spans));
+        self
+    }
     /// Attach a fragment's location without claiming the complete scalar value.
     pub fn with_field_fragment(
         mut self,
@@ -59,13 +68,17 @@ pub enum ProtectionError {
     Residual,
     #[error("token provenance or reversibility rejected")]
     Provenance,
-    /// A confirmed sensitive field has no safe reversible rendering. No producer yet.
+    /// A confirmed sensitive field has no safe reversible rendering. Raised before any token
+    /// is minted or output produced, by the bridge and by the pipeline's outcome enforcement.
     #[error("confirmed sensitive field cannot be transformed: {reason}")]
     Untransformable {
-        /// Closed reason without the sensitive value.
+        /// Closed reason for the first refused field, without the sensitive value.
         reason: gaze_types::UntransformableReason,
-        /// Structural location. Diagnostics hide its segments.
+        /// The first refused field's structural location. Diagnostics hide its segments.
         field_path: gaze_types::FieldPath,
+        /// Every further refused field of the same input, in document order. Together with
+        /// the first, the complete set the pipeline refused; empty when only one field did.
+        others: Vec<(gaze_types::UntransformableReason, gaze_types::FieldPath)>,
     },
 }
 
@@ -532,30 +545,13 @@ impl Pipeline {
         let mut cursor = 0;
         // Owned tokens split the leaf, so each gap is only part of the scalar.
         let split = !ranges.is_empty();
-        let gap_context = |offset: usize| {
-            if !split {
-                return context;
-            }
-            let field = match context.field {
-                Some(gaze_types::FieldContext::WholeInput(field)) => {
-                    Some(gaze_types::FieldContext::Fragment { field, offset })
-                }
-                Some(gaze_types::FieldContext::Fragment {
-                    field,
-                    offset: base,
-                }) => Some(gaze_types::FieldContext::Fragment {
-                    field,
-                    offset: base + offset,
-                }),
-                other => other,
-            };
-            ProtectionContext { field, ..context }
-        };
         for range in ranges {
-            self.protect_gap(
+            self.protect_leaf_range(
                 transaction,
-                &input[cursor..range.start],
-                gap_context(cursor),
+                input,
+                cursor..range.start,
+                context,
+                split,
                 &mut clean,
                 &mut expected,
                 &mut spans,
@@ -575,10 +571,12 @@ impl Pipeline {
             ));
             cursor = range.end;
         }
-        self.protect_gap(
+        self.protect_leaf_range(
             transaction,
-            &input[cursor..],
-            gap_context(cursor),
+            input,
+            cursor..input.len(),
+            context,
+            split,
             &mut clean,
             &mut expected,
             &mut spans,
@@ -742,6 +740,69 @@ impl Pipeline {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Protect one stretch of a leaf between owned tokens. A whole-input field becomes a
+    /// fragment when tokens split the leaf; a carried JSON document's scalars are split into
+    /// pieces so a scalar cut by an owned token is a fragment and the rest stay complete.
+    #[allow(clippy::too_many_arguments)]
+    fn protect_leaf_range(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        input: &str,
+        range: std::ops::Range<usize>,
+        context: ProtectionContext<'_>,
+        split: bool,
+        clean: &mut String,
+        expected: &mut String,
+        spans: &mut Ledger,
+    ) -> std::result::Result<(), ProtectionError> {
+        let offset = range.start;
+        let field = match context.field {
+            Some(gaze_types::FieldContext::Spans(fields)) => {
+                for (piece, kind) in crate::field_pieces(range, fields) {
+                    let field = match &kind {
+                        crate::FieldPiece::Spans(fields) => {
+                            (!fields.is_empty()).then_some(gaze_types::FieldContext::Spans(fields))
+                        }
+                        crate::FieldPiece::Fragment { field, offset } => {
+                            Some(gaze_types::FieldContext::Fragment {
+                                field,
+                                offset: *offset,
+                            })
+                        }
+                    };
+                    self.protect_gap(
+                        transaction,
+                        &input[piece],
+                        ProtectionContext { field, ..context },
+                        clean,
+                        expected,
+                        spans,
+                    )?;
+                }
+                return Ok(());
+            }
+            Some(gaze_types::FieldContext::WholeInput(field)) if split => {
+                Some(gaze_types::FieldContext::Fragment { field, offset })
+            }
+            Some(gaze_types::FieldContext::Fragment {
+                field,
+                offset: base,
+            }) if split => Some(gaze_types::FieldContext::Fragment {
+                field,
+                offset: base + offset,
+            }),
+            other => other,
+        };
+        self.protect_gap(
+            transaction,
+            &input[range],
+            ProtectionContext { field, ..context },
+            clean,
+            expected,
+            spans,
+        )
+    }
+
     fn protect_gap(
         &self,
         transaction: &mut SessionTransaction<'_>,
@@ -769,7 +830,11 @@ impl Pipeline {
                 None,
                 context.field,
             )
-            .map_err(|_| ProtectionError::Primary)?;
+            .map_err(|error| match error {
+                // A typed refusal keeps its reason and fields; anything else stays opaque.
+                Error::Protection(error @ ProtectionError::Untransformable { .. }) => error,
+                _ => ProtectionError::Primary,
+            })?;
         clean.push_str(&result.text);
         spans
             .append(result.manifest, raw_offset, clean_offset)
