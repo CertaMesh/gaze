@@ -56,16 +56,28 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
         multi_gold = [r for r in rows if r["expected_verdict"] == "blocked"
                       and len(r["expected_refused_ranges"]) > 1]
         mixed = [r for r in rows if r["expected_verdict"] == "ordinary"]
-        self.assertTrue(multi_gold and len(mixed) >= 2)
+        # A direct refusal beside a protected ID whose repeat refuses in a benign carrier.
+        repeat_mixed = [r for r in mixed if r["expected_protected_gold"]]
+        self.assertTrue(multi_gold and len(mixed) >= 3 and repeat_mixed)
         for row in rows:
             gold = sorted([a, b] for a, b, _ in row["gold"])
             expected = row["expected_refused_ranges"]
+            protected = row["expected_protected_gold"]
             self.assertEqual(expected, sorted(expected), row["id"])
-            # All-gold rows refuse exactly their gold; mixed rows add a benign range.
+            self.assertEqual(protected, sorted(protected), row["id"])
+            # Protected gold is gold that a complete producer tokenizes, never refuses.
+            self.assertTrue(set(map(tuple, protected)) <= set(map(tuple, gold)), row["id"])
+            self.assertFalse(set(map(tuple, protected)) & set(map(tuple, expected)), row["id"])
+            refused_gold = [g for g in gold if g not in protected]
+            # All-gold rows refuse exactly their gold; mixed rows refuse every refused gold
+            # range plus a benign one.
             if row["expected_verdict"] == "blocked":
+                self.assertEqual(protected, [], row["id"])
                 self.assertEqual(expected, gold, row["id"])
             else:
-                self.assertTrue(set(map(tuple, gold)) < set(map(tuple, expected)), row["id"])
+                self.assertTrue(refused_gold, row["id"])
+                self.assertTrue(set(map(tuple, refused_gold)) < set(map(tuple, expected)),
+                                row["id"])
 
     def test_expected_ranges_classify_as_declared_under_the_shipped_pin(self):
         for row in load():
@@ -86,7 +98,7 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
     def test_identity_rows_name_every_refused_range_and_round_trip(self):
         # Zero identity rows is the pre-emitter state; any identity row is fully checked.
         rows = load()
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 5)
         for row in rows:
             check_row(self, row, row["response"])
 
@@ -110,7 +122,7 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
                     check_row(self, row, broken)
                 rejected += 1
         self.assertEqual((checked, first_path_failures, mixed_ordinary, rejected),
-                         (4, 3, 2, 16))
+                         (5, 4, 3, 20))
 
     def test_live_fixture_test_checks_each_rows_own_response(self):
         # Drive the live test with controlled payloads: each row's own response
@@ -130,7 +142,7 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
                 mock.patch(f"{__name__}.check_row", spy):
             self.test_identity_rows_name_every_refused_range_and_round_trip()
         self.assertEqual([row_id for row_id, _ in seen], [row_id for row_id, _ in sent])
-        self.assertEqual(len(seen), 4)
+        self.assertEqual(len(seen), 5)
         for (_, got), (row_id, payload) in zip(seen, sent):
             self.assertIs(got, payload, row_id)
 
