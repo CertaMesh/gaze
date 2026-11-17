@@ -1329,7 +1329,9 @@ impl Pipeline {
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
-        let pool = self.enforce_outcomes(target, pool, field_name, document_kind)?;
+        // Refusals wait for the repeat sweep, so the one error names every refused field.
+        let (pool, mut refusals) =
+            self.enforce_outcomes(target, pool, field_name, document_kind)?;
         let mut whole = {
             let _perf = gaze_types::perf_span!("resolve1_ns");
             recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?
@@ -1341,9 +1343,10 @@ impl Pipeline {
             text,
             field_name,
             locale_chain,
-            document_kind,
             whole_number,
+            &mut refusals,
         )?;
+        self.raise_refusals(target, refusals, field_name, document_kind)?;
         // House numbers are licensed by the final street spans, so they can only be
         // found once resolution (and the repeat-value sweep) has settled; the pool is
         // then resolved once more with them added. Every other candidate is unchanged,
@@ -1776,8 +1779,8 @@ impl Pipeline {
         text: &str,
         field_name: Option<&str>,
         locale_chain: &[crate::LocaleTag],
-        document_kind: DocumentKind,
         whole_number: Option<&gaze_types::FieldProvenance>,
+        refusals: &mut outcomes::Refusals,
     ) -> Result<BTreeMap<(usize, usize), SweepLink>> {
         let _perf = gaze_types::perf_span!("sweep_ns");
         let winners = whole.primary.iter().chain(&whole.recovered);
@@ -1817,15 +1820,8 @@ impl Pipeline {
                     .is_protective()
             })
         });
-        let uncovered = self.guard_field_bound_repeats(
-            target,
-            uncovered,
-            normalized,
-            text,
-            whole_number,
-            field_name,
-            document_kind,
-        )?;
+        let uncovered =
+            self.guard_field_bound_repeats(uncovered, normalized, text, whole_number, refusals)?;
         let mut links = BTreeMap::new();
         let mut added = Vec::new();
         for hit in crate::sweep::select(uncovered) {

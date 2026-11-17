@@ -3,15 +3,34 @@
 //! Enforcement runs after detection and validator veto and before conflict resolution, token
 //! allocation or any output. Resolution could otherwise let an overlapping candidate discard a
 //! refusal, and a token minted before the refusal would already be staged.
+//!
+//! Refusals are collected, not raised at the first stage: a direct refusal defers until the
+//! repeat sweep (D6) has added its own, so one typed error names every refused field of the
+//! input. Neither stage mints a token or produces output before the error.
 
 use super::*;
 use crate::policy::PossiblySensitiveDisposition;
 use gaze_types::{JsonScalarType, ProtectionOutcome, UntransformableReason};
 
+/// `provenance_stage` of every refusal audit row. The row keeps the candidate's own outcome
+/// (a refused possibly sensitive value stays `possibly_sensitive`), so this stage is what
+/// records the refusal disposition.
+pub(crate) const OUTCOME_REFUSAL_STAGE: &str = "primary_pipeline.outcome_refusal";
+
 /// One refused candidate: why, and the value-free field it covers.
 struct Refused {
     reason: UntransformableReason,
     candidate: Candidate,
+}
+
+/// Refusals found before output, raised together once every pre-output stage has run.
+#[derive(Default)]
+pub(super) struct Refusals(Vec<Refused>);
+
+impl Refusals {
+    pub(super) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 impl Pipeline {
@@ -20,20 +39,25 @@ impl Pipeline {
     /// A confirmed-untransformable candidate refuses the whole input. A possibly sensitive one
     /// is protected like a confirmed match, refused, or passed with an audit row, as the policy
     /// says; a possibly sensitive JSON number cannot be protected without changing its type, so
-    /// `protect` refuses it too. Every refused field is reported, in document order, and audited.
+    /// `protect` refuses it too. Refused candidates leave the pool and are returned, not raised:
+    /// the caller raises them with [`Self::raise_refusals`] after the repeat sweep, so every
+    /// refused field is reported, in document order, and audited.
     pub(super) fn enforce_outcomes(
         &self,
         target: &ProtectionTarget<'_, '_>,
         mut pool: crate::resolver::CandidatePool,
         field_name: Option<&str>,
         document_kind: DocumentKind,
-    ) -> Result<crate::resolver::CandidatePool> {
+    ) -> Result<(crate::resolver::CandidatePool, Refusals)> {
         let originals = pool.take_originals();
         if originals
             .iter()
             .all(|candidate| candidate.outcome.is_none())
         {
-            return Ok(crate::resolver::CandidatePool::new(originals));
+            return Ok((
+                crate::resolver::CandidatePool::new(originals),
+                Refusals::default(),
+            ));
         }
         let disposition = self.outcomes.possibly_sensitive;
         let mut kept = Vec::with_capacity(originals.len());
@@ -76,9 +100,6 @@ impl Pipeline {
                 document_kind,
             )?;
         }
-        if refused.is_empty() {
-            return Ok(crate::resolver::CandidatePool::new(kept));
-        }
         // A class the policy leaves in place is not protected, so it has nothing to refuse.
         let context = build_context(field_name);
         refused.retain(|refused| {
@@ -86,10 +107,21 @@ impl Pipeline {
                 .action
                 .is_protective()
         });
-        if refused.is_empty() {
-            return Ok(crate::resolver::CandidatePool::new(kept));
+        Ok((crate::resolver::CandidatePool::new(kept), Refusals(refused)))
+    }
+
+    /// Raise every collected refusal as one typed error, after the last pre-output stage.
+    pub(super) fn raise_refusals(
+        &self,
+        target: &ProtectionTarget<'_, '_>,
+        refusals: Refusals,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+    ) -> Result<()> {
+        if refusals.is_empty() {
+            return Ok(());
         }
-        Err(self.refuse(target, refused, field_name, document_kind))
+        Err(self.refuse(target, refusals.0, field_name, document_kind))
     }
 
     /// Audit every refused candidate and build the typed error naming each refused field in
@@ -108,10 +140,21 @@ impl Pipeline {
                 .resolve_action(&refused.candidate.class, &context)
                 .action;
             let mut candidate = refused.candidate.clone();
-            candidate.outcome = Some(ProtectionOutcome::ConfirmedUntransformable(refused.reason));
-            if let Err(error) =
-                self.log_outcome(target, &candidate, action, field_name, document_kind)
-            {
+            // A refused possibly sensitive value keeps its outcome and reason: the audit row
+            // must not upgrade policy-refused uncertainty into confirmed sensitivity. Only a
+            // candidate without a typed outcome (a swept repeat) records the refusal reason.
+            if candidate.outcome.is_none() {
+                candidate.outcome =
+                    Some(ProtectionOutcome::ConfirmedUntransformable(refused.reason));
+            }
+            if let Err(error) = self.log_outcome_at(
+                target,
+                &candidate,
+                action,
+                field_name,
+                document_kind,
+                Some(OUTCOME_REFUSAL_STAGE),
+            ) {
                 return error;
             }
         }
@@ -136,17 +179,15 @@ impl Pipeline {
     /// object key. An exact whole-literal repeat there refuses, typed, before any token is
     /// minted; a repeat that only overlaps such a literal is a different value and is dropped
     /// rather than splitting the literal. The sweep's own length floors still apply, so short
-    /// values never reach this check. Other classes keep their sweep behavior.
-    #[allow(clippy::too_many_arguments)]
+    /// values never reach this check. Other classes keep their sweep behavior. Refused repeats
+    /// join `refusals`; the caller raises them with any direct refusal.
     pub(super) fn guard_field_bound_repeats(
         &self,
-        target: &ProtectionTarget<'_, '_>,
         hits: Vec<crate::sweep::SweepHit>,
         normalized: &crate::normalize::NormalizedText,
         text: &str,
         whole_number: Option<&gaze_types::FieldProvenance>,
-        field_name: Option<&str>,
-        document_kind: DocumentKind,
+        refusals: &mut Refusals,
     ) -> Result<Vec<crate::sweep::SweepHit>> {
         let bound = self.registry.field_bound_classes();
         if !hits.iter().any(|hit| bound.contains(&hit.class)) {
@@ -165,7 +206,6 @@ impl Pipeline {
         });
         let places = places.collect::<Vec<_>>();
         let mut kept = Vec::with_capacity(hits.len());
-        let mut refused = Vec::new();
         for hit in hits {
             if !bound.contains(&hit.class) {
                 kept.push(hit);
@@ -197,19 +237,15 @@ impl Pipeline {
                         },
                         gaze_types::FieldEvidence::ValidatedParse,
                     ));
-                    refused.push(Refused { reason, candidate });
+                    refusals.0.push(Refused { reason, candidate });
                 }
                 Some(_) => {}
             }
         }
-        if refused.is_empty() {
-            Ok(kept)
-        } else {
-            Err(self.refuse(target, refused, field_name, document_kind))
-        }
+        Ok(kept)
     }
 
-    /// Audit a decision that mints no token: a refusal or a possibly sensitive pass.
+    /// Audit a decision that mints no token: a possibly sensitive pass.
     fn log_outcome(
         &self,
         target: &ProtectionTarget<'_, '_>,
@@ -217,6 +253,19 @@ impl Pipeline {
         action: Action,
         field_name: Option<&str>,
         document_kind: DocumentKind,
+    ) -> Result<()> {
+        self.log_outcome_at(target, candidate, action, field_name, document_kind, None)
+    }
+
+    /// Audit a decision that mints no token, tagging the row with the stage that decided it.
+    fn log_outcome_at(
+        &self,
+        target: &ProtectionTarget<'_, '_>,
+        candidate: &Candidate,
+        action: Action,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+        stage: Option<&str>,
     ) -> Result<()> {
         let mut entry = RedactionEntry::new(
             candidate.source.clone(),
@@ -239,6 +288,7 @@ impl Pipeline {
         if let Some(field) = &candidate.field {
             entry = entry.with_field_provenance(field);
         }
+        entry.provenance_stage = stage.map(str::to_owned);
         for logger in &self.redaction_loggers {
             let _perf = gaze_types::perf_span!("audit_ns");
             logger.log(&entry)?;

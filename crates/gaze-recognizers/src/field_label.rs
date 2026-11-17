@@ -2,11 +2,15 @@
 //! person-linked identifier.
 //!
 //! The recognizer reads only [`DetectContext::fields`]. It never guesses labels in prose and
-//! never treats a value's shape alone as evidence. A field binds when its final key (ignoring
-//! array indices) is a declared label, or when a declared label is the parent of an
-//! `id`/`value`/`number`/`no`/`nr` key, or when parent and child spell a label together
-//! (`{"customer": {"id": …}}`). Labels compare after removing case, `_`, `-`, `.` and spaces,
-//! so snake, camel and kebab spellings agree.
+//! never treats a value's shape alone as evidence. A field binds when its final key is a
+//! declared label, or when a declared label is the parent of an `id`/`value`/`number`/`no`/`nr`
+//! key, or when parent and child spell a label together (`{"customer": {"id": …}}`). Array
+//! indices are transparent anywhere in the path, so `{"customer_id": [{"value": …}]}` binds,
+//! but only the nearest object key is ever the parent: a label never reaches through an
+//! unrelated object (`{"customer_id": [{"meta": {"value": …}}]}` does not bind). Labels compare
+//! through the shared detection normalization (fullwidth folded, default-ignorable code points
+//! such as U+200B removed), then without case, `_`, `-`, `.` and whitespace, so snake, camel,
+//! kebab and fullwidth spellings agree. Paths keep their original keys.
 //!
 //! | Carrier | Evidence | Outcome |
 //! |---|---|---|
@@ -16,8 +20,10 @@
 //! | JSON number | validated parse or caller | `ConfirmedUntransformable(JsonNumberNoTextOnlyPath)` |
 //!
 //! Booleans and nulls carry no identifier bytes, so they produce no candidate. A fragment of a
-//! leaf cannot establish the complete value and is skipped. Unlabelled values never produce a
-//! candidate; other recognizers keep their own contracts.
+//! labelled leaf (the text beside an owned token) cannot establish the complete value, so it is
+//! never `Protected`; its identifier bytes are still `PossiblySensitive(LabelValueShapeUnclear)`
+//! (or `LabelBindingUnproven` for a hint), so the rest of a labelled value never ships raw.
+//! Unlabelled values never produce a candidate; other recognizers keep their own contracts.
 
 use std::collections::BTreeSet;
 use std::ops::Range;
@@ -86,14 +92,14 @@ impl FieldLabelRecognizer {
 
     /// Whether a field path binds to one of this recognizer's labels.
     pub fn binds(&self, path: &[&str]) -> bool {
-        let keys: Vec<String> = {
-            // Trailing array indices are transparent: `customer_id[0]` is still the label.
-            let end = path
-                .iter()
-                .rposition(|segment| !is_index(segment))
-                .map_or(0, |at| at + 1);
-            path[..end].iter().map(|key| normalize_label(key)).collect()
-        };
+        // Array indices are transparent: `customer_id[0]` is still the label, and
+        // `customer_id[0].value` has `customer_id` as its parent. Only object keys remain, so
+        // the parent is always the nearest object key, never a more distant one.
+        let keys: Vec<String> = path
+            .iter()
+            .filter(|segment| !is_index(segment))
+            .map(|key| normalize_label(key))
+            .collect();
         let Some(last) = keys.last() else {
             return false;
         };
@@ -131,10 +137,12 @@ impl FieldLabelRecognizer {
     }
 }
 
-/// Lowercase and drop `_`, `-`, `.` and whitespace, so `Customer-ID`, `customerId` and
-/// `customer_id` agree.
+/// Apply the shared detection normalization, then lowercase and drop `_`, `-`, `.` and
+/// whitespace, so `Customer-ID`, `customerId`, `customer_id`, a fullwidth spelling and one with
+/// a zero-width space all agree.
 pub fn normalize_label(label: &str) -> String {
-    label
+    gaze_types::normalize::normalize(label)
+        .text
         .chars()
         .filter(|ch| !matches!(ch, '_' | '-' | '.') && !ch.is_whitespace())
         .flat_map(char::to_lowercase)
@@ -208,6 +216,7 @@ impl FieldLabelRecognizer {
         range: &Range<usize>,
         field: &FieldProvenance,
         carrier: Carrier<'_>,
+        complete: bool,
     ) -> Option<ProtectionOutcome> {
         if !self.binds(&field.path.segments()) {
             return None;
@@ -227,8 +236,10 @@ impl FieldLabelRecognizer {
             Carrier::Number => None,
             Carrier::Text(json_string) => {
                 // A parse failure never proves a value harmless: unclear, so still sensitive.
-                let shaped = decoded(input, range, json_string.is_some())
-                    .is_some_and(|value| id_shaped(&value));
+                // A fragment never proves a complete identifier, whatever its shape.
+                let shaped = complete
+                    && decoded(input, range, json_string.is_some())
+                        .is_some_and(|value| id_shaped(&value));
                 Some(if shaped {
                     ProtectionOutcome::Protected
                 } else {
@@ -270,7 +281,30 @@ impl Recognizer for FieldLabelRecognizer {
     ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         let mut candidates: Vec<Candidate> = Vec::new();
         match ctx.fields {
-            None | Some(FieldContext::Fragment { .. }) => {}
+            None => {}
+            Some(FieldContext::Fragment { field, .. }) => {
+                // Owned tokens split this labelled leaf. The gap's identifier bytes, trimmed of
+                // separators, stay sensitive; the owned tokens keep their own authority.
+                let start = input
+                    .find(|ch: char| ch.is_alphanumeric())
+                    .unwrap_or(input.len());
+                let end = input
+                    .rfind(|ch: char| ch.is_alphanumeric())
+                    .map_or(start, |at| {
+                        at + input[at..].chars().next().map_or(0, char::len_utf8)
+                    });
+                let range = start..end;
+                let carrier = match field.json_type {
+                    JsonScalarType::Number => Carrier::Number,
+                    JsonScalarType::Bool | JsonScalarType::Null => Carrier::Literal,
+                    _ => Carrier::Text(None),
+                };
+                if !range.is_empty() {
+                    if let Some(outcome) = self.outcome(input, &range, field, carrier, false) {
+                        candidates.push(self.candidate(range, outcome, field));
+                    }
+                }
+            }
             Some(FieldContext::WholeInput(field)) => {
                 let range = 0..input.len();
                 let carrier = match field.json_type {
@@ -280,7 +314,7 @@ impl Recognizer for FieldLabelRecognizer {
                     _ => Carrier::Text(None),
                 };
                 if !range.is_empty() {
-                    if let Some(outcome) = self.outcome(input, &range, field, carrier) {
+                    if let Some(outcome) = self.outcome(input, &range, field, carrier, true) {
                         candidates.push(self.candidate(range, outcome, field));
                     }
                 }
@@ -291,7 +325,7 @@ impl Recognizer for FieldLabelRecognizer {
                         continue;
                     }
                     let carrier = carrier(range, field, spans);
-                    let Some(outcome) = self.outcome(input, range, field, carrier) else {
+                    let Some(outcome) = self.outcome(input, range, field, carrier, true) else {
                         continue;
                     };
                     // A caller declaration and the parse can locate the same bytes: keep the

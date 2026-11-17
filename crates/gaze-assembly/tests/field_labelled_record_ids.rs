@@ -461,3 +461,203 @@ fn coincident_unlabelled_numbers_refuse_only_at_the_sweep_floor() {
         );
     }
 }
+
+/// Field keys compare through the shared detection normalization: fullwidth and
+/// default-ignorable spellings bind like the ASCII key, the original key stays in the output,
+/// and benign keys in the same spellings stay benign.
+#[test]
+fn normalized_key_spellings_bind_and_benign_ones_do_not() {
+    let (pipeline, active) = stock();
+    for input in [
+        "{\"\u{ff43}\u{ff55}\u{ff53}\u{ff54}\u{ff4f}\u{ff4d}\u{ff45}\u{ff52}\u{ff3f}\u{ff49}\u{ff44}\":\"C-731284\"}",
+        "{\"customer\u{200b}_id\":\"C-731284\"}",
+        "{\"customer_id\":{\"\u{ff56}\u{ff41}\u{ff4c}\u{ff55}\u{ff45}\":\"C-731284\"}}",
+        "{\"customer\\u200b_id\":\"C-731284\"}",
+    ] {
+        let cleaned = protected(&pipeline, &active, input);
+        assert!(!cleaned.contains("731284"), "{input} leaked: {cleaned}");
+    }
+    for input in [
+        "{\"\u{ff4f}\u{ff52}\u{ff44}\u{ff45}\u{ff52}\u{ff3f}\u{ff49}\u{ff44}\":\"O-731284\"}",
+        "{\"customer\u{200b}s\":{\"id\":\"O-731284\"}}",
+        "{\"customer_id\u{200b}_hash\":\"O-731284\"}",
+    ] {
+        assert_eq!(protected(&pipeline, &active, input), input);
+    }
+}
+
+/// An array between a bound parent and its value key keeps the binding; it never reaches
+/// through an unrelated object below the array.
+#[test]
+fn arrays_between_a_label_and_its_value_keep_the_binding() {
+    let (pipeline, active) = stock();
+    for input in [
+        r#"{"customer_id":[{"value":"C-731284"}]}"#,
+        r#"{"customer_id":[["C-731284"]]}"#,
+        r#"{"customer":[{"id":"C-731284","name":"Acme"}]}"#,
+        r#"{"employee_number":[{"nr":"E-731284"},{"nr":"E-731285"}]}"#,
+    ] {
+        let cleaned = protected(&pipeline, &active, input);
+        assert!(!cleaned.contains("73128"), "{input} leaked: {cleaned}");
+    }
+    for input in [
+        r#"{"customer_id":[{"meta":{"value":"O-731284"}}]}"#,
+        r#"{"customer":[{"value":"O-731284"}]}"#,
+    ] {
+        assert_eq!(protected(&pipeline, &active, input), input);
+    }
+}
+
+/// A session-owned token inside a labelled leaf splits it; the rest of the identifier is
+/// still protected (possibly sensitive under `[outcomes]`), and the owned token keeps its
+/// authority and restores to its own raw value.
+#[test]
+fn owned_tokens_in_a_labelled_leaf_never_expose_the_rest() {
+    let field = gaze_types::FieldProvenance::new(
+        path(&["customer_id"]),
+        gaze_types::JsonScalarType::String,
+        gaze_types::FieldEvidence::ValidatedParse,
+    );
+    let dictionaries = DictionaryBundle::default();
+    let (pipeline, active) = stock();
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let context = gaze::ProtectionContext::strict(active.as_slice(), &dictionaries);
+    let mut transaction = session.begin_transaction();
+    let email = pipeline
+        .protect_text_transaction(&mut transaction, "synthetic@example.invalid", context)
+        .expect("email protects");
+    assert!(!email.contains("example.invalid"), "{email}");
+    for leaf in [format!("{email} C-731284"), format!("C-731284/{email}")] {
+        let clean = pipeline
+            .protect_text_transaction(&mut transaction, &leaf, context.with_field(&field))
+            .expect("labelled leaf protects");
+        assert!(!clean.contains("731284"), "{leaf} leaked: {clean}");
+        assert!(
+            clean.contains(&email),
+            "owned token keeps its authority: {clean}"
+        );
+    }
+    // The owned token alone, or with only separators, adds nothing.
+    let clean = pipeline
+        .protect_text_transaction(
+            &mut transaction,
+            &format!(" {email} "),
+            context.with_field(&field),
+        )
+        .expect("owned token leaf");
+    assert_eq!(clean, format!(" {email} "));
+    transaction.commit().expect("commit");
+
+    // Under `possibly_sensitive = "refuse"` the split leaf refuses, typed, at the field.
+    let (refuse, active) = pipeline_for_probe("[outcomes]\npossibly_sensitive = \"refuse\"\n");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let context = gaze::ProtectionContext::strict(active.as_slice(), &dictionaries);
+    let mut transaction = session.begin_transaction();
+    let email = refuse
+        .protect_text_transaction(&mut transaction, "synthetic@example.invalid", context)
+        .expect("email protects");
+    match refuse.protect_text_transaction(
+        &mut transaction,
+        &format!("{email} C-731284"),
+        context.with_field(&field),
+    ) {
+        Err(ProtectionError::Untransformable {
+            reason, field_path, ..
+        }) => {
+            assert_eq!(reason, UntransformableReason::NoSafeRendering);
+            assert_eq!(field_path, path(&["customer_id"]));
+        }
+        other => panic!("typed refusal expected, got {other:?}"),
+    }
+}
+
+/// A direct labelled-number refusal and a repeat (D6) refusal of the same document are named
+/// together: the first refusal stage never hides a later one.
+#[test]
+fn direct_and_repeat_refusals_are_named_together() {
+    let (pipeline, active) = stock();
+    let error = refusal(
+        &pipeline,
+        &active,
+        r#"{"customer_id":731284,"employee_id":"654321","qty":654321}"#,
+    );
+    let ProtectionError::Untransformable {
+        reason,
+        field_path,
+        others,
+    } = error
+    else {
+        panic!("typed refusal expected, got {error:?}");
+    };
+    assert_eq!(reason, UntransformableReason::JsonNumberNoTextOnlyPath);
+    assert_eq!(field_path, path(&["customer_id"]));
+    assert_eq!(
+        others,
+        vec![(
+            UntransformableReason::JsonNumberNoTextOnlyPath,
+            path(&["qty"])
+        )]
+    );
+    // A repeat into a key joins a direct refusal too, in document order.
+    let error = refusal(
+        &pipeline,
+        &active,
+        r#"{"employee_id":"654321","654321":1,"customer_id":731284}"#,
+    );
+    let ProtectionError::Untransformable {
+        field_path, others, ..
+    } = error
+    else {
+        panic!("typed refusal expected, got {error:?}");
+    };
+    assert_eq!(field_path, path(&["654321"]));
+    assert_eq!(
+        others,
+        vec![(
+            UntransformableReason::JsonNumberNoTextOnlyPath,
+            path(&["customer_id"])
+        )]
+    );
+}
+
+/// A possibly sensitive value refused by `possibly_sensitive = "refuse"` keeps its outcome
+/// and reason in the audit row; the refusal disposition is the row's provenance stage.
+#[test]
+fn refused_possible_values_keep_their_outcome_in_the_audit() {
+    use gaze_types::{PossiblySensitiveReason, ProtectionOutcome};
+    let custom = |name: &str| gaze::PiiClass::custom(name).unwrap();
+    let rows = Rows::default();
+    let (refuse, active) = pipeline_for_probe("[outcomes]\npossibly_sensitive = \"refuse\"\n");
+    let refuse = refuse.with_redaction_logger(rows.clone());
+    refusal(&refuse, &active, r#"{"customer_id":"pending review"}"#);
+    refusal(&refuse, &active, r#"{"employee_id":44190}"#);
+    let entries = rows.0.lock().unwrap();
+    let possible = entries
+        .iter()
+        .find(|row| row.class == custom("customer_id"))
+        .expect("refused possible row");
+    assert_eq!(
+        possible.protection_outcome().unwrap(),
+        Some(ProtectionOutcome::PossiblySensitive(
+            PossiblySensitiveReason::LabelValueShapeUnclear
+        ))
+    );
+    assert_eq!(
+        possible.provenance_stage.as_deref(),
+        Some("primary_pipeline.outcome_refusal")
+    );
+    let confirmed = entries
+        .iter()
+        .find(|row| row.class == custom("employee_id"))
+        .expect("refused confirmed row");
+    assert_eq!(
+        confirmed.protection_outcome().unwrap(),
+        Some(ProtectionOutcome::ConfirmedUntransformable(
+            UntransformableReason::JsonNumberNoTextOnlyPath
+        ))
+    );
+    assert_eq!(
+        confirmed.provenance_stage.as_deref(),
+        Some("primary_pipeline.outcome_refusal")
+    );
+}

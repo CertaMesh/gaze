@@ -996,8 +996,11 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
                 });
             }
             for label in field_labels {
-                // A bare generic key would bind every object's own id, public or not.
-                let folded = label
+                // A bare generic key would bind every object's own id, public or not. Fold as
+                // the recognizer compares labels, shared detection normalization first, so a
+                // fullwidth or zero-width spelling of a generic key is rejected too.
+                let folded = gaze_types::normalize::normalize(label)
+                    .text
                     .chars()
                     .filter(|ch| !matches!(ch, '_' | '-' | '.') && !ch.is_whitespace())
                     .flat_map(char::to_lowercase)
@@ -1395,6 +1398,72 @@ origin = "ported"
 from = "presidio"
 license = "Apache-2.0"
 "#;
+
+    fn field_labelled_pack(label: &str) -> String {
+        format!(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "field-labels"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "synthetic.field"
+class = "custom:synthetic_id"
+enabled = true
+locales = ["global"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "field_labelled"
+value_shape = "identifier"
+field_labels = ["{label}"]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+"#
+        )
+    }
+
+    #[test]
+    fn field_labelled_rejects_generic_labels_in_every_normalized_spelling() {
+        // Validation folds labels the way the recognizer compares them: a fullwidth or
+        // zero-width spelling of a generic key would otherwise bind every object's own id.
+        for generic in [
+            "id",
+            "ID",
+            "_id",
+            "Value",
+            "\u{FF49}\u{FF44}",
+            "i\u{200B}d",
+            "n\u{00AD}o",
+            "\u{FF35}\u{FF35}\u{FF29}\u{FF24}",
+            "",
+        ] {
+            assert!(
+                matches!(
+                    Rulepack::parse(&field_labelled_pack(generic)),
+                    Err(RulepackError::UnsupportedFieldLabelled { .. })
+                ),
+                "{generic:?} must be rejected"
+            );
+        }
+        for specific in [
+            "customer_id",
+            "\u{FF43}\u{FF55}\u{FF53}\u{FF54}_id",
+            "order\u{200B}id",
+        ] {
+            Rulepack::parse(&field_labelled_pack(specific))
+                .unwrap_or_else(|error| panic!("{specific:?} must parse: {error}"));
+        }
+    }
 
     #[test]
     fn parses_core_rulepack_end_to_end() {
