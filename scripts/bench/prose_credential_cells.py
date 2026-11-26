@@ -189,7 +189,7 @@ def records(api, partition):
         public = pem(PUBLIC_LABELS[index % len(PUBLIC_LABELS)])
         whole = b64(private)
         aligned_one = b64(json.dumps({"private_key": private}))
-        aligned_two = b64(json.dumps({"pem": private}))
+        aligned_two = b64(json.dumps({"privkey": private}))
         wrapped = "\n".join(whole[start:start + 76] for start in range(0, len(whole), 76))
         secret = ("apiVersion: v1\nkind: Secret\ntype: kubernetes.io/tls\ndata:\n  tls.crt: {C}\n"
                   "  tls.key: {V}\n" if partition == "test" else

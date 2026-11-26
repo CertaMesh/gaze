@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:9fe95546b08636cb06b9804b4d2a3e9bf44cd1f9fdfadd2bbe8c1dde4bb61927",
+  "id": "gaze-benchmark-v1:37119d11c6890322a6c38e536418ebe33cb523f52c1909182bfb88fa739a730d",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -15,7 +15,7 @@
         "D": 8992,
         "R": 12801
       },
-      "corpus_sha256": "acde379a90c6bf56b8db7ded4bb95cc4590fa05d06e03baa1ce85e0faadefeb2",
+      "corpus_sha256": "75cd1f99dcb1b78185aedab25b195bf0c87babbf6372cefa94ad938aae4c743e",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -125,7 +125,7 @@
       "scripts/bench/probe_government_id_mutants.py": "8a94343e6af1af2a3e4730d09fdfb828fa1299f947141ab657673290c3b4771e",
       "scripts/bench/probe_postal_coverage.py": "f484620e3c7d2f4f100d0b99619a9c05754cb0a9813461cb1e757082a48af364",
       "scripts/bench/producer_build_binding.py": "db267264b37473f81f0cb6db610f48fd2941ad176ed72ba38c8354e7efbcf411",
-      "scripts/bench/prose_credential_cells.py": "4f73f4563c1584c6eed7cb20e6ec082672c31553467833f0c6a63941b6f6a50a",
+      "scripts/bench/prose_credential_cells.py": "15fbdd7a7c6bf2e9ee7e3f69366bc89bbcd4fa8f664fdce20cb7ed3a996f18b8",
       "scripts/bench/prove_refusal_history.py": "7853d4ac0b21d124c7bc01bb4e5393fd7c76fe7d32b7ae974002fd1591c2c697",
       "scripts/bench/proxy_request_order.py": "4ee000a628bc3473b1d4e263bd43ac75d90ded20760c66ae0f5322509094baf8",
       "scripts/bench/publish_mcp_operation_evidence.py": "9c0a379c9283855f1527b63df9770a50151fd112c7b4e196c79cbc36837ad5cd",
@@ -348,7 +348,7 @@
       "A": {
         "documents": 19917,
         "document_ids_sha256": "59e83287c06e5107027aa5426a7d40197377e66746f5ab4e1af99f150b4bd01f",
-        "descriptors_sha256": "2b5fe2340db785ec338ed9145f783f2fe2eb9c2e35057662da1d02728cfa384f"
+        "descriptors_sha256": "a678028cb74bc4c9356455ecffce75e548241db3ac1854e104099163cdadd559"
       },
       "D": {
         "documents": 8992,
