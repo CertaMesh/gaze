@@ -116,7 +116,13 @@ string is decoded with a byte map, so nested positions map back to source
 bytes. Tool selectors come from a declared list of provider envelopes, never
 from a generic key such as `name` alone. Only rebuildable texts are read; the
 metadata-only holdout is reported as unreadable bytes. The report also gives
-the gold bytes a blanket learned-detector veto per position would expose.
+the gold bytes a blanket learned-detector veto per position would expose; for
+unreadable documents it gives only an upper bound. It reads one config (the
+production config unless `--config` names another) and fails when that
+config's population is incomplete. JSON it cannot verify stays a plain
+string: quoted JSON inside a log value, serialized JSON that does not start
+its string, lone surrogate escapes and duplicate keys. Those cases can only
+undercount critical bytes.
 
 ```bash
 uv run --project scripts/bench python scripts/bench/json_structure_census.py report \
@@ -736,7 +742,7 @@ measuring source closure. The
 also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
 The [pipeline-producer specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
 pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
-The [current specification](../../docs/reference/benchmarks/specifications/4696391e71531dd1a47ccad4ac7cbbb83626633a3058dbdcb002cac4fcf51dfb.json)
+The [current specification](../../docs/reference/benchmarks/specifications/3069a82eaf9b0e4303ed4c8b97511ce723303160d153edd12bdd4805f0e02efa.json)
 differs from it only by adding `json_structure_census.py` to the measuring closure.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,

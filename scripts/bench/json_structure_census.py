@@ -55,16 +55,19 @@ CRITICAL_ROLES = frozenset({KEY, NUMBER, LITERAL, SELECTOR, ARGUMENT, SYNTAX, LO
 LEARNED_SOURCES = ("ner", "nym-")
 
 # Declared tool-call carriers. An object is an envelope when it has a string
-# selector member and an argument member (OpenAI `function` and legacy
+# selector member (`name`, `tool` or `tool_name`) beside an argument member
+# holding an object or serialized JSON: OpenAI `function` and legacy
 # `function_call`, Anthropic `tool_use`, Gemini `functionCall`, MCP
-# `tools/call` params), or an explicit `tool`/`tool_name` string, or a bare
-# `arguments`/`args` member. `name` alone never makes a selector.
+# `tools/call` params. A bare `arguments`/`args` member is an argument
+# subtree without a selector. `name` alone never makes a selector, and a
+# JSON-Schema tool definition (`parameters`) is not a call.
 CARRIERS = {
-    "selector_with_arguments": ("name",),
-    "explicit_selectors": ("tool", "tool_name"),
-    "arguments": ("arguments", "args", "input", "parameters"),
+    "selectors": ("name", "tool", "tool_name"),
+    "arguments": ("arguments", "args", "input"),
     "bare_arguments": ("arguments", "args"),
 }
+# Surfaces whose text is a log or field carrier (`key=value`, `key: value`).
+_LOG_SURFACE = re.compile(r"(?:^|_)log(?:_|$)")
 # Serialized JSON nested deeper than this stays an opaque string value.
 MAX_SERIALIZATION_DEPTH = 16
 _LOG_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*\s*[=:]")
@@ -240,7 +243,7 @@ def _complete_values(text: str) -> Iterable[tuple[Node, list[tuple[int, int]]]]:
         parser = _Parser(text)
         try:
             node = parser.value(i)
-        except (ValueError, IndexError):
+        except (ValueError, IndexError, RecursionError):
             i += 1
             continue
         if node.kind == "object" or any(item.kind in ("object", "array") for item in node.items):
@@ -270,12 +273,15 @@ class Structure:
 def _envelope(node: Node) -> tuple[set[str], set[str]]:
     """Selector and argument member names this object declares, if any."""
     members = {key.value: value for key, value in node.members}
-    selectors = {name for name in CARRIERS["explicit_selectors"]
-                 if members.get(name) is not None and members[name].kind == "string"}
-    arguments = {name for name in CARRIERS["arguments"] if name in members}
-    if arguments:
-        selectors |= {name for name in CARRIERS["selector_with_arguments"]
-                      if members.get(name) is not None and members[name].kind == "string"}
+
+    def structured(value: Node) -> bool:
+        return value.kind == "object" or (
+            value.kind == "string" and value.value.lstrip(_WHITESPACE)[:1] in ("{", "["))
+
+    arguments = {name for name in CARRIERS["arguments"]
+                 if name in members and structured(members[name])}
+    selectors = {name for name in CARRIERS["selectors"]
+                 if members.get(name) is not None and members[name].kind == "string"} if arguments else set()
     if not selectors:
         arguments &= set(CARRIERS["bare_arguments"])
     return selectors, arguments
@@ -335,16 +341,25 @@ def structure(text: str, *, log_carrier: bool = False) -> Structure:
 
 
 def _mark_log_keys(text: str, offsets: Sequence[int], result: Structure) -> None:
-    """`key=` / `key:` tokens outside quotes and outside JSON, at a token start."""
+    """`key=` / `key:` tokens outside quotes and outside JSON, at a token start.
+
+    A quote opens only at a value start (after `=`, `:` or whitespace), a
+    backslash escapes the next character inside it, and a newline ends it, so
+    an apostrophe in prose or an escaped quote cannot hide the next key.
+    """
     quote = None
     i = 0
     while i < len(text):
         ch = text[i]
         if quote:
-            quote = None if ch == quote else quote
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote or ch == "\n":
+                quote = None
             i += 1
             continue
-        if ch in "\"'":
+        if ch in "\"'" and (i == 0 or text[i - 1] in "=: \t\n"):
             quote = ch
             i += 1
             continue
@@ -407,34 +422,51 @@ def fragments(document_id: str, layer: str, raw: bytes, gold: Sequence[tuple[int
     """Maximal runs of false-positive bytes sharing role, class and detector."""
     gold_bytes = {b for start, end in gold for b in range(start, end)}
     excluded = _bridging_whitespace(raw, gold, traces)
-    owner: dict[int, tuple[str, tuple[str, ...]]] = {}
+    escapes = shape.escapes if shape else []
+    owner: dict[int, tuple[str, tuple[str, ...], bool]] = {}
     for trace in traces:
         sources = _byte_sources(trace)
+        # A protected range whose own edge falls inside an escape sequence
+        # replaces half of it, whatever position the bytes are in.
+        cuts = any(a < edge < b for a, b in escapes for edge in (trace["raw_start"], trace["raw_end"]))
         for offset in range(trace["raw_start"], trace["raw_end"]):
             if offset in gold_bytes or offset in excluded:
                 continue
-            label, known = owner.get(offset, (trace["class"], ()))
-            owner[offset] = (label, tuple(sorted(set(known) | set(sources.get(offset, ())))))
-    escapes = shape.escapes if shape else []
+            label, known, cut = owner.get(offset, (trace["class"], (), False))
+            owner[offset] = (label, tuple(sorted(set(known) | set(sources.get(offset, ())))), cut or cuts)
     rows: list[dict] = []
     for offset in sorted(owner):
-        label, sources = owner[offset]
+        label, sources, cut = owner[offset]
         role = shape.roles[offset] if shape and shape.roles[offset] else PROSE
-        key = (role, label, sources)
+        key = (role, label, sources, cut)
         if rows and rows[-1]["end"] == offset and rows[-1]["_key"] == key:
             rows[-1]["end"] += 1
             continue
         rows.append({"document_id": document_id, "layer": layer, "start": offset, "end": offset + 1,
-                     "role": role, "class": label, "sources": list(sources), "_key": key})
+                     "role": role, "class": label, "sources": list(sources), "_key": key, "_cut": cut})
     for row in rows:
         del row["_key"]
-        row["critical"] = row["role"] in CRITICAL_ROLES
-        row["splits_escape"] = any(a < row["start"] < b or a < row["end"] < b for a, b in escapes)
-        row["critical"] = row["critical"] or row["splits_escape"]
+        row["splits_escape"] = key_cut = row.pop("_cut")
+        row["critical"] = row["role"] in CRITICAL_ROLES or key_cut
     return rows
 
 
-def learned_veto_exposure(raw_length: int, gold: Sequence[tuple[int, int]], traces: Sequence[dict],
+def _learned_only(trace: dict) -> bool:
+    sources = {s for names in _byte_sources(trace).values() for s in names}
+    return bool(sources) and all(_is_learned(s) for s in sources)
+
+
+def learned_only_gold(gold: Sequence[tuple[int, int]], traces: Sequence[dict]) -> int:
+    """Gold bytes only learned-only traces protect: what any learned veto could expose."""
+    gold_intervals = score.merge_intervals(gold)
+    def covered(selected):
+        protected = score.merge_intervals([(t["raw_start"], t["raw_end"]) for t in selected])
+        return score.interval_length(gold_intervals) - score.interval_length(
+            score.subtract_intervals(gold_intervals, protected))
+    return covered(traces) - covered([t for t in traces if not _learned_only(t)])
+
+
+def learned_veto_exposure(gold: Sequence[tuple[int, int]], traces: Sequence[dict],
                           shape: Structure | None) -> dict[str, int]:
     """Gold bytes a blanket learned-detector veto would expose, per veto.
 
@@ -445,10 +477,7 @@ def learned_veto_exposure(raw_length: int, gold: Sequence[tuple[int, int]], trac
     """
     if shape is None:
         return {}
-
-    def learned_only(trace: dict) -> bool:
-        sources = {s for names in _byte_sources(trace).values() for s in names}
-        return bool(sources) and all(_is_learned(s) for s in sources)
+    learned_only = _learned_only
 
     def touches(trace: dict, role: str) -> bool:
         return any(shape.roles[b] == role for b in range(trace["raw_start"], trace["raw_end"]))
@@ -498,16 +527,40 @@ def _texts(header: dict) -> tuple[dict[str, tuple[str, str]], str]:
     return texts, corpus["corpus_sha256"]
 
 
-def census(record_path: Path) -> dict:
+def _selected_rows(header: dict, rows: Sequence[dict], config: str) -> list[dict]:
+    """The observations of one config, checked complete against its populations.
+
+    A record captured without `--policy` holds several configs; mixing them
+    double-counts, and a truncated record would read as fewer false positives.
+    """
+    card = header["scorecard"]
+    runs = [("C", run) for run in card.get("runs", [])]
+    runs += [(layer, run) for layer in ("A", "D", "R")
+             for run in card.get("layers", {}).get(layer, {}).get("runs", [])]
+    expected = set()
+    for layer, run in runs:
+        if run["config"] == config:
+            expected.update((layer, uid) for uid in run["scored_population"]["document_ids"]
+                            + run["failed_closed_population"]["document_ids"])
+    selected = [row for row in rows if row["config"] == config]
+    observed = [(row["layer"], row["document_id"]) for row in selected]
+    if not expected or len(set(observed)) != len(observed) or set(observed) != expected:
+        raise CensusError(f"record does not hold exactly one complete population for config {config}")
+    return selected
+
+
+def census(record_path: Path, *, config: str | None = None) -> dict:
     header, rows = records._read(record_path)
+    config = config or agentic.production_config(header["scorecard"])
     documents = {row["id"]: row for row in header["documents"]}
     texts, corpus_sha256 = _texts(header)
     ledger: list[dict] = []
     exposure: Counter = Counter()
     exposure_documents: Counter = Counter()
     unreadable = Counter()
+    unmeasured_exposure = Counter()
     refused = Counter()
-    for row in rows:
+    for row in _selected_rows(header, rows, config):
         uid = row["document_id"]
         document = documents.get(uid)
         if document is None or document["layer"] != row["layer"]:
@@ -518,32 +571,39 @@ def census(record_path: Path) -> dict:
             continue
         gold = [(start, end) for start, end, _ in document["gold"]]
         traces = response["final_protection_trace"]
+        if not all(records.has_lineage(t) for t in traces):
+            raise CensusError("record has no trace lineage (observation schema v2 is required)")
         if uid not in texts:
             unreadable[row["layer"]] += score.interval_length(score.subtract_intervals(
                 score.merge_intervals([(t["raw_start"], t["raw_end"]) for t in traces]),
                 score.merge_intervals(gold)))
+            unmeasured_exposure[row["layer"]] += learned_only_gold(gold, traces)
             continue
         text, surface = texts[uid]
         raw = text.encode("utf-8")
         if len(raw) != document["utf8_bytes"]:
             raise CensusError(f"rebuilt text length disagrees with the record: {uid}")
-        shape = structure(text, log_carrier="log" in surface)
+        shape = structure(text, log_carrier=bool(_LOG_SURFACE.search(surface)))
         ledger.extend(fragments(uid, row["layer"], raw, gold, traces, shape))
-        for name, value in learned_veto_exposure(len(raw), gold, traces, shape).items():
+        for name, value in learned_veto_exposure(gold, traces, shape).items():
             if value:
                 exposure[(row["layer"], name)] += value
                 exposure_documents[(row["layer"], name)] += 1
     return {
         "schema_version": SCHEMA_VERSION,
         "report_only": True,
+        "config": config,
         "record_sha256": score.sha256_file(record_path),
         "benchmark_spec_id": header.get("benchmark_spec_id"),
         "generator_corpus_sha256": corpus_sha256,
         "summary": summarize(ledger),
+        # Measured on rebuildable documents only; for the others the upper bound
+        # is every gold byte that only learned-only traces protect.
         "learned_veto_exposure": [
             {"layer": layer, "veto": name, "gold_bytes": exposure[(layer, name)],
              "documents": exposure_documents[(layer, name)]}
             for layer, name in sorted(exposure)],
+        "unmeasured_learned_veto_exposure_upper_bound": dict(sorted(unmeasured_exposure.items())),
         "unreadable_false_positive_bytes": dict(sorted(unreadable.items())),
         "refused_documents": dict(sorted(refused.items())),
         # Value-free: offsets only. The gate needs the critical ones.
@@ -592,6 +652,8 @@ def gate(base: dict, candidate: dict) -> list[str]:
         raise CensusError("base and candidate measured different corpora")
     if base.get("benchmark_spec_id") != candidate.get("benchmark_spec_id"):
         raise CensusError("base and candidate use different benchmark specifications")
+    if base.get("config") != candidate.get("config"):
+        raise CensusError("base and candidate measured different configs")
     known = defaultdict(set)
     for row in base["critical_fragments"]:
         known[row["document_id"]].update(range(row["start"], row["end"]))
@@ -629,6 +691,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report_parser = commands.add_parser("report", help="write the census of one record")
     report_parser.add_argument("record", type=Path)
     report_parser.add_argument("--output", type=Path)
+    report_parser.add_argument("--config", help="observation config (default: the production config)")
     report_parser.add_argument("--markdown", action="store_true")
     check_parser = commands.add_parser("check", help="recompute a committed census")
     check_parser.add_argument("record", type=Path)
@@ -639,7 +702,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "report":
-            value = census(args.record)
+            value = census(args.record, config=args.config)
             text = markdown(value) if args.markdown else json.dumps(value, indent=1, sort_keys=True) + "\n"
             if args.output:
                 args.output.write_text(text, encoding="utf-8")

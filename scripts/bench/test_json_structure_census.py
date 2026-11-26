@@ -53,6 +53,12 @@ def test_name_is_a_selector_only_inside_a_declared_carrier():
     assert roles_of(anthropic, "20") == {census.ARGUMENT}
     # `input` alone, without a selector, is an ordinary field.
     assert roles_of('{"input":{"limit":"20"}}', "20") == {census.STRING}
+    # A selector needs a structured argument member beside it.
+    assert roles_of('{"tool":"hammer","price":3}', "hammer") == {census.STRING}
+    assert roles_of('{"name":"Dr. Schmidt","input":"hello"}', "Dr. Schmidt") == {census.STRING}
+    # A JSON-Schema tool definition is not a call.
+    definition = '{"name":"get_account","parameters":{"type":"object"}}'
+    assert roles_of(definition, "get_account") == {census.STRING}
 
 
 def test_serialized_arguments_map_back_to_source_bytes():
@@ -92,6 +98,15 @@ def test_log_keys_are_outside_quotes_only():
     assert roles_of(text, "result=", log=True) == {census.LOG_KEY}
     assert roles_of(text, "fe80:", occurrence=1, log=True) == {None}
     assert roles_of(text, "level=", log=False) == {None}
+    # An apostrophe in prose or an escaped quote does not hide the next key.
+    assert roles_of("msg=can't connect user=bob", "user=", log=True) == {census.LOG_KEY}
+    assert roles_of('msg="say \\"hi" user=bob', "user=", log=True) == {census.LOG_KEY}
+
+
+def test_log_carriers_are_named_surfaces_only():
+    assert census._LOG_SURFACE.search("adjacent_log_kv")
+    assert census._LOG_SURFACE.search("coverage_log")
+    assert not census._LOG_SURFACE.search("credentials_review_metadata_logprob")
 
 
 def test_fragments_split_by_role_and_flag_critical_bytes():
@@ -120,6 +135,35 @@ def test_a_range_cutting_an_escape_is_critical_even_in_a_plain_value():
     assert rows and all(r["critical"] for r in rows if r["start"] < escape + 6)
 
 
+def test_escape_flag_comes_from_trace_edges_not_fragment_edges():
+    text = '{"note":"a\\u00e9b"}'
+    escape = len(text[:text.index("\\u00e9")].encode())
+    whole = trace(escape, escape + 6, sources=(("nym-small-int8", "winner"),))
+    whole["provenance"]["contributions"] = [
+        {"recognizer_id": "nym-small-int8", "role": "winner", "raw_start": escape, "raw_end": escape + 3},
+        {"recognizer_id": "rule.x", "role": "co_member", "raw_start": escape + 3, "raw_end": escape + 6}]
+    rows = census.fragments("d", "D", text.encode(), [], [whole], census.structure(text))
+    assert len(rows) == 2 and not any(r["critical"] for r in rows)
+    # A cut escape stays critical even when gold takes the cut half.
+    rows = census.fragments("d", "D", text.encode(), [(escape, escape + 3)],
+                            [trace(escape - 1, escape + 3)], census.structure(text))
+    assert [(r["start"], r["critical"]) for r in rows] == [(escape - 1, True)]
+
+
+def test_one_complete_config_is_read():
+    def run(ids):
+        return {"config": "pass2-ner", "scored_population": {"document_ids": ids},
+                "failed_closed_population": {"document_ids": []}}
+    header = {"scorecard": {"layers": {"A": {"runs": [run(["a", "b"])]}}}}
+    rows = [{"layer": "A", "document_id": uid, "config": config}
+            for uid in ("a", "b") for config in ("pass2-ner", "rule-floor-extended")]
+    assert len(census._selected_rows(header, rows, "pass2-ner")) == 2
+    with pytest.raises(census.CensusError):
+        census._selected_rows(header, rows[:2], "pass2-ner")  # b is missing
+    with pytest.raises(census.CensusError):
+        census._selected_rows(header, rows, "policy-file")
+
+
 def test_whitespace_bridging_two_gold_parts_is_not_a_false_positive():
     text = "Dr. Schmidt"
     raw = text.encode()
@@ -134,10 +178,10 @@ def test_learned_veto_exposure_counts_only_learned_only_gold():
     value = text.index("819903")
     gold = [(value, value + 6)]
     shape = census.structure(text)
-    learned = census.learned_veto_exposure(len(text), gold, [trace(value, value + 6)], shape)
+    learned = census.learned_veto_exposure(gold, [trace(value, value + 6)], shape)
     assert learned[census.NUMBER] == 6 and learned["outside_one_string_leaf"] == 6
     assert learned[census.KEY] == 0
-    ruled = census.learned_veto_exposure(len(text), gold, [trace(value, value + 6, sources=(
+    ruled = census.learned_veto_exposure(gold, [trace(value, value + 6, sources=(
         ("nym-small-int8", "winner"), ("customer_id.labelled", "co_member")))], shape)
     assert ruled[census.NUMBER] == 0
 
@@ -187,3 +231,5 @@ def test_v30_release_record_census(v30):
 def test_v30_blanket_learned_veto_would_expose_record_ids(v30):
     exposure = {r["veto"]: (r["documents"], r["gold_bytes"]) for r in v30["learned_veto_exposure"]}
     assert exposure == {"number": (4, 24), "outside_one_string_leaf": (4, 24)}
+    # Layer C cannot be rebuilt, so its exposure is only bounded.
+    assert set(v30["unmeasured_learned_veto_exposure_upper_bound"]) == {"C"}

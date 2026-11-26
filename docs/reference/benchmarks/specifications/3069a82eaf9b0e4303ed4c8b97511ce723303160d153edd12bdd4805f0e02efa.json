@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:4696391e71531dd1a47ccad4ac7cbbb83626633a3058dbdcb002cac4fcf51dfb",
+  "id": "gaze-benchmark-v1:3069a82eaf9b0e4303ed4c8b97511ce723303160d153edd12bdd4805f0e02efa",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -82,7 +82,7 @@
       "scripts/bench/invisible_separator_cells.py": "5d0e1d8beff7b01dac1971bd4c01e264ee5f9fc67795eb9e621ba071d4117324",
       "scripts/bench/ip_adjacent_gain.py": "5bd80284889be703cbbce018cbf35d74010a6eacc9b195c36398ebc41d8fd006",
       "scripts/bench/issuer_credential_cells.py": "869cb0809040c4b3d3d8d7fe797dc909ec5c252cf509b1516e11f4260e7af398",
-      "scripts/bench/json_structure_census.py": "eb549399afce8821b8e272de048b22ff9dc3ef8e0b282f87a1142772b05af767",
+      "scripts/bench/json_structure_census.py": "7ffe2ab04584c87ee5e534b756e15b5b87a686f4321dc48153d11a6efaaffb7a",
       "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",
       "scripts/bench/known_record_arm.py": "3aa74c2e8993e02298b23f65e52d2a1e7bf441f6513381e463fb035c1f568ab0",
       "scripts/bench/known_record_attribution.py": "34e6f26aaab7378da4505306badb14cadd8c70932fd4460f0e0182f97d6d720f",
