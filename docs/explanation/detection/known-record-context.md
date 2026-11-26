@@ -24,8 +24,8 @@ Audit source IDs contain class and slot, never values.
 | Cards, IBANs, national IDs, Steuer IDs | Exact and flexible whitespace |
 | Passports, phones | Exact |
 | Full names | Exact, case-folded, combined whitespace/case |
-| Single names | Case-folded or corroborated |
-| Address parts, exact single names, whitespace-only full-name variants, email, unlisted pairs | Off |
+| Single names | Any case spelling, or corroborated for common names |
+| Address parts, email, unlisted pairs | Off |
 
 `record_match_kinds` replaces a group's defaults. Record terms first use the shared text detection
 view: fullwidth ASCII and Unicode space separators fold, nonbreaking hyphens
@@ -41,8 +41,12 @@ fragments, and typos are not inferred.
 [Common single-token names](../../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
 such as `Will`, need NER person evidence, an adjacent record name, or a full
 record name elsewhere with a name-position cue. Unlisted names such as `Maren`
-match changed case by default; same-case exact copies need opt-in or another
-detector. Default Nym has no person label, so model corroboration uses NER.
+match in any letter case by default, including the declared spelling.
+A spelling closer to the declared value always satisfies a looser enabled kind:
+an exact occurrence passes `case_folded` and `whitespace_flexible`, and an exact,
+case-only or whitespace-only variant passes `whitespace_case_folded`. Letter case
+never decides whether a declared value is protected; common single names stay
+behind the corroboration rule in every case. Default Nym has no person label, so model corroboration uses NER.
 
 Unsafe short values refuse the whole call with the closed reason
 `caller_value_too_short`. This applies to clean, daemon v1 and v2, embedded

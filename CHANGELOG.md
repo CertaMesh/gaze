@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- A caller-known record value is no longer left raw because it appears in its
+  declared spelling. Match kinds are now ordered: an exact occurrence satisfies
+  every looser enabled kind, so a single name declared as `Qorvex` is protected
+  as `Qorvex` wherever `qorvex` already was, and a same-case full name with
+  extra spaces is protected wherever its upper-case copy was. Common single
+  names still need corroboration in every letter case. Record dictionaries and
+  the MCP host-context guess check share the rule.
+
 - Update bundled SQLite through `rusqlite` 0.41, `pulldown-cmark` to 0.13.6,
   and `rmcp` to 3.9.0 to address RUSTSEC-2026-0459, RUSTSEC-2026-0433,
   RUSTSEC-2026-0457, and RUSTSEC-2026-0462. Update `rustix` to 1.1.6

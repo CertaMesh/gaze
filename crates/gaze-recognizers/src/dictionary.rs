@@ -267,19 +267,20 @@ impl Recognizer for DictionaryRecognizer {
                 } else {
                     record_match_kind(matched, term)
                 };
-                entry
-                    .record_allowed_kinds()
-                    .unwrap_or(&self.record_allowed_kinds)
-                    .contains(&kind)
-                    && (!corroborate_single_name
-                        || corroborated_record_name(
-                            input,
-                            normalized_text.as_ref(),
-                            *start,
-                            *end,
-                            ctx,
-                            &self.dictionary_name,
-                        ))
+                record_kind_allowed(
+                    kind,
+                    entry
+                        .record_allowed_kinds()
+                        .unwrap_or(&self.record_allowed_kinds),
+                ) && (!corroborate_single_name
+                    || corroborated_record_name(
+                        input,
+                        normalized_text.as_ref(),
+                        *start,
+                        *end,
+                        ctx,
+                        &self.dictionary_name,
+                    ))
             })
             .filter(|(start, end, _)| emitted_spans.insert((*start, *end)))
             .map(|(start, end, index)| {
@@ -325,6 +326,26 @@ fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
     record_match_kind_with_folded(matched, term, || {
         matched.case_fold().collect::<String>() == term.case_fold().collect::<String>()
     })
+}
+
+/// A spelling closer to the declared value satisfies every looser kind: an
+/// exact occurrence passes `case_folded`, and an exact or case-only variant
+/// passes `whitespace_case_folded`. Letter case alone never decides whether a
+/// declared value is protected; common single names keep their own
+/// `corroborated_single` rule.
+pub(crate) fn record_kind_allowed(
+    kind: RecordMatchKind,
+    allowed: &BTreeSet<RecordMatchKind>,
+) -> bool {
+    use RecordMatchKind::*;
+    let satisfies: &[RecordMatchKind] = match kind {
+        Exact => &[Exact, WhitespaceFlexible, CaseFolded, WhitespaceCaseFolded],
+        WhitespaceFlexible => &[WhitespaceFlexible, WhitespaceCaseFolded],
+        CaseFolded => &[CaseFolded, WhitespaceCaseFolded],
+        WhitespaceCaseFolded => &[WhitespaceCaseFolded],
+        CorroboratedSingle => &[CorroboratedSingle],
+    };
+    satisfies.iter().any(|looser| allowed.contains(looser))
 }
 
 pub(crate) fn record_match_kind_with_folded(
@@ -955,8 +976,25 @@ mod tests {
                 .len(),
             1
         );
+        // The exact spelling satisfies the looser kind, so case alone never leaves it raw.
+        assert_eq!(
+            recognizer
+                .detect("Maren Okafor", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
+        let recognizer = recognizer
+            .with_record_allowed_kinds([RecordMatchKind::CaseFolded].into_iter().collect());
+        assert_eq!(
+            recognizer
+                .detect("Maren Okafor", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
         assert!(recognizer
-            .detect("Maren Okafor", &detect_context)
+            .detect("Maren  Okafor", &detect_context)
             .unwrap()
             .is_empty());
     }

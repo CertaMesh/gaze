@@ -5,8 +5,8 @@ use aho_corasick::{automaton::Automaton, nfa::contiguous::NFA, Anchored};
 use gaze_types::{PiiClass, RecordMatchKind};
 
 use crate::dictionary::{
-    fold_with_original_offsets, has_identifier_component, record_match_kind_with_folded,
-    record_name_is_common_folded,
+    fold_with_original_offsets, has_identifier_component, record_kind_allowed,
+    record_match_kind_with_folded, record_name_is_common_folded,
 };
 
 /// Matching semantics of the response recognizer that owns a term.
@@ -276,7 +276,7 @@ impl<'a> RecordGuessMatcher<'a> {
                         kind,
                         RecordMatchKind::Exact | RecordMatchKind::WhitespaceFlexible
                     );
-                compiled_match && allowed_kinds.contains(&kind)
+                compiled_match && record_kind_allowed(kind, allowed_kinds)
             }
         }
     }
