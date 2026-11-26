@@ -1532,7 +1532,10 @@ mod normalized_duplicate_tests {
     fn ineligible_duplicate_cannot_hide_an_eligible_match_kind() {
         let entry = DictionaryEntry::new(
             "tag",
-            vec!["ＱORVEX".into(), "qorvex".into()],
+            // The earlier term is only a case-folded match here; exact-only must not
+            // let it shadow the exact duplicate. (An exact occurrence satisfies every
+            // looser kind, so the ineligible duplicate has to be the looser spelling.)
+            vec!["qorvex".into(), "ＱORVEX".into()],
             true,
             DictionarySource::Cli,
         )
@@ -1541,7 +1544,7 @@ mod normalized_duplicate_tests {
         let context = DetectContext::new(&[LocaleTag::Global], &dictionaries);
         let recognizer = DictionaryRecognizer::new("tag", PiiClass::Name, "tag", true, "counter")
             .with_unicode_case_insensitive()
-            .with_record_allowed_kinds([RecordMatchKind::CaseFolded].into_iter().collect());
+            .with_record_allowed_kinds([RecordMatchKind::Exact].into_iter().collect());
         let hits = recognizer.detect("QORVEX", &context).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 0..6);
