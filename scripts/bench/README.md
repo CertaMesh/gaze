@@ -453,6 +453,10 @@ The other half keep the same non-ASCII spelling in record and text, with gold
 spans covering the original UTF-8 bytes. Every pair has a one-digit-off public
 fixture reference as its benign twin. The pinned v6 corpus hash is
 `ead514a882f8a19dfac18a7f94cbf706eaeee32e78cd2d54342b84a515246b56`.
+Generator version 7 rebuilds the unlisted-name control with rare declared names
+and superstring twins, and adds `control_uncorroborated_word_name` for given
+names that are also ordinary words. It has 120 pairs; the pinned v7 corpus hash
+is `9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0`.
 The model-free tests pin all pre-existing v5 pairs byte for byte, including
 their match kinds and buckets. Keep historical v5 results under their original
 specification; compare each implementation against the same v6 cells.
@@ -719,10 +723,12 @@ pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
 The [field-label specification](../../docs/reference/benchmarks/specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json)
 differs from it only in the validation vocabulary, which adds the field-labelled
 record-ID rules `customer_id.field`, `employee_id.field` and `record_id.field`.
-The [current specification](../../docs/reference/benchmarks/specifications/b837cae9c1e95e3511c34bcb3325408f43094dab99760c68dfc09c3a0f7c508a.json)
+The [current specification](../../docs/reference/benchmarks/specifications/5a4a29069c85f2df3fa0af2c4b98164fcd5d5ef7347797e070b781f3bada60fc.json)
 differs from the field-label one only in the `known_record_cells.py` and
-`known_record_arm.py` digests: known-record cell generator v7 and the
-generated English name-word dictionary.
+`known_record_arm.py` digests: known-record cell generator v7, which reads
+the generated English name-word dictionary. That dictionary is a crate asset,
+not a harness input; the pinned v7 corpus hash, not the specification, detects
+any change to it.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

@@ -1103,8 +1103,6 @@ class VariantTally:
 
 # The product's default allowed kinds per record group
 # (`Context::record_allowed_match_kinds`); the OFF arm states them explicitly.
-# Kinds are ordered: a spelling closer to the record value satisfies every
-# looser enabled kind, so adding a probe kind can also protect closer spellings.
 DEFAULT_MATCH_KINDS: dict[str, tuple[str, ...]] = {
     "name_single": ("case_folded", "corroborated_single"),
     "name_multi": ("exact", "case_folded", "whitespace_case_folded"),
@@ -1235,8 +1233,7 @@ def prove(args: argparse.Namespace) -> dict[str, object]:
         },
         # Controls show their effect here; probe kinds are off in both arms.
         "default_kinds_vs_no_record": _compare(pairs, scored, responses["no_record"], responses["record_default_kinds"]),
-        # Only the probe kinds differ between these arms; with ordered kinds a
-        # looser probe kind can also cover closer spellings.
+        # Only the probe kinds differ between these arms.
         "probe_kinds_on_vs_default": _compare(pairs, scored, responses["record_default_kinds"], responses["record_probe_kinds_on"]),
     }
 

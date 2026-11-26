@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:b837cae9c1e95e3511c34bcb3325408f43094dab99760c68dfc09c3a0f7c508a",
+  "id": "gaze-benchmark-v1:5a4a29069c85f2df3fa0af2c4b98164fcd5d5ef7347797e070b781f3bada60fc",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -85,7 +85,7 @@
       "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",
       "scripts/bench/known_record_arm.py": "41e2a585eb2eb7707348123dddfeb64ae19638599e848e067d6c064c8718a997",
       "scripts/bench/known_record_attribution.py": "34e6f26aaab7378da4505306badb14cadd8c70932fd4460f0e0182f97d6d720f",
-      "scripts/bench/known_record_cells.py": "34beed317b42c45b9c87e92cabc66c73fc21c4142050b4aa5f8eb65e8e7d6924",
+      "scripts/bench/known_record_cells.py": "fd23bacc4cc0c74fc813bc3eb6ee81e1be9d811938e5107c81d3173137c46c04",
       "scripts/bench/known_record_gain.py": "fe2007f6ed5e3f3a82bb3b1f7f9c3c17821488bcbabef62b0b6fa7557b1b2a6c",
       "scripts/bench/known_record_shipping_gate.py": "d78c3d9d8ce0a0146f56678befd5c722ec86d34cd562a3341e97346dfd6b8a6a",
       "scripts/bench/layer_display.py": "b37c4f763bc5f7eee4340ac0cfd041e4434f279449a31adf5177f30055434df1",

@@ -83,6 +83,7 @@ def ssa_names(archive: bytes) -> set[str]:
                 name, sex, count = line.split(",")
                 by_sex[sex].append((-int(count), name))
             for ranked in by_sex.values():
+                # Top 1,000 by count; ties at the cut-off break alphabetically.
                 names.update(name.casefold() for _, name in sorted(ranked)[:TOP_RANK])
     return names
 
