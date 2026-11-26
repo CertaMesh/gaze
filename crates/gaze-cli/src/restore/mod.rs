@@ -65,8 +65,15 @@ pub(crate) fn run_restore(
     let assessment = session
         .assess_restore_text(&text)
         .map_err(|_| CliError::Pipeline)?;
+    // A strict refusal of a malformed spelling must not leave a success row behind.
+    let malformed_refusal = restore_mode == RestoreMode::Strict
+        && gaze::token_shape::validate_restore_shapes(&text).is_err();
     let restore_telemetry = if telemetry_enabled || audit_db.is_some() {
-        let telemetry = assessment.telemetry(restore_policy(restore_mode));
+        let mut telemetry = assessment.telemetry(restore_policy(restore_mode));
+        if malformed_refusal {
+            telemetry.unknown_token_count += 1;
+            telemetry.restore_decision = gaze::RestoreDecision::Failed;
+        }
         if let Some(path) = audit_db {
             persist_restore_telemetry(path, &session, telemetry.clone())?;
         }
@@ -74,7 +81,7 @@ pub(crate) fn run_restore(
     } else {
         None
     };
-    let restore_warning = restore_pass2_validate(&assessment, restore_mode)?;
+    let restore_warning = restore_pass2_validate(&text, &assessment, restore_mode)?;
     let text = assessment.into_restored().text;
 
     if output == OutputFormat::Text {
