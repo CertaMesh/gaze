@@ -73,7 +73,8 @@ before any work runs.
 
 `gaze restore --session-file <PATH>` reads UTF-8 text on stdin and prints the
 restored text exactly. Restore semantics match the JSON form: strict mode
-rejects a token the session did not issue with `UnknownToken`, a tampered
+rejects a token the session did not issue, or a malformed token spelling such
+as `<deadbeef:Email_>` or a bare `<name>` tag, with `UnknownToken`, a tampered
 session fails with `InvalidSignature`, and an expired one with `BlobExpired`,
 all exit `3` with nothing on stdout. A missing file, or one that is not a
 session file, fails with `SessionFile` (exit `4`). With `--restore-mode tolerant`,

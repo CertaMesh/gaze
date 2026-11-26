@@ -964,22 +964,34 @@ fn t03b_strict_restore_refuses_malformed_spellings_like_the_library() {
             parse_stderr_variant(&stderr),
             json!({ "error": "UnknownToken", "exit": 3, "token": bad })
         );
-
-        // Tolerant mode keeps passing the spelling through unchanged.
-        let (code, stdout, stderr) =
-            restore_json_with_args(&["--restore-mode=tolerant"], &blob, &text);
-        assert_eq!(
-            code,
-            Some(0),
-            "{bad}: stderr={}",
-            String::from_utf8_lossy(&stderr)
-        );
-        let resp: Value = serde_json::from_slice(&stdout).unwrap();
-        assert_eq!(
-            resp["text"].as_str().unwrap(),
-            format!("Email is alice@example.invalid please. then {bad} here")
-        );
     }
+
+    // Tolerant mode keeps passing the spelling through unchanged.
+    let bad = "<deadbeef:Email_>";
+    let text = format!("{clean_text} then {bad} here");
+    let (code, stdout, stderr) = restore_json_with_args(&["--restore-mode=tolerant"], &blob, &text);
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    let resp: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(
+        resp["text"].as_str().unwrap(),
+        format!("Email is alice@example.invalid please. then {bad} here")
+    );
+
+    // The audit row of a strict refusal records a failed restore, not a success.
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("restore.sqlite");
+    let audit_arg = format!("--audit-db={}", audit_path.display());
+    let (code, _, _) = restore_json_with_args(&["--restore-mode=strict", &audit_arg], &blob, &text);
+    assert_eq!(code, Some(3));
+    let rows = SqliteLogger::query(&audit_path, &{
+        let mut filter = AuditFilter::default();
+        filter.restore_events_only = true;
+        filter
+    })
+    .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].restore_decision.as_deref(), Some("failed"));
+    assert_eq!(rows[0].restore_unknown_token_count, Some(1));
 }
 
 // -----------------------------------------------------------------------

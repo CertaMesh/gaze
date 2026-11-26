@@ -184,7 +184,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `gaze restore --restore-mode strict` and daemon v1 `restore` now refuse
   malformed token spellings such as `<deadbeef:Email_>` with `UnknownToken`
   (exit 3), as `Session::restore_strict_text` and daemon v2 already did.
-  Previously they returned the text unchanged with a success decision. The
+  Previously they returned the text unchanged with a success decision. Bare
+  class tags such as `<name>`, `<Email>` or `<custom:x>` count as malformed
+  spellings, so model output containing them now refuses in strict mode; the
+  restore audit row records `failed`. The
   library's malformed-spelling grammar now derives its class names from
   `BUILTIN_CLASS_NAMES`.
 
