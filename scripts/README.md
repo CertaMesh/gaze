@@ -9,6 +9,12 @@ Run these helpers from the repository root.
 | `scripts/fetch/fetch-ner-model.sh` | Fetches and verifies the pinned Davlan mBERT NER bundle. |
 | `scripts/fetch/fetch-openai-privacy-filter.sh` | Installs the pinned OpenAI Privacy Filter subprocess runtime. |
 
+## Release
+
+| Script | Purpose |
+|---|---|
+| `scripts/release/build-binary.sh` | Builds the release `gaze` binary reproducibly with the pinned toolchain and writes its `.sha256` and `.buildinfo`. The release workflow and outside verifiers both run it. |
+
 ## Gate
 
 | Script | Purpose |
