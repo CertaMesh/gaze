@@ -194,6 +194,9 @@ mod tests {
                 "security_token.code",
                 "security_token.bare",
                 "security_token.pem",
+                "password.prose",
+                "security_token.prose",
+                "security_token.pem_base64",
             ]
         );
         let core = Rulepack::load(RulepackSource::Embedded(embedded("core").expect("core")))
@@ -204,6 +207,9 @@ mod tests {
                 | "security_token.code"
                 | "security_token.bare"
                 | "security_token.pem"
+                | "security_token.prose"
+                | "security_token.pem_base64"
+                | "password.prose"
                 | "password.field"
                 | "password.hash"
                 | "password.code"

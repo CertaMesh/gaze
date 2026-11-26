@@ -122,3 +122,49 @@ The candidate appends the new hash and code-field definitions. Use the emitted
 `mechanism_arms.py record --policy-delta`. The emitted paths are local artifacts.
 The committed evidence records the policy delta and retains both value-free
 observation archives. Historical release rows are not re-labelled as v25.
+
+## Credentials named in prose
+
+Chat, email and tool-call text often gives a credential in a sentence:
+`I reset my password to …`, `Das Passwort für das Portal lautet „…“`,
+`Ihr Sicherheitstoken, der Code …, wurde bestätigt`. Three `secrets` rules
+cover these, and the private keys that deployment files carry base64-encoded.
+
+`password.prose` starts at a password, passphrase, Passwort or Kennwort cue,
+including German compounds such as `WLAN-Passwort`. The value follows the cue
+directly, after `:` or `=`, after a copula or preposition (`is`, `was`, `to`,
+`as`, `from`, `ist`, `lautet`, `sei`, `auf`, `zu`, `von`) that may come behind
+up to eight connector words, or in quotes behind those words. An unquoted value
+needs a digit or a symbol other than word punctuation, so `password to log in`
+and `password reset-link` are not credentials. A trailing `!` stays in the
+value; sentence punctuation does not. The context guard refuses values under
+six characters, plain words, symbol-only placeholders such as `********`, URLs,
+email addresses, and matches whose connector words name credential metadata
+(name, label, hint, policy, length, rotation, template, field, and their German
+equivalents): a password's hint or policy is not the password.
+
+`security_token.prose` starts at an explicit security cue: German
+`Sicherheits-`, `Zugangs-`, `Anmelde-`, `Verifizierungs-` and
+`Bestätigungs-` tokens, codes and keys, English security, access, auth,
+verification, session, API, bearer and one-time tokens, codes and keys, and
+`Token-ID`. Up to eight connector words may stand between cue and value. The
+value has at least eight characters and both a letter and a digit, or is an
+all-digit one-time code of six to eight digits. Three- and four-digit card
+security codes stay raw here; the same metadata guard applies. The bare word `token` is not a cue, because agent text uses it for
+model tokens and tokenizer names; a value introduced only by `token` therefore
+stays raw unless the anchored rule owns it.
+
+`security_token.pem_base64` finds the base64 spelling of a private-key
+`-----BEGIN … PRIVATE KEY-----` line at each of the three byte alignments and
+protects the whole contiguous base64 run, so `tls.key:` values in Kubernetes
+secrets, `KEY_B64=` environment lines and keys inside a larger encoded JSON
+file are one restorable span. Wrapped `base64` output continues through lines
+of at least 16 characters and a final padded line; an unpadded short final line
+stays raw, and it encodes only the public END armour. Encoded certificates and
+public keys stay raw.
+
+Known residuals: a value placed before its cue (`I entered … as the password`),
+a value after `like`/`wie` without quotes, an unquoted spaced passphrase, and a
+value that ends in `?`, whose last character is read as sentence punctuation.
+Generator v31 measures these phrasings with the rest; see the
+[benchmark contract](../../reference/benchmarks/README.md).

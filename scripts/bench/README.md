@@ -710,7 +710,7 @@ measuring source closure. The
 also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
 The [typed refusal producer specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
 pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
-The [current specification](../../docs/reference/benchmarks/specifications/6b61c854e5c3df68aa97e22ebac82829a00bc03513eb3e1445ce2ac8f009036e.json)
+The [current specification](../../docs/reference/benchmarks/specifications/a108fe1e0a4a46070a80ba15ab000cabb6cc00c81671a6f134dffe412e33f3d9.json)
 adds generator v31's prose credential cells.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,

@@ -126,6 +126,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `secrets` bundle (included by `gaze setup`) protects credentials named
+  in prose: `password.prose` for passwords and passphrases given after an EN/DE
+  password cue, `security_token.prose` for security codes, tokens and API keys
+  behind an explicit security cue, and `security_token.pem_base64` for
+  base64-encoded private keys such as Kubernetes `tls.key` values. Credential
+  metadata (names, hints, policies, lengths), card verification digits and
+  encoded public certificates stay raw.
+- Benchmark generator v31 adds EN/DE prose credential and base64 private-key
+  cells with benign counterweights; generator v30 rebuilds byte-for-byte.
 - Policies accept an `[outcomes]` table with `possibly_sensitive = "protect"`
   (default), `"refuse"` or `"pass_audited"`. No recognizer produces that
   outcome yet, so output is unchanged. Untransformable refusals now have one
