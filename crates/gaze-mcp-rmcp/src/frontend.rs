@@ -36,6 +36,9 @@ pub struct HostCallContext {
     pub selection: gaze_mcp_core::HostContextSelection,
     /// Host-owned audit correlation, validated by SessionIdPolicy.
     pub audit_session_id: Option<String>,
+    /// Host-authenticated conversation, used by
+    /// [`RmcpFrontend::into_conversation_handler`] to choose the Session.
+    pub conversation: Option<gaze_mcp_core::ConversationId>,
 }
 
 impl std::fmt::Debug for HostCallContext {
@@ -192,7 +195,21 @@ impl RmcpFrontend {
     /// Private context requires a fresh host and Session per conversation. Construct
     /// both inside the service factory; cloning a shared host does not isolate sessions.
     pub fn into_server_handler(self, host: Arc<dyn DispatchHost>) -> impl ServerHandler {
-        RmcpServer::new(host, self.config.principal_resolver)
+        RmcpServer::new(HostSource::Fixed(host), self.config.principal_resolver)
+    }
+
+    /// Build an embeddable handler that routes each call to the host of its
+    /// conversation. Host middleware must set [`HostCallContext::conversation`]
+    /// from an authenticated identity; a call without one is refused before
+    /// dispatch. Tool arguments and `_meta` never select a conversation.
+    pub fn into_conversation_handler(
+        self,
+        conversations: Arc<gaze_mcp_core::ConversationRegistry>,
+    ) -> impl ServerHandler {
+        RmcpServer::new(
+            HostSource::Conversations(conversations),
+            self.config.principal_resolver,
+        )
     }
 }
 
@@ -230,16 +247,35 @@ impl Frontend for RmcpFrontend {
 }
 
 #[derive(Clone)]
+enum HostSource {
+    Fixed(Arc<dyn DispatchHost>),
+    Conversations(Arc<gaze_mcp_core::ConversationRegistry>),
+}
+
+#[derive(Clone)]
 struct RmcpServer {
-    host: Arc<dyn DispatchHost>,
+    hosts: HostSource,
     principal_resolver: Arc<dyn PrincipalResolver>,
 }
 
 impl RmcpServer {
-    fn new(host: Arc<dyn DispatchHost>, principal_resolver: Arc<dyn PrincipalResolver>) -> Self {
+    fn new(hosts: HostSource, principal_resolver: Arc<dyn PrincipalResolver>) -> Self {
         Self {
-            host,
+            hosts,
             principal_resolver,
+        }
+    }
+
+    fn host(&self, call: &HostCallContext) -> Result<Arc<dyn DispatchHost>, &'static str> {
+        match &self.hosts {
+            HostSource::Fixed(host) => Ok(host.clone()),
+            HostSource::Conversations(registry) => {
+                let id = call.conversation.as_ref().ok_or("conversation-required")?;
+                registry.host(id).map_err(|err| match err {
+                    gaze_mcp_core::ConversationError::Capacity => "conversation-limit",
+                    _ => "conversation-unavailable",
+                })
+            }
         }
     }
 
@@ -268,8 +304,10 @@ impl ServerHandler for RmcpServer {
     ) -> Result<ListToolsResult, ErrorData> {
         let principal = self.principal(&context).await?;
         let principal_tier = tier_for_principal(&principal);
-        let tools = self
-            .host
+        let host = self
+            .host(&host_call_context(&context.extensions))
+            .map_err(|class| ErrorData::invalid_request(class, None))?;
+        let tools = host
             .list_tools()
             .into_iter()
             .filter(|descriptor| descriptor_visible_to(descriptor, principal_tier))
@@ -286,9 +324,12 @@ impl ServerHandler for RmcpServer {
     ) -> Result<CallToolResponse, ErrorData> {
         let principal = self.principal(&context).await?;
         let host = host_call_context(&context.extensions);
+        let target = match self.host(&host) {
+            Ok(target) => target,
+            Err(class) => return Ok(CallToolResult::error(vec![ContentBlock::text(class)]).into()),
+        };
         let dispatch_args = rmcp_args_to_dispatch_args(request);
-        let response = self
-            .host
+        let response = target
             .dispatch(
                 &principal,
                 &dispatch_args.tool_name,
@@ -313,7 +354,7 @@ async fn serve_stdio(
     shutdown: ShutdownToken,
 ) -> Result<(), FrontendError> {
     let ct = cancellation_token_from_shutdown(shutdown);
-    let service = RmcpServer::new(host, principal_resolver);
+    let service = RmcpServer::new(HostSource::Fixed(host), principal_resolver);
     let running = rmcp::service::serve_server_with_ct(service, rmcp::transport::stdio(), ct)
         .await
         .map_err(FrontendError::backend)?;
@@ -336,7 +377,12 @@ async fn serve_http(
         .await
         .map_err(FrontendError::Io)?;
     let service = StreamableHttpService::new(
-        move || Ok(RmcpServer::new(host.clone(), principal_resolver.clone())),
+        move || {
+            Ok(RmcpServer::new(
+                HostSource::Fixed(host.clone()),
+                principal_resolver.clone(),
+            ))
+        },
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
@@ -440,6 +486,9 @@ mod tests {
                 r#"{"fields":{"private_canary_key":"private_canary_value"}}"#.into(),
             ),
             audit_session_id: Some("private_canary_session".into()),
+            conversation: Some(gaze_mcp_core::ConversationId::new(
+                "private_canary_conversation",
+            )),
         });
         let host = host_call_context(&extensions);
         assert!(matches!(
@@ -460,6 +509,7 @@ mod tests {
         parts.extensions.insert(HostCallContext {
             selection: gaze_mcp_core::HostContextSelection::present("{}".into()),
             audit_session_id: Some("host-audit".into()),
+            conversation: None,
         });
         let mut extensions = rmcp::model::Extensions::new();
         extensions.insert(parts);
@@ -469,6 +519,54 @@ mod tests {
             gaze_mcp_core::HostContextSelection::Present(_)
         ));
         assert_eq!(host.audit_session_id.as_deref(), Some("host-audit"));
+    }
+
+    struct NoTools;
+
+    #[async_trait]
+    impl DispatchHost for NoTools {
+        async fn dispatch(
+            &self,
+            _: &Principal,
+            _: &str,
+            _: serde_json::Value,
+            _: Option<&str>,
+            _: gaze_mcp_core::HostContextSelection,
+        ) -> Result<gaze_mcp_core::ToolResponse, DispatchError> {
+            unreachable!("routing tests never dispatch")
+        }
+
+        fn list_tools(&self) -> Vec<gaze_mcp_core::ToolDescriptor> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn conversation_routing_requires_a_host_supplied_conversation() {
+        let registry = Arc::new(gaze_mcp_core::ConversationRegistry::new(
+            || Ok(Arc::new(NoTools) as Arc<dyn DispatchHost>),
+            gaze_mcp_core::ConversationLimits::new(2, std::time::Duration::from_secs(60)),
+        ));
+        let server = RmcpServer::new(
+            HostSource::Conversations(registry),
+            Arc::new(FixedPrincipalResolver::agent("synthetic")),
+        );
+        let call = |id: Option<&str>| HostCallContext {
+            conversation: id.map(gaze_mcp_core::ConversationId::new),
+            ..HostCallContext::default()
+        };
+        assert_eq!(
+            server.host(&call(None)).err(),
+            Some("conversation-required")
+        );
+        let a = server.host(&call(Some("a"))).unwrap();
+        let b = server.host(&call(Some("b"))).unwrap();
+        assert!(!Arc::ptr_eq(&a, &b));
+        assert!(Arc::ptr_eq(&a, &server.host(&call(Some("a"))).unwrap()));
+        assert_eq!(
+            server.host(&call(Some("c"))).err(),
+            Some("conversation-limit")
+        );
     }
 
     #[test]

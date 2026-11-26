@@ -144,16 +144,20 @@ It cannot change audit correlation or select a Session. Use host-owned
 `HostCallContext::audit_session_id` for correlation. `SessionIdPolicy` validates
 that id before dispatch; the id never grants access or selects a Session.
 
-Private context requires one `Session` and one `DispatchHost` per conversation.
-Sharing a host across MCP sessions shares Rule-evidence mappings, HMAC labels,
-and restore authority. Audit session ids do not partition this state. The built-in
-`Frontend::serve(host, ...)` HTTP path reuses the supplied host across MCP sessions.
-For private conversations, embed the service and create the host inside its
-per-MCP-session factory:
+Private context requires one `Session` per conversation. Sharing a host across
+conversations shares Rule-evidence mappings, HMAC labels, and restore authority.
+Audit session ids do not partition this state. The built-in
+`Frontend::serve(host, ...)` HTTP path reuses the supplied host for every caller.
+
+For private conversations, keep a `gaze_mcp_core::ConversationRegistry` whose
+factory builds a host with a fresh `Session`, and serve it with
+`into_conversation_handler`. Authenticated middleware sets
+`HostCallContext::conversation`; the handler routes each call to that
+conversation's host and refuses a call without one:
 
 ```rust,no_run
 use std::sync::Arc;
-use gaze_mcp_core::DispatchHost;
+use gaze_mcp_core::{ConversationLimits, ConversationRegistry, DispatchHost};
 use gaze_mcp_rmcp::RmcpFrontend;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
@@ -161,14 +165,16 @@ use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
 # #[cfg(feature = "transport-http")]
 # fn embed_http(
 # 	frontend: RmcpFrontend,
-# 	new_conversation_host: impl Fn() -> std::io::Result<Arc<dyn DispatchHost>> + Send + Sync + 'static,
+# 	new_conversation_host: impl Fn() -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
+# 		+ Send + Sync + 'static,
 # ) {
+// The factory must allocate a fresh Session on every call.
+let conversations = Arc::new(ConversationRegistry::new(
+	new_conversation_host,
+	ConversationLimits::default(),
+));
 let service = StreamableHttpService::new(
-	move || {
-		// Allocate a fresh Session and DispatchHost on every factory invocation.
-		let host = new_conversation_host()?;
-		Ok(frontend.clone().into_server_handler(host))
-	},
+	move || Ok(frontend.clone().into_conversation_handler(conversations.clone())),
 	Arc::new(LocalSessionManager::default()),
 	StreamableHttpServerConfig::default(),
 );
@@ -176,13 +182,13 @@ let service = StreamableHttpService::new(
 # fn main() {}
 ```
 
-Enable `gaze-mcp-rmcp/transport-http` and add `rmcp` 2.x with
-`transport-streamable-http-server` to use this example. Implement
-`new_conversation_host` so each call constructs a new host with its own `Session`.
-Resident policies, pipelines, and model handles can be shared. Install trusted
-`HostCallContext` middleware on the router that serves this service. Authenticate
-MCP session ownership before reusing a session across requests. On reconnect,
-restore only that conversation's trusted snapshot into its host.
+Enable `gaze-mcp-rmcp/transport-http` and add `rmcp` with
+`transport-streamable-http-server` to use this example. Resident policies,
+pipelines, and model handles can be shared between hosts. Derive the conversation
+id from an authenticated identity, never from tool arguments or `_meta`. Close a
+conversation with `ConversationRegistry::close`; idle conversations expire after
+`ConversationLimits::idle_timeout`. On reconnect, restore only that
+conversation's trusted snapshot into its host.
 
 ## rmcp version policy
 

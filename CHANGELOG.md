@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `gaze_mcp_core::ConversationRegistry` keeps one host, with its own Session,
+  per host-authenticated `ConversationId`, with close, idle expiry (default
+  30 minutes) and a live-conversation limit (default 64) that refuses new ids
+  instead of evicting. `RmcpFrontend::into_conversation_handler` routes each
+  call by `HostCallContext::conversation` and refuses calls without one.
+  Two conversations never share mappings, and each refuses the other's tokens
+  on strict restore.
+- `gaze mcp doctor` reports the declared protection profile (bundled `core`
+  rules, Resolve/Strict, no NER or Nym) and the session scope.
+
 ### Changed
+
+- `HostCallContext` gains a `conversation` field. Struct literals must set it
+  or use `..Default::default()`.
+- `gaze mcp serve` scopes its Session to the stdio connection and shares only
+  the resident pipeline and tool registry.
 
 - MCP tool results include the fixed `resultType: "complete"` discriminator
   for protocol 2026-07-28 and newer. Direct serialization of rmcp results also

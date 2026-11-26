@@ -175,11 +175,32 @@ for classes and dictionaries. Version 8 snapshots carry that key in the signed
 owner-only payload. Older keyless snapshots still restore, but MCP dispatch
 refuses their opaque classes before invocation or audit. The host retains restore authority.
 
-Private context requires one `Session` and one `DispatchHost` per conversation.
-Sharing a host across MCP sessions shares Rule-evidence mappings, HMAC labels,
-and restore authority. Audit session ids do not partition any of this state.
-The [rmcp example](../../../crates/gaze-mcp-rmcp/README.md#host-context-and-session-ids)
-creates hosts inside the per-MCP-session service factory.
+Private context requires one `Session` per conversation. Sharing a Session across
+conversations shares Rule-evidence mappings, HMAC labels, and restore authority.
+Audit session ids do not partition any of this state, and a model-written
+`_session_id` or `_meta` value never selects a Session.
+
+`ConversationRegistry` holds one host, with its own Session, per
+host-authenticated `ConversationId`. The first call for an id opens the
+conversation through a factory that shares resident pipelines but allocates a
+fresh Session. Closing it with `close`, or leaving it idle past
+`ConversationLimits::idle_timeout` (default 30 minutes), drops its Session, so a
+later call with the same id starts empty and earlier tokens no longer restore.
+At `max_conversations` live entries (default 64) a new id is refused rather than
+evicting a live conversation. The registry is memory-only: after a restart every
+id starts empty. A call already in flight keeps its host until it returns.
+
+Embedded HTTP hosts pass the registry to `RmcpFrontend::into_conversation_handler`
+and set `HostCallContext::conversation` in authenticated middleware. A call
+without a conversation fails with `conversation-required`; a full registry
+returns `conversation-limit`. See the
+[rmcp example](../../../crates/gaze-mcp-rmcp/README.md#host-context-and-session-ids).
+
+`gaze mcp serve` treats one stdio connection as one conversation: each server
+process has its own memory-only Session, which ends with the connection. A client
+that keeps one server process for several chats shares that Session across them.
+`gaze mcp doctor` reports this scope and the declared protection profile
+(bundled `core` rules, Resolve/Strict, without NER or Nym models).
 
 Embedded HTTP middleware sets `HostCallContext` in request extensions. Raw context
 in `_meta`, arguments, headers, or provider bodies is never trusted input. Stock
