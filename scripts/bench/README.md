@@ -720,11 +720,13 @@ measuring source closure. The
 also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
 The [pipeline-producer specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
 pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
-The [field-label specification](../../docs/reference/benchmarks/specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json)
+The [field-labelled record-ID specification](../../docs/reference/benchmarks/specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json)
 differs from it only in the validation vocabulary, which adds the field-labelled
 record-ID rules `customer_id.field`, `employee_id.field` and `record_id.field`.
-The [current specification](../../docs/reference/benchmarks/specifications/5a4a29069c85f2df3fa0af2c4b98164fcd5d5ef7347797e070b781f3bada60fc.json)
-differs from the field-label one only in the `known_record_cells.py` and
+The [prose credential specification](../../docs/reference/benchmarks/specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json)
+adds generator v31's prose credential cells.
+The [current specification](../../docs/reference/benchmarks/specifications/8233afed2b5b2a8897e3ab99fe6f6b109ae095753b882558ed8bb8ba051dfd2f.json)
+differs from the prose credential one only in the `known_record_cells.py` and
 `known_record_arm.py` digests: known-record cell generator v7, which reads
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
