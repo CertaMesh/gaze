@@ -47,6 +47,11 @@ if [ "$release" != "$channel" ]; then
   echo "build-binary: rustc reports $release; rust-toolchain.toml pins $channel" >&2
   exit 1
 fi
+cargo_version="$(cargo -V | cut -d' ' -f2)"
+if [ "$cargo_version" != "$channel" ]; then
+  echo "build-binary: cargo reports $cargo_version; rust-toolchain.toml pins $channel" >&2
+  exit 1
+fi
 
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 rustflags=(
