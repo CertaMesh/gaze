@@ -161,6 +161,7 @@
     "gaze-recognizers::postal_at_ch",
     "gaze-recognizers::postal_au",
     "gaze-recognizers::postal_international",
+    "gaze-recognizers::prose_credentials",
     "gaze-recognizers::review580_diagnostics",
     "gaze-recognizers::rulepack_lint",
     "gaze-recognizers::secrets_opt_in",
