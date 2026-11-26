@@ -848,7 +848,7 @@ fn protect_json_leaves(
             );
             // A string whose whole text strictly parses as one JSON object or array carries
             // its own fields; bind them as a whole-document clean does.
-            let embedded = gaze::json_text_field_spans(text, path);
+            let embedded = pipeline.json_text_field_spans(text, path);
             let leaf = if embedded.is_empty() {
                 context.with_field(&field)
             } else {

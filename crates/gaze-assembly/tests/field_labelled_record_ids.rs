@@ -229,10 +229,35 @@ fn repeats_into_numbers_and_keys_refuse_typed() {
         ),
         "{key:?}"
     );
-    // A different number that merely contains the ID's digits is another value.
-    let input = r#"{"customer_id":"731284","ratio":731284.5}"#;
-    let cleaned = protected(&pipeline, &active, input);
-    assert!(cleaned.contains("731284.5"), "{cleaned}");
+    // A literal that only contains the bound ID still carries its bytes: it refuses too,
+    // rather than shipping them raw or splitting the literal.
+    for (input, reason, at) in [
+        (
+            r#"{"customer_id":"731284","ratio":731284.5}"#,
+            UntransformableReason::JsonNumberNoTextOnlyPath,
+            path(&["ratio"]),
+        ),
+        (
+            r#"{"customer_id":"731284","delta":-731284}"#,
+            UntransformableReason::JsonNumberNoTextOnlyPath,
+            path(&["delta"]),
+        ),
+        (
+            r#"{"customer_id":"C-731284","balances":{"C-731284:EUR":12}}"#,
+            UntransformableReason::NoSafeRendering,
+            path(&["balances", "C-731284:EUR"]),
+        ),
+    ] {
+        let error = refusal(&pipeline, &active, input);
+        assert!(
+            matches!(
+                &error,
+                ProtectionError::Untransformable { reason: r, field_path, .. }
+                    if *r == reason && *field_path == at
+            ),
+            "{input}: {error:?}"
+        );
+    }
     // Second turn: the session's bound value repeats as a number in a later document.
     let session = Session::new(Scope::Ephemeral).expect("session");
     clean(&pipeline, &active, &session, r#"{"customer_id":"731284"}"#).expect("first turn");
@@ -473,6 +498,8 @@ fn normalized_key_spellings_bind_and_benign_ones_do_not() {
         "{\"customer\u{200b}_id\":\"C-731284\"}",
         "{\"customer_id\":{\"\u{ff56}\u{ff41}\u{ff4c}\u{ff55}\u{ff45}\":\"C-731284\"}}",
         "{\"customer\\u200b_id\":\"C-731284\"}",
+        "{\"customer\u{2010}id\":\"C-731284\"}",
+        "{\"customer\u{2212}id\":\"C-731284\"}",
     ] {
         let cleaned = protected(&pipeline, &active, input);
         assert!(!cleaned.contains("731284"), "{input} leaked: {cleaned}");

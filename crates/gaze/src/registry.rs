@@ -1725,6 +1725,12 @@ impl RecognizerRegistry {
             .collect()
     }
 
+    pub(crate) fn binds_field_path(&self, path: &[&str]) -> bool {
+        self.entries
+            .iter()
+            .any(|recognizer| recognizer.binds_field_path(path))
+    }
+
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
         self.recognizers_by_id.get(id)
     }

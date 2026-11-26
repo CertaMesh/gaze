@@ -1455,7 +1455,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         // A leaf whose whole text strictly parses as one JSON object or array (a tool call's
         // `arguments`, a JSON tool result) carries its own fields: bind them exactly as a
         // whole-document clean does. Prose that merely contains JSON gets no field context.
-        let embedded = gaze::json_text_field_spans(
+        let embedded = self.pipeline.json_text_field_spans(
             input,
             &field.map(|field| field.path.clone()).unwrap_or_default(),
         );

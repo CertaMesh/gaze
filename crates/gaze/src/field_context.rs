@@ -113,7 +113,7 @@ pub(crate) fn document_field_spans(
 /// followed by the leaf's own, so a labelled key inside the carried document binds exactly as
 /// it would in a whole JSON document. Empty unless the text strictly parses as one JSON object
 /// or array: arbitrary prose that merely contains JSON is not a carrier.
-pub fn json_text_field_spans(
+pub(crate) fn json_text_field_spans(
     text: &str,
     carrier: &FieldPath,
 ) -> Vec<(Range<usize>, FieldProvenance)> {
@@ -148,7 +148,7 @@ pub enum FieldPiece {
 /// Split `gap` (a stretch of a leaf between owned tokens) so each piece carries one honest
 /// field context: scalars wholly inside the gap stay complete spans, and the part of a scalar
 /// that an owned token cuts becomes its own fragment piece. `spans` are disjoint, in leaf
-/// coordinates, as [`json_text_field_spans`] returns them. Empty pieces are omitted.
+/// coordinates, as [`crate::Pipeline::json_text_field_spans`] returns them. Empty pieces are omitted.
 pub fn field_pieces(
     gap: Range<usize>,
     spans: &[(Range<usize>, FieldProvenance)],

@@ -39,30 +39,39 @@ fn owned_token_in_a_labelled_argument_never_exposes_the_rest() {
         .tokenize(&gaze::PiiClass::Email, SYNTHETIC_EMAIL)
         .unwrap();
     let adapter = crate::adapters::OpenAiAdapter::new(Url::parse("http://127.0.0.1:1").unwrap());
-    let arguments = format!(r#"{{"customer_id":"{owned} C-731284","employee_id":"E-731285"}}"#);
-    let mut body = arguments_body(&arguments);
-    let staged = redact_surfaces(
-        &pipeline,
-        &session,
-        adapter.request_pii_surfaces(&mut body),
-        &locales,
-        &DictionaryBundle::default(),
-    )
-    .unwrap();
-    let clean = forwarded_arguments(&body);
-    assert!(!clean.contains("73128"), "{clean}");
-    assert!(
-        clean.contains(&owned),
-        "owned token keeps its authority: {clean}"
-    );
-    let inner: Value = serde_json::from_str(&clean).expect("arguments stay JSON");
-    assert!(inner["customer_id"].is_string() && inner["employee_id"].is_string());
-    staged.transaction.commit().unwrap();
-    // Restore expands every token, the owned one included, back to the raw arguments.
-    assert_eq!(
-        session.restore_strict_text(&clean).unwrap(),
-        arguments.replace(&owned, SYNTHETIC_EMAIL)
-    );
+    // The ID after the token may start with a JSON escape (`\n`, `\u0043` for `C`); the
+    // protected fragment must never split the escape and break the arguments' JSON.
+    for (customer, employee) in [
+        (format!("{owned} C-731284"), "E-731285"),
+        (format!("{owned} \\nC-731286"), "E-731287"),
+        (format!("{owned}\\u0043-731288"), "E-731289"),
+    ] {
+        let arguments = format!(r#"{{"customer_id":"{customer}","employee_id":"{employee}"}}"#);
+        let mut body = arguments_body(&arguments);
+        let staged = redact_surfaces(
+            &pipeline,
+            &session,
+            adapter.request_pii_surfaces(&mut body),
+            &locales,
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+        let clean = forwarded_arguments(&body);
+        assert!(!clean.contains("7312"), "{clean}");
+        assert!(
+            clean.contains(&owned),
+            "owned token keeps its authority: {clean}"
+        );
+        let inner: Value = serde_json::from_str(&clean)
+            .unwrap_or_else(|error| panic!("arguments stay JSON ({error}): {clean}"));
+        assert!(inner["customer_id"].is_string() && inner["employee_id"].is_string());
+        staged.transaction.commit().unwrap();
+        // Restore expands every token, the owned one included, back to the raw arguments.
+        assert_eq!(
+            session.restore_strict_text(&clean).unwrap(),
+            arguments.replace(&owned, SYNTHETIC_EMAIL)
+        );
+    }
 }
 
 #[test]

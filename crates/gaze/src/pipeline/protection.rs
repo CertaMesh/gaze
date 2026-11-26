@@ -26,7 +26,7 @@ impl<'a> ProtectionContext<'a> {
         self
     }
     /// Attach the complete scalars of a JSON document carried as this leaf's text, such as a
-    /// tool call's `arguments` ([`crate::json_text_field_spans`]). Ranges are leaf byte offsets.
+    /// tool call's `arguments` ([`crate::Pipeline::json_text_field_spans`]). Ranges are leaf byte offsets.
     pub fn with_field_spans(
         mut self,
         spans: &'a [(std::ops::Range<usize>, gaze_types::FieldProvenance)],
@@ -514,6 +514,24 @@ impl Pipeline {
             }
         }
         Ok(())
+    }
+
+    /// Scalar leaves of a JSON document carried as text inside one field, such as an OpenAI
+    /// tool call's `arguments`, in that text's byte coordinates, for
+    /// [`ProtectionContext::with_field_spans`]. Each leaf's path is the carrier's path followed
+    /// by its own. Empty unless the text strictly parses as one JSON object or array, and empty
+    /// when the carrier's own path binds a structured field label: such a leaf is one labelled
+    /// value, as a whole-document clean treats it, so attach it whole with
+    /// [`ProtectionContext::with_field`].
+    pub fn json_text_field_spans(
+        &self,
+        text: &str,
+        carrier: &gaze_types::FieldPath,
+    ) -> Vec<(std::ops::Range<usize>, gaze_types::FieldProvenance)> {
+        if self.registry.binds_field_path(&carrier.segments()) {
+            return Vec::new();
+        }
+        crate::field_context::json_text_field_spans(text, carrier)
     }
 
     /// Protects a complete string leaf in caller-owned staging state; never commits.

@@ -137,16 +137,9 @@ impl FieldLabelRecognizer {
     }
 }
 
-/// Apply the shared detection normalization, then lowercase and drop `_`, `-`, `.` and
-/// whitespace, so `Customer-ID`, `customerId`, `customer_id`, a fullwidth spelling and one with
-/// a zero-width space all agree.
+/// The comparison form of a field label: [`gaze_types::normalize::fold_field_label`].
 pub fn normalize_label(label: &str) -> String {
-    gaze_types::normalize::normalize(label)
-        .text
-        .chars()
-        .filter(|ch| !matches!(ch, '_' | '-' | '.') && !ch.is_whitespace())
-        .flat_map(char::to_lowercase)
-        .collect()
+    gaze_types::normalize::fold_field_label(label)
 }
 
 fn is_index(segment: &str) -> bool {
@@ -285,9 +278,20 @@ impl Recognizer for FieldLabelRecognizer {
             Some(FieldContext::Fragment { field, .. }) => {
                 // Owned tokens split this labelled leaf. The gap's identifier bytes, trimmed of
                 // separators, stay sensitive; the owned tokens keep their own authority.
-                let start = input
+                let mut start = input
                     .find(|ch: char| ch.is_alphanumeric())
                     .unwrap_or(input.len());
+                // In JSON source spelling the first alphanumeric may be an escape's letter
+                // (`\n`, `\u0043`); start at its unescaped backslash so a token never splits
+                // the escape. In decoded text this only covers one more literal byte.
+                let backslashes = input[..start]
+                    .bytes()
+                    .rev()
+                    .take_while(|&byte| byte == b'\\')
+                    .count();
+                if backslashes % 2 == 1 {
+                    start -= 1;
+                }
                 let end = input
                     .rfind(|ch: char| ch.is_alphanumeric())
                     .map_or(start, |at| {
@@ -363,6 +367,10 @@ impl Recognizer for FieldLabelRecognizer {
 
     fn binds_structured_fields(&self) -> bool {
         true
+    }
+
+    fn binds_field_path(&self, path: &[&str]) -> bool {
+        self.binds(path)
     }
 }
 

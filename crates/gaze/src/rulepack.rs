@@ -999,12 +999,7 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
                 // A bare generic key would bind every object's own id, public or not. Fold as
                 // the recognizer compares labels, shared detection normalization first, so a
                 // fullwidth or zero-width spelling of a generic key is rejected too.
-                let folded = gaze_types::normalize::normalize(label)
-                    .text
-                    .chars()
-                    .filter(|ch| !matches!(ch, '_' | '-' | '.') && !ch.is_whitespace())
-                    .flat_map(char::to_lowercase)
-                    .collect::<String>();
+                let folded = gaze_types::normalize::fold_field_label(label);
                 if matches!(
                     folded.as_str(),
                     "" | "id" | "value" | "number" | "no" | "nr" | "key" | "uuid"

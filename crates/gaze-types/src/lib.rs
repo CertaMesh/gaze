@@ -4744,6 +4744,13 @@ pub trait Recognizer: Send + Sync {
         false
     }
 
+    /// Whether a value at this field path is bound by one of this recognizer's labels.
+    /// A JSON-text carrier whose own path binds is a labelled value as a whole; its embedded
+    /// fields must not replace that binding.
+    fn binds_field_path(&self, _path: &[&str]) -> bool {
+        false
+    }
+
     /// What this recognizer's candidates rest on. The registry stamps it on every candidate
     /// the recognizer emits, overwriting [`Candidate::evidence`]. Defaults to
     /// [`EvidenceKind::Learned`], which the repeat-value sweep never propagates; see

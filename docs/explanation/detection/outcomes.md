@@ -86,7 +86,8 @@ and before conflict resolution, token allocation or output, so no overlapping
 candidate can discard a refusal and nothing is staged first. Refusals are
 collected rather than raised at the first stage: a direct refusal waits for the
 repeat-value sweep below, and one typed error names every refused field of the
-input, direct and repeat alike. A confirmed
+input, direct and repeat alike (a leaf split by owned tokens is the exception;
+see Known limits). A confirmed
 untransformable candidate refuses the input. `[outcomes] possibly_sensitive`
 protects (default), refuses with `no_safe_rendering`, or passes with an audit
 row; a possibly sensitive JSON number refuses under `protect`. A class the
@@ -95,11 +96,12 @@ stay distinct in the audit row and the final protection trace.
 
 A field-bound value enters the session with rule evidence, so the repeat-value
 sweep copies it elsewhere in the document and in later turns. A copy may not
-become a token inside a JSON number or object key: an exact whole-literal
-repeat there refuses, typed (`json_number_no_text_only_path` for a number,
-`no_safe_rendering` for a key), before any token is minted. A copy that only
-overlaps such a literal is a different value and is dropped rather than
-splitting the literal. The sweep's length floors still apply, so short values
+become a token inside a JSON number or object key: a repeat that is or
+overlaps such a literal (`731284`, `-731284`, `731284.5`, a key
+`C-731284:EUR`) refuses, typed (`json_number_no_text_only_path` for a number,
+`no_safe_rendering` for a key), before any token is minted. Splitting the
+literal would corrupt the document, and dropping the copy would ship the bound
+identifier's bytes raw. The sweep's length floors still apply, so short values
 never trigger it.
 
 Boundaries apply the same contract. Anthropic `tool_use.input` numbers pass
@@ -114,8 +116,10 @@ JSON-text carrier: an OpenAI `tool_calls[].function.arguments` or Responses
 get validated-parse context, the carrier's path followed by their own, which
 is the same evidence a whole-document clean uses. Labelled strings inside
 protect and the inner document stays valid; labelled numbers refuse with
-`json_number_no_text_only_path`. `gaze::json_text_field_spans` locates them and
-`ProtectionContext::with_field_spans` attaches them. When owned tokens split
+`json_number_no_text_only_path`. `Pipeline::json_text_field_spans` locates them and
+`ProtectionContext::with_field_spans` attaches them. A carrier whose own key is
+a label, such as `customer_id` holding JSON text, is one labelled value: it
+keeps that binding as a whole, as a whole-document clean does. When owned tokens split
 such a string, scalars wholly between tokens stay complete and the part of a
 scalar cut by a token is a fragment, as above.
 
@@ -140,6 +144,10 @@ These are not protected surfaces. Each keeps today's legacy detection.
 - Repeats inside a split JSON-text carrier. When owned tokens split a JSON-text
   carrier, a repeat of a bound value inside one of its numbers is not refused:
   it is tokenized, which leaves that inner document invalid (never raw).
+- Refusals in a split leaf. When owned tokens split a leaf, its pieces are
+  protected in order and the first refusal fails the leaf, so the typed error
+  names that piece's refused fields, not every refused field of the leaf. The
+  leaf still fails closed.
 
 ## Audit metadata
 

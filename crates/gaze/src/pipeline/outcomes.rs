@@ -176,11 +176,12 @@ impl Pipeline {
     }
 
     /// D6: a repeat of a field-bound value may not become a token inside a JSON number or
-    /// object key. An exact whole-literal repeat there refuses, typed, before any token is
-    /// minted; a repeat that only overlaps such a literal is a different value and is dropped
-    /// rather than splitting the literal. The sweep's own length floors still apply, so short
-    /// values never reach this check. Other classes keep their sweep behavior. Refused repeats
-    /// join `refusals`; the caller raises them with any direct refusal.
+    /// object key. A repeat that is or overlaps such a literal (`-731284`, `731284.5`, a key
+    /// `C-731284:EUR`) refuses, typed, before any token is minted: splitting the literal would
+    /// corrupt the carrier, and dropping the repeat would ship known identifier bytes raw.
+    /// The sweep's own length floors still apply, so short values never reach this check.
+    /// Other classes keep their sweep behavior. Refused repeats join `refusals`; the caller
+    /// raises them with any direct refusal.
     pub(super) fn guard_field_bound_repeats(
         &self,
         hits: Vec<crate::sweep::SweepHit>,
@@ -227,7 +228,7 @@ impl Pipeline {
             };
             match place {
                 None => kept.push(hit),
-                Some((range, path, reason)) if range == raw => {
+                Some((_, path, reason)) => {
                     let candidate = hit.candidate().with_field(gaze_types::FieldProvenance::new(
                         path,
                         if reason == UntransformableReason::JsonNumberNoTextOnlyPath {
@@ -239,7 +240,6 @@ impl Pipeline {
                     ));
                     refusals.0.push(Refused { reason, candidate });
                 }
-                Some(_) => {}
             }
         }
         Ok(kept)

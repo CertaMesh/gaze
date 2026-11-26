@@ -291,6 +291,18 @@ async fn mcp_owned_tokens_and_json_text_arguments_bind_with_stock_core() {
     assert!(!payload.contains("731299"), "{payload}");
     let inner: Value = serde_json::from_str(payload).expect("payload stays JSON");
     assert_eq!(inner["note"], "ok");
+    // A labelled argument whose value is JSON text is one labelled value: its own label
+    // still binds, however the inner keys are named.
+    let sent = dispatch_capture(
+        &pipeline,
+        &chain,
+        &Session::new(Scope::Ephemeral).unwrap(),
+        json!({"customer_id": r#"{"v":"C-731299"}"#}),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("labelled JSON-text argument: {error:?}"));
+    let leaf = sent["customer_id"].as_str().unwrap();
+    assert!(!leaf.contains("731299"), "{leaf}");
     // A labelled number inside the JSON text refuses typed instead of becoming a token.
     let refused = dispatch_capture(
         &pipeline,

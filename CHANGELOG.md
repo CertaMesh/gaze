@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A labelled JSON number now refuses, typed, instead of leaking or becoming an
   unquoted token: `Untransformable` with `json_number_no_text_only_path` (CLI
-  exit 8, no output). A repeat of a bound ID that lands exactly on a JSON number
-  or object key refuses the same way (`no_safe_rendering` for a key).
+  exit 8, no output). A repeat of a bound ID that is or overlaps a JSON number
+  or object key (`-731284`, `731284.5`, `"C-731284:EUR"`) refuses the same way
+  (`no_safe_rendering` for a key).
 - Anthropic `tool_use.input` numbers are admitted when nothing detects them and
   forwarded with their original spelling; previously every number refused with
   `UnsupportedRequestSurface`. Other detections in a number still refuse.
@@ -27,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reason in the audit row. Every refusal row carries
   `provenance_stage = "primary_pipeline.outcome_refusal"`.
 - `field_labelled` rulepack validation rejects generic labels in any normalized
-  spelling, such as fullwidth `ｉｄ`.
+  spelling, such as fullwidth `ｉｄ` or `customer‐id` with a Unicode dash.
 - The library `pseudonymize` text path passes the same document field context
   as every text clean.
 - MCP tool results include the fixed `resultType: "complete"` discriminator
@@ -72,9 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier-shaped string is tokenized as a whole leaf in `gaze clean`, the
   daemon, the library, the proxy (Anthropic, Gemini and OpenAI tool calls and
   results) and MCP arguments. Keys bind in fullwidth and zero-width spellings
-  and through arrays (`{"customer_id": [{"value": …}]}`). A string whose whole
-  text is a JSON object or array, such as OpenAI `function.arguments` or a JSON
-  tool result, binds its own keys. An owned token inside a labelled value no
+  and Unicode-dash spellings and through arrays
+  (`{"customer_id": [{"value": …}]}`). A string whose whole text is a JSON
+  object or array, such as OpenAI `function.arguments` or a JSON tool result,
+  binds its own keys; under a labelled key it stays one labelled value. An owned token inside a labelled value no
   longer exposes the rest of the identifier. Known limits (JSON inside prose,
   strict-parse fallback, escaped versus decoded repeats) are listed in
   `docs/explanation/detection/outcomes.md`.
