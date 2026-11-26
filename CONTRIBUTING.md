@@ -40,7 +40,10 @@ cargo build --workspace --all-features
 
 PR-triggered CI runs `cargo doc -D warnings`, `cargo test --doc`, workspace
 tests, MSRV checks, cargo-deny, and the active xtask gate roster on every
-relevant PR. Keep running the local [PR checks](#run-the-pr-checks) before opening or
+relevant PR. The required `cargo-deny policy` check covers licences, bans and
+sources on every PR and in the merge queue. RustSec advisories run daily
+instead and open an issue when they fail, so a new advisory never blocks
+merges. Keep running the local [PR checks](#run-the-pr-checks) before opening or
 pushing to a PR.
 
 ## Workspace shape
