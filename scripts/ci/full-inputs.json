@@ -344,6 +344,7 @@
     "docs/reference/benchmarks/dictionary-sequences/v0.16.0/switch-K.jsonl.gz",
     "docs/reference/benchmarks/dictionary-sequences/warm-bypass-mutation.json",
     "docs/reference/benchmarks/evidence-protocol-v1.md",
+    "docs/reference/benchmarks/f8-budgets.json",
     "docs/reference/benchmarks/family-action-review-history.md",
     "docs/reference/benchmarks/full-name-case-coverage.md",
     "docs/reference/benchmarks/full-name-case-v20-contract-replay.json",
