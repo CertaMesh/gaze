@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Daemon v2 `clean_blocks` reuses the committed result of an unchanged block
+  when nothing learned since the last commit can reach it, so a warm turn no
+  longer re-cleans the whole conversation. Responses stay byte-identical to a
+  full clean; `cache_hit` can now be `true`. Reuse is off for `resync`, with
+  `--audit-db`, and for a request that adds or changes no block. Retained
+  results count against the v2 state budget.
 - Release binaries now include the `mcp` feature, so `gaze mcp install`,
   `doctor`, `serve` and `bridge` work without a source build. The release
   smoke test runs a stdio `gaze mcp serve` call. On macOS arm64 the binary
