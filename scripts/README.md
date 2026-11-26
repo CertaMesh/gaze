@@ -8,6 +8,7 @@ Run these helpers from the repository root.
 |---|---|
 | `scripts/fetch/fetch-ner-model.sh` | Fetches and verifies the pinned Davlan mBERT NER bundle. |
 | `scripts/fetch/fetch-openai-privacy-filter.sh` | Installs the pinned OpenAI Privacy Filter subprocess runtime. |
+| `scripts/fetch/build_record_common_name_words.py` | Regenerates the English name∩word list for caller-known single names from pinned SSA and SCOWL sources; `--check` fails on drift. |
 
 ## Gate
 

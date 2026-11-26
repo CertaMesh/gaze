@@ -716,9 +716,13 @@ measuring source closure. The
 also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
 The [pipeline-producer specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
 pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
-The [current specification](../../docs/reference/benchmarks/specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json)
+The [field-label specification](../../docs/reference/benchmarks/specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json)
 differs from it only in the validation vocabulary, which adds the field-labelled
 record-ID rules `customer_id.field`, `employee_id.field` and `record_id.field`.
+The [current specification](../../docs/reference/benchmarks/specifications/b837cae9c1e95e3511c34bcb3325408f43094dab99760c68dfc09c3a0f7c508a.json)
+differs from the field-label one only in the `known_record_cells.py` and
+`known_record_arm.py` digests: known-record cell generator v7 and the
+generated English name-word dictionary.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
