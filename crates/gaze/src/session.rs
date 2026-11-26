@@ -1265,6 +1265,7 @@ impl<'session> SessionTransaction<'session> {
     /// an intermediate view, so any such token answers `false`.
     ///
     /// Errors exactly where a fresh clean would fail on the session matcher.
+    #[doc(hidden)]
     pub fn reuse_unaffected(&mut self, raw: &str, clean: &str) -> Result<bool> {
         if !self.staged.deterministic_sweep {
             return Ok(false);

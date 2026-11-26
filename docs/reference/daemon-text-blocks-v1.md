@@ -19,6 +19,13 @@ of the request. Reuse is off for `resync`, for a daemon started with
 runs the configured models at least once. A reused block's redaction rows are
 replayed from its last clean.
 
+The retained results count against the session's v2 state budget, so a session
+with reuse holds less new input under `global_v2_state_bytes` than one without.
+Near that limit a reused block can be charged slightly less than a fresh clean
+of it, so a request that a full clean would refuse with `CacheCapacity` may
+succeed. Capacity refusals at the limit are outside the identity guarantee;
+results that are returned are identical.
+
 ## Open and identity
 
 Start a daemon with its normal policy and model configuration. Send one JSON

@@ -1661,7 +1661,11 @@ fn old_block_quoting_a_newly_minted_token_is_cleaned_again() {
         literal.clone(),
         "bob@example.invalid".to_string(),
     ];
-    let expected = oracle(&d, "literal", &texts).output;
+    let Oracle {
+        output: expected,
+        entries: oracle_entries,
+        ..
+    } = oracle(&d, "literal", &texts);
     let result = clean(
         &mut d,
         &state,
@@ -1679,4 +1683,76 @@ fn old_block_quoting_a_newly_minted_token_is_cleaned_again() {
     }
     let hits: Vec<_> = blocks.iter().map(|b| b["cache_hit"].clone()).collect();
     assert_eq!(hits, [json!(true), json!(false), json!(false)]);
+    assert_eq!(
+        d.v2.sessions["literal"].session.snapshot_entries(),
+        oracle_entries,
+        "reuse commits the same session state as a full clean"
+    );
+}
+
+fn hits(result: &Value) -> Vec<Value> {
+    result["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["cache_hit"].clone())
+        .collect()
+}
+
+#[test]
+fn reuse_requires_the_same_context_bytes() {
+    let mut d = daemon();
+    let state = open(&mut d, "context");
+    let with_context = |state: &Value, blocks: Vec<Value>, name: &str| {
+        let mut request = clean_request(state, blocks);
+        request["context"] = json!({"record":{"name":name}});
+        request
+    };
+    let first = send(
+        &mut d,
+        with_context(
+            &state,
+            vec![block("a", "alice@example.invalid")],
+            "Qorvex Exampleton",
+        ),
+    );
+    assert_eq!(first["op"], "clean_blocks", "{first}");
+    let a = json!({"id":"a","sha256":hash("alice@example.invalid")});
+    let same = send(
+        &mut d,
+        with_context(
+            &first,
+            vec![a.clone(), block("b", "bob@example.invalid")],
+            "Qorvex Exampleton",
+        ),
+    );
+    assert_eq!(hits(&same), [json!(true), json!(false)]);
+    let b = json!({"id":"b","sha256":hash("bob@example.invalid")});
+    let changed = send(
+        &mut d,
+        with_context(
+            &same,
+            vec![a, b, block("c", "carol@example.invalid")],
+            "Velmor Exampleton",
+        ),
+    );
+    assert_eq!(hits(&changed), [json!(false), json!(false), json!(false)]);
+}
+
+#[test]
+fn audit_database_disables_reuse_and_retains_no_results() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut d = daemon_with_audit(Some(&dir.path().join("audit.db")));
+    let state = open(&mut d, "audited");
+    let state = clean(&mut d, &state, vec![block("a", "alice@example.invalid")]);
+    assert!(d.v2.sessions["audited"].cache.is_empty());
+    let result = clean(
+        &mut d,
+        &state,
+        vec![
+            json!({"id":"a","sha256":hash("alice@example.invalid")}),
+            block("b", "bob@example.invalid"),
+        ],
+    );
+    assert_eq!(hits(&result), [json!(false), json!(false)]);
 }

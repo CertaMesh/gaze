@@ -1057,7 +1057,12 @@ impl Daemon {
         live.blocks = inventory;
         live.revision += 1;
         live.generation = generation;
-        live.cache = cache;
+        // Reuse never runs with an audit database, so keep nothing it cannot use.
+        live.cache = if self.logger.audit.is_none() {
+            cache
+        } else {
+            HashMap::new()
+        };
         live.cache_context = context_digest;
         Ok(response)
     }
