@@ -27,8 +27,13 @@ Audit source IDs contain class and slot, never values.
 | Single names | Case-folded or corroborated |
 | Address parts, exact single names, whitespace-only full-name variants, email, unlisted pairs | Off |
 
-`record_match_kinds` replaces a group's defaults. Values are trimmed and
-whitespace runs collapsed. Flexible matching allows text whitespace runs up to
+`record_match_kinds` replaces a group's defaults. Record terms first use the shared text detection
+view: fullwidth ASCII and Unicode space separators fold, nonbreaking hyphens
+become hyphens, and default-ignorable characters are removed. The short-value
+floor applies after that normalization. Values are then trimmed and whitespace
+runs collapsed. Ordinary dictionaries use the same detection view while retaining
+case and whitespace runs. The manifest keeps original source bytes, including
+interior invisible characters; restore remains byte-exact. Flexible matching allows text whitespace runs up to
 32 characters, without adding/removing separators. Enabled name folding uses
 full Unicode case folds. Name order, email case changes, abbreviations,
 fragments, and typos are not inferred.
