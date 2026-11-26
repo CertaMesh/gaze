@@ -7,23 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Release binaries are reproducible. `scripts/release/build-binary.sh` builds
-  them with remapped source, Cargo and toolchain paths, and refuses any `rustc`
-  other than the rustup toolchain in `rust-toolchain.toml`. The release workflow
-  rebuilds each binary from a second checkout path and fails on any byte
-  difference. Each binary ships with a `.buildinfo` file that records the
-  commit, compiler, linker and digest, so anyone can rebuild and compare it.
-- Each GitHub Release now includes `THIRD-PARTY-LICENSES.txt`. It lists every
-  Rust crate linked into the `gaze` binary with its licence text, followed by
-  the notices of C/C++ and ported code vendored inside crates (Oniguruma,
-  esaxx, sais-lite, crossbeam-channel, atomic-waker) and the licence and
-  third-party notices of the statically linked ONNX Runtime 1.24.2.
-  `scripts/release/third-party-licenses.sh` generates it with cargo-about. The
-  cargo-deny workflow regenerates it on dependency changes and fails if an
-  `ort-sys` bump outdates the vendored ONNX Runtime notices.
-
 ### Changed
 
 - Release binaries now include the `mcp` feature, so `gaze mcp install`,
@@ -146,6 +129,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were accepted.
 
 ### Added
+
+- Release binaries are reproducible. `scripts/release/build-binary.sh` builds
+  them with remapped source, Cargo and toolchain paths, and refuses any `rustc`
+  other than the rustup toolchain in `rust-toolchain.toml`. The release workflow
+  rebuilds each binary from a second checkout path and fails on any byte
+  difference. Each binary ships with a `.buildinfo` file that records the
+  commit, compiler, linker and digest, so anyone can rebuild and compare it.
+- Each GitHub Release now includes `THIRD-PARTY-LICENSES.txt`. It lists every
+  Rust crate linked into the `gaze` binary with its licence text, followed by
+  the notices of C/C++ and ported code vendored inside crates (Oniguruma,
+  esaxx, sais-lite, crossbeam-channel, atomic-waker) and the licence and
+  third-party notices of the statically linked ONNX Runtime 1.24.2.
+  `scripts/release/third-party-licenses.sh` generates it with cargo-about. The
+  cargo-deny workflow regenerates it on dependency changes and fails if an
+  `ort-sys` bump outdates the vendored ONNX Runtime notices.
 
 - Policies accept an `[outcomes]` table with `possibly_sensitive = "protect"`
   (default), `"refuse"` or `"pass_audited"`. No recognizer produces that
