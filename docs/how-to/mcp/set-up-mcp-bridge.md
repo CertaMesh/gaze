@@ -16,12 +16,12 @@ For the trust model and fail-closed dispatch order, see the
 
 ## Prerequisites
 
-- A `gaze` binary built with the `mcp` feature.
+- A `gaze` binary with the `mcp` feature. The release binaries include it.
 - One or more downstream MCP servers that can run over stdio.
 - A bridge TOML file that names those servers and the per-tool policy.
 - A 32-byte session key when using persistent file sessions.
 
-Install the CLI from the repository with MCP support:
+To build the CLI from the repository instead, enable MCP support:
 
 ```sh
 cargo install --path crates/gaze-cli --features mcp

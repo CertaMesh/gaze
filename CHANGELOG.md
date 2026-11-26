@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Release binaries now include the `mcp` feature, so `gaze mcp install`,
+  `doctor`, `serve` and `bridge` work without a source build. The release
+  smoke test runs a stdio `gaze mcp serve` call. On macOS arm64 the binary
+  grows from 47.2 MB to 54.6 MB, with no new linked libraries.
 - MCP tool results include the fixed `resultType: "complete"` discriminator
   for protocol 2026-07-28 and newer. Direct serialization of rmcp results also
   includes it; rmcp omits it for older negotiated protocol versions. Tool-error
@@ -187,6 +191,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ProtocolVersion`.
 
 ### Fixed
+
+- `gaze restore --restore-mode strict` and daemon v1 `restore` now refuse
+  malformed token spellings such as `<deadbeef:Email_>` with `UnknownToken`
+  (exit 3), as `Session::restore_strict_text` and daemon v2 already did.
+  Previously they returned the text unchanged with a success decision. Bare
+  class tags such as `<name>`, `<Email>` or `<custom:x>` count as malformed
+  spellings, so model output containing them now refuses in strict mode; the
+  restore audit row records `failed`. The
+  library's malformed-spelling grammar now derives its class names from
+  `BUILTIN_CLASS_NAMES`.
 
 - Workspace tests and their CLI children refuse native OS keystore access before
   credential construction, including Cargo invoked outside the repository via

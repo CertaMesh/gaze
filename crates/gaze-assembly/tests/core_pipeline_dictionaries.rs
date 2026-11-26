@@ -331,3 +331,38 @@ fn core_pipeline_mixed_dictionary_sources_are_a_typed_error() {
         );
     }
 }
+
+#[test]
+fn normalized_rulepack_inline_and_file_terms_round_trip_source_bytes() {
+    let fixture = Fixture::new();
+    let inline = std::fs::read_to_string(&fixture.inline).unwrap();
+    std::fs::write(
+        &fixture.inline,
+        inline.replace("tenant-song-xyz", "Ｑx7Lm2Rt"),
+    )
+    .unwrap();
+    std::fs::write(&fixture.terms, "Qx\u{200b}7Lm2Ru\n").unwrap();
+    let file = std::fs::read_to_string(&fixture.file).unwrap();
+    std::fs::write(
+        &fixture.file,
+        file.replace("case_sensitive = false", "case_sensitive = true"),
+    )
+    .unwrap();
+    let core = fixture.config().build().unwrap();
+    for value in ["Ｑx7Lm2Rt", "Qx7Lm2Rt", "Qx\u{200b}7Lm2Ru", "Qx7Lm2Ru"] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let raw = format!("found {value} here");
+        let clean = text(core.pseudonymize_text(&session, &raw).unwrap());
+        assert!(
+            clean.starts_with("found <"),
+            "rulepack term leaked: {clean:?}"
+        );
+        assert!(clean.ends_with("> here"));
+        assert_eq!(
+            core.pipeline()
+                .restore_strict_text(&session, &clean)
+                .unwrap(),
+            raw
+        );
+    }
+}
