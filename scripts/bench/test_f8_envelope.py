@@ -85,3 +85,27 @@ def test_token_prefixes_normalize_per_sample():
              "u": ["email1.0a1b2c3d@gaze-fake.invalid", "ffffffff:name_1", "deadbeef0a1b2c3d:x"]}
     assert f8.normalize(value, {}) == {"t": "<S0:EMAIL_1> and <S1:IBAN_1> <S0:EMAIL_2>",
                                        "u": ["email1.S0@gaze-fake.invalid", "S1:name_1", "deadbeef0a1b2c3d:x"]}
+
+
+def test_exchange_reads_a_burst_of_replies_written_at_once(tmp_path, monkeypatch):
+    # A server-mode burst: the daemon answers four frames in one write. The
+    # harness must not strand buffered replies behind an empty descriptor.
+    import stat
+    import sys
+    fake = tmp_path / "fake-gaze"
+    fake.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "lines = [sys.stdin.readline() for _ in range(4)]\n"
+        "sys.stdout.write(''.join(lines)); sys.stdout.flush()\n"
+        "sys.stdin.read()\n"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setattr(f8, "EXCHANGE_TIMEOUT", 5.0)
+    daemon = f8.Daemon(fake, tmp_path / "policy.toml", tmp_path / "stderr.log")
+    try:
+        replies = daemon.exchange([{"n": i} for i in range(4)])
+        assert [r for r, _ in replies] == [{"n": i} for i in range(4)]
+    finally:
+        daemon.close()
+    assert daemon.proc.returncode == 0 and daemon.peak > 0

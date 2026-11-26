@@ -57,7 +57,8 @@ import math
 import os
 import platform
 import random
-import select
+import queue
+import signal
 import re
 import shutil
 import subprocess
@@ -248,14 +249,24 @@ class Daemon:
         self.peak = 0
         self.samples: list[int] = []
         self.probes = probes
+        # A reader thread owns stdout, so buffered replies are never stranded
+        # behind a select() on an already drained descriptor.
+        self._lines: queue.Queue[bytes] = queue.Queue()
+        self._reader = threading.Thread(target=self._read, daemon=True)
+        self._reader.start()
         self._stop = threading.Event()
         self._poller = threading.Thread(target=self._poll, daemon=True)
         self._poller.start()
 
+    def _read(self):
+        for line in self.proc.stdout:
+            self._lines.put(line)
+        self._lines.put(b"")
+
     def _poll(self):
         # The kernel's ru_maxrss at exit gives the true peak; polling only adds
         # host probes and a coarse running peak, so it stays cheap.
-        while not self._stop.is_set() and self.proc.poll() is None:
+        while not self._stop.is_set() and self.proc.returncode is None:
             rss = rss_bytes(self.proc.pid)
             if rss:
                 self.peak = max(self.peak, rss)
@@ -278,10 +289,10 @@ class Daemon:
         out = []
         deadline = start + EXCHANGE_TIMEOUT
         for _ in requests:
-            ready, _, _ = select.select([self.proc.stdout], [], [], max(0.0, deadline - time.perf_counter()))
-            if not ready:
-                raise RuntimeError("daemon did not respond within the exchange timeout")
-            line = self.proc.stdout.readline()
+            try:
+                line = self._lines.get(timeout=max(0.0, deadline - time.perf_counter()))
+            except queue.Empty:
+                raise RuntimeError("daemon did not respond within the exchange timeout") from None
             if not line:
                 raise RuntimeError("daemon exited before responding")
             out.append((json.loads(line), time.perf_counter() - start))
@@ -295,21 +306,28 @@ class Daemon:
             self.proc.stdin.close()
         except OSError:
             pass
-        deadline = time.monotonic() + 30
-        while True:
-            pid, status, usage = os.wait4(self.proc.pid, os.WNOHANG)
-            if pid:
-                break
-            if time.monotonic() > deadline:
-                self.proc.kill()
-                pid, status, usage = os.wait4(self.proc.pid, 0)
-                break
-            time.sleep(0.05)
-        self.proc.returncode = os.waitstatus_to_exitcode(status)
-        # ru_maxrss is bytes on macOS and KiB on Linux.
-        maxrss = usage.ru_maxrss if platform.system() == "Darwin" else usage.ru_maxrss * 1024
-        self.peak = max(self.peak, maxrss)
-        self._stderr.close()
+        try:
+            deadline = time.monotonic() + 30
+            while True:
+                pid, status, usage = os.wait4(self.proc.pid, os.WNOHANG)
+                if pid:
+                    break
+                if time.monotonic() > deadline:
+                    os.kill(self.proc.pid, signal.SIGKILL)
+                    pid, status, usage = os.wait4(self.proc.pid, 0)
+                    break
+                time.sleep(0.05)
+            self.proc.returncode = os.waitstatus_to_exitcode(status)
+            # ru_maxrss is bytes on macOS and KiB on Linux.
+            maxrss = usage.ru_maxrss if platform.system() == "Darwin" else usage.ru_maxrss * 1024
+            self.peak = max(self.peak, maxrss)
+        except ChildProcessError:
+            # Already reaped elsewhere: the kernel peak is lost, so report none.
+            self.peak = 0
+        finally:
+            self._reader.join(timeout=5)
+            self.proc.stdout.close()
+            self._stderr.close()
 
 
 class Session:
@@ -405,8 +423,10 @@ def measure(args) -> dict:
     stderr = args.output.with_suffix(".daemon.log")
     stderr.parent.mkdir(parents=True, exist_ok=True)
     # The binary's own setup profile, exactly as `gaze setup` writes it.
-    subprocess.run([str(args.binary), "setup", "--non-interactive", "--force", "--policy-out", str(policy)],
-                   check=True, capture_output=True)
+    setup = subprocess.run([str(args.binary), "setup", "--non-interactive", "--force", "--policy-out", str(policy)],
+                           capture_output=True, text=True)
+    if setup.returncode:
+        sys.exit(f"gaze setup failed ({setup.returncode}):\n{setup.stderr}")
 
     probes = [start_probe]
     cold = [cold_start(args, policy, stderr) for _ in range(args.cold_runs)]
