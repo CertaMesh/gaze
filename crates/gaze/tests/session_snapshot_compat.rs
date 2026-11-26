@@ -1,15 +1,15 @@
 //! Snapshot compatibility fixtures for every envelope version current releases write.
 //!
 //! UPGRADE.md promises that manifests from an older minor still restore on newer ones. Each
-//! checked-in fixture was exported by the version that introduced its envelope, so a reader
-//! change, a token-grammar change or a class rename that breaks restore of a stored manifest
-//! fails here. The tokens are pinned literally on purpose: `Custom:postal_code` must keep
-//! restoring even after the class becomes a first-class variant.
+//! checked-in fixture is an export written by the v6, v7 or v8 writer, so a reader change, a
+//! stored-class encoding change or lost per-entry metadata that breaks a stored manifest fails
+//! here. The tokens are pinned literally on purpose: `Custom:postal_code` must keep restoring,
+//! and keep its counter, even after the class becomes a first-class variant.
 //!
 //! The writer is `session::tests::write_snapshot_compat_fixtures` (ignored). Never regenerate a
 //! fixture to make this test pass; add a new fixture for a new envelope instead.
 
-use gaze::{Error, SensitiveSnapshot, Session, SourceSpelling};
+use gaze::{Error, PiiClass, SensitiveSnapshot, Session, SourceSpelling};
 use serde_json::Value;
 
 const V6: &[u8] = include_bytes!("fixtures/session_snapshot_v6.bin");
@@ -32,6 +32,18 @@ fn assert_base_entries_restore(session: &Session, hex: &str) {
     assert_eq!(
         session.restore_strict_text(&clean).expect("strict restore"),
         "Reviewer Dr. Schmidt (alice@example.invalid) at postcode 12345."
+    );
+
+    // An imported class must keep its value and counter keys, or the next turn would mint a
+    // duplicate token for a stored value or reuse a stored token for a new one.
+    let postal = PiiClass::custom("postal_code").unwrap();
+    assert_eq!(
+        session.tokenize(&postal, "12345").unwrap(),
+        format!("<{hex}:Custom:postal_code_1>")
+    );
+    assert_eq!(
+        session.tokenize(&postal, "54321").unwrap(),
+        format!("<{hex}:Custom:postal_code_2>")
     );
 }
 
