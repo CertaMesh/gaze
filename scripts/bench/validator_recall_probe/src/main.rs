@@ -309,20 +309,30 @@ fn empty_context() -> Context {
     }
 }
 
+/// The document's protected spans. A typed `Untransformable` refusal emits no output, so it
+/// predicts nothing and covers no gold: diagnostic recall never credits a refusal, which the
+/// benchmark producer reports separately as typed refusal evidence. Every other error still
+/// fails the probe.
 fn run_pipeline(
     pipeline: &Pipeline,
     text: &str,
     locale_chain: &[LocaleTag],
 ) -> Result<Vec<Prediction>, Box<dyn std::error::Error>> {
     let session = Session::new(Scope::Ephemeral)?;
-    let (_, _, _, trace) = pipeline
+    let trace = match pipeline
         .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
             &session,
             text,
             locale_chain,
             &DictionaryBundle::default(),
             SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
-        )?;
+        ) {
+        Ok((_, _, _, trace)) => trace,
+        Err(gaze::Error::Protection(gaze::ProtectionError::Untransformable { .. })) => {
+            return Ok(Vec::new())
+        }
+        Err(error) => return Err(error.into()),
+    };
     Ok(trace
         .into_iter()
         .map(|item| Prediction {
