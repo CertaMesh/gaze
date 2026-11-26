@@ -21,7 +21,7 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: 45
     env:
-      GAZE_RELEASE_FEATURES: document,proxy
+      GAZE_RELEASE_FEATURES: document,mcp,proxy
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
@@ -67,6 +67,8 @@ jobs:
           "$bin" proxy --help | grep -q 'stop'
           "$bin" proxy --help | grep -q 'status'
           "$bin" proxy --help | grep -q 'restart'
+          "$bin" mcp --help | grep -q 'serve'
+          "$bin" mcp serve --help | grep -q -- '--manifest-dir'
 
           clean_json="$(printf 'alice@example.invalid' | "$bin" clean)"
           clean_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$clean_json")"
@@ -97,6 +99,54 @@ jobs:
           extended_json="$(printf 'host 10.20.30.40' | "$bin" clean --policy="$policy")"
           extended_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$extended_json")"
           grep -q 'Custom:ip_address' <<< "$extended_text" || (echo "smoke failed: core-extended did not tokenize IP fixture"; exit 1)
+
+          mcp_dir="$(mktemp -d)"
+          python3 - "$bin" "$mcp_dir" <<'PYTHON'
+          import json
+          import subprocess
+          import sys
+          import threading
+
+          binary, manifest_dir = sys.argv[1], sys.argv[2]
+          messages = [
+              {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                  "protocolVersion": "2025-06-18", "capabilities": {},
+                  "clientInfo": {"name": "release-smoke", "version": "0"}}},
+              {"jsonrpc": "2.0", "method": "notifications/initialized"},
+              {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+              {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+                  "name": "gaze_read_text", "arguments": {"text": "alice@example.invalid"}}},
+          ]
+          server = subprocess.Popen(
+              [binary, "mcp", "serve", "--manifest-dir", manifest_dir],
+              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+          )
+          # A server that stays alive without answering gets killed, so readline() ends.
+          watchdog = threading.Timer(60, server.kill)
+          watchdog.start()
+          responses = {}
+          for message in messages:
+              server.stdin.write(json.dumps(message) + "\n")
+              server.stdin.flush()
+              if "id" in message:
+                  while True:
+                      reply = json.loads(server.stdout.readline())
+                      if reply.get("id") == message["id"]:
+                          responses[message["id"]] = reply
+                          break
+          server.stdin.close()
+          server.wait(timeout=30)
+          watchdog.cancel()
+          assert "result" in responses[1], responses[1]
+          tools = {tool["name"] for tool in responses[2]["result"]["tools"]}
+          assert "gaze_read_text" in tools, tools
+          result = responses[3]["result"]
+          assert not result.get("isError"), result
+          payload = json.dumps(result)
+          assert "alice@example.invalid" not in payload, payload
+          assert "Email" in payload, payload
+          PYTHON
+          rm -rf "$mcp_dir"
 
           smoke_home="$(mktemp -d)"
           proxy_port="$(python3 - <<'PY'

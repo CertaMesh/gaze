@@ -1914,6 +1914,20 @@ class ConfigTests(unittest.TestCase):
                 ):
                     benchmark.load_committed_source_id_vocabulary(repo_root)
 
+    def test_pinned_rule_source_ids_join_the_vocabulary_ahead_of_their_rules(self) -> None:
+        # The field-labelled record-ID rule IDs are pinned ahead of the rulepack that ships
+        # them, so that change and its base share one specification. Each pin is an
+        # id-only table; it is never a model pin.
+        repo_root = Path(__file__).resolve().parents[2]
+        with (repo_root / "scripts/bench/no_opf_models.toml").open("rb") as handle:
+            models = tomllib.load(handle)
+        pinned = {name: table for name, table in models.items()
+                  if name.startswith("pinned_rule_")}
+        self.assertTrue(all(set(table) == {"id"} for table in pinned.values()), pinned)
+        ids = {table["id"] for table in pinned.values()}
+        self.assertEqual(ids, {"customer_id.field", "employee_id.field", "record_id.field"})
+        self.assertTrue(ids <= benchmark.COMMITTED_SOURCE_ID_VOCABULARY)
+
     def test_all_no_opf_config_names_are_present_and_spelled_exactly(self) -> None:
         expected = (
             "rule-floor-extended",

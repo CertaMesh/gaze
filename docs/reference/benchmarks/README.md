@@ -2001,7 +2001,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [current specification](specifications/3069a82eaf9b0e4303ed4c8b97511ce723303160d153edd12bdd4805f0e02efa.json) differs from it only by adding the JSON structure census to the measuring closure.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-label specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) differs from it only by adding the field-labelled record-ID rules to the validation vocabulary; the [current specification](specifications/434615c77d40efbce435df18a1ade522975b820babfe3a4fe82e8a28fe6f48be.json) differs from it only by adding the JSON structure census to the measuring closure.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
