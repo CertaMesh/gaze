@@ -187,10 +187,13 @@ and builds the conversation's own Session, empty or imported from that
 conversation's trusted snapshot. `tools/list` reads a cached tool catalog and
 does not open a conversation. Closing it with `close`, or leaving it idle past
 `ConversationLimits::idle_timeout` (default 30 minutes), drops its Session, so a
-later call with the same id starts empty and earlier tokens no longer restore.
+later call with the same id gets what the factory builds: empty, so earlier
+tokens no longer restore, unless the factory imports that conversation's
+snapshot. The factory may run twice for one id when two calls race, so it must
+not consume its snapshot, and every host it builds must list the same tools.
 At `max_conversations` live entries (default 64) a new id is refused rather than
 evicting a live conversation. The registry is memory-only: after a restart every
-id starts empty. A call already in flight keeps its host until it returns.
+id starts from what the factory builds. A call already in flight keeps its host until it returns.
 
 Embedded HTTP hosts pass the registry to `RmcpFrontend::into_conversation_handler`
 and set `HostCallContext::conversation` in authenticated middleware. A call

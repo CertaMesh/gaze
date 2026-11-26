@@ -15,9 +15,14 @@
 //!   which receives the id so it can bind per-conversation resources or import
 //!   that conversation's trusted snapshot. The factory runs outside the registry
 //!   lock; when two calls race to open one id, the first inserted host wins and
-//!   the other is dropped unused.
+//!   the other is dropped unused, so the factory must be safe to run twice for
+//!   one id (for example, read a snapshot without consuming it). Every host it
+//!   builds must list the same tools: `tools/list` for a conversation that is not
+//!   live reads the catalog of the first host built.
 //! - **Close:** [`ConversationRegistry::close`] drops the entry. A later call with
-//!   the same id starts a new, empty Session.
+//!   the same id gets whatever the factory builds: an empty Session unless the
+//!   factory imports a snapshot. Close does not cancel an open of the same id that
+//!   is still in its factory; that open inserts afterwards.
 //! - **Expiry:** an entry unused for [`ConversationLimits::idle_timeout`] is
 //!   dropped on the next registry access, with the same effect as close.
 //! - **Capacity:** at [`ConversationLimits::max_conversations`] live entries a new
@@ -25,7 +30,8 @@
 //!   never evicted to make room, because that would silently drop their restore
 //!   authority.
 //! - **Restart:** the registry is memory-only. After a restart every id starts
-//!   empty, and tokens issued before it are unowned.
+//!   from what the factory builds; without an imported snapshot, tokens issued
+//!   before it are unowned.
 //!
 //! A call already in flight keeps its host until it returns, even when its
 //! conversation is closed or expires meanwhile.
