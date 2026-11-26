@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Release binaries are reproducible. `scripts/release/build-binary.sh` builds
+  them with remapped source, Cargo and toolchain paths, and refuses any `rustc`
+  other than the rustup toolchain in `rust-toolchain.toml`. The release workflow
+  rebuilds each binary from a second checkout path and fails on any byte
+  difference. Each binary ships with a `.buildinfo` file that records the
+  commit, compiler, linker and digest, so anyone can rebuild and compare it.
+
 ### Changed
 
 - A labelled JSON number now refuses, typed, instead of leaking or becoming an
@@ -31,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spelling, such as fullwidth `ｉｄ` or `customer‐id` with a Unicode dash.
 - The library `pseudonymize` text path passes the same document field context
   as every text clean.
+- Release binaries now include the `mcp` feature, so `gaze mcp install`,
+  `doctor`, `serve` and `bridge` work without a source build. The release
+  smoke test runs a stdio `gaze mcp serve` call. On macOS arm64 the binary
+  grows from 47.2 MB to 54.6 MB, with no new linked libraries.
 - MCP tool results include the fixed `resultType: "complete"` discriminator
   for protocol 2026-07-28 and newer. Direct serialization of rmcp results also
   includes it; rmcp omits it for older negotiated protocol versions. Tool-error
@@ -215,6 +228,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ProtocolVersion`.
 
 ### Fixed
+
+- `gaze restore --restore-mode strict` and daemon v1 `restore` now refuse
+  malformed token spellings such as `<deadbeef:Email_>` with `UnknownToken`
+  (exit 3), as `Session::restore_strict_text` and daemon v2 already did.
+  Previously they returned the text unchanged with a success decision. Bare
+  class tags such as `<name>`, `<Email>` or `<custom:x>` count as malformed
+  spellings, so model output containing them now refuses in strict mode; the
+  restore audit row records `failed`. The
+  library's malformed-spelling grammar now derives its class names from
+  `BUILTIN_CLASS_NAMES`.
 
 - Workspace tests and their CLI children refuse native OS keystore access before
   credential construction, including Cargo invoked outside the repository via
