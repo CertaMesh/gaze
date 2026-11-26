@@ -1,0 +1,39 @@
+{
+  "decided": "2026-11-26",
+  "rule": "Budgets are fixed before measuring and never adjusted after results. A missing measurement is not a pass. Speedups must keep output byte-identical.",
+  "envelopes": {
+    "laptop": {
+      "machine": "MacBook Pro M5 Max, quiet (load1 < 2.0, no foreign build or benchmark)",
+      "workload": {
+        "description": "warm daemon v2 session, 12-turn EN/DE history (~32 KiB), new message <= 4 KiB with PII, gaze setup policy, strict restore",
+        "concurrent_sessions": 1
+      },
+      "budgets": {
+        "turn_p50_ms": 150,
+        "turn_p95_ms": 500,
+        "turn_p99_ms": 1000,
+        "reclean_p95_ms": 2000,
+        "restore_p95_ms": 50,
+        "cold_start_max_ms": 3000,
+        "steady_rss_bytes": 1200000000,
+        "peak_rss_bytes": 1500000000
+      }
+    },
+    "server": {
+      "machine": "Hetzner CCX23 (4 dedicated vCPU, 16 GB), Debian 13, x86-64 release binary",
+      "workload": {
+        "description": "as laptop, with 4 concurrent sessions on one resident daemon",
+        "concurrent_sessions": 4
+      },
+      "budgets": {
+        "turn_p50_ms": 250,
+        "turn_p95_ms": 800,
+        "turn_p99_ms": 1500,
+        "reclean_p95_ms": 3000,
+        "restore_p95_ms": 80,
+        "cold_start_max_ms": 5000,
+        "peak_rss_bytes": 2500000000
+      }
+    }
+  }
+}
