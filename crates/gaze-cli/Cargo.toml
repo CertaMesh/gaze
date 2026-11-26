@@ -18,7 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 perf-timers = ["gaze-assembly/perf-timers", "gaze-types/perf-timers", "gaze/perf-timers", "gaze-recognizers/perf-timers"]
 default = ["proxy", "setup"]
-setup = ["dep:gaze-model-setup", "dep:tempfile", "safety-net-nym"]
+setup = ["dep:tempfile", "dep:thiserror", "dep:ureq", "safety-net-nym"]
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
 safety-net-nym = ["gaze-recognizers/safety-net-nym", "gaze-assembly/safety-net-nym"]
 document = ["dep:gaze-document"]
@@ -55,7 +55,6 @@ gaze-document = { path = "../gaze-document", version = "0.17.0", optional = true
 gaze-mcp-bridge = { workspace = true, optional = true }
 gaze-mcp-core = { path = "../gaze-mcp-core", version = "0.17.0", optional = true }
 gaze-mcp-rmcp = { path = "../gaze-mcp-rmcp", version = "0.17.0", optional = true }
-gaze-model-setup = { workspace = true, optional = true }
 gaze-proxy = { workspace = true, optional = true }
 gaze-proxy-dashboard = { workspace = true, optional = true }
 gaze-recognizers = { path = "../gaze-recognizers", version = "0.17.0" }
@@ -69,11 +68,13 @@ serde_json = { version = "1", features = ["raw_value"] }
 signal-hook = "0.3"
 sha2 = "0.10"
 tempfile = { version = "3", optional = true }
+thiserror = { workspace = true, optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 tracing = "0.1"
+ureq = { version = "3.3.0", optional = true }
 url = "2"
 
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [dev-dependencies]

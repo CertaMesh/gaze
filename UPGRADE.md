@@ -29,6 +29,16 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: stop depending on `gaze-model-setup`
+
+The `gaze-model-setup` crate is no longer published; its code moved into
+`gaze-cli`. Rust callers of `install_ner_bundle`, `install_nym_bundle`,
+`install_gliner_dob_bundle` or the `default_*_model_dir` helpers should run
+`gaze setup` (or `gaze setup --non-interactive --model-dir <dir>`) instead, or
+keep the last published `gaze-model-setup` 0.17 release pinned. The bundle
+pins and verification (`gaze_recognizers::verify_davlan_ner_bundle`,
+`verify_nym_bundle`, `verify_gliner_dob_bundle`) are unchanged.
+
 ### Action required: handle caller-context dictionary refusals
 
 `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context` now

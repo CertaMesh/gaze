@@ -3,11 +3,11 @@ use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
-use clap::ValueEnum;
-use gaze::{CleanDocument, LocaleTag, RawDocument, Rulepack, Session};
-use gaze_model_setup::{
+use crate::model_setup::{
     install_gliner_dob_bundle, install_ner_bundle, install_nym_bundle, InstallOutcome, SetupError,
 };
+use clap::ValueEnum;
+use gaze::{CleanDocument, LocaleTag, RawDocument, Rulepack, Session};
 use gaze_recognizers::safety_net::nym::{NYM_SMALL_HF_COMMIT, NYM_SMALL_HF_REPO};
 use gaze_recognizers::{GLINER_DOB_HF_COMMIT, GLINER_DOB_HF_REPO};
 use sha2::{Digest, Sha256};
@@ -1161,7 +1161,7 @@ mod tests {
 
         let err = resolve_nym_safety_net(|| {
             Err(SetupError::Verify(
-                gaze_model_setup::SafetyNetError::ModelIntegrityMismatch {
+                crate::model_setup::SafetyNetError::ModelIntegrityMismatch {
                     expected: "pinned".to_string(),
                     actual: "other".to_string(),
                 },

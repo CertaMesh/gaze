@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.2.0. Its existing fixture detections remain unchanged.
 
 
+### Removed
+
+- The `gaze-model-setup` crate is folded into `gaze-cli`, its only consumer.
+  `gaze setup` installs and verifies the same pinned NER, Nym and GLiNER DOB
+  bundles through the CLI `setup` feature. The workspace now publishes 14
+  crates; `gaze-model-setup` receives no further releases.
+
 ### Security
 
 - Update bundled SQLite through `rusqlite` 0.41, `pulldown-cmark` to 0.13.6,

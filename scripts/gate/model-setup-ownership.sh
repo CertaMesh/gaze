@@ -78,9 +78,9 @@ cargo test --locked -p gaze-recognizers --lib \
 grep -F "test $cross_directory_test ... ok" "$receipt_dir/cross-directory.log"
 
 for setup_test in loose_mode_current_user_dir_is_repaired_then_accepted foreign_owned_dir_fails_closed; do
-  GAZE_MODEL_SETUP_FOREIGN_MODEL_DIR="$foreign_setup_dir" cargo test --locked -p gaze-model-setup --lib "tests::$setup_test" -- --ignored --exact --nocapture \
+  GAZE_MODEL_SETUP_FOREIGN_MODEL_DIR="$foreign_setup_dir" cargo test --locked -p gaze-cli --features setup --bin gaze "model_setup::tests::$setup_test" -- --ignored --exact --nocapture \
     | tee "$receipt_dir/$setup_test.log"
-  grep -F "test tests::$setup_test ... ok" "$receipt_dir/$setup_test.log"
+  grep -F "test model_setup::tests::$setup_test ... ok" "$receipt_dir/$setup_test.log"
 done
 (
   cd "$GAZE_MODEL_SETUP_LOOSE_MODEL_DIR"
