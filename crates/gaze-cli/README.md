@@ -65,9 +65,9 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 | `audit safety-net query` | Prints filtered `safety_net_log` rows from a `--audit-db` SQLite log, opened read-only. |
 | `document clean` | OCRs PNG/JPG/PDF input into a SafeBundle. Requires `--features document`. |
 | `index ingest/search` | Builds and searches a local owner-side text/Markdown index. Requires `--features index`. |
-| `mcp install` | Installs `gaze mcp serve` into supported MCP client configs. Requires `--features mcp`. |
-| `mcp doctor` | Diagnoses MCP runtime dependencies, client config, and AGENTS.md guidance. Requires `--features mcp`. |
-| `mcp serve` | Runs the stdio MCP server exposing `gaze_read_file` and `gaze_read_text`. Requires `--features mcp`. |
+| `mcp install` | Installs `gaze mcp serve` into supported MCP client configs. Requires `--features mcp`; the release binary includes it. |
+| `mcp doctor` | Diagnoses MCP runtime dependencies, client config, and AGENTS.md guidance. Requires `--features mcp`; the release binary includes it. |
+| `mcp serve` | Runs the stdio MCP server exposing `gaze_read_file` and `gaze_read_text`. Requires `--features mcp`; the release binary includes it. |
 | `proxy serve/start/stop/status/restart` | Runs or manages the local LLM API proxy. Included in the default build. |
 | `proxy serve --dashboard` | Launches the opt-in, memory-only inspection dashboard child alongside the proxy. Requires `--features dashboard` (default-off); owner-domain capture additionally requires explicit per-domain risk-acknowledgement flags, and any activation failure disables only the dashboard while the proxy keeps serving. On Linux the launcher must hold (or promptly open) the read end of the pairing FIFO, otherwise `gaze proxy serve` blocks in the write-only open before provider startup. Exact flags, pairing display, and failure behavior: [`docs/reference/cli.md`](../../docs/reference/cli.md#dashboard-flags-opt-in-dashboard-cargo-feature). |
 

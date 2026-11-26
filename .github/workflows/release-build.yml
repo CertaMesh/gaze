@@ -105,6 +105,7 @@ jobs:
           import json
           import subprocess
           import sys
+          import threading
 
           binary, manifest_dir = sys.argv[1], sys.argv[2]
           messages = [
@@ -120,6 +121,9 @@ jobs:
               [binary, "mcp", "serve", "--manifest-dir", manifest_dir],
               stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
           )
+          # A server that stays alive without answering gets killed, so readline() ends.
+          watchdog = threading.Timer(60, server.kill)
+          watchdog.start()
           responses = {}
           for message in messages:
               server.stdin.write(json.dumps(message) + "\n")
@@ -132,6 +136,8 @@ jobs:
                           break
           server.stdin.close()
           server.wait(timeout=30)
+          watchdog.cancel()
+          assert "result" in responses[1], responses[1]
           tools = {tool["name"] for tool in responses[2]["result"]["tools"]}
           assert "gaze_read_text" in tools, tools
           result = responses[3]["result"]
