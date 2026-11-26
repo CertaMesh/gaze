@@ -103,6 +103,32 @@ uv run --project scripts/bench python scripts/bench/outcome_counters.py prove \
   --release v0.17.0 --check docs/reference/benchmarks/outcome-counters-v0.17.0.json
 ```
 
+## JSON structure census
+
+`json_structure_census.py` maps every false-positive byte of a record to the
+innermost JSON or log position it lands in and to the recognizers that
+detected it. Positions are keys, numbers, `true`/`false`/`null`, tool
+selectors, tool arguments, ordinary string values, syntax and log keys; a
+protected range that cuts an escape sequence in two also counts. Every
+position except an ordinary string value or prose is critical: a change there
+can break parsing, typing or tool dispatch (F2). Serialized JSON inside a
+string is decoded with a byte map, so nested positions map back to source
+bytes. Tool selectors come from a declared list of provider envelopes, never
+from a generic key such as `name` alone. Only rebuildable texts are read; the
+metadata-only holdout is reported as unreadable bytes. The report also gives
+the gold bytes a blanket learned-detector veto per position would expose.
+
+```bash
+uv run --project scripts/bench python scripts/bench/json_structure_census.py report \
+  target/bench-data/gate-base/full/observations-v1.jsonl.gz --output target/gate/census-base.json
+uv run --project scripts/bench python scripts/bench/json_structure_census.py gate \
+  target/gate/census-base.json target/gate/census-candidate.json
+```
+
+`gate` fails on any critical false-positive byte the candidate adds at a
+document offset where the base had none. It is a diagnostic beside the gain
+gate, not a replacement for it.
+
 ## Scored-label contracts
 
 A scored-label contract says which corpus labels count as gold PII. Without
@@ -708,8 +734,10 @@ also includes the bounded inference-equivalence and key-mutation tools in the
 measuring source closure. The
 [refusal contract specification](../../docs/reference/benchmarks/specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json)
 also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
-The [current specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
+The [pipeline-producer specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
 pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
+The [current specification](../../docs/reference/benchmarks/specifications/4696391e71531dd1a47ccad4ac7cbbb83626633a3058dbdcb002cac4fcf51dfb.json)
+differs from it only by adding `json_structure_census.py` to the measuring closure.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
