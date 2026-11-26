@@ -284,6 +284,13 @@ an empty list disables it. Allowed kinds are `exact`, `case_folded`,
 The last kind applies to common-word single-token names. Enabling an
 off-by-default kind is an explicit precision choice; some measured kinds lost
 more benign bytes than leaked bytes, while unmeasured kinds have unknown gain.
+Dictionary and record terms use `gaze_types::normalize::normalize`, the same
+detection view as document text. Record whitespace canonicalization and the
+short-value floor follow that normalization. Match-kind classification uses
+that view and remains exclusive: an exact occurrence is `exact`, even when
+`case_folded` is enabled. Tokens cover the original source bytes and restore
+byte-exact.
+
 Case-folded kinds apply only to names; whitespace kinds require a
 multi-token value. Incompatible combinations fail with a path-only error.
 A record field whose class is off supplies no extra record detection;

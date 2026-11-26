@@ -598,3 +598,222 @@ fn record_terms_keep_their_typed_classes() {
         .values()
         .any(|class| class == &PiiClass::Email));
 }
+
+#[test]
+fn normalized_known_terms_protect_original_bytes_and_session_repeats() {
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    for value in [
+        "Ｑx7Lm2Rt",
+        "Qx\u{200b}7Lm2Rt",
+        "Qx7Lm2Rt",
+        "Qe\u{301}7Lm2Rt",
+    ] {
+        for context_json in [
+            serde_json::json!({"record":{"tag":value},"field_map":{"/tag":"custom:tag"},"record_match_kinds":{"custom:tag":["exact"]}}),
+            serde_json::json!({"dictionaries":{"tag":{"terms":[value],"case_sensitive":true}},"class_map":{"tag":"custom:tag"}}),
+        ] {
+            let context = Context::from_json_str(&context_json.to_string()).unwrap();
+            let configured = policy(Action::Tokenize);
+            let pipeline = build_pipeline(&configured, &context, &[], &locales, None).unwrap();
+            let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let raw = format!("found {value} here");
+            let CleanDocument::Text(clean) = pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(raw.clone()),
+                    locales.as_slice(),
+                    &bundle,
+                )
+                .unwrap()
+            else {
+                panic!("expected text")
+            };
+            assert!(
+                clean.starts_with("found <"),
+                "declared term leaked: {raw:?}"
+            );
+            assert!(
+                clean.ends_with("> here"),
+                "entire source value must be covered: {clean:?}"
+            );
+            assert_eq!(
+                pipeline
+                    .restore_with_telemetry(&session, &clean)
+                    .unwrap()
+                    .0
+                    .text,
+                raw
+            );
+            let resident = &pipeline;
+            let CleanDocument::Text(repeated) = resident
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(raw.clone()),
+                    locales.as_slice(),
+                    &gaze::DictionaryBundle::default(),
+                )
+                .unwrap()
+            else {
+                panic!("expected text")
+            };
+            assert!(!repeated.contains(value), "session repeat leaked");
+            assert_eq!(
+                resident
+                    .restore_with_telemetry(&session, &repeated)
+                    .unwrap()
+                    .0
+                    .text,
+                raw
+            );
+        }
+    }
+}
+
+#[test]
+fn normalized_short_records_still_refuse_before_assembly() {
+    for value in ["Ｑx", "Q\u{115f}x", "１２３", "\u{200b}\u{200c}\u{200d}"] {
+        let context = Context::from_json_str(&serde_json::json!({"record":{"tag":value},"field_map":{"/tag":"custom:tag"},"record_match_kinds":{"custom:tag":["exact"]}}).to_string()).unwrap();
+        assert_eq!(
+            context.untransformable_reason(),
+            Some(gaze::UntransformableReason::CallerValueTooShort)
+        );
+        let locales = LocaleChain::merge_policy_and_cli(None, None);
+        assert!(matches!(
+            build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None),
+            Err(BuildError::Untransformable(
+                gaze::UntransformableReason::CallerValueTooShort
+            ))
+        ));
+    }
+}
+
+#[test]
+fn normalized_prefix_terms_cannot_hide_existing_longer_dictionary_values() {
+    let context = Context::from_json_str(r#"{"dictionaries":{"tag":{"terms":["Ｑx7", "Qx7Lm2Rt"],"case_sensitive":true}},"class_map":{"tag":"custom:tag"}}"#).unwrap();
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    let pipeline =
+        build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+    let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "found Qx7Lm2Rt here";
+    let CleanDocument::Text(clean) = pipeline
+        .pseudonymize_with_detect_context(
+            &session,
+            RawDocument::Text(raw.into()),
+            locales.as_slice(),
+            &bundle,
+        )
+        .unwrap()
+    else {
+        panic!("expected text")
+    };
+    assert!(
+        clean.starts_with("found <"),
+        "the preexisting longer match must survive: {clean:?}"
+    );
+    assert!(clean.ends_with("> here"));
+    assert_eq!(
+        pipeline
+            .restore_with_telemetry(&session, &clean)
+            .unwrap()
+            .0
+            .text,
+        raw
+    );
+}
+
+#[test]
+fn ascii_record_terms_protect_non_ascii_text_spellings_and_restore() {
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    for (value, spelling) in [
+        ("Qx7Lm2Rt", "Ｑx７Lm２Rt"),
+        ("Qx7Lm2Rt", "Qx\u{200b}7Lm2Rt"),
+        ("Qx7-Lm2Rt", "Qx7\u{2011}Lm2Rt"),
+        ("Qx7 Lm2Rt", "Qx7\u{2007}Lm2Rt"),
+    ] {
+        let context = Context::from_json_str(
+            &serde_json::json!({
+                "record": {"tag": value}, "field_map": {"/tag": "custom:tag"},
+                "record_match_kinds": {"custom:tag": ["exact"]},
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let pipeline =
+            build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+        let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let raw = format!("found {spelling} here");
+        let CleanDocument::Text(clean) = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                RawDocument::Text(raw.clone()),
+                locales.as_slice(),
+                &bundle,
+            )
+            .unwrap()
+        else {
+            panic!("expected text")
+        };
+        assert!(
+            clean.starts_with("found <"),
+            "normalized text value leaked: {clean:?}"
+        );
+        assert!(
+            clean.ends_with("> here"),
+            "token must cover every source byte"
+        );
+        assert_eq!(
+            pipeline
+                .restore_with_telemetry(&session, &clean)
+                .unwrap()
+                .0
+                .text,
+            raw
+        );
+    }
+}
+
+#[test]
+fn record_normalization_does_not_equate_distinct_separators_or_combining_marks() {
+    let locales = LocaleChain::merge_policy_and_cli(None, None);
+    for (value, spelling) in [
+        ("Qx7-Lm2Rt", "Qx7Lm2Rt"),
+        ("Qx7 Lm2Rt", "Qx7Lm2Rt"),
+        ("Qx7-Lm2Rt", "Qx7 Lm2Rt"),
+        ("Qx7-Lm2Rt", "Qx7\u{2010}Lm2Rt"),
+        ("Qx7Lm2Rt", "Qx7Lm2R\u{0301}t"),
+    ] {
+        for context_json in [
+            serde_json::json!({"record":{"tag":value},"field_map":{"/tag":"custom:tag"},"record_match_kinds":{"custom:tag":["exact"]}}),
+            serde_json::json!({"dictionaries":{"tag":{"terms":[value],"case_sensitive":true}},"class_map":{"tag":"custom:tag"}}),
+        ] {
+            let context = Context::from_json_str(&context_json.to_string()).unwrap();
+            let pipeline =
+                build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
+            let bundle = gaze::dictionary_bundle_from_context(&context).unwrap();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let raw = format!("found {spelling} here");
+            let CleanDocument::Text(clean) = pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(raw.clone()),
+                    locales.as_slice(),
+                    &bundle,
+                )
+                .unwrap()
+            else {
+                panic!("expected text")
+            };
+            assert_eq!(
+                clean, raw,
+                "distinct values must stay distinct under the shared fold"
+            );
+            assert!(
+                session.tokens().is_empty(),
+                "unrelated text must emit no private token"
+            );
+        }
+    }
+}
