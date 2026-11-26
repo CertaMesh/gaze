@@ -14,3 +14,17 @@ ids = [
     "openai-privacy-filter",
     "openai-privacy-filter-subprocess",
 ]
+
+# Rulepack source IDs registered ahead of the detection change that ships them, so the
+# base and that change measure under one benchmark specification. The scorer adds the `id`
+# of every top-level table here to its source-ID vocabulary; accepting an ID the base never
+# emits changes no score, and once the rule lands in bundled `core` its rulepack declares
+# the same ID, so the vocabulary is unchanged. These tables are not models.
+[pinned_rule_customer_id_field]
+id = "customer_id.field"
+
+[pinned_rule_employee_id_field]
+id = "employee_id.field"
+
+[pinned_rule_record_id_field]
+id = "record_id.field"
