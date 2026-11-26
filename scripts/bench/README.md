@@ -406,7 +406,10 @@ At scorer initialization, stable provenance IDs are loaded from every committed
 `scripts/bench/no_opf_models.toml`. That file's `[builtin_source_ids]` declaration
 adds built-in producer IDs only from committed ground truth; tests require every
 declared ID to appear as a string literal in the read-only `gaze-recognizers`
-sources. Runtime producer assertions never extend this vocabulary. An exact,
+sources. Its id-only `pinned_rule_*` tables add rulepack IDs registered ahead of
+the detection change that ships them, so that change and its base measure under
+one specification; the vocabulary is unchanged once the rule lands. Runtime
+producer assertions never extend this vocabulary. An exact,
 case-sensitive vocabulary match may skip only the protected-content reproduction
 check; source-ID grammar, ordering, non-empty, and uniqueness validation still
 apply. Missing, unreadable, malformed, or empty committed vocabulary inputs abort
@@ -514,7 +517,10 @@ side-by-side `validator_backed_recall` and `shape_only_recall`. The dataset bloc
 reports a full available-population `validator_gold_census` with validator pass
 and fail counts. Labels without an applicable validator say `not_applicable` and
 use null pass/fail and recall fields, so not-applicable cannot be confused with a
-measured zero.
+measured zero. A document the pipeline refuses with a typed untransformable
+error emits no output, so the probe reports no predictions for it: a refusal
+never earns diagnostic recall, and the benchmark producer reports the refusal
+itself as typed refusal evidence.
 
 These fields define schema v4. Older schema-v3 artifacts remain readable for
 diagnostic replay and their aggregate evidence is not rewritten. Because v3

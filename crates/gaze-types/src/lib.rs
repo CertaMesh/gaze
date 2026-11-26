@@ -4090,6 +4090,10 @@ impl DictionaryEntry {
                 name: name.to_string(),
             });
         }
+        let terms = terms
+            .into_iter()
+            .map(|term| normalize::normalize(&term).text)
+            .collect();
         Ok(Self {
             terms,
             case_sensitive,
@@ -4114,7 +4118,7 @@ impl DictionaryEntry {
         self.case_sensitive
     }
 
-    /// Returns configured dictionary terms.
+    /// Returns terms in the shared detection view, preserving case and whitespace runs.
     pub fn terms(&self) -> &[String] {
         &self.terms
     }
