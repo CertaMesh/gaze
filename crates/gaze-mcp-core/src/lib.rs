@@ -41,6 +41,7 @@
 #![warn(missing_docs)]
 
 pub mod auth;
+pub mod conversation;
 pub mod ctx;
 pub mod dispatch;
 pub mod frontend;
@@ -67,6 +68,10 @@ pub mod operator_tools {
 }
 
 pub use crate::auth::{AuthError, AuthHook, DenyAllAuthHook, Principal};
+pub use crate::conversation::{
+    ConversationError, ConversationFactory, ConversationId, ConversationLimits,
+    ConversationRegistry,
+};
 pub use crate::ctx::{SessionHandle, ToolCtx, ToolResources, UntrustedInvocationArgs};
 pub use crate::dispatch::{DispatchError, PiiEnvelope};
 pub use crate::frontend::{DispatchHost, Frontend, FrontendError, ShutdownToken};

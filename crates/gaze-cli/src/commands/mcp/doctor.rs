@@ -9,7 +9,7 @@ use crate::error::CliError;
 use crate::style;
 
 use super::install::{targets, ClientTarget};
-use super::serve::default_manifest_dir;
+use super::serve::{default_manifest_dir, protection_profile, SESSION_SCOPE};
 use super::{default_agents_md, Client, DoctorArgs};
 
 const BEGIN_MARKER: &str = "<!-- BEGIN GAZE MCP -->";
@@ -20,6 +20,8 @@ pub(crate) fn run(args: DoctorArgs) -> Result<(), CliError> {
         check_tesseract(),
         check_pdfium(),
         check_manifest_dir(&default_manifest_dir().join("calls")),
+        check_protection_profile(),
+        pass("session scope", SESSION_SCOPE),
     ];
     #[cfg(all(feature = "setup", feature = "safety-net-nym"))]
     checks.push(check_nym_bundle(nym_model_dir()));
@@ -141,6 +143,23 @@ fn check_binary_on_path() -> Check {
                 current.display()
             ),
         )
+    }
+}
+
+fn check_protection_profile() -> Check {
+    let profile = protection_profile();
+    let rulepacks = profile.bundled_rulepack_ids().join(", ");
+    match profile.build() {
+        Ok(_) => pass(
+            "protection profile",
+            format!(
+                "bundled rulepacks [{rulepacks}], Resolve/Strict tokenization; no NER or Nym models"
+            ),
+        ),
+        Err(err) => fail(
+            "protection profile",
+            format!("bundled rulepacks [{rulepacks}] failed to build: {err}"),
+        ),
     }
 }
 

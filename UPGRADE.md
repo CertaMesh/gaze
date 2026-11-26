@@ -161,6 +161,19 @@ request extensions. The host selects the Session independently of that id.
 `DispatchArgs::session_id` is removed. `rmcp_args_to_dispatch_args` now returns
 `DispatchArgs` directly because translation no longer validates an argument id.
 
+### Action required: give each MCP conversation its own Session
+
+`HostCallContext` gains a `conversation: Option<ConversationId>` field. Struct
+literals must set it or end with `..HostCallContext::default()`.
+
+A host that serves several conversations must not share one `Session` across
+them. Build a `gaze_mcp_core::ConversationRegistry` whose factory receives the
+`ConversationId` and returns a host with that conversation's own Session, then
+serve it with `RmcpFrontend::into_conversation_handler`. Middleware sets
+`HostCallContext::conversation` from an authenticated identity; calls without it
+fail with `conversation-required`. Do not build hosts in the rmcp service factory
+for isolation: under protocol 2026-07-28 rmcp calls it once per request.
+
 ### Action required: replace positional context arrays
 
 Context JSON now requires a top-level object. `gaze clean --context-json`
