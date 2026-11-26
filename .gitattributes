@@ -3,3 +3,4 @@
 # docs/reference/benchmarks/*.md are the reviewable view.
 docs/reference/benchmarks/**/*.json linguist-generated=true
 docs/reference/benchmarks/**/*.gz linguist-generated=true binary
+crates/gaze/tests/fixtures/*.bin binary
