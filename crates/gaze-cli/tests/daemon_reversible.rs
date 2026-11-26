@@ -212,6 +212,30 @@ fn interrupted_session_cannot_restore_after_restart() {
 }
 
 #[test]
+fn v1_restore_refuses_malformed_token_spellings() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"run-a"}));
+    let token = daemon.request(
+        json!({"version":1,"op":"clean","session_id":"run-a","text":"alice@example.invalid"}),
+    )["clean_text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for bad in [
+        "<deadbeef:Email_>",
+        "<Name_>",
+        "<Custom:family:tenant-document_>",
+    ] {
+        let rejected = daemon.request(
+            json!({"version":1,"op":"restore","session_id":"run-a","text":format!("{token} {bad}")}),
+        );
+        assert_eq!(rejected["error"], "UnknownToken", "{bad}: {rejected}");
+        assert!(rejected.get("text").is_none(), "{bad}: {rejected}");
+    }
+}
+
+#[test]
 fn restore_rejects_tokens_from_another_live_session_without_partial_output() {
     let (_dir, policy) = policy();
     let mut daemon = Daemon::start(&policy);
@@ -761,4 +785,33 @@ fn context_requests_keep_resident_ner_and_its_learned_evidence_tier() {
         !cleaned.contains("ZELMORA QUENTRIX"),
         "caller-known rule evidence must propagate"
     );
+}
+
+#[test]
+fn normalized_context_terms_round_trip_and_propagate_in_daemon() {
+    let (dir, path) = policy();
+    let mut configured = fs::read_to_string(&path).unwrap();
+    configured = configured.replace("action = \"preserve\"", "action = \"tokenize\"");
+    fs::write(&path, configured).unwrap();
+    let mut daemon = Daemon::start(&path);
+    for (index, value) in ["Ｑx7Lm2Rt", "Qx\u{200b}7Lm2Rt"].into_iter().enumerate() {
+        let id = format!("normalized-{index}");
+        daemon.request(json!({"version":1,"op":"open","session_id":id}));
+        let raw = format!("found {value} here");
+        let protected = daemon.request(json!({"version":1,"op":"clean","session_id":id,"text":raw,"context":{"record":{"tag":value},"field_map":{"/tag":"custom:tag"},"record_match_kinds":{"custom:tag":["exact"]}}}));
+        let clean = protected["clean_text"].as_str().expect("successful clean");
+        assert!(
+            clean.starts_with("found <"),
+            "declared source bytes leaked: {clean:?}"
+        );
+        assert!(clean.ends_with("> here"));
+        assert_eq!(
+            daemon.request(json!({"version":1,"op":"restore","session_id":id,"text":clean}))
+                ["text"],
+            raw
+        );
+        let later = daemon.request(json!({"version":1,"op":"clean","session_id":id,"text":raw}));
+        assert_eq!(later["clean_text"], clean);
+    }
+    drop(dir);
 }

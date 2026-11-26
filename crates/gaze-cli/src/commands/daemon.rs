@@ -457,7 +457,7 @@ impl Daemon {
         let assessment = session
             .assess_restore_text(&text)
             .map_err(|_| (session_id.clone(), DaemonError::RestoreFailed))?;
-        restore_pass2_validate(&assessment, RestoreMode::Strict).map_err(|error| {
+        restore_pass2_validate(&text, &assessment, RestoreMode::Strict).map_err(|error| {
             let variant = if matches!(error, CliError::UnknownToken { .. }) {
                 DaemonError::UnknownToken
             } else {

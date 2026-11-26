@@ -101,6 +101,7 @@ pub struct RecordGuessMatcher<'a> {
     terms: Vec<RecordGuessTerm<'a>>,
     lengths: Vec<usize>,
     folded_terms: Vec<String>,
+    normalized_terms: Vec<String>,
     corroborate_single: Vec<bool>,
     max_length: usize,
     matched: Vec<bool>,
@@ -111,22 +112,27 @@ impl<'a> RecordGuessMatcher<'a> {
         let patterns = terms
             .iter()
             .map(|term| {
-                let prepared = RecordGuessText::from_normalized(term.value.to_owned());
-                (prepared.folded, prepared.literal_folded)
+                let prepared = RecordGuessText::new(term.value);
+                (
+                    prepared.folded,
+                    (prepared.literal_folded, prepared.normalized),
+                )
             })
             .collect::<Vec<_>>();
-        let (patterns, folded_terms): (Vec<_>, Vec<_>) = patterns.into_iter().unzip();
+        let (patterns, prepared_terms): (Vec<_>, Vec<_>) = patterns.into_iter().unzip();
+        let (folded_terms, normalized_terms): (Vec<_>, Vec<_>) = prepared_terms.into_iter().unzip();
         let corroborate_single = terms
             .iter()
             .zip(&folded_terms)
-            .map(|(term, folded)| {
+            .zip(&normalized_terms)
+            .map(|((term, folded), normalized)| {
                 matches!(
                     &term.mode,
                     RecordGuessMode::Record {
                         class: PiiClass::Name,
                         ..
                     }
-                ) && !term.value.chars().any(char::is_whitespace)
+                ) && !normalized.chars().any(char::is_whitespace)
                     && record_name_is_common_folded(folded)
             })
             .collect();
@@ -138,6 +144,7 @@ impl<'a> RecordGuessMatcher<'a> {
             terms,
             lengths,
             folded_terms,
+            normalized_terms,
             corroborate_single,
             max_length,
         })
@@ -245,13 +252,14 @@ impl<'a> RecordGuessMatcher<'a> {
     ) -> bool {
         let term = &self.terms[pattern];
         let matched = slice(parts, start, end);
+        let normalized = &self.normalized_terms[pattern];
         match &term.mode {
             RecordGuessMode::Dictionary {
                 case_sensitive: true,
-            } => matched == term.value,
+            } => matched == *normalized,
             RecordGuessMode::Dictionary {
                 case_sensitive: false,
-            } => matched.eq_ignore_ascii_case(term.value),
+            } => matched.eq_ignore_ascii_case(normalized),
             RecordGuessMode::Record {
                 class,
                 allowed_kinds,
@@ -259,7 +267,7 @@ impl<'a> RecordGuessMatcher<'a> {
                 let kind = if self.corroborate_single[pattern] {
                     RecordMatchKind::CorroboratedSingle
                 } else {
-                    record_match_kind_with_folded(&matched, term.value, || {
+                    record_match_kind_with_folded(&matched, normalized, || {
                         folded_slice(parts, start, end) == self.folded_terms[pattern]
                     })
                 };
@@ -331,7 +339,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn record_guess_preparation_is_independent_of_terms_and_pairs() {
+    fn record_guess_preparation_is_once_per_term_or_argument_not_per_pair() {
         WORK.with(|count| count.set((0, 0)));
         let texts = (0..32)
             .map(|i| RecordGuessText::new(&format!("Synthetic{i} ")))
@@ -360,7 +368,7 @@ mod tests {
             }
         }
         assert!(matcher.matches().iter().all(|matched| !matched));
-        assert_eq!(WORK.with(|count| count.get()), (33, 65));
+        assert_eq!(WORK.with(|count| count.get()), (65, 65));
     }
     fn name_mode() -> RecordGuessMode {
         RecordGuessMode::Record {
@@ -500,6 +508,40 @@ mod tests {
             .unwrap();
             matcher.check(&RecordGuessText::new(input));
             assert_eq!(matcher.matches(), &[expected], "{input}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod normalization_tests {
+    use super::*;
+
+    #[test]
+    fn private_guess_terms_share_the_argument_detection_view() {
+        for value in ["Ｑx7Lm2Rt", "Qx\u{200b}7Lm2Rt", "Ｑx\u{200b}7Lm2Rt"] {
+            for mode in [
+                RecordGuessMode::Dictionary {
+                    case_sensitive: true,
+                },
+                RecordGuessMode::Record {
+                    class: PiiClass::Custom("passport".into()),
+                    allowed_kinds: [RecordMatchKind::Exact].into_iter().collect(),
+                },
+            ] {
+                for spelling in [value, "Qx7Lm2Rt"] {
+                    let mut matcher = RecordGuessMatcher::new(vec![RecordGuessTerm {
+                        value,
+                        mode: mode.clone(),
+                    }])
+                    .unwrap();
+                    matcher.check(&RecordGuessText::new(spelling));
+                    assert_eq!(matcher.matches(), [true], "declared guess term missed");
+                }
+                let mut matcher =
+                    RecordGuessMatcher::new(vec![RecordGuessTerm { value, mode }]).unwrap();
+                matcher.check(&RecordGuessText::new("Qx8Lm2Rt"));
+                assert_eq!(matcher.matches(), [false]);
+            }
         }
     }
 }
