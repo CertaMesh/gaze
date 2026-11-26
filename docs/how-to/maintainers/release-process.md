@@ -125,14 +125,14 @@ before `gaze-model-setup` at the coordinated version.
 
 ## Reproduce a release binary
 
-Each release asset `gaze-<target>` has a `.sha256` file and a `.buildinfo`
-file. The build info records the commit, Cargo arguments, `rustc -vV`, and the
+Each release binary (`gaze-aarch64-apple-darwin`, `gaze-x86_64-linux-gnu`,
+`gaze-aarch64-linux-gnu`) has a `.sha256` file and a `.buildinfo` file. The build info records the commit, Cargo arguments, `rustc -vV`, and the
 linker. To check a published binary, rebuild it from the tagged source:
 
 ```bash
 git checkout vX.Y.Z
 scripts/release/build-binary.sh aarch64-apple-darwin /tmp/gaze --features document,proxy
-gh release download vX.Y.Z --pattern 'gaze-aarch64-apple-darwin.*' --dir /tmp/published
+gh release download vX.Y.Z --repo CertaMesh/gaze --pattern 'gaze-aarch64-apple-darwin.*' --dir /tmp/published
 cut -d' ' -f1 /tmp/gaze.sha256 /tmp/published/gaze-aarch64-apple-darwin.sha256
 ```
 
@@ -147,7 +147,8 @@ The script:
   depend on where they are.
 - On macOS, omits the linker debug map, so `LC_UUID` does not depend on the
   build directory.
-- Overrides inherited `RUSTFLAGS` and compiler wrappers.
+- Clears inherited `RUSTFLAGS`, `RUSTC`, compiler wrappers, and target
+  directory settings, so the build uses the checked compiler.
 
 The same commit, target, Cargo arguments, and toolchain give the same bytes
 when the linker also matches. Compare the `linker`, `xcode`, `cc`, and `glibc`

@@ -26,6 +26,11 @@ cd "$root"
 # Refuse any compiler other than the rustup toolchain pinned in
 # rust-toolchain.toml. A rustc of the same version from another distribution
 # (for example Homebrew) ignores the pin and emits different code.
+# Cargo prefers RUSTC, CARGO_BUILD_RUSTC and wrappers over the rustc on PATH.
+# Clear them before checking the compiler so the check covers what cargo runs.
+unset RUSTFLAGS RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC \
+  CARGO_BUILD_RUSTC_WRAPPER CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER \
+  CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR
 channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
 if ! command -v rustup >/dev/null 2>&1; then
   echo "build-binary: rustup is required to select the pinned toolchain $channel" >&2
@@ -63,9 +68,14 @@ CARGO_ENCODED_RUSTFLAGS="$(IFS=$'\x1f'; printf '%s' "${rustflags[*]}")"
 export CARGO_ENCODED_RUSTFLAGS
 export CARGO_INCREMENTAL=0
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
-unset RUSTFLAGS RUSTC_WRAPPER CARGO_BUILD_RUSTC_WRAPPER
 
-cargo build --locked --release -p gaze-cli --bin gaze --target "$target" "$@"
+# Same feature unification as the historical release command: `--bin gaze` at
+# the virtual workspace root. --config overrides a build.rustc or target-dir
+# from a user's Cargo config.
+cargo build --locked --release --bin gaze --target "$target" \
+  --target-dir "$root/target" \
+  --config 'build.rustc="rustc"' --config 'build.rustc-wrapper=""' \
+  --config 'build.rustc-workspace-wrapper=""' "$@"
 
 mkdir -p "$(dirname "$output")"
 cp "target/$target/release/gaze" "$output"
@@ -88,6 +98,12 @@ name="$(basename "$output")"
     *-apple-darwin)
       echo "linker: $(ld -v 2>&1 | head -1)"
       echo "xcode: $(xcodebuild -version 2>/dev/null | tr '\n' ' ')"
+      ;;
+    x86_64-unknown-linux-gnu)
+      # Rust 1.90+ links this target with the toolchain's rust-lld.
+      echo "linker: rust-lld (from the rustc toolchain above)"
+      echo "cc: $(cc --version 2>&1 | head -1)"
+      echo "glibc: $(ldd --version 2>&1 | head -1)"
       ;;
     *-linux-gnu)
       echo "linker: $(ld -v 2>&1 | head -1)"

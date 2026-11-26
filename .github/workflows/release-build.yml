@@ -19,7 +19,7 @@ permissions:
 jobs:
   build:
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 90
+    timeout-minutes: 60
     env:
       GAZE_RELEASE_FEATURES: document,proxy
     steps:
@@ -41,7 +41,9 @@ jobs:
           set -euo pipefail
           rebuild="$RUNNER_TEMP/gaze-rebuild"
           git worktree add --detach "$rebuild" HEAD
-          (cd "$rebuild" && scripts/release/build-binary.sh ${{ inputs.target }} "$RUNNER_TEMP/rebuild/${{ inputs.artifact }}" --features "$GAZE_RELEASE_FEATURES")
+          # A fresh CARGO_HOME re-fetches crates to a different path, so the check
+          # also covers the registry location.
+          (cd "$rebuild" && CARGO_HOME="$RUNNER_TEMP/cargo-home-rebuild" scripts/release/build-binary.sh ${{ inputs.target }} "$RUNNER_TEMP/rebuild/${{ inputs.artifact }}" --features "$GAZE_RELEASE_FEATURES")
           first="$(cut -d' ' -f1 < dist/${{ inputs.artifact }}.sha256)"
           second="$(cut -d' ' -f1 < "$RUNNER_TEMP/rebuild/${{ inputs.artifact }}.sha256")"
           if [ "$first" != "$second" ]; then
