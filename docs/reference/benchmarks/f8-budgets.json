@@ -20,7 +20,7 @@
       }
     },
     "server": {
-      "machine": "Hetzner CCX23 (4 dedicated vCPU, 16 GB), Debian 13, x86-64 release binary",
+      "machine": "Amp orb a1.medium: 4 vCPU (shared, not dedicated), 8 GB, x86-64 Linux, x86-64 release binary built in the orb. Replaces the originally decided Hetzner CCX23 (4 dedicated vCPU, 16 GB, Debian 13), which was not rented. Same architecture, OS family and vCPU count; half the memory, still over 3x the 2.5 GB peak budget. Shared vCPUs make it at most as fast and noisier than a CCX23, so a pass here is conservative; budget numbers are unchanged.",
       "workload": {
         "description": "as laptop, with 4 sessions on one resident daemon; each step sends the 4 sessions' frames as one simultaneous burst, so per-turn latency includes queueing behind the other sessions",
         "concurrent_sessions": 4
