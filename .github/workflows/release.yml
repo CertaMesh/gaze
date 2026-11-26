@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - '.github/workflows/release-build.yml'
+      - 'scripts/release/**'
   workflow_dispatch:
     inputs:
       version:
