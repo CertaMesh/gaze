@@ -552,6 +552,7 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
     let mut state = open(&mut d, "conversation-a");
     let mut texts = vec!["Earlier Selene Exampleton.".to_string(), "".to_string()];
     let mut oldest = None;
+    let mut hits = 0;
     for turn in 0..20 {
         texts.push(if turn % 2 == 0 {
             format!("Record name: Selene Exampleton{turn}.")
@@ -588,7 +589,14 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
             for key in ["clean_text", "manifest", "tokens"] {
                 assert_eq!(actual[key], expected[key], "turn {turn}: {key}");
             }
-            assert_eq!(actual["cache_hit"], false);
+            hits += usize::from(actual["cache_hit"] == true);
+        }
+        if turn == 4 {
+            // The new record teaches `Selene Exampleton`, which leaf-0 repeats.
+            assert_eq!(
+                state["blocks"][0]["cache_hit"], false,
+                "late value reaches leaf-0"
+            );
         }
         assert_committed_v1_identity(&mut d, "conversation-a", &texts, &state);
         let session = &d.v2.sessions["conversation-a"].session;
@@ -604,6 +612,7 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
             assert_eq!(session.restore_strict(&old.token).unwrap(), old.raw);
         }
     }
+    assert!(hits > 0, "unchanged blocks reuse their committed result");
 }
 
 #[test]
@@ -1632,4 +1641,42 @@ fn untransformable_failure_reports_the_closed_reason() {
     let body: Value = serde_json::from_str(d.v2.error(other, None).get()).unwrap();
     assert_eq!(body["error"], "Pipeline");
     assert!(body.get("reason").is_none());
+}
+
+#[test]
+fn old_block_quoting_a_newly_minted_token_is_cleaned_again() {
+    let mut d = daemon();
+    let state = open(&mut d, "literal");
+    let hex = d.v2.sessions["literal"].session.session_hex();
+    // Unowned until a later turn mints Email_2. Ownership feeds the safety-net
+    // view, so reusing this block across that mint would not be proven exact.
+    let literal = format!("Quoted <{hex}:Email_2> stays as written.");
+    let state = clean(
+        &mut d,
+        &state,
+        vec![block("a", "alice@example.invalid"), block("b", &literal)],
+    );
+    let texts = [
+        "alice@example.invalid".to_string(),
+        literal.clone(),
+        "bob@example.invalid".to_string(),
+    ];
+    let expected = oracle(&d, "literal", &texts).output;
+    let result = clean(
+        &mut d,
+        &state,
+        vec![
+            json!({"id":"a","sha256":hash(&texts[0])}),
+            json!({"id":"b","sha256":hash(&literal)}),
+            block("c", &texts[2]),
+        ],
+    );
+    let blocks = result["blocks"].as_array().unwrap();
+    for (actual, expected) in blocks.iter().zip(&expected) {
+        for key in ["clean_text", "manifest", "tokens"] {
+            assert_eq!(actual[key], expected[key], "{key}");
+        }
+    }
+    let hits: Vec<_> = blocks.iter().map(|b| b["cache_hit"].clone()).collect();
+    assert_eq!(hits, [json!(true), json!(false), json!(false)]);
 }

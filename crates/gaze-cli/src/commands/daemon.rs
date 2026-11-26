@@ -840,6 +840,29 @@ impl DeferredRedactions<'_> {
         })
     }
 
+    /// Number of rows buffered so far in this pass.
+    fn mark(&self) -> Result<usize, RedactionLogError> {
+        let slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        Ok(slot.as_ref().expect("active audit scope").entries.len())
+    }
+
+    /// Rows buffered since `mark`, in order.
+    fn since(&self, mark: usize) -> Result<Vec<RedactionEntry>, RedactionLogError> {
+        let slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        Ok(slot.as_ref().expect("active audit scope").entries[mark..].to_vec())
+    }
+
+    /// Buffer rows a reused block produced when it was last cleaned.
+    fn replay(&self, entries: &[RedactionEntry]) -> Result<(), RedactionLogError> {
+        let mut slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        let buffer = slot.as_mut().expect("active audit scope");
+        for entry in entries {
+            buffer.reserve_entry(entry)?;
+            buffer.entries.push(entry.clone());
+        }
+        Ok(())
+    }
+
     fn reset_pass(&self) -> Result<(), RedactionLogError> {
         let mut slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
         let buffer = slot.as_mut().expect("active audit scope");
