@@ -182,8 +182,10 @@ Audit session ids do not partition any of this state, and a model-written
 
 `ConversationRegistry` holds one host, with its own Session, per
 host-authenticated `ConversationId`. The first call for an id opens the
-conversation through a factory that shares resident pipelines but allocates a
-fresh Session. Closing it with `close`, or leaving it idle past
+conversation through a factory that receives the id, shares resident pipelines,
+and builds the conversation's own Session, empty or imported from that
+conversation's trusted snapshot. `tools/list` reads a cached tool catalog and
+does not open a conversation. Closing it with `close`, or leaving it idle past
 `ConversationLimits::idle_timeout` (default 30 minutes), drops its Session, so a
 later call with the same id starts empty and earlier tokens no longer restore.
 At `max_conversations` live entries (default 64) a new id is refused rather than

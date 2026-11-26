@@ -116,7 +116,7 @@ fn conversations(limits: ConversationLimits) -> (ConversationRegistry, Arc<Mutex
     let built = Arc::new(Mutex::new(Vec::new()));
     let seen = built.clone();
     let registry = ConversationRegistry::new(
-        move || {
+        move |_: &ConversationId| {
             let host = Arc::new(Host {
                 shared: shared.clone(),
                 session: gaze::Session::new(gaze::Scope::Ephemeral)?,

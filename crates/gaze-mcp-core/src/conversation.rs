@@ -11,7 +11,11 @@
 //! tool argument or `_meta` field, is never a conversation id.
 //!
 //! Lifecycle:
-//! - **Open:** the first call for an id builds its host through the factory.
+//! - **Open:** the first call for an id builds its host through the factory,
+//!   which receives the id so it can bind per-conversation resources or import
+//!   that conversation's trusted snapshot. The factory runs outside the registry
+//!   lock; when two calls race to open one id, the first inserted host wins and
+//!   the other is dropped unused.
 //! - **Close:** [`ConversationRegistry::close`] drops the entry. A later call with
 //!   the same id starts a new, empty Session.
 //! - **Expiry:** an entry unused for [`ConversationLimits::idle_timeout`] is
@@ -103,9 +107,10 @@ pub enum ConversationError {
     Factory(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
-/// Builds one isolated host, with its own fresh [`gaze::Session`], per conversation.
-/// Resident pipelines, registries and model handles may be shared between hosts.
-pub type ConversationFactory = dyn Fn() -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
+/// Builds one isolated host, with its own [`gaze::Session`], for the given
+/// conversation. Resident pipelines, registries and model handles may be shared
+/// between hosts. Never return a host whose Session another conversation uses.
+pub type ConversationFactory = dyn Fn(&ConversationId) -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
     + Send
     + Sync;
 
@@ -120,13 +125,17 @@ pub struct ConversationRegistry {
     factory: Box<ConversationFactory>,
     limits: ConversationLimits,
     entries: Mutex<HashMap<ConversationId, Entry>>,
+    catalog: std::sync::OnceLock<Vec<crate::ToolDescriptor>>,
 }
 
 impl ConversationRegistry {
     /// A registry that builds each new conversation's host with `factory`.
     pub fn new<F>(factory: F, limits: ConversationLimits) -> Self
     where
-        F: Fn() -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
+        F: Fn(
+                &ConversationId,
+            )
+                -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
             + Send
             + Sync
             + 'static,
@@ -135,6 +144,7 @@ impl ConversationRegistry {
             factory: Box::new(factory),
             limits,
             entries: Mutex::new(HashMap::new()),
+            catalog: std::sync::OnceLock::new(),
         }
     }
 
@@ -145,9 +155,17 @@ impl ConversationRegistry {
 
     /// The host for `id`, opening the conversation when it is not live.
     pub fn host(&self, id: &ConversationId) -> Result<Arc<dyn DispatchHost>, ConversationError> {
+        if let Some(host) = self.live(id)? {
+            return Ok(host);
+        }
+        // Build outside the lock so a slow factory never blocks other conversations.
+        let host = (self.factory)(id).map_err(|error| {
+            tracing::warn!(target: "gaze_mcp_core::conversation", "conversation host construction failed");
+            ConversationError::Factory(error)
+        })?;
+        let _ = self.catalog.set(host.list_tools());
         let now = Instant::now();
-        let mut entries = self.lock();
-        entries.retain(|_, entry| now.duration_since(entry.last_used) < self.limits.idle_timeout);
+        let mut entries = self.swept(now);
         if let Some(entry) = entries.get_mut(id) {
             entry.last_used = now;
             return Ok(entry.host.clone());
@@ -155,7 +173,6 @@ impl ConversationRegistry {
         if entries.len() >= self.limits.max_conversations {
             return Err(ConversationError::Capacity);
         }
-        let host = (self.factory)().map_err(ConversationError::Factory)?;
         entries.insert(
             id.clone(),
             Entry {
@@ -164,6 +181,39 @@ impl ConversationRegistry {
             },
         );
         Ok(host)
+    }
+
+    /// The tool catalog, read from a live or earlier-built host without opening a
+    /// conversation. `None` until the factory has built any host.
+    pub fn tools(&self, id: Option<&ConversationId>) -> Option<Vec<crate::ToolDescriptor>> {
+        if let Some(host) = id.and_then(|id| self.lock().get(id).map(|entry| entry.host.clone())) {
+            return Some(host.list_tools());
+        }
+        self.catalog.get().cloned()
+    }
+
+    /// The live host for `id`, refreshing its idle clock, or `None` when a new
+    /// conversation would have to be opened (and capacity allows it).
+    fn live(
+        &self,
+        id: &ConversationId,
+    ) -> Result<Option<Arc<dyn DispatchHost>>, ConversationError> {
+        let now = Instant::now();
+        let mut entries = self.swept(now);
+        if let Some(entry) = entries.get_mut(id) {
+            entry.last_used = now;
+            return Ok(Some(entry.host.clone()));
+        }
+        if entries.len() >= self.limits.max_conversations {
+            return Err(ConversationError::Capacity);
+        }
+        Ok(None)
+    }
+
+    fn swept(&self, now: Instant) -> std::sync::MutexGuard<'_, HashMap<ConversationId, Entry>> {
+        let mut entries = self.lock();
+        entries.retain(|_, entry| now.duration_since(entry.last_used) < self.limits.idle_timeout);
+        entries
     }
 
     /// End the conversation and drop its Session. Returns whether it was live.
@@ -230,7 +280,7 @@ mod tests {
         let built = Arc::new(AtomicUsize::new(0));
         let counter = built.clone();
         let registry = ConversationRegistry::new(
-            move || {
+            move |_| {
                 counter.fetch_add(1, Ordering::SeqCst);
                 Ok(Arc::new(Host) as Arc<dyn DispatchHost>)
             },
@@ -301,7 +351,7 @@ mod tests {
     #[test]
     fn factory_failure_opens_nothing() {
         let registry = ConversationRegistry::new(
-            || Err("synthetic factory failure".into()),
+            |_| Err("synthetic factory failure".into()),
             ConversationLimits::default(),
         );
         assert!(matches!(
@@ -309,6 +359,30 @@ mod tests {
             Err(ConversationError::Factory(_))
         ));
         assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn factory_receives_the_conversation_it_opens() {
+        let opened = Arc::new(Mutex::new(Vec::new()));
+        let seen = opened.clone();
+        let registry = ConversationRegistry::new(
+            move |id: &ConversationId| {
+                seen.lock().unwrap().push(id.as_str().to_owned());
+                Ok(Arc::new(Host) as Arc<dyn DispatchHost>)
+            },
+            ConversationLimits::default(),
+        );
+        assert!(
+            registry.tools(None).is_none(),
+            "no catalog before any host exists"
+        );
+        registry.host(&ConversationId::new("a")).unwrap();
+        registry.host(&ConversationId::new("a")).unwrap();
+        registry.host(&ConversationId::new("b")).unwrap();
+        assert_eq!(*opened.lock().unwrap(), ["a", "b"]);
+        // Listing tools for an unknown conversation reads the catalog without opening it.
+        assert!(registry.tools(Some(&ConversationId::new("c"))).is_some());
+        assert_eq!(registry.len(), 2);
     }
 
     #[test]

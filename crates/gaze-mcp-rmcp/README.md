@@ -157,7 +157,7 @@ conversation's host and refuses a call without one:
 
 ```rust,no_run
 use std::sync::Arc;
-use gaze_mcp_core::{ConversationLimits, ConversationRegistry, DispatchHost};
+use gaze_mcp_core::{ConversationId, ConversationLimits, ConversationRegistry, DispatchHost};
 use gaze_mcp_rmcp::RmcpFrontend;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
@@ -165,10 +165,10 @@ use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
 # #[cfg(feature = "transport-http")]
 # fn embed_http(
 # 	frontend: RmcpFrontend,
-# 	new_conversation_host: impl Fn() -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
+# 	new_conversation_host: impl Fn(&ConversationId) -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
 # 		+ Send + Sync + 'static,
 # ) {
-// The factory must allocate a fresh Session on every call.
+// The factory builds a host with its own Session for the conversation it is given.
 let conversations = Arc::new(ConversationRegistry::new(
 	new_conversation_host,
 	ConversationLimits::default(),
@@ -187,8 +187,10 @@ Enable `gaze-mcp-rmcp/transport-http` and add `rmcp` with
 pipelines, and model handles can be shared between hosts. Derive the conversation
 id from an authenticated identity, never from tool arguments or `_meta`. Close a
 conversation with `ConversationRegistry::close`; idle conversations expire after
-`ConversationLimits::idle_timeout`. On reconnect, restore only that
-conversation's trusted snapshot into its host.
+`ConversationLimits::idle_timeout`. The factory receives the `ConversationId`,
+so after expiry or a restart it can import only that conversation's trusted
+snapshot into the new host. It runs outside the registry lock; keep it bounded,
+because the call that opened the conversation waits for it.
 
 ## rmcp version policy
 

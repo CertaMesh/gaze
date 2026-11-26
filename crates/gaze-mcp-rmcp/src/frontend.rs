@@ -190,10 +190,13 @@ impl RmcpFrontend {
         &self.config
     }
 
-    /// Build an embeddable rmcp handler. HTTP hosts install middleware on their own
-    /// StreamableHttpService and insert HostCallContext in request extensions.
-    /// Private context requires a fresh host and Session per conversation. Construct
-    /// both inside the service factory; cloning a shared host does not isolate sessions.
+    /// Build an embeddable rmcp handler that sends every call to `host`. HTTP hosts
+    /// install middleware on their own StreamableHttpService and insert
+    /// HostCallContext in request extensions. Every caller of this handler shares
+    /// `host` and its Session. For private conversations use
+    /// [`Self::into_conversation_handler`]: rmcp serves protocol 2026-07-28
+    /// statelessly and calls the service factory per request, so building a host in
+    /// that factory gives one Session per request, not per conversation.
     pub fn into_server_handler(self, host: Arc<dyn DispatchHost>) -> impl ServerHandler {
         RmcpServer::new(HostSource::Fixed(host), self.config.principal_resolver)
     }
@@ -304,11 +307,9 @@ impl ServerHandler for RmcpServer {
     ) -> Result<ListToolsResult, ErrorData> {
         let principal = self.principal(&context).await?;
         let principal_tier = tier_for_principal(&principal);
-        let host = self
-            .host(&host_call_context(&context.extensions))
-            .map_err(|class| ErrorData::invalid_request(class, None))?;
-        let tools = host
-            .list_tools()
+        let tools = self
+            .tools(&host_call_context(&context.extensions))
+            .map_err(|class| ErrorData::invalid_request(class, None))?
             .into_iter()
             .filter(|descriptor| descriptor_visible_to(descriptor, principal_tier))
             .map(|descriptor| descriptor_to_rmcp_tool(&descriptor))
@@ -323,27 +324,58 @@ impl ServerHandler for RmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
         let principal = self.principal(&context).await?;
-        let host = host_call_context(&context.extensions);
+        let result = self
+            .call(&principal, host_call_context(&context.extensions), request)
+            .await?;
+        Ok(result.into())
+    }
+}
+
+impl RmcpServer {
+    /// Tools for the caller's conversation. Never opens a conversation when the
+    /// registry already knows its catalog.
+    fn tools(
+        &self,
+        call: &HostCallContext,
+    ) -> Result<Vec<gaze_mcp_core::ToolDescriptor>, &'static str> {
+        match &self.hosts {
+            HostSource::Fixed(host) => Ok(host.list_tools()),
+            HostSource::Conversations(registry) => {
+                let id = call.conversation.as_ref().ok_or("conversation-required")?;
+                match registry.tools(Some(id)) {
+                    Some(tools) => Ok(tools),
+                    None => Ok(self.host(call)?.list_tools()),
+                }
+            }
+        }
+    }
+
+    /// Route one tool call to its conversation's host. Only host middleware state
+    /// selects the host; tool arguments never do.
+    async fn call(
+        &self,
+        principal: &Principal,
+        host: HostCallContext,
+        request: CallToolRequestParams,
+    ) -> Result<CallToolResult, ErrorData> {
         let target = match self.host(&host) {
             Ok(target) => target,
-            Err(class) => return Ok(CallToolResult::error(vec![ContentBlock::text(class)]).into()),
+            Err(class) => return Ok(CallToolResult::error(vec![ContentBlock::text(class)])),
         };
         let dispatch_args = rmcp_args_to_dispatch_args(request);
         let response = target
             .dispatch(
-                &principal,
+                principal,
                 &dispatch_args.tool_name,
                 dispatch_args.args,
                 host.audit_session_id.as_deref(),
                 host.selection,
             )
             .await;
-
-        let result = match response {
+        match response {
             Ok(response) => response_to_rmcp_call_tool_result(response).map_err(rmcp_error_to_mcp),
             Err(err) => Ok(dispatch_error_to_tool_result(err)),
-        }?;
-        Ok(result.into())
+        }
     }
 }
 
@@ -521,52 +553,102 @@ mod tests {
         assert_eq!(host.audit_session_id.as_deref(), Some("host-audit"));
     }
 
-    struct NoTools;
+    /// Records which conversation's host received each call, and its arguments.
+    struct Recording {
+        conversation: String,
+        calls: Arc<std::sync::Mutex<Vec<(String, serde_json::Value)>>>,
+    }
 
     #[async_trait]
-    impl DispatchHost for NoTools {
+    impl DispatchHost for Recording {
         async fn dispatch(
             &self,
             _: &Principal,
             _: &str,
-            _: serde_json::Value,
+            args: serde_json::Value,
             _: Option<&str>,
             _: gaze_mcp_core::HostContextSelection,
         ) -> Result<gaze_mcp_core::ToolResponse, DispatchError> {
-            unreachable!("routing tests never dispatch")
+            self.calls
+                .lock()
+                .unwrap()
+                .push((self.conversation.clone(), args));
+            Ok(gaze_mcp_core::ToolResponse::text("ok"))
         }
 
         fn list_tools(&self) -> Vec<gaze_mcp_core::ToolDescriptor> {
-            Vec::new()
+            vec![gaze_mcp_core::ToolDescriptor::agent(
+                "lookup",
+                serde_json::json!({"type": "object"}),
+            )]
         }
     }
 
-    #[test]
-    fn conversation_routing_requires_a_host_supplied_conversation() {
+    #[tokio::test]
+    async fn calls_route_by_host_conversation_never_by_arguments() {
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let built = calls.clone();
         let registry = Arc::new(gaze_mcp_core::ConversationRegistry::new(
-            || Ok(Arc::new(NoTools) as Arc<dyn DispatchHost>),
+            move |id: &gaze_mcp_core::ConversationId| {
+                Ok(Arc::new(Recording {
+                    conversation: id.as_str().to_owned(),
+                    calls: built.clone(),
+                }) as Arc<dyn DispatchHost>)
+            },
             gaze_mcp_core::ConversationLimits::new(2, std::time::Duration::from_secs(60)),
         ));
         let server = RmcpServer::new(
-            HostSource::Conversations(registry),
+            HostSource::Conversations(registry.clone()),
             Arc::new(FixedPrincipalResolver::agent("synthetic")),
         );
-        let call = |id: Option<&str>| HostCallContext {
+        let principal = Principal::new("synthetic");
+        let context = |id: Option<&str>| HostCallContext {
             conversation: id.map(gaze_mcp_core::ConversationId::new),
             ..HostCallContext::default()
         };
+        let request = |session: &str| {
+            let mut arguments = serde_json::Map::new();
+            arguments.insert("_session_id".into(), serde_json::json!(session));
+            CallToolRequestParams::new("lookup").with_arguments(arguments)
+        };
+        let text = |result: CallToolResult| result.content[0].as_text().unwrap().text.clone();
+
+        let refused = server
+            .call(&principal, context(None), request("a"))
+            .await
+            .unwrap();
+        assert_eq!(refused.is_error, Some(true));
+        assert_eq!(text(refused), "conversation-required");
         assert_eq!(
-            server.host(&call(None)).err(),
+            server.tools(&context(None)).err(),
             Some("conversation-required")
         );
-        let a = server.host(&call(Some("a"))).unwrap();
-        let b = server.host(&call(Some("b"))).unwrap();
-        assert!(!Arc::ptr_eq(&a, &b));
-        assert!(Arc::ptr_eq(&a, &server.host(&call(Some("a"))).unwrap()));
+
+        // The model names conversation b; the host's conversation a still decides.
+        server
+            .call(&principal, context(Some("a")), request("b"))
+            .await
+            .unwrap();
+        server
+            .call(&principal, context(Some("b")), request("a"))
+            .await
+            .unwrap();
         assert_eq!(
-            server.host(&call(Some("c"))).err(),
-            Some("conversation-limit")
+            *calls.lock().unwrap(),
+            [
+                ("a".to_owned(), serde_json::json!({})),
+                ("b".to_owned(), serde_json::json!({})),
+            ]
         );
+
+        // Listing tools for a new conversation spends no capacity.
+        assert_eq!(server.tools(&context(Some("c"))).unwrap().len(), 1);
+        assert_eq!(registry.len(), 2);
+        let full = server
+            .call(&principal, context(Some("c")), request("c"))
+            .await
+            .unwrap();
+        assert_eq!(text(full), "conversation-limit");
     }
 
     #[test]
