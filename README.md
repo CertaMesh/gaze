@@ -156,7 +156,8 @@ Claude Code also needs an explicit beta allowlist. See
 [proxy setup](docs/how-to/proxy/set-up-proxy.md#point-your-sdk-at-the-proxy)
 for the flags, supported request shapes, and documented refusals.
 
-From a source checkout, for MCP hosts (Claude Code, Claude Desktop, Cursor):
+For MCP hosts (Claude Code, Claude Desktop, Cursor), the release binary
+includes `gaze mcp`. From a source checkout, build it with the `mcp` feature:
 
 ```sh
 cargo install --path crates/gaze-cli --features mcp
