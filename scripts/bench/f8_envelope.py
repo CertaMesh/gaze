@@ -30,17 +30,21 @@ hashes, and one SHA-256 over the canonical cleaned outputs (manifests and token
 metadata included) with random session token prefixes normalized. Equal digests
 from a base and a candidate binary show byte-identical output on this workload.
 
+`measure` writes the policy itself with the binary's own `gaze setup` and passes
+no other daemon flags, so a receipt always describes the decided profile.
+
 A timing claim needs the Solo `bench-machine` lease and a quiet host: load1
-below 2.0 at start and end and no foreign build or benchmark process. `check`
-fails a receipt that is not quiet, that misses any budgeted measurement, or that
-exceeds any budget. Budgets are fixed before measuring; never edit them to fit
+below 2.0 and no foreign build or benchmark process at every probe (start, every
+few seconds during the run, end). `check` recomputes quietness from the probes
+and fails a receipt that is not quiet, that was measured against other budgets,
+another platform or extra daemon flags, that misses any budgeted measurement,
+or that exceeds any budget. Budgets are fixed before measuring; never edit them to fit
 a result.
 
 Usage (from the repository root):
 
-    cargo run -p gaze-cli -- setup --non-interactive --force --policy-out target/f8/policy.toml
     python3 scripts/bench/f8_envelope.py measure --binary target/release/gaze \\
-        --policy target/f8/policy.toml --envelope laptop --output target/f8/laptop.json
+        --envelope laptop --output target/f8/laptop.json
     python3 scripts/bench/f8_envelope.py check target/f8/laptop.json
     python3 scripts/bench/f8_envelope.py compare base.json candidate.json
 """
@@ -53,9 +57,12 @@ import math
 import os
 import platform
 import random
+import select
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -66,9 +73,16 @@ SCHEMA = "gaze-f8-envelope-v1"
 QUIET_LOAD_1M = 2.0
 FOREIGN = re.compile(
     r"cargo (build|test|run|clippy)|rustc |clean_for_bench|run_no_opf_benchmark|"
-    r"privacy-filter/venv/bin/opf|opf_daemon|f8_envelope\.py measure"
+    r"privacy-filter/venv/bin/opf|opf_daemon|f8_envelope\.py measure|cargo (check|nextest|bench)|"
+    r"gaze daemon"
 )
-TOKEN_PREFIX = re.compile(r"<([0-9a-f]{8}):")
+# Session prefixes in bracket (`<hex:Class_1>`), bare (`hex:class_1`) and
+# fake-email (`email1.hex@gaze-fake.invalid`) token forms.
+TOKEN_PREFIX = re.compile(r"(?<![0-9A-Za-z])([0-9a-f]{8})(?=:|@gaze-fake\.invalid)")
+PLATFORMS = {"laptop": ("Darwin", "arm64"), "server": ("Linux", "x86_64")}
+PROBE_SECONDS = 5.0
+EXCHANGE_TIMEOUT = 600.0
+COLD_RUNS_MIN = 5
 HISTORY_TURNS = 12
 HISTORY_BYTES = 32 * 1024
 NEW_MESSAGE_MAX = 4 * 1024
@@ -164,7 +178,7 @@ def sha256_file(path: Path) -> str:
 def normalize(value, prefixes: dict[str, str]):
     """Replace random session token prefixes with per-sample ordinals."""
     if isinstance(value, str):
-        return TOKEN_PREFIX.sub(lambda m: "<S%s:" % prefixes.setdefault(m.group(1), str(len(prefixes))), value)
+        return TOKEN_PREFIX.sub(lambda m: "S%s" % prefixes.setdefault(m.group(1), str(len(prefixes))), value)
     if isinstance(value, list):
         return [normalize(item, prefixes) for item in value]
     if isinstance(value, dict):
@@ -193,14 +207,27 @@ def rss_bytes(pid: int) -> int | None:
 
 
 def foreign_processes() -> list[str]:
-    out = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True).stdout
-    mine = os.getpid()
-    found = []
+    """Matching processes outside this harness's own ancestors and descendants."""
+    out = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+    table = []
     for line in out.splitlines():
-        pid, _, command = line.strip().partition(" ")
-        if pid.isdigit() and int(pid) != mine and FOREIGN.search(command):
-            found.append(FOREIGN.search(command).group(0))
-    return sorted(set(found))
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            table.append((int(parts[0]), int(parts[1]), parts[2]))
+    parent = {pid: ppid for pid, ppid, _ in table}
+    mine, cursor = set(), os.getpid()
+    while cursor and cursor not in mine:
+        mine.add(cursor)
+        cursor = parent.get(cursor, 0)
+    grew = True
+    while grew:
+        grew = False
+        for pid, ppid, _ in table:
+            if ppid in mine and pid not in mine and ppid != 1:
+                mine.add(pid)
+                grew = True
+    found = {FOREIGN.search(cmd).group(0) for pid, _, cmd in table if pid not in mine and FOREIGN.search(cmd)}
+    return sorted(found)
 
 
 def host_probe() -> dict:
@@ -211,24 +238,30 @@ def host_probe() -> dict:
 
 
 class Daemon:
-    def __init__(self, binary: Path, policy: Path, extra: list[str]):
+    def __init__(self, binary: Path, policy: Path, stderr: Path, probes: list | None = None):
+        self._stderr = stderr.open("ab")
         self.proc = subprocess.Popen(
-            [str(binary), "daemon", "--policy", str(policy), *extra],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            [str(binary), "daemon", "--policy", str(policy)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr,
             env={k: v for k, v in os.environ.items() if not k.startswith("GAZE_PERF")},
         )
         self.peak = 0
         self.samples: list[int] = []
+        self.probes = probes
         self._stop = threading.Event()
         self._poller = threading.Thread(target=self._poll, daemon=True)
         self._poller.start()
 
     def _poll(self):
+        # The kernel's ru_maxrss at exit gives the true peak; polling only adds
+        # host probes and a coarse running peak, so it stays cheap.
         while not self._stop.is_set() and self.proc.poll() is None:
             rss = rss_bytes(self.proc.pid)
             if rss:
                 self.peak = max(self.peak, rss)
-            self._stop.wait(0.02)
+            if self.probes is not None:
+                self.probes.append(host_probe())
+            self._stop.wait(PROBE_SECONDS)
 
     def rss(self) -> int | None:
         rss = rss_bytes(self.proc.pid)
@@ -243,7 +276,11 @@ class Daemon:
         self.proc.stdin.write(b"".join(json.dumps(r, separators=(",", ":")).encode() + b"\n" for r in requests))
         self.proc.stdin.flush()
         out = []
+        deadline = start + EXCHANGE_TIMEOUT
         for _ in requests:
+            ready, _, _ = select.select([self.proc.stdout], [], [], max(0.0, deadline - time.perf_counter()))
+            if not ready:
+                raise RuntimeError("daemon did not respond within the exchange timeout")
             line = self.proc.stdout.readline()
             if not line:
                 raise RuntimeError("daemon exited before responding")
@@ -251,13 +288,28 @@ class Daemon:
         return out
 
     def close(self):
+        """Stop the daemon and fold the kernel's peak RSS into `peak`."""
         self._stop.set()
+        self._poller.join()
         try:
             self.proc.stdin.close()
-            self.proc.wait(timeout=30)
-        except Exception:
-            self.proc.kill()
-            self.proc.wait()
+        except OSError:
+            pass
+        deadline = time.monotonic() + 30
+        while True:
+            pid, status, usage = os.wait4(self.proc.pid, os.WNOHANG)
+            if pid:
+                break
+            if time.monotonic() > deadline:
+                self.proc.kill()
+                pid, status, usage = os.wait4(self.proc.pid, 0)
+                break
+            time.sleep(0.05)
+        self.proc.returncode = os.waitstatus_to_exitcode(status)
+        # ru_maxrss is bytes on macOS and KiB on Linux.
+        maxrss = usage.ru_maxrss if platform.system() == "Darwin" else usage.ru_maxrss * 1024
+        self.peak = max(self.peak, maxrss)
+        self._stderr.close()
 
 
 class Session:
@@ -323,10 +375,10 @@ def digest_outputs(outputs: list) -> str:
                                      ensure_ascii=False).encode()).hexdigest()
 
 
-def cold_start(args) -> tuple[float, str]:
-    """Spawn to first validated clean of a short PII message."""
+def cold_start(args, policy: Path, stderr: Path) -> tuple[float, str]:
+    """Spawn to first validated clean of a short PII message (page cache warm)."""
     start = time.perf_counter()
-    daemon = Daemon(args.binary, args.policy, args.daemon_arg)
+    daemon = Daemon(args.binary, policy, stderr)
     try:
         session = Session("cold")
         [(opened, _)] = daemon.exchange([session.open()])
@@ -348,9 +400,17 @@ def measure(args) -> dict:
         sys.exit(f"host not quiet at start: {start_probe}; pass --allow-noisy for a diagnostic run")
     if args.samples % concurrency:
         sys.exit("--samples must be a multiple of the concurrent session count")
+    work = Path(tempfile.mkdtemp(prefix="gaze-f8-"))
+    policy = work / "policy.toml"
+    stderr = args.output.with_suffix(".daemon.log")
+    stderr.parent.mkdir(parents=True, exist_ok=True)
+    # The binary's own setup profile, exactly as `gaze setup` writes it.
+    subprocess.run([str(args.binary), "setup", "--non-interactive", "--force", "--policy-out", str(policy)],
+                   check=True, capture_output=True)
 
-    cold = [cold_start(args) for _ in range(args.cold_runs)]
-    daemon = Daemon(args.binary, args.policy, args.daemon_arg)
+    probes = [start_probe]
+    cold = [cold_start(args, policy, stderr) for _ in range(args.cold_runs)]
+    daemon = Daemon(args.binary, policy, stderr, probes)
     turn_ms, reclean_ms, restore_ms, outputs = [], [], [], []
     try:
         for group in range(args.samples // concurrency):
@@ -374,11 +434,14 @@ def measure(args) -> dict:
                     sample_outputs[lane].append([{k: b[k] for k in ("id", "clean_text", "manifest", "tokens")}
                                                  for b in r["blocks"]])
             daemon.rss()
-            for s, (r, elapsed) in zip(sessions, daemon.exchange([s.resync() for s in sessions])):
+            for lane, (s, (r, elapsed)) in enumerate(zip(sessions, daemon.exchange([s.resync() for s in sessions]))):
                 s.accept(r, "resync")
                 reclean_ms.append(elapsed * 1000)
+                sample_outputs[lane].append([{k: b[k] for k in ("id", "clean_text", "manifest", "tokens")}
+                                             for b in r["blocks"]])
+                sample_outputs[lane].append({k: r[k] for k in ("conversation_revision", "manifest_generation")})
             newest = [s.blocks[-1] for s in sessions]
-            cleaned = [sample_outputs[lane][-1][-1]["clean_text"] for lane in range(len(sessions))]
+            cleaned = [sample_outputs[lane][args.turns - 1][-1]["clean_text"] for lane in range(len(sessions))]
             responses = daemon.exchange([s.restore(c) for s, c in zip(sessions, cleaned)])
             for s, bid, (r, elapsed) in zip(sessions, newest, responses):
                 s.accept(r, "restore")
@@ -387,15 +450,18 @@ def measure(args) -> dict:
                 restore_ms.append(elapsed * 1000)
             for lane, s in enumerate(sessions):
                 outputs.append(normalize(sample_outputs[lane], {}))
-                [(closed, _)] = daemon.exchange([{**s._common("close", "close")}])
+                [(closed, _)] = daemon.exchange([s._common("close", "close")])
                 s.accept(closed, "close")
             print(f"group {group + 1}/{args.samples // concurrency}: last turn {turn_ms[-1]:.1f} ms",
                   file=sys.stderr)
     finally:
+        daemon.close()
         steady = sorted(daemon.samples)[len(daemon.samples) // 2] if daemon.samples else None
         peak = daemon.peak or None
-        daemon.close()
+        policy_sha = sha256_file(policy)
+        shutil.rmtree(work, ignore_errors=True)
     end_probe = host_probe()
+    probes.append(end_probe)
 
     pipeline_ids = {pid for _, pid in cold}
     return {
@@ -403,15 +469,16 @@ def measure(args) -> dict:
         "envelope": args.envelope,
         "budgets_sha256": sha256_file(BUDGETS),
         "binary_sha256": sha256_file(args.binary),
-        "policy_sha256": sha256_file(args.policy),
+        "policy_sha256": policy_sha,
+        "policy_source": "gaze setup --non-interactive",
         "commit": args.commit,
         "workload": {"seed": args.seed, "samples": args.samples, "turns_per_sample": args.turns,
                      "concurrent_sessions": concurrency, "history_turns": HISTORY_TURNS,
                      "history_bytes_target": HISTORY_BYTES, "new_message_max_bytes": NEW_MESSAGE_MAX,
-                     "daemon_args": args.daemon_arg, "pipeline_ids_distinct": len(pipeline_ids)},
+                     "daemon_args": [], "pipeline_ids_distinct": len(pipeline_ids)},
         "host": {"os": platform.system(), "release": platform.release(), "machine": platform.machine(),
-                 "cpu_count": os.cpu_count(), "start": start_probe, "end": end_probe},
-        "quiet": start_probe["quiet"] and end_probe["quiet"],
+                 "cpu_count": os.cpu_count(), "probes": probes},
+        "quiet": all(p["quiet"] for p in probes),
         "output_sha256": digest_outputs(outputs),
         "samples_ms": {"turn": turn_ms, "reclean": reclean_ms, "restore": restore_ms,
                        "cold_start": [c * 1000 for c, _ in cold]},
@@ -441,11 +508,23 @@ def check(receipt: dict, budgets: dict) -> list[str]:
     envelope = budgets["envelopes"].get(receipt["envelope"])
     if envelope is None:
         return [f"unknown envelope {receipt['envelope']!r}"]
-    if not receipt.get("quiet"):
-        failures.append("host was not quiet at start and end; the receipt is diagnostic only")
+    probes = receipt.get("host", {}).get("probes") or []
+    if len(probes) < 2 or not all(p.get("load", [99])[0] < QUIET_LOAD_1M and not p.get("foreign") for p in probes):
+        failures.append("host was not quiet at every probe; the receipt is diagnostic only")
+    if receipt.get("budgets_sha256") != sha256_file(BUDGETS):
+        failures.append("receipt was measured against a different budgets file")
+    if receipt.get("workload", {}).get("daemon_args"):
+        failures.append("receipt used extra daemon flags; the envelope uses the setup profile only")
+    if receipt.get("policy_source") != "gaze setup --non-interactive":
+        failures.append("receipt policy was not written by the binary's own gaze setup")
+    host = receipt.get("host", {})
+    if (host.get("os"), host.get("machine")) != PLATFORMS[receipt["envelope"]]:
+        failures.append(f"platform {host.get('os')}/{host.get('machine')} does not match the envelope")
     workload = envelope["workload"]
     if receipt["workload"]["concurrent_sessions"] != workload["concurrent_sessions"]:
         failures.append("concurrent session count differs from the envelope workload")
+    if len(receipt["samples_ms"]["cold_start"]) < COLD_RUNS_MIN:
+        failures.append(f"cold_start: fewer than {COLD_RUNS_MIN} runs (not a pass)")
     observed = metrics(receipt)
     for name, limit in envelope["budgets"].items():
         value = observed.get(name)
@@ -461,7 +540,6 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     m = sub.add_parser("measure")
     m.add_argument("--binary", type=Path, required=True)
-    m.add_argument("--policy", type=Path, required=True)
     m.add_argument("--envelope", choices=["laptop", "server"], required=True)
     m.add_argument("--output", type=Path, required=True)
     m.add_argument("--commit", default=None, help="source commit of the binary, recorded verbatim")
@@ -470,7 +548,6 @@ def main() -> int:
     m.add_argument("--concurrency", type=int, default=None, help="defaults to the envelope's session count")
     m.add_argument("--cold-runs", type=int, default=5)
     m.add_argument("--seed", type=int, default=20261126)
-    m.add_argument("--daemon-arg", action="append", default=[], help="extra `gaze daemon` argument")
     m.add_argument("--allow-noisy", action="store_true", help="diagnostic run on a loaded host")
     c = sub.add_parser("check")
     c.add_argument("receipt", type=Path)

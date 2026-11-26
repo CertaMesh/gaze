@@ -5,7 +5,7 @@
     "laptop": {
       "machine": "MacBook Pro M5 Max, quiet (load1 < 2.0, no foreign build or benchmark)",
       "workload": {
-        "description": "warm daemon v2 session, 12-turn EN/DE history (~32 KiB), new message <= 4 KiB with PII, gaze setup policy, strict restore",
+        "description": "warm daemon v2 session, 12-turn EN/DE history (~32 KiB), new message with PII sized uniformly 512-4096 bytes, gaze setup policy written by the binary itself, strict restore. Cold start: spawn to first validated clean with a warm page cache, at least 5 runs, maximum reported.",
         "concurrent_sessions": 1
       },
       "budgets": {
@@ -22,7 +22,7 @@
     "server": {
       "machine": "Hetzner CCX23 (4 dedicated vCPU, 16 GB), Debian 13, x86-64 release binary",
       "workload": {
-        "description": "as laptop, with 4 concurrent sessions on one resident daemon",
+        "description": "as laptop, with 4 sessions on one resident daemon; each step sends the 4 sessions' frames as one simultaneous burst, so per-turn latency includes queueing behind the other sessions",
         "concurrent_sessions": 4
       },
       "budgets": {
