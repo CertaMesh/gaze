@@ -93,7 +93,7 @@ test installation from crates.io.
 
 ## Pre-tag model-setup ownership gate
 
-Before tagging a release, dispatch `release.yml` on the
+Before tagging a release that changes model setup, dispatch `release.yml` on the
 reviewed preparation branch:
 
 ```sh

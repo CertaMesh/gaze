@@ -37,7 +37,8 @@ The `gaze-model-setup` crate is no longer published; its code moved into
 `gaze setup` (or `gaze setup --non-interactive --model-dir <dir>`) instead, or
 keep the last published `gaze-model-setup` 0.17 release pinned. The bundle
 pins and verification (`gaze_recognizers::verify_davlan_ner_bundle`,
-`verify_nym_bundle`, `verify_gliner_dob_bundle`) are unchanged.
+`gaze_recognizers::verify_gliner_dob_bundle` and
+`gaze_recognizers::safety_net::nym::verify_nym_bundle`) are unchanged.
 
 ### Action required: handle caller-context dictionary refusals
 
