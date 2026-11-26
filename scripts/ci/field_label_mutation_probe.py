@@ -23,6 +23,7 @@ FIELD_CONTEXT = ROOT / "crates/gaze/src/field_context.rs"
 CODEC = ROOT / "crates/gaze-proxy/src/codecs/anthropic.rs"
 SERVER = ROOT / "crates/gaze-proxy/src/server.rs"
 RULEPACK = ROOT / "crates/gaze/src/rulepack.rs"
+NORMALIZE = ROOT / "crates/gaze-types/src/normalize.rs"
 DISPATCH = ROOT / "crates/gaze-mcp-core/src/dispatch.rs"
 BENCH = ROOT / "crates/gaze-recognizers/examples/clean_for_bench.rs"
 FIXTURE = ROOT / "crates/gaze-recognizers/tests/fixtures/typed_refusal_producer.json"
@@ -107,13 +108,13 @@ MUTANTS = (
      "",
      PROXY_TEST, "gemini_structured_calls_and_responses_protect_strings_and_refuse_labelled_numbers"),
     # Field keys compare through the shared detection normalization (fullwidth, U+200B).
-    ("label_normalization_bypassed", RECOGNIZER,
-     "    gaze_types::normalize::normalize(label)\n        .text\n        .chars()",
+    ("label_normalization_bypassed", NORMALIZE,
+     "    normalize(label)\n        .text\n        .chars()",
      "    label\n        .chars()",
      ASSEMBLY_TEST, "normalized_key_spellings_bind_and_benign_ones_do_not"),
     ("generic_label_validation_unnormalized", RULEPACK,
-     "gaze_types::normalize::normalize(label)\n                    .text\n                    .chars()",
-     "label\n                    .chars()",
+     "let folded = gaze_types::normalize::fold_field_label(label);",
+     "let folded = label.to_lowercase();",
      ("gaze-pii", ["--lib"]),
      "rulepack::tests::field_labelled_rejects_generic_labels_in_every_normalized_spelling"),
     # Array indices are transparent between a bound parent and its value key.
@@ -162,9 +163,31 @@ MUTANTS = (
      PROXY_LIB,
      "server::json_carrier_tests::owned_token_in_a_labelled_argument_never_exposes_the_rest"),
     ("mcp_json_text_unbound", DISPATCH,
-     "gaze::json_text_field_spans(text, path)",
+     "pipeline.json_text_field_spans(text, path)",
      "{ let _ = path; Vec::new() }",
      MCP_TEST, "mcp_owned_tokens_and_json_text_arguments_bind_with_stock_core"),
+    # A JSON-text carrier whose own key is a label stays one labelled value.
+    ("labelled_carrier_unbound", PROTECTION,
+     "if self.registry.binds_field_path(&carrier.segments()) {",
+     "if false && self.registry.binds_field_path(&carrier.segments()) {",
+     MCP_TEST, "mcp_owned_tokens_and_json_text_arguments_bind_with_stock_core"),
+    # Unicode dash punctuation folds like `-` in a label.
+    ("label_unicode_dash_kept", NORMALIZE,
+     "'_' | '.' | '-' | '\\u{2010}'..='\\u{2015}' | '\\u{2212}' | '\\u{FE58}' | '\\u{FE63}'",
+     "'_' | '.' | '-'",
+     ASSEMBLY_TEST, "normalized_key_spellings_bind_and_benign_ones_do_not"),
+    # A fragment never starts inside a JSON escape of its carrier.
+    ("fragment_splits_escape", RECOGNIZER,
+     "if backslashes % 2 == 1 {",
+     "if false && backslashes % 2 == 1 {",
+     PROXY_LIB,
+     "server::json_carrier_tests::owned_token_in_a_labelled_argument_never_exposes_the_rest"),
+    # A bound repeat overlapping a JSON number or key refuses; it is never dropped raw.
+    ("partial_overlap_dropped", OUTCOMES,
+     "                Some((_, path, reason)) => {",
+     "                Some((range, _, _)) if range != raw => {}\n"
+     "                Some((_, path, reason)) => {",
+     ASSEMBLY_TEST, "repeats_into_numbers_and_keys_refuse_typed"),
 )
 ALL = tuple((name, path, ((before, after),), target, test, {}, None)
             for name, path, before, after, target, test in MUTANTS) + PRODUCER_MUTANTS
@@ -185,7 +208,7 @@ def main():
     parser.add_argument("--probe", action="append", default=[],
                         help="Run only this named mutation (repeatable)")
     args = parser.parse_args()
-    if len(ALL) != 24:
+    if len(ALL) != 28:
         raise SystemExit("mutant roster changed")
     unknown = set(args.probe) - {mutant[0] for mutant in ALL}
     if unknown:
