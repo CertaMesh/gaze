@@ -196,6 +196,7 @@
     "gaze-mcp-core::auth_hook_fail_closed",
     "gaze-mcp-core::chokepoint_ordering",
     "gaze-mcp-core::concurrent_noop_conflict",
+    "gaze-mcp-core::conversation_isolation",
     "gaze-mcp-core::strict_contract",
     "gaze-mcp-core::structured_field_record_ids",
     "gaze-mcp-core::tier_isolation",
