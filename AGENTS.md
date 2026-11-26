@@ -35,7 +35,7 @@ Correctness axes 1–4 beat performance. Justify any weakened axis in the PR bod
 
 ## Workspace shape (v0.9)
 
-The workspace now has 15 published crates plus `xtask`; see the canonical
+The workspace now has 14 published crates plus `xtask`; see the canonical
 [workspace table](CONTRIBUTING.md#workspace-shape).
 
 - Core `gaze` re-exports `gaze_types::RedactionLogger`; it has no `rusqlite`

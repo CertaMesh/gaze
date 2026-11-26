@@ -178,7 +178,7 @@ fn nym_model_dir() -> Option<PathBuf> {
     std::env::var_os("GAZE_NYM_MODEL_DIR")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .or_else(|| gaze_model_setup::default_nym_model_dir().ok())
+        .or_else(|| crate::model_setup::default_nym_model_dir().ok())
 }
 
 /// The Nym net is opt-in, so an absent bundle passes; a present bundle must verify against the

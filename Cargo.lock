@@ -1338,7 +1338,6 @@ dependencies = [
  "gaze-mcp-bridge",
  "gaze-mcp-core",
  "gaze-mcp-rmcp",
- "gaze-model-setup",
  "gaze-pii",
  "gaze-proxy",
  "gaze-proxy-dashboard",
@@ -1356,8 +1355,10 @@ dependencies = [
  "sha2 0.10.9",
  "signal-hook",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "ureq",
  "url",
 ]
 
@@ -1460,17 +1461,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-util",
-]
-
-[[package]]
-name = "gaze-model-setup"
-version = "0.17.0"
-dependencies = [
- "gaze-recognizers",
- "libc",
- "tempfile",
- "thiserror 1.0.69",
- "ureq",
 ]
 
 [[package]]

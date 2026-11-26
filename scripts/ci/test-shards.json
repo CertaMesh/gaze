@@ -206,7 +206,6 @@
     "gaze-mcp-rmcp::manifest_persisted",
     "gaze-mcp-rmcp::stdio_smoke",
     "gaze-mcp-rmcp::strict_egress",
-    "gaze-model-setup",
     "gaze-token-bridge",
     "gaze-token-bridge::local_demo_assertions",
     "gaze-token-bridge::os_keystore_isolation",
