@@ -13,6 +13,7 @@ Run these helpers from the repository root.
 
 | Script | Purpose |
 |---|---|
+| `scripts/release/build-binary.sh` | Builds the release `gaze` binary reproducibly with the pinned toolchain and writes its `.sha256` and `.buildinfo`. The release workflow and outside verifiers both run it. |
 | `scripts/release/third-party-licenses.sh` | Writes the `THIRD-PARTY-LICENSES.txt` release asset: licences of all linked crates plus the vendored ONNX Runtime licence and notices. |
 
 ## Gate

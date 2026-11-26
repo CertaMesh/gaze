@@ -9,16 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Release binaries are reproducible. `scripts/release/build-binary.sh` builds
+  them with remapped source, Cargo and toolchain paths, and refuses any `rustc`
+  other than the rustup toolchain in `rust-toolchain.toml`. The release workflow
+  rebuilds each binary from a second checkout path and fails on any byte
+  difference. Each binary ships with a `.buildinfo` file that records the
+  commit, compiler, linker and digest, so anyone can rebuild and compare it.
 - Each GitHub Release now includes `THIRD-PARTY-LICENSES.txt`. It lists every
   Rust crate linked into the `gaze` binary with its licence text, followed by
   the notices of C/C++ and ported code vendored inside crates (Oniguruma,
   esaxx, sais-lite, crossbeam-channel, atomic-waker) and the licence and
-  third-party notices of the statically linked ONNX Runtime 1.24.2. `scripts/release/third-party-licenses.sh` generates it with
-  cargo-about. The cargo-deny workflow regenerates it on dependency changes and
-  fails if an `ort-sys` bump outdates the vendored ONNX Runtime notices.
+  third-party notices of the statically linked ONNX Runtime 1.24.2.
+  `scripts/release/third-party-licenses.sh` generates it with cargo-about. The
+  cargo-deny workflow regenerates it on dependency changes and fails if an
+  `ort-sys` bump outdates the vendored ONNX Runtime notices.
 
 ### Changed
 
+- Release binaries now include the `mcp` feature, so `gaze mcp install`,
+  `doctor`, `serve` and `bridge` work without a source build. The release
+  smoke test runs a stdio `gaze mcp serve` call. On macOS arm64 the binary
+  grows from 47.2 MB to 54.6 MB, with no new linked libraries.
 - MCP tool results include the fixed `resultType: "complete"` discriminator
   for protocol 2026-07-28 and newer. Direct serialization of rmcp results also
   includes it; rmcp omits it for older negotiated protocol versions. Tool-error
@@ -190,6 +201,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ProtocolVersion`.
 
 ### Fixed
+
+- `gaze restore --restore-mode strict` and daemon v1 `restore` now refuse
+  malformed token spellings such as `<deadbeef:Email_>` with `UnknownToken`
+  (exit 3), as `Session::restore_strict_text` and daemon v2 already did.
+  Previously they returned the text unchanged with a success decision. Bare
+  class tags such as `<name>`, `<Email>` or `<custom:x>` count as malformed
+  spellings, so model output containing them now refuses in strict mode; the
+  restore audit row records `failed`. The
+  library's malformed-spelling grammar now derives its class names from
+  `BUILTIN_CLASS_NAMES`.
 
 - Workspace tests and their CLI children refuse native OS keystore access before
   credential construction, including Cargo invoked outside the repository via
