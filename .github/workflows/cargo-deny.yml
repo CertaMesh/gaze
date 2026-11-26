@@ -9,6 +9,8 @@ on:
       - about.toml
       - 'scripts/release/third-party-licenses.*'
       - 'scripts/release/notices/**'
+      - 'crates/*/Cargo.toml'
+      - .github/workflows/release-build.yml
       - .github/workflows/cargo-deny.yml
   schedule:
     - cron: '0 9 * * 1'   # Mondays 09:00 UTC

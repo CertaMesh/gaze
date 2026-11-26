@@ -1,5 +1,6 @@
 # cargo-about configuration for the third-party licence file shipped with
-# release binaries. Keep `accepted` in step with [licenses] in deny.toml.
+# release binaries. Keep `accepted` in step with [licenses] in deny.toml, and
+# `targets` in step with the build matrix in .github/workflows/release.yml.
 accepted = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
@@ -8,7 +9,6 @@ accepted = [
     "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
-    "MPL-2.0",
     "Unicode-3.0",
     "Zlib",
 ]
@@ -20,3 +20,7 @@ targets = [
 ignore-build-dependencies = true
 ignore-dev-dependencies = true
 private = { ignore = true }
+
+# deny.toml allows MPL-2.0 only for this crate.
+[option-ext]
+accepted = ["MPL-2.0"]
