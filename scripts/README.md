@@ -9,6 +9,12 @@ Run these helpers from the repository root.
 | `scripts/fetch/fetch-ner-model.sh` | Fetches and verifies the pinned Davlan mBERT NER bundle. |
 | `scripts/fetch/fetch-openai-privacy-filter.sh` | Installs the pinned OpenAI Privacy Filter subprocess runtime. |
 
+## Release
+
+| Script | Purpose |
+|---|---|
+| `scripts/release/third-party-licenses.sh` | Writes the `THIRD-PARTY-LICENSES.txt` release asset: licences of all linked crates plus the vendored ONNX Runtime licence and notices. |
+
 ## Gate
 
 | Script | Purpose |

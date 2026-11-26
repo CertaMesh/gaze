@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Each GitHub Release now includes `THIRD-PARTY-LICENSES.txt`. It lists every
+  Rust crate linked into the `gaze` binary with its licence text, followed by
+  the licence and third-party notices of the statically linked ONNX Runtime
+  1.24.2. `scripts/release/third-party-licenses.sh` generates it with
+  cargo-about. The cargo-deny workflow regenerates it on dependency changes and
+  fails if an `ort-sys` bump outdates the vendored ONNX Runtime notices.
+
 ### Changed
 
 - MCP tool results include the fixed `resultType: "complete"` discriminator

@@ -6,6 +6,9 @@ on:
     paths:
       - Cargo.lock
       - deny.toml
+      - about.toml
+      - 'scripts/release/third-party-licenses.*'
+      - 'scripts/release/notices/**'
       - .github/workflows/cargo-deny.yml
   schedule:
     - cron: '0 9 * * 1'   # Mondays 09:00 UTC
@@ -39,3 +42,12 @@ jobs:
           fi
       - name: cargo deny check
         run: cargo deny check
+      # The release attaches this file to every binary; fail here, not at tag
+      # time, when a dependency change leaves a licence cargo-about rejects or
+      # an ort-sys bump outdates the vendored ONNX Runtime notices.
+      - name: Generate third-party licences
+        run: |
+          if ! command -v cargo-about >/dev/null 2>&1; then
+            cargo install cargo-about --version 0.8.2 --locked
+          fi
+          scripts/release/third-party-licenses.sh "$RUNNER_TEMP/THIRD-PARTY-LICENSES.txt"
