@@ -43,10 +43,10 @@ a result.
 
 Usage (from the repository root):
 
-    python3 scripts/bench/f8_envelope.py measure --binary target/release/gaze \\
+    python3 scripts/perf/f8_envelope.py measure --binary target/release/gaze \\
         --envelope laptop --output target/f8/laptop.json
-    python3 scripts/bench/f8_envelope.py check target/f8/laptop.json
-    python3 scripts/bench/f8_envelope.py compare base.json candidate.json
+    python3 scripts/perf/f8_envelope.py check target/f8/laptop.json
+    python3 scripts/perf/f8_envelope.py compare base.json candidate.json
 """
 from __future__ import annotations
 
