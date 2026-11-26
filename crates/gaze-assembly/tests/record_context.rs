@@ -469,6 +469,7 @@ fn record_spellings_closer_to_the_declared_value_are_never_less_protected() {
     const RARE_EXACT_ONLY: &str =
         r#"{"record":{"first_name":"Qorvex"},"record_match_kinds":{"name_single":["exact"]}}"#;
     const FULL_LOOSEST_ONLY: &str = r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["whitespace_case_folded"]}}"#;
+    const FULL_WS_ONLY: &str = r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["whitespace_flexible"]}}"#;
     const FULL_EXACT_ONLY: &str =
         r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["exact"]}}"#;
     for (context, raw, value, protected) in [
@@ -537,6 +538,8 @@ fn record_spellings_closer_to_the_declared_value_are_never_less_protected() {
             "maren okafor",
             true,
         ),
+        (FULL_WS_ONLY, "Maren Okafor called", "Maren Okafor", true),
+        (FULL_WS_ONLY, "maren okafor called", "maren okafor", false),
         (
             FULL_EXACT_ONLY,
             "maren okafor called",

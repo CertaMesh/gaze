@@ -485,6 +485,31 @@ mod tests {
                 "Synthetic  Qorvex",
                 true,
             ),
+            // A closer spelling satisfies a looser kind, never a sideways one.
+            (
+                PiiClass::Name,
+                vec![RecordMatchKind::CaseFolded],
+                "Synthetic Qorvex",
+                true,
+            ),
+            (
+                PiiClass::Name,
+                vec![RecordMatchKind::WhitespaceCaseFolded],
+                "Synthetic  Qorvex",
+                true,
+            ),
+            (
+                PiiClass::Name,
+                vec![RecordMatchKind::WhitespaceFlexible],
+                "synthetic qorvex",
+                false,
+            ),
+            (
+                PiiClass::Name,
+                vec![RecordMatchKind::CaseFolded],
+                "synthetic  qorvex",
+                false,
+            ),
             (
                 PiiClass::Custom("private_value".into()),
                 vec![RecordMatchKind::CaseFolded],

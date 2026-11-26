@@ -330,9 +330,9 @@ fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
 
 /// A spelling closer to the declared value satisfies every looser kind: an
 /// exact occurrence passes `case_folded`, and an exact or case-only variant
-/// passes `whitespace_case_folded`. Letter case alone never decides whether a
-/// declared value is protected; common single names keep their own
-/// `corroborated_single` rule.
+/// passes `whitespace_case_folded`. For names, letter case alone never decides
+/// whether a declared value is protected; identifiers cannot enable case kinds,
+/// and common single names keep their own `corroborated_single` rule.
 pub(crate) fn record_kind_allowed(
     kind: RecordMatchKind,
     allowed: &BTreeSet<RecordMatchKind>,
