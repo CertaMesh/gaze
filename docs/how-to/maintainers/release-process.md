@@ -132,8 +132,11 @@ linker. To check a published binary, rebuild it from the tagged source:
 ```bash
 git checkout vX.Y.Z
 scripts/release/build-binary.sh aarch64-apple-darwin /tmp/gaze --features document,proxy
-diff /tmp/gaze.sha256 <(curl -fsSL https://github.com/CertaMesh/gaze/releases/download/vX.Y.Z/gaze-aarch64-apple-darwin.sha256 | sed 's/gaze-aarch64-apple-darwin/gaze/')
+gh release download vX.Y.Z --pattern 'gaze-aarch64-apple-darwin.*' --dir /tmp/published
+cut -d' ' -f1 /tmp/gaze.sha256 /tmp/published/gaze-aarch64-apple-darwin.sha256
 ```
+
+The two printed digests must be equal.
 
 The script:
 
