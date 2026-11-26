@@ -233,3 +233,11 @@ def test_v30_blanket_learned_veto_would_expose_record_ids(v30):
     assert exposure == {"number": (4, 24), "outside_one_string_leaf": (4, 24)}
     # Layer C cannot be rebuilt, so its exposure is only bounded.
     assert set(v30["unmeasured_learned_veto_exposure_upper_bound"]) == {"C"}
+
+
+def test_a_corpus_that_does_not_reproduce_its_digest_is_refused():
+    header = {"layer_identity": {"generator_version": 30, "generator_corpus_sha256": "0" * 64},
+              "documents": [{"id": "agentic-test-A-aadhaar-000-coverage_json",
+                             "source_dataset": "gaze-agentic-layers"}]}
+    with pytest.raises(census.CensusError):
+        census._texts(header)

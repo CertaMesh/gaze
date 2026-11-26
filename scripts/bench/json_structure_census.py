@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -516,10 +517,16 @@ def _texts(header: dict) -> tuple[dict[str, tuple[str, str]], str]:
     identity = header.get("layer_identity") or {}
     generated = agentic.generate(agentic.PUBLISHED_PARTITION)
     corpus = agentic.manifest(agentic.PUBLISHED_PARTITION, generated)
-    if identity and (identity.get("generator_version") != corpus["generator_version"]
-                     or identity.get("generator_corpus_sha256") != corpus["corpus_sha256"]):
-        raise CensusError("record measured a different generated corpus; rebuild it with "
-                          f"generator v{identity.get('generator_version')}")
+    recorded = identity.get("generator_corpus_sha256")
+    if recorded and recorded != corpus["corpus_sha256"]:
+        # A later generator that only adds documents still rebuilds an older
+        # record exactly: its documents, in order, must give the recorded digest.
+        ids = {row["id"] for row in header["documents"] if row["source_dataset"] == "gaze-agentic-layers"}
+        generated = [record for record in generated if record.uid in ids]
+        if hashlib.sha256(agentic.corpus_bytes(generated)).hexdigest() != recorded:
+            raise CensusError("record measured a different generated corpus; rebuild it with "
+                              f"generator v{identity.get('generator_version')}")
+        corpus = {**corpus, "corpus_sha256": recorded}
     texts = {record.uid: (record.text, record.surface) for record in generated}
     for line in NEGATIVE_CORPUS.read_text(encoding="utf-8").splitlines():
         row = json.loads(line)
