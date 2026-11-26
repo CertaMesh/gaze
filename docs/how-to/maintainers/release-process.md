@@ -22,6 +22,9 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
   to pass on the PR head. This job runs only on PRs that change those workflows.
   It uploads Actions artifacts without publishing a release. Publication runs
   only on a `v*` tag push and is exercised at the next release.
+- Each binary is built by `scripts/release/build-binary.sh` and rebuilt from a
+  second checkout path. The job fails if the two builds differ by one byte. See
+  [Reproduce a release binary](#reproduce-a-release-binary).
 - After publication, confirm all three binaries and their checksums are present. Select
   the matching Linux architecture when replaying installation in a container.
 - GitHub generates release notes from tag history. Keep curated highlights in
@@ -119,6 +122,40 @@ Zero-test results fail. The `model-setup-ownership-<commit>` artifact retains
 commit, commands, toolchain, hashes, owner/mode inventory, and test receipts.
 Temporary models are deleted on exit. Publish order places `gaze-recognizers`
 before `gaze-model-setup` at the coordinated version.
+
+## Reproduce a release binary
+
+Each release binary (`gaze-aarch64-apple-darwin`, `gaze-x86_64-linux-gnu`,
+`gaze-aarch64-linux-gnu`) has a `.sha256` file and a `.buildinfo` file. The build info records the commit, Cargo arguments, `rustc -vV`, and the
+linker. To check a published binary, rebuild it from the tagged source:
+
+```bash
+git checkout vX.Y.Z
+scripts/release/build-binary.sh aarch64-apple-darwin /tmp/gaze --features document,proxy
+gh release download vX.Y.Z --repo CertaMesh/gaze --pattern 'gaze-aarch64-apple-darwin.*' --dir /tmp/published
+cut -d' ' -f1 /tmp/gaze.sha256 /tmp/published/gaze-aarch64-apple-darwin.sha256
+```
+
+The two printed digests must be equal.
+
+The script:
+
+- Refuses any `rustc` that is not the rustup toolchain pinned in
+  `rust-toolchain.toml`. A `rustc` of the same version from another
+  distribution, such as Homebrew, emits different code.
+- Remaps the checkout, `CARGO_HOME`, and toolchain paths, so the result does not
+  depend on where they are.
+- On macOS, omits the linker debug map, so `LC_UUID` does not depend on the
+  build directory.
+- Clears inherited `RUSTFLAGS`, `RUSTC`, compiler wrappers, and target
+  directory settings, so the build uses the checked compiler.
+
+The same commit, target, Cargo arguments, and toolchain give the same bytes
+when the linker also matches. Compare the `linker`, `xcode`, `cc`, and `glibc`
+lines of the published `.buildinfo` with your machine before treating a
+mismatch as a problem. To pin a custom feature set, run the script with your
+own arguments, for example `--no-default-features --features safety-net-nym`,
+and publish that digest yourself.
 
 ## Homebrew Tap Location
 

@@ -543,7 +543,11 @@ fn safe_record_value(value: &str, class: &PiiClass) -> bool {
 }
 
 fn canonical_record_value(value: &str) -> String {
-    value.split_whitespace().collect::<Vec<_>>().join(" ")
+    gaze_types::normalize::normalize(value)
+        .text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn safe_record_path(path: &str) -> String {

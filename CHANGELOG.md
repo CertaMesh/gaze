@@ -18,9 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   share mappings, and each refuses the other's tokens on strict restore.
 - `gaze mcp doctor` reports the declared protection profile (bundled `core`
   rules, Resolve/Strict, no NER or Nym) and the session scope.
+- Release binaries are reproducible. `scripts/release/build-binary.sh` builds
+  them with remapped source, Cargo and toolchain paths, and refuses any `rustc`
+  other than the rustup toolchain in `rust-toolchain.toml`. The release workflow
+  rebuilds each binary from a second checkout path and fails on any byte
+  difference. Each binary ships with a `.buildinfo` file that records the
+  commit, compiler, linker and digest, so anyone can rebuild and compare it.
 
 ### Changed
 
+- Release binaries now include the `mcp` feature, so `gaze mcp install`,
+  `doctor`, `serve` and `bridge` work without a source build. The release
+  smoke test runs a stdio `gaze mcp serve` call. On macOS arm64 the binary
+  grows from 47.2 MB to 54.6 MB, with no new linked libraries.
 - `HostCallContext` gains a `conversation` field. Struct literals must set it
   or use `..Default::default()`.
 - `gaze mcp serve` scopes its Session to the stdio connection and shares only
@@ -196,6 +206,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ProtocolVersion`.
 
 ### Fixed
+
+- `gaze restore --restore-mode strict` and daemon v1 `restore` now refuse
+  malformed token spellings such as `<deadbeef:Email_>` with `UnknownToken`
+  (exit 3), as `Session::restore_strict_text` and daemon v2 already did.
+  Previously they returned the text unchanged with a success decision. Bare
+  class tags such as `<name>`, `<Email>` or `<custom:x>` count as malformed
+  spellings, so model output containing them now refuses in strict mode; the
+  restore audit row records `failed`. The
+  library's malformed-spelling grammar now derives its class names from
+  `BUILTIN_CLASS_NAMES`.
 
 - Workspace tests and their CLI children refuse native OS keystore access before
   credential construction, including Cargo invoked outside the repository via

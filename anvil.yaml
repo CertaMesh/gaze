@@ -352,3 +352,54 @@ checks:
     toolchain: *rust-tools
     commands:
       - env GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 python3 scripts/measure_mcp_host_context.py --cli-bin target/release/gaze --host-bin target/release/examples/host_context_measure --output target/gate/mcp-host-latency-rss.json --reference-host-bin target/gate/mcp-host-before-cache/host_context_measure --reference-source-sha f9f79848e6e6f4837821862801a4a795714e1547
+
+  known-record-normalization:
+    description: Known-term normalization, original-byte restore, and mutation regressions
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, scripts/ci/known_record_normalization_mutations.py, scripts/ci/known_record_normalization_probe.py, scripts/ci/known_record_normalization_capture.py, docs, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V, uv --version]
+    commands:
+      - uv run --project scripts/bench --python 3.13 --locked python scripts/ci/known_record_normalization_mutations.py
+      - cargo test -p gaze-assembly --test core_pipeline_dictionaries --test record_context
+      - 'cargo test -p gaze-recognizers --all-features --lib dictionary::'
+      - cargo test -p gaze-recognizers --lib normalization_tests
+      - 'cargo test -p gaze-recognizers --lib record_guess::'
+      - cargo test -p gaze-cli --no-default-features --test cli_pipe normalized_context_
+      - cargo test -p gaze-cli --no-default-features --test daemon_reversible normalized_context_
+      - cargo test -p gaze-mcp-core --test strict_contract normalized_host_dictionary_terms_
+      - uv run --project scripts/bench --python 3.13 --locked python scripts/ci/ci_inputs.py
+
+  known-record-release-gates:
+    description: Behavioral xtask gates for dictionary and context changes
+    expensive: true
+    reusable: false
+    locks: [workspace-build]
+    inputs: *rust-inputs
+    toolchain: *rust-tools
+    commands:
+      - cargo deny check
+      - cargo run -p xtask -- symmetric-potemkin
+      - cargo run -p xtask -- class-map-override-safety
+      - cargo run -p xtask -- recognizer-composition-validator
+      - cargo run -p xtask -- no-tenant-knowledge
+      - cargo run -p xtask -- bundle-tokenization-drift
+      - cargo run -p xtask -- family-policy-table-coherence
+      - cargo run -p xtask -- locale-cue-bundle-coherence
+      - cargo run -p xtask -- fixture-citation-lint
+      - cargo run -p xtask -- trybuild-fixture-hygiene
+      - cargo run -p xtask -- cargo-metadata-audit-isolation
+      - cargo run -p xtask -- readme-version-check
+      - cargo run -p xtask -- safety-net-sanity
+
+  known-record-capture:
+    description: One producer-owned setup or record-once capture stage
+    expensive: true
+    reusable: false
+    locks: [bench-machine, workspace-build]
+    identity_env: [GAZE_KR_SUBJECT, GAZE_KR_REVISION, GAZE_KR_CAPTURE_KIND, GAZE_KR_DATASET]
+    inputs: [Cargo.toml, Cargo.lock, rust-toolchain.toml, crates, scripts/bench, scripts/ci/known_record_capture_stage.py, scripts/ci/known_record_normalization_capture.py, docs/reference/benchmarks, anvil.yaml]
+    toolchain: [rustc -Vv, cargo -V, uv --version]
+    commands:
+      - uv run --project scripts/bench --python 3.13 --locked python scripts/ci/known_record_capture_stage.py

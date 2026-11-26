@@ -29,6 +29,16 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: expect strict restore to refuse malformed token spellings
+
+`gaze restore` (strict is the default) and daemon v1 `restore` now refuse text
+containing a malformed token spelling with `UnknownToken` (exit 3), as the
+library strict restore and daemon v2 already did. Besides spellings without an
+ordinal such as `<deadbeef:Email_>`, this covers bare class tags such as
+`<name>`, `<Email>`, `<organization>` or `<custom:x>` in model output. Closing
+tags such as `</name>` are unaffected. To keep such text, ask the model not to
+emit those tags, escape them, or restore with `--restore-mode tolerant`.
+
 ### Action required: handle caller-context dictionary refusals
 
 `dictionary_bundle_from_context` and `DictionaryBundleExt::from_context` now
