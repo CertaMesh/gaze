@@ -1,8 +1,8 @@
 [advisories]
 ignore = [
-    # RUSTSEC-2023-0089 (atomic-polyfill): informational "unmaintained", no patched version. Build dependency via phonenumber -> postcard -> heapless 0.7. Re-checked 2026-11-26: postcard 1.2.0 still selects heapless 0.7 through its default heapless-cas feature. Revisit when phonenumber's postcard moves to heapless 0.8+, or by 2027-02-26.
+    # RUSTSEC-2023-0089 (atomic-polyfill): informational "unmaintained", no patched version. Reached via phonenumber -> postcard -> heapless 0.7, which enables it only on avr, riscv32, thumbv6m and xtensa targets, so it is never compiled for Gaze targets; cargo-deny reports it because deny.toml checks all targets. Re-checked 2026-11-26: postcard 1.2.0 still selects heapless 0.7 through its default heapless-cas feature. Revisit when phonenumber's postcard moves to heapless 0.8+, or by 2027-02-26.
     "RUSTSEC-2023-0089",
-    # RUSTSEC-2024-0436 (paste): informational "unmaintained", no patched version. Proc-macro dependency of tokenizers and macro_rules_attribute. Re-checked 2026-11-26: tokenizers 0.23.2 still requires paste. Revisit when tokenizers drops paste, or by 2027-02-26.
+    # RUSTSEC-2024-0436 (paste): informational "unmaintained", no patched version. Proc-macro dependency of tokenizers and macro_rules_attribute. Re-checked 2026-11-26: Gaze pins tokenizers 0.22, and tokenizers 0.23.2 still requires paste directly. Revisit when tokenizers drops paste, or by 2027-02-26.
     "RUSTSEC-2024-0436",
     # RUSTSEC-2026-0194/RUSTSEC-2026-0195 (quick-xml): patched in quick-xml >=0.41, but phonenumber 0.3.9 caps quick-xml at <=0.38. Gaze uses only phonenumber's bundled metadata and never its XML loader, so no user XML reaches quick-xml. Re-checked 2026-11-26: phonenumber 0.3.10 allows quick-xml 0.41 but also updates libphonenumber metadata (9.0.21 -> 9.0.33), which changes phone detection and needs the benchmark gain gate. Revisit when that bump lands, or by 2027-02-26.
     "RUSTSEC-2026-0194",
