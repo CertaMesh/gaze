@@ -303,7 +303,8 @@ is text/Markdown only; OCR/PDF/image ingestion stays with `gaze document`.
 ## MCP installation
 
 The `mcp` feature embeds the rmcp stdio server into the `gaze` binary and
-registers `gaze-document` tools:
+registers `gaze-document` tools. The release binaries include it. To build it
+from source:
 
 ```console
 $ cargo install gaze-cli --version 0.17.0 --features mcp

@@ -19,9 +19,9 @@ Every verb below is defined by the clap `Subcommand` enum in
 | `gaze audit purge` | Manually delete redaction-log metadata rows older than an ISO 8601 UTC timestamp. See [guide](#gaze-audit-purge). | always |
 | [`gaze audit safety-net query`](../../crates/gaze-cli/README.md#audit-safety-net-query) | Print filtered `safety_net_log` rows as TSV. See [guide](#gaze-audit-safety-net-query). | always |
 | `gaze document clean` | OCR a PNG/JPG/PDF into a split `SafeBundle` (`agent/clean.md`, `agent/report.json`, `owner/manifest.json`). See [guide](#gaze-document-clean) and [crate README](../../crates/gaze-document/README.md). | `document` |
-| `gaze mcp install` | Install `gaze mcp serve` into a supported MCP client config. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
-| `gaze mcp doctor` | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
-| `gaze mcp serve` | Run the stdio MCP server exposing agent-tier document tools. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
+| `gaze mcp install` | Install `gaze mcp serve` into a supported MCP client config. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp`; in the release binary |
+| `gaze mcp doctor` | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp`; in the release binary |
+| `gaze mcp serve` | Run the stdio MCP server exposing agent-tier document tools. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp`; in the release binary |
 | `gaze proxy` | Run or manage the multi-provider HTTP chokepoint daemon. See [guide](#gaze-proxy) and [crate README](../../crates/gaze-proxy/README.md). | built into the default release binary since v0.8.1 |
 
 ## Warnings and exit codes
@@ -302,6 +302,7 @@ gaze mcp serve
 
 The CLI verbs require the `mcp` feature. Document tools require the `document`
 feature as well, because the tool implementations live in `gaze-document`.
+The release binaries include both features.
 
 | Option | Purpose |
 |--------|---------|
