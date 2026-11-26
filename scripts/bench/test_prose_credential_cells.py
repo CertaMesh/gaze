@@ -18,11 +18,14 @@ class ProseCredentialCellsTests(unittest.TestCase):
             records = cells.records(api, partition)
             self.assertEqual(
                 {layer: sum(r.layer == layer for r in records) for layer in "ADR"},
-                {"A": 230, "D": 160, "R": 190},
+                {"A": 230, "D": 200, "R": 190},
             )
             for record in records:
                 self.assertTrue(record.surface.startswith(cells.SURFACE_PREFIX))
                 self.assertEqual(len(record.gold), {"A": 1, "D": 0, "R": 2}[record.layer], record.uid)
+                if record.layer in "AD":
+                    # Every protected D byte and non-gold A byte already counts as a false positive.
+                    self.assertFalse(record.decoys, record.uid)
                 for gold in record.gold:
                     self.assertEqual(record.text.encode()[gold.start:gold.end].decode(), gold.value)
                     self.assertIn(gold.label, {"PASSWORD", "SECURITYTOKEN"})

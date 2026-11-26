@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:37119d11c6890322a6c38e536418ebe33cb523f52c1909182bfb88fa739a730d",
+  "id": "gaze-benchmark-v1:6b61c854e5c3df68aa97e22ebac82829a00bc03513eb3e1445ce2ac8f009036e",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -9,13 +9,13 @@
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 41710,
+      "documents": 41750,
       "documents_by_layer": {
         "A": 19917,
-        "D": 8992,
+        "D": 9032,
         "R": 12801
       },
-      "corpus_sha256": "75cd1f99dcb1b78185aedab25b195bf0c87babbf6372cefa94ad938aae4c743e",
+      "corpus_sha256": "8380d500b949265ef5e01f9a8b801819fd8d83373474f87abcdc535a4df33944",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,7 +24,7 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "dfa56840851d19ee79da712a14665d9d4a691bdc26a0a5d9ce7915a5a47c8127"
+      "generated": "9480508e4ddeca0c4ce82e40acede4c18aca64f318dfdc75eeb04457ee7cd695"
     },
     "harness": {
       "scripts/bench/agentic_layers.py": "f61047e00779a50e2b416e62e98a5240aad31a1015c10a43de47135b3ce32266",
@@ -125,7 +125,7 @@
       "scripts/bench/probe_government_id_mutants.py": "8a94343e6af1af2a3e4730d09fdfb828fa1299f947141ab657673290c3b4771e",
       "scripts/bench/probe_postal_coverage.py": "f484620e3c7d2f4f100d0b99619a9c05754cb0a9813461cb1e757082a48af364",
       "scripts/bench/producer_build_binding.py": "db267264b37473f81f0cb6db610f48fd2941ad176ed72ba38c8354e7efbcf411",
-      "scripts/bench/prose_credential_cells.py": "15fbdd7a7c6bf2e9ee7e3f69366bc89bbcd4fa8f664fdce20cb7ed3a996f18b8",
+      "scripts/bench/prose_credential_cells.py": "014163202ab7393252331f2a00d938a148e4e92f029e5303a007f85caf0858cf",
       "scripts/bench/prove_refusal_history.py": "7853d4ac0b21d124c7bc01bb4e5393fd7c76fe7d32b7ae974002fd1591c2c697",
       "scripts/bench/proxy_request_order.py": "4ee000a628bc3473b1d4e263bd43ac75d90ded20760c66ae0f5322509094baf8",
       "scripts/bench/publish_mcp_operation_evidence.py": "9c0a379c9283855f1527b63df9770a50151fd112c7b4e196c79cbc36837ad5cd",
@@ -348,17 +348,17 @@
       "A": {
         "documents": 19917,
         "document_ids_sha256": "59e83287c06e5107027aa5426a7d40197377e66746f5ab4e1af99f150b4bd01f",
-        "descriptors_sha256": "a678028cb74bc4c9356455ecffce75e548241db3ac1854e104099163cdadd559"
+        "descriptors_sha256": "50fb3b21d03bd612711512bd64cab58c8df677680cfd7f29b9cf01c94f690aa8"
       },
       "D": {
-        "documents": 8992,
-        "document_ids_sha256": "3f9c0952fcfa3ce07f983fffab94b7aa05fe1262cd535ee7dcc1e49e8b01085d",
-        "descriptors_sha256": "8b0ccf325bb15f10c4d7adfd6c9d982010b3fb27360cbcce4430c014df3de0b8"
+        "documents": 9032,
+        "document_ids_sha256": "b18bb8d9074196dd31c12cfd1a5ff7206d1bace3e4f6b23ddc07ff2efa44956b",
+        "descriptors_sha256": "1f4a0cdf30f7480ddc523370ef23efbc70f687ab2b4adcd9eb974a944259e562"
       },
       "R": {
         "documents": 12801,
         "document_ids_sha256": "028229919afd860f5dd7fee7d9e667af8c0292f289afb392654185ef4406ad81",
-        "descriptors_sha256": "b4e3e5b7b64cd0041f478bff2c459345206df53147a8b602ab1b0ebd6e066549"
+        "descriptors_sha256": "13d4f7a50fca667558b710024653f43bd69c4a20fe3d7ab13de5e805d01861b8"
       }
     }
   }

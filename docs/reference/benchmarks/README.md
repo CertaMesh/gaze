@@ -2001,7 +2001,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [typed refusal producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin, and the [current specification](specifications/37119d11c6890322a6c38e536418ebe33cb523f52c1909182bfb88fa739a730d.json) adds generator v31's prose credential cells.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [typed refusal producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin, and the [current specification](specifications/6b61c854e5c3df68aa97e22ebac82829a00bc03513eb3e1445ce2ac8f009036e.json) adds generator v31's prose credential cells.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2525,29 +2525,35 @@ twin under either generator.
 ### Prose credentials and base64 private keys (generator v31)
 
 The [prose credential generator](../../../scripts/bench/prose_credential_cells.py)
-adds `prose_credentials_` cells: 580 documents per partition (230 A, 160 D,
+adds `prose_credentials_` cells: 620 documents per partition (230 A, 200 D,
 190 R). These are harness inputs, not a detection change. Layer A holds
 invented EN/DE passwords, passphrases, security codes, access tokens and API
 keys named in chat, email and tool-call arguments: the value directly after its
 cue, after a copula or preposition behind connector words, or quoted, plus two
 phrasings with the cue after the value (`I may have entered … as the password`,
-`Als Passwort habe ich … gewählt`), which keep that residual measured. It also
+`Als Passwort habe ich … gewählt`), which keep that residual measured. Values
+include symbol-bearing passwords, spaced passphrases, grouped tokens, lowercase
+hex API keys and all-digit one-time codes. It also
 holds base64-encoded private-key files at all three byte alignments: whole
 files in a Kubernetes secret and an environment line, files inside encoded
 JSON, and line-wrapped `base64` output. Each whole value is gold, a trailing
 `!` included and sentence punctuation excluded; each base64 run is gold whole.
-Layer R repeats every value bare. Layer D carries the same cue words with no
+Layer R repeats every value bare; base64 repeats use the whole-file alignment
+only. Layer D carries the same cue words with no
 credential: password rules and lengths, credential names, hints, policies and
-rotation schedules, card verification digits, tokenizer names, and base64
+rotation schedules, the digit count of a card security code, tokenizer names,
+password- and token-shaped campaign names, build tags and article numbers under
+non-credential cues, and base64
 public certificates, public keys and prose. Every protected D byte is a false
-positive. Dev and test use disjoint wording and values. Generator v30 rebuilds
+positive. A card security code written out is a credential, so no D record
+carries one. Dev and test use disjoint wording and values. Generator v30 rebuilds
 byte-for-byte; its contract is frozen as
 [`scored-labels-agentic-generator-v30.json`](scored-labels-agentic-generator-v30.json).
 
 | Generator | A documents | D documents | R documents | Total per partition |
 | --- | ---: | ---: | ---: | ---: |
 | v30 | 19,687 | 8,832 | 12,611 | 41,130 |
-| v31 | 19,917 | 8,992 | 12,801 | 41,710 |
+| v31 | 19,917 | 9,032 | 12,801 | 41,750 |
 
 No release has been measured on generator v31 yet. The v30 history rows above
 stay bound to the v30 specification; the v31 backfill runs outside the PR

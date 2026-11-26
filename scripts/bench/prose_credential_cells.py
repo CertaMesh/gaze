@@ -6,8 +6,10 @@ Layer A carries EN/DE chat, email and tool-call prose that names a credential
 and gives its value, including phrasings a cue grammar does not reach, so the
 residual stays measured. Layer R repeats each value bare. Layer D carries the
 same cue words with no credential: password rules and lengths, credential
-names, hints, rotation schedules, card verification digits, tokenizer names,
-and base64-encoded public certificates and keys.
+names, hints, rotation schedules, the digit count of a card security code,
+tokenizer names, credential-shaped build tags, article numbers and campaign
+names under non-credential cues, and base64-encoded public certificates and
+keys.
 """
 
 import base64
@@ -50,14 +52,18 @@ TEMPLATES = {
             ("API key name: {D}", "slug"),
             ("Security token rotation runs every {D} days.", "digits"),
             ("The tokenizer {D} splits this prompt into tokens.", "tokenizer"),
-            ("Enter the 3-digit security code {D} from the back of the card.", "cvc"),
+            ("Enter the {D}-digit security code from the back of the card.", "cvclen"),
+            ("Build tag {D} shipped to staging.", "tokenshape"),
+            ("Our spring campaign is called {D} this year.", "pwshape"),
             ("Verification code template {D} is used for sign-in mails.", "slug"),
         ],
         "benign_de": [
             ("Das Passwort muss mindestens {D} Zeichen haben.", "digits"),
             ("Passwort vergessen? Den Link finden Sie unter {D}.", "url"),
             ("Der Passwort-Hinweis für Konto {D} wurde entfernt.", "reference"),
-            ("Sicherheitscode (CVC) auf der Kartenrückseite: {D}", "cvc"),
+            ("Der Sicherheitscode (CVC) auf der Kartenrückseite hat {D} Ziffern.", "cvclen"),
+            ("Die Artikelnummer {D} ist ausverkauft.", "tokenshape"),
+            ("Unser Kampagnenname lautet {D}.", "pwshape"),
             ("Zugangscode-Länge: {D} Stellen", "digits"),
         ],
     },
@@ -95,14 +101,18 @@ TEMPLATES = {
             ("Access token label: {D}", "slug"),
             ("Session token rotation happens every {D} hours.", "digits"),
             ("We counted tokens with {D} before sending the prompt.", "tokenizer"),
-            ("Type the security code {D} printed next to the signature strip.", "cvc"),
+            ("Type the {D}-digit security code printed next to the signature strip.", "cvclen"),
+            ("Release tag {D} went out on Tuesday.", "tokenshape"),
+            ("The product line {D} launches next month.", "pwshape"),
             ("The API key hint {D} is shown in the console.", "slug"),
         ],
         "benign_de": [
             ("Ein Passwort braucht mindestens {D} Zeichen.", "digits"),
             ("Passwort zurücksetzen über {D}.", "url"),
             ("Die Passwort-Richtlinie {D} gilt ab sofort.", "reference"),
-            ("Der Sicherheitscode auf der Karte lautet {D}.", "cvc"),
+            ("Der Sicherheitscode auf der Karte besteht aus {D} Ziffern.", "cvclen"),
+            ("Die Chargennummer {D} ist freigegeben.", "tokenshape"),
+            ("Der Messeslogan lautet {D}.", "pwshape"),
             ("Sicherheitstoken-Laufzeit: {D} Minuten", "digits"),
         ],
     },
@@ -117,6 +127,11 @@ UPPER_DIGITS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 PRIVATE_LABELS = ["PRIVATE KEY", "RSA PRIVATE KEY", "EC PRIVATE KEY", "OPENSSH PRIVATE KEY"]
 PUBLIC_LABELS = ["CERTIFICATE", "PUBLIC KEY"]
+PRODUCT_STEMS = {"dev": ["Aurora", "Basalt", "Cobalt", "Delta"], "test": ["Ember", "Falke", "Granit", "Helix"]}
+PASSPHRASE_WORDS = {
+    "dev": ["copper", "meadow", "violin", "glacier", "pepper", "orbit", "lantern", "mosaic"],
+    "test": ["harbor", "thimble", "saffron", "quartz", "willow", "canyon", "biscuit", "nebula"],
+}
 
 
 def records(api, partition):
@@ -137,11 +152,19 @@ def records(api, partition):
     def chars(size, alphabet):
         return "".join(alphabet[rng.below(len(alphabet))] for _ in range(size))
 
-    def password():
-        value = rng.choice(STEMS[partition]) + rng.digits(rng.between(2, 4)) + rng.choice(SYMBOLS)
+    def password(template, stems=STEMS[partition]):
+        if "passphrase" in template and rng.below(2):
+            words = PASSPHRASE_WORDS[partition]
+            return " ".join(rng.choice(words) for _ in range(4)) + " " + rng.digits(2)
+        value = rng.choice(stems) + rng.digits(rng.between(2, 4)) + rng.choice(SYMBOLS)
         return value if rng.below(2) else rng.choice(SYMBOLS) + value
 
-    def token():
+    def token(template):
+        # One-time codes are often all digits; API keys are often lowercase hex.
+        if "code" in template.lower() and not rng.below(3):
+            return rng.digits(rng.between(6, 8))
+        if "API key" in template and rng.below(2):
+            return chars(32, "0123456789abcdef")
         groups = [chars(rng.between(4, 6), UPPER_DIGITS) for _ in range(rng.between(1, 3))]
         value = "-".join(groups)
         while len(value) < 8 or not any(c.isdigit() for c in value) or not any(c.isalpha() for c in value):
@@ -157,8 +180,12 @@ def records(api, partition):
             return f"{rng.choice(['ci', 'backend', 'billing', 'mailer'])}-{rng.choice(['deploy', 'sync', 'export'])}-{rng.digits(2)}"
         if kind == "tokenizer":
             return rng.choice(["cl100k_base", "o200k_base", "p50k_base"])
-        if kind == "cvc":
-            return rng.digits(3)
+        if kind == "cvclen":
+            return str(rng.between(3, 4))
+        if kind == "tokenshape":
+            return token("")
+        if kind == "pwshape":
+            return password("", PRODUCT_STEMS[partition])
         return f"https://example.invalid/reset/{rng.digits(4)}"
 
     def pem(label):
@@ -173,7 +200,7 @@ def records(api, partition):
             for family, mint in (("password", password), ("token", token)):
                 label = "PASSWORD" if family == "password" else "SECURITYTOKEN"
                 for surface, template in enumerate(templates[f"{family}_{language}"]):
-                    value = mint()
+                    value = mint(template)
                     emit("A", f"{family}_{language}", f"{family}_{surface}", index, template,
                          {"V": (value, label)}, language)
                     emit("R", f"{family}_{language}", f"{family}_repeat_{surface}", index,
@@ -210,7 +237,8 @@ def records(api, partition):
         emit("R", "pem_base64", "repeat", index, "tls.key: {V}\n---\nprivateKey: {V}\n",
              {"V": (whole, "SECURITYTOKEN")}, "en")
         for surface, value in [("certificate", b64(public)),
-                               ("prose", b64("Never commit a private key to the repository.\n")),
+                               ("prose", b64("Never commit a private key to the repository.\n" if partition == "test"
+                                         else "Keep signing keys out of version control.\n")),
                                ("public_key", b64(pem("PUBLIC KEY")))]:
             emit("D", "pem_base64", surface, index, "tls.crt: {D}\n" if partition == "test" else "ca.crt: {D}\n",
                  {"D": (value, None)}, "en")
