@@ -994,7 +994,7 @@ impl Daemon {
                 gaze::BoundedRestoreError::CapExceeded => Failure::CacheCapacity,
                 _ => Failure::RestoreFailed,
             })?;
-        restore_pass2_validate(&assessment, RestoreMode::Strict)
+        restore_pass2_validate(&text, &assessment, RestoreMode::Strict)
             .map_err(|_| Failure::UnknownToken)?;
         let text = assessment.into_restored().text;
         #[derive(Serialize)]

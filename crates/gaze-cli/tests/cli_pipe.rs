@@ -936,6 +936,52 @@ fn t03_unknown_token_pascalcase_shape() {
     );
 }
 
+#[test]
+fn t03b_strict_restore_refuses_malformed_spellings_like_the_library() {
+    let (clean_text, blob, _) = clean_ok("Email is alice@example.invalid please.");
+    let mut malformed = Vec::new();
+    for class in gaze::BUILTIN_CLASS_NAMES {
+        malformed.push(format!("<deadbeef:{class}_>"));
+        malformed.push(format!("<{class}_>"));
+        malformed.push(format!("<{}>", class.to_ascii_lowercase()));
+    }
+    malformed.push("<deadbeef:Custom:order_id_>".to_string());
+    malformed.push("<Custom:family:tenant-document_>".to_string());
+    for bad in malformed {
+        let text = format!("{clean_text} then {bad} here");
+        let (code, stdout, stderr) = restore_json(&blob, &text);
+        assert_eq!(
+            code,
+            Some(3),
+            "{bad}: stdout={}",
+            String::from_utf8_lossy(&stdout)
+        );
+        assert!(
+            stdout.is_empty(),
+            "{bad}: strict refusal must not emit text"
+        );
+        assert_eq!(
+            parse_stderr_variant(&stderr),
+            json!({ "error": "UnknownToken", "exit": 3, "token": bad })
+        );
+
+        // Tolerant mode keeps passing the spelling through unchanged.
+        let (code, stdout, stderr) =
+            restore_json_with_args(&["--restore-mode=tolerant"], &blob, &text);
+        assert_eq!(
+            code,
+            Some(0),
+            "{bad}: stderr={}",
+            String::from_utf8_lossy(&stderr)
+        );
+        let resp: Value = serde_json::from_slice(&stdout).unwrap();
+        assert_eq!(
+            resp["text"].as_str().unwrap(),
+            format!("Email is alice@example.invalid please. then {bad} here")
+        );
+    }
+}
+
 // -----------------------------------------------------------------------
 // 4. UnknownToken — lowercase FormatPreserve shape
 // -----------------------------------------------------------------------

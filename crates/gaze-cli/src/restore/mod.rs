@@ -74,7 +74,7 @@ pub(crate) fn run_restore(
     } else {
         None
     };
-    let restore_warning = restore_pass2_validate(&assessment, restore_mode)?;
+    let restore_warning = restore_pass2_validate(&text, &assessment, restore_mode)?;
     let text = assessment.into_restored().text;
 
     if output == OutputFormat::Text {

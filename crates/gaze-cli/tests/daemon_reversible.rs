@@ -212,6 +212,30 @@ fn interrupted_session_cannot_restore_after_restart() {
 }
 
 #[test]
+fn v1_restore_refuses_malformed_token_spellings() {
+    let (_dir, policy) = policy();
+    let mut daemon = Daemon::start(&policy);
+    daemon.request(json!({"version":1,"op":"open","session_id":"run-a"}));
+    let token = daemon.request(
+        json!({"version":1,"op":"clean","session_id":"run-a","text":"alice@example.invalid"}),
+    )["clean_text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for bad in [
+        "<deadbeef:Email_>",
+        "<Name_>",
+        "<Custom:family:tenant-document_>",
+    ] {
+        let rejected = daemon.request(
+            json!({"version":1,"op":"restore","session_id":"run-a","text":format!("{token} {bad}")}),
+        );
+        assert_eq!(rejected["error"], "UnknownToken", "{bad}: {rejected}");
+        assert!(rejected.get("text").is_none(), "{bad}: {rejected}");
+    }
+}
+
+#[test]
 fn restore_rejects_tokens_from_another_live_session_without_partial_output() {
     let (_dir, policy) = policy();
     let mut daemon = Daemon::start(&policy);
