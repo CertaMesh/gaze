@@ -326,7 +326,10 @@ class Daemon:
             self.peak = 0
         finally:
             self._reader.join(timeout=5)
-            self.proc.stdout.close()
+            # A reader still blocked in read() holds the buffer lock; closing
+            # would wait for it forever.
+            if not self._reader.is_alive():
+                self.proc.stdout.close()
             self._stderr.close()
 
 
@@ -426,6 +429,7 @@ def measure(args) -> dict:
     setup = subprocess.run([str(args.binary), "setup", "--non-interactive", "--force", "--policy-out", str(policy)],
                            capture_output=True, text=True)
     if setup.returncode:
+        shutil.rmtree(work, ignore_errors=True)
         sys.exit(f"gaze setup failed ({setup.returncode}):\n{setup.stderr}")
 
     probes = [start_probe]
