@@ -14,7 +14,7 @@ import prose_record_id_cells as cells
 @pytest.mark.parametrize("partition", api.PARTITIONS)
 def test_whole_value_gold_and_public_twins(partition):
     records = cells.records(api, partition)
-    assert Counter(r.layer for r in records) == {"A": 770, "D": 555}
+    assert Counter(r.layer for r in records) == {"A": 780, "D": 585}
     personal, public, selectors, names, numeric = set(), set(), set(), set(), set()
     for r in records:
         assert r.surface.startswith(cells.SURFACE_PREFIX)
@@ -62,6 +62,19 @@ def test_case_plus_digits_has_exact_switch_and_test_case_twins(partition):
         twins = [r for r in records if r.family == "public_case" and r.surface.endswith("_" + surface)]
         assert all(r.layer == "D" and not r.gold for r in twins)
         assert Counter(n for r in twins for n in re.findall(syntax, r.text)) == positive
+
+
+@pytest.mark.parametrize("partition", api.PARTITIONS)
+def test_same_login_spelling_in_public_release_and_build_tags(partition):
+    rows = cells.records(api, partition)
+    personal = {r.gold[0].value for r in rows if r.surface.endswith("_ownership_login")}
+    assert len(personal) == api.DOCS_PER_FAMILY
+    for surface, syntax in (("release", r"Release (ACCT_\d{5})\b"),
+                            ("quoted", r"`(ACCT_\d{5})`"), ("build", r"Build tag: (ACCT_\d{5})\b")):
+        controls = [r for r in rows if r.surface.endswith("_ownership_" + surface)]
+        assert all(r.layer == "D" and not r.gold and not r.decoys for r in controls)
+        assert Counter(v for r in controls for v in re.findall(syntax, r.text)) == Counter(personal)
+    assert any(r.text == "Release ACCT_57293" for r in rows) == (partition == "dev")
 
 
 def test_partitions_have_disjoint_values_and_wording():

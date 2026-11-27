@@ -765,7 +765,7 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/884f2c810370129bbca26b9f83d2855fa826cf49fa9b03b06c429a26a4011096.json)
+The [current specification](../../docs/reference/benchmarks/specifications/8c6bea3500e646c4be39d7aef7e046defe6362c655a12ba2c3df5d7f43983cc9.json)
 adds generator v32's EN/DE prose record IDs and benign public references, selectors, switch cases and test cases.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,

@@ -121,4 +121,22 @@ def records(api, partition):
                      {"V": (value, None)})
     for lang, cue, development, held_out in NO_VALUE:
         emit("D", lang, "schema_or_prose", cue, 0, development if dev else held_out, {})
+
+    # Assign each synthetic spelling both roles: the person owns the login,
+    # and the release/build owns the tag. Neither role follows from the prefix.
+    ownership = api.Rng(api.PARTITION_SEEDS[partition], "prose-account-tag-ownership")
+    for index in range(api.DOCS_PER_FAMILY):
+        value = "ACCT_" + ("5" if dev else "8") + ownership.digits(4)
+        if dev and index == 0:
+            value = "ACCT_57293"
+        emit("A", "en", "record_id", "ownership_login", index,
+             "I sign in as {V} to view my statements." if dev else "My receipts are under my login {V}.",
+             {"V": (value, "RECORD_ID")})
+        for surface, development, held_out in (
+            ("release", "Release {V}", "Release {V} is available for download."),
+            ("quoted", "Install release `{V}` to get the fix.", "The stable release tag is `{V}`."),
+            ("build", "Build tag: {V}", "Build tag: {V} (nightly)."),
+        ):
+            emit("D", "en", "public_tag", "ownership_" + surface, index, development if dev else held_out,
+                 {"V": (value, None)})
     return result
