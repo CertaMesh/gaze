@@ -83,6 +83,12 @@ pub enum RawMatch {
         /// four groups. Other values under the label are possibly sensitive.
         value_shape: String,
     },
+    /// One opaque token after a same-line prose cue, outside structured carriers.
+    ProseRecordId {
+        cue_pattern: String,
+        #[serde(default)]
+        complete_joined: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -978,7 +984,7 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
                 return Err(RulepackError::DictionarySourceConflict { id: raw.id.clone() });
             }
         }
-        RawMatch::Ner { .. } => {}
+        RawMatch::Ner { .. } | RawMatch::ProseRecordId { .. } => {}
         RawMatch::FieldLabelled {
             field_labels,
             value_shape,

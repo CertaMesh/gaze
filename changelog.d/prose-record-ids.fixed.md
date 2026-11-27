@@ -1,0 +1,1 @@
+- Protect whole compound record IDs in prose, including five-digit suffixes previously tokenized alone as postal codes. English and German customer, employee and case-number cues protect the identifier without consuming the cue or trailing sentence punctuation.

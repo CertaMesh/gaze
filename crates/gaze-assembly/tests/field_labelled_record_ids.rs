@@ -108,6 +108,64 @@ fn path(segments: &[&str]) -> FieldPath {
 }
 
 #[test]
+fn prose_ids_protect_one_whole_token_and_restore_its_source_bytes() {
+    let (pipeline, active) = stock();
+    for (before, id, after) in [
+        ("Please look up ", "LLY-40718", "."),
+        ("See ", "KC-96-11842", " again."),
+        ("Lookup ", "ACCT_IN_40871", "; thanks."),
+        ("Check ", "ACCT/IN/40871", " today."),
+        ("Meine Fall-Nr.", "64312071", ", bitte prüfen."),
+        ("FN: ", "6412\u{200b}5072", "."),
+        ("The customer ID is ", "nx_6418/z2", "."),
+        ("Employee ID: ", "qr-701829", " was entered."),
+        ("[handoff] My case ", "Q73", " is open."),
+        ("My case number ", "Q73", "."),
+        ("My claim ID: ", "X42", "."),
+        ("My customer ID: ", "AB3–Q7", "."),
+        ("Lookup ", "A-B-C-D-38451", "."),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let raw = format!("{before}{id}{after}");
+        let cleaned = clean(&pipeline, &active, &session, &raw).unwrap();
+        let replacement = cleaned
+            .strip_prefix(before)
+            .and_then(|s| s.strip_suffix(after));
+        assert!(
+            replacement.is_some_and(|s| s.starts_with('<')
+                && s.ends_with('>')
+                && s.matches('<').count() == 1
+                && !s.to_lowercase().contains("postal")),
+            "{raw} -> {cleaned}"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            raw
+        );
+    }
+}
+
+#[test]
+fn prose_completion_preserves_the_policy_of_an_enclosed_card() {
+    let (pipeline, active) = pipeline(
+        "[[rule]]\nkind = \"class\"\nclass = \"custom:credit_card\"\naction = \"redact\"\n",
+        r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
+    );
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "Reference: AX-4111111111111111.";
+    let output = clean(&pipeline, &active, &session, raw).unwrap();
+    assert!(
+        !output.contains("AX-") && !output.contains("4111111111111111"),
+        "{output}"
+    );
+    assert!(output.ends_with("[REDACTED]."), "{output}");
+    assert!(!session
+        .snapshot_entries()
+        .iter()
+        .any(|e| e.raw.contains("4111111111111111")));
+}
+
+#[test]
 fn labelled_strings_protect_with_shape_and_restore() {
     let (pipeline, active) = stock();
     for (input, raw) in [

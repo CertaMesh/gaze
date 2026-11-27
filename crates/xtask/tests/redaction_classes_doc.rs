@@ -140,6 +140,7 @@ fn matcher_name(matcher: &RawMatch) -> &'static str {
         RawMatch::Ner { .. } => "ner",
         RawMatch::AnchoredMatch { .. } => "anchored_match",
         RawMatch::FieldLabelled { .. } => "field_labelled",
+        RawMatch::ProseRecordId { .. } => "prose_record_id",
         _ => panic!("new RawMatch variant must be documented"),
     }
 }
