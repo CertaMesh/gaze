@@ -25,6 +25,11 @@ line that names each affected bundle.
 `python3 scripts/release/changelog.py check` validates fragment names and
 contents; CI runs it on every PR. At release time,
 `python3 scripts/release/changelog.py assemble X.Y.Z --date YYYY-MM-DD` moves
-every fragment into a new `## [X.Y.Z]` section of `CHANGELOG.md`, in Keep a
-Changelog section order and file name order within a section, and deletes the
-fragments.
+every fragment into a new `## [X.Y.Z]` section of `CHANGELOG.md` and deletes the
+fragments. Entries join the first matching section; a new section is placed in
+Keep a Changelog order. Within a section, fragments follow file name order.
+Release tags refuse to publish while a fragment is left.
+
+For a prerelease such as `1.0.0-rc.1`, `assemble` copies the fragments into the
+prerelease section and keeps them, so the final `1.0.0` section still lists
+every change. Prerelease tags do not require the fragments to be gone.

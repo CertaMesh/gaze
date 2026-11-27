@@ -67,6 +67,54 @@ class ChangelogFragmentsTest(unittest.TestCase):
         self.assertTrue((self.root / 'changelog.d/pr.fixed.md').exists())
         self.assertEqual((self.root / 'CHANGELOG.md').read_text(), BASE)
 
+    def test_new_section_keeps_keep_a_changelog_order(self):
+        self.fragment('pr.deprecated.md', '- Deprecated thing.\n')
+        changelog.assemble(self.root, '1.0.0', '2026-12-01')
+        text = (self.root / 'CHANGELOG.md').read_text()
+        # Legacy order is Changed, Added; Deprecated goes before neither, after both.
+        self.assertIn('- Legacy added entry.\n\n### Deprecated\n\n- Deprecated thing.\n\n## [0.17.0]', text)
+        self.fragment('pr.added.md', '- Added thing.\n')
+        legacy = BASE.replace('### Changed', '### Security').replace(
+            '### Added\n\n- Legacy added entry.\n\n', '')
+        (self.root / 'CHANGELOG.md').write_text(legacy)
+        changelog.assemble(self.root, '1.0.0', '2026-12-01')
+        text = (self.root / 'CHANGELOG.md').read_text()
+        self.assertIn('## [1.0.0] - 2026-12-01\n\n### Added\n\n- Added thing.\n\n'
+                      '### Security\n\n- Legacy changed entry.\n\n## [0.17.0]', text)
+
+    def test_prerelease_keeps_fragments_for_the_final_release(self):
+        self.fragment('pr.fixed.md', '- Fix.\n')
+        changelog.assemble(self.root, '1.0.0-rc.1', '2026-12-01')
+        self.assertTrue((self.root / 'changelog.d/pr.fixed.md').exists())
+        changelog.assemble(self.root, '1.0.0', '2026-12-08')
+        text = (self.root / 'CHANGELOG.md').read_text()
+        self.assertEqual(text.count('- Fix.'), 2)
+        self.assertIn('[1.0.0]: https://github.com/CertaMesh/gaze/compare/v1.0.0-rc.1...v1.0.0', text)
+        self.assertFalse((self.root / 'changelog.d/pr.fixed.md').exists())
+
+    def test_release_check_refuses_pending_fragments_except_prereleases(self):
+        self.fragment('pr.fixed.md', '- Fix.\n')
+        original = changelog.ROOT
+        changelog.ROOT = self.root
+        try:
+            self.assertEqual(changelog.main(['check', '--release', '1.0.0-rc.1']), 0)
+            self.assertEqual(changelog.main(['check', '--release', '1.0.0']), 1)
+        finally:
+            changelog.ROOT = original
+
+    def test_missing_compare_link_fails_before_writing(self):
+        self.fragment('pr.fixed.md', '- Fix.\n')
+        broken = BASE.replace('compare/v0.17.0...HEAD', 'compare/0.17.0...HEAD')
+        (self.root / 'CHANGELOG.md').write_text(broken)
+        with self.assertRaisesRegex(ValueError, 'compare'):
+            changelog.assemble(self.root, '1.0.0', '2026-12-01')
+        self.assertEqual((self.root / 'CHANGELOG.md').read_text(), broken)
+        self.assertTrue((self.root / 'changelog.d/pr.fixed.md').exists())
+
+    def test_wrapped_issue_reference_is_not_a_heading(self):
+        self.fragment('pr.fixed.md', '- Fix the queue drop reported in\n#934.\n')
+        changelog.fragments(self.root)
+
     def test_malformed_fragments_are_rejected(self):
         for name, text, message in [
             ('pr.misc.md', '- Entry.\n', 'section one of'),

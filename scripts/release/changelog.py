@@ -7,8 +7,11 @@ Markdown list items. At release time, `assemble` moves every fragment into a
 new version section of CHANGELOG.md and deletes the fragments.
 
   python3 scripts/release/changelog.py check
-  python3 scripts/release/changelog.py check --none-pending
+  python3 scripts/release/changelog.py check --release 1.0.0
   python3 scripts/release/changelog.py assemble 1.0.0 --date 2026-12-01
+
+A prerelease (1.0.0-rc.1) section copies the fragments and keeps them, so the
+final release section still lists every change.
 """
 import argparse
 import datetime
@@ -50,7 +53,7 @@ def fragments(root):
             errors.append(f'{path.relative_to(root)}: fragment is empty')
         elif not text.lstrip().startswith('- '):
             errors.append(f'{path.relative_to(root)}: fragment must start with a "- " list item')
-        elif re.search(r'^#', text, re.M):
+        elif re.search(r'^#{1,6}\s', text, re.M):
             errors.append(f'{path.relative_to(root)}: fragment must not contain headings')
         found.append((match['section'], path))
     if errors:
@@ -67,10 +70,19 @@ def unreleased_bounds(changelog):
     return start, body, len(changelog) if end < 0 else end + 1
 
 
+def prerelease(version):
+    return '-' in version
+
+
 def merge(body, entries):
-    """Add fragment entries to the first matching `###` block, else a new block."""
+    """Add fragment entries to the first matching `###` block, else a new block.
+
+    A new block goes before the first block of a later section, so sections
+    keep Keep a Changelog order even after hand-written legacy blocks.
+    """
     blocks = re.split(r'(?m)^(?=### )', body.strip('\n'))
     blocks = [block.rstrip('\n') for block in blocks if block.strip()]
+    rank = {f'### {title}': position for position, title in enumerate(SECTIONS.values())}
     for key, title in SECTIONS.items():
         items = [entry for section, entry in entries if section == key]
         if not items:
@@ -80,7 +92,9 @@ def merge(body, entries):
         index = next((i for i, block in enumerate(blocks)
                       if block.split('\n', 1)[0].strip() == heading), None)
         if index is None:
-            blocks.append(f'{heading}\n\n{text}')
+            later = (i for i, block in enumerate(blocks)
+                     if rank.get(block.split('\n', 1)[0].strip(), -1) > rank[heading])
+            blocks.insert(next(later, len(blocks)), f'{heading}\n\n{text}')
         else:
             blocks[index] = f'{blocks[index]}\n{text}'
     return '\n\n'.join(blocks) + '\n\n' if blocks else ''
@@ -102,15 +116,17 @@ def assemble(root, version, date):
     changelog = (changelog[:start] + f'{UNRELEASED}\n\n## [{version}] - {date}\n\n'
                  + released + changelog[end:])
     link = COMPARE.search(changelog)
-    if link:
-        base, previous = link['base'], link['previous']
-        changelog = (changelog[:link.start()]
-                     + f'[Unreleased]: {base}/compare/v{version}...HEAD\n'
-                     + f'[{version}]: {base}/compare/v{previous}...v{version}'
-                     + changelog[link.end():])
+    if link is None:
+        raise ValueError('CHANGELOG.md has no "[Unreleased]: <repo>/compare/v<previous>...HEAD" link')
+    base, previous = link['base'], link['previous']
+    changelog = (changelog[:link.start()]
+                 + f'[Unreleased]: {base}/compare/v{version}...HEAD\n'
+                 + f'[{version}]: {base}/compare/v{previous}...v{version}'
+                 + changelog[link.end():])
     path.write_text(changelog)
-    for _, fragment in found:
-        fragment.unlink()
+    if not prerelease(version):
+        for _, fragment in found:
+            fragment.unlink()
     return len(found)
 
 
@@ -119,8 +135,9 @@ def main(argv=None):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
     check = commands.add_parser('check', help='validate fragment names and contents')
-    check.add_argument('--none-pending', action='store_true',
-                       help='also fail if any fragment is left (release tags)')
+    check.add_argument('--release', metavar='VERSION',
+                       help='release tags: also fail if a fragment is left, unless VERSION '
+                            'is a prerelease')
     run = commands.add_parser('assemble', help='move fragments into a new version section')
     run.add_argument('version')
     run.add_argument('--date', default=datetime.date.today().isoformat())
@@ -128,7 +145,7 @@ def main(argv=None):
     try:
         if args.command == 'check':
             found = fragments(ROOT)
-            if args.none_pending and found:
+            if args.release and not prerelease(args.release.removeprefix('v')) and found:
                 raise ValueError('unreleased changelog fragments remain; run '
                                  '`python3 scripts/release/changelog.py assemble <version>` '
                                  'in the release PR:\n'
