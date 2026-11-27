@@ -29,6 +29,13 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
   the matching Linux architecture when replaying installation in a container.
 - GitHub generates release notes from tag history. Keep curated highlights in
   `CHANGELOG.md`; do not maintain `dist/release-notes/` files.
+- PRs add changelog fragments under `changelog.d/` instead of editing
+  `CHANGELOG.md`. In the release PR, run
+  `python3 scripts/release/changelog.py assemble X.Y.Z --date YYYY-MM-DD`. It
+  merges every fragment into a new `## [X.Y.Z]` section, together with any
+  entries still written directly under `[Unreleased]`, updates the compare
+  links and deletes the fragments. Review the section and commit the result.
+  The tag jobs refuse to publish while a fragment is left.
 - `cargo run -p xtask -- scrub-public-text --published` checks all of `CHANGELOG.md`,
   `UPGRADE.md`, root/crate READMEs, and one hop of linked Markdown under `docs/`.
   PR tests and release preflights share this set. Tag jobs also scrub that

@@ -41,6 +41,7 @@ jobs:
             exit 0
           fi
 
+          python3 scripts/release/changelog.py check --none-pending
           version="${GITHUB_REF_NAME#v}"
           changelog_section="$(mktemp)"
           awk -v version="$version" '

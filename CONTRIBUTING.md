@@ -25,6 +25,14 @@ PR commit. It does not apply retroactively to pre-gate history. Agents follow
 [commit discipline](AGENTS.md#universal-rules-all-agents), including no amend
 or force-push.
 
+### Changelog fragments
+
+Do not edit `CHANGELOG.md` in a PR. Describe a user-visible change in a new file
+`changelog.d/<branch-or-topic>.<section>.md`, as one or more Markdown list
+items. See [`changelog.d/README.md`](changelog.d/README.md) for the sections and
+the release-time assembly. Run `python3 scripts/release/changelog.py check` to
+validate fragments.
+
 ### Code of Conduct
 
 Community interactions are governed by the [Contributor Covenant](CODE_OF_CONDUCT.md).
