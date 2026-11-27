@@ -755,7 +755,7 @@ The [generator v31 specification](../../docs/reference/benchmarks/specifications
 adds generator v31's prose credential cells.
 The [JSON structure census specification](../../docs/reference/benchmarks/specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json)
 differs from it only by adding `json_structure_census.py` to the measuring closure.
-The [current specification](../../docs/reference/benchmarks/specifications/606f3e4686ffd42dadc0c2b27dbde174ba35672ccbf9b87a296eba5b8983594e.json)
+The [current specification](../../docs/reference/benchmarks/specifications/8ab2bbcd8b39edc68547111a9e7fcd483bdc932d5d77ea1518cbc2b6fc888b35.json)
 adds generator v32's credential-form and agent-text cells and the prose
 credential recognizers to the validation vocabulary.
 Previous manifests retain their original identities.

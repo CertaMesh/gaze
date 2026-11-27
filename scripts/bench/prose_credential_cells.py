@@ -259,11 +259,18 @@ AGENT_TEXT = {
             ('{"messages":[{"role":"user","content":"my new password is {V}"}]}', "plain"),
             ('msg = "the password is {V}";', "plain"),
             ("The password is {V} until Monday.", "dollar"),
+            ("The password for my email is {V}.", "plain"),
+            ("The password is \"{V}\" in the fixture.", "cue_word"),
+            ("My passphrase is \"{V}\".", "sentence"),
+            ("Server=db;Password={V};User Id=sa;", "plain"),
+            ("The password is {V} ok", "hyphen_stem"),
         ],
         "password_de": [
             ("Das Passwort lautet \"{V}\".", "phrase"),
             ('{"msg":"Mein Passwort ist \\"{V}\\"."}', "plain"),
             ('{"content":"Das Passwort lautet {V}","b":"x y"}', "plain"),
+            ("Das Passwort für die Seite lautet {V}.", "plain"),
+            ("Das Passwort lautet \"{V}\".", "sentence_de"),
         ],
         "benign_en": [
             ("The API key works with {D} and the embeddings model.", "model"),
@@ -296,11 +303,18 @@ AGENT_TEXT = {
             ('{"input":{"notes":["the shared password is {V}"]}}', "plain"),
             ('reply("ok, the password is {V}")', "plain"),
             ("Heads up, the router password is now {V} again.", "dollar"),
+            ("FYI the password on the kiosk screen is {V} this week.", "plain"),
+            ("Weak, I know, but the password is '{V}' for the demo box.", "cue_word"),
+            ("Honestly my passphrase was '{V}' all along.", "sentence"),
+            ('"ConnectionString": "Host=db;Password={V};Username=app"', "plain"),
+            ("Told them the VPN password is {V} for now.", "hyphen_stem"),
         ],
         "password_de": [
             ("Das WLAN-Passwort war zuletzt \"{V}\".", "phrase"),
             ('{"text":"Das neue Kennwort lautet \\"{V}\\", danke"}', "plain"),
             ('{"note":"Kennwort ist {V}","id":"n1 n2"}', "plain"),
+            ("Das Kennwort für meine E-Mail ist {V}.", "plain"),
+            ("Mein Passwort war ehrlich gesagt '{V}'.", "sentence_de"),
         ],
         "benign_en": [
             ("Since the upgrade our access token only gets accepted by {D} endpoints.", "model"),
@@ -324,6 +338,13 @@ AGENT_TEXT = {
             ("Unser Zugangscode ist {D}.", "hyphen"),
         ],
     },
+}
+# Digit-free passphrases built from ordinary words, function words included.
+SENTENCES = {
+    "dev": {"sentence": ["the moon is blue", "it is raining cats", "one for all and all for one"],
+            "sentence_de": ["der Hund bellt laut", "die Katze schläft gern", "ein Baum im Wind"]},
+    "test": {"sentence": ["a fox under the bridge", "we sail at the dawn", "the owl and the lamp"],
+             "sentence_de": ["das Boot im Hafen", "ein Lied für den Mond", "die Brücke am Fluss"]},
 }
 AGENT_VALUES = {
     "dev": {
@@ -382,6 +403,13 @@ def agent_text_records(api, partition):
             return " ".join(words)
         if kind == "inner_quote":
             return stem()[:-1] + "'" + rng.choice(STEMS[partition]) + rng.digits(2)
+        if kind == "cue_word":
+            return rng.choice(["Passw0rd", "Kennwort", "MyPassword", "Password"]) + rng.digits(rng.between(1, 4)) + rng.choice("!#")
+        if kind in ("sentence", "sentence_de"):
+            words = SENTENCES[partition][kind]
+            return rng.choice(words)
+        if kind == "hyphen_stem":
+            return rng.choice(STEMS[partition]) + rng.digits(4) + "-" + rng.choice(["only", "safe", "ready"])
         if kind == "dollar":
             return "$" + stem() + rng.choice("#%&*+@")
         if kind == "bracket":
