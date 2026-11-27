@@ -1218,7 +1218,10 @@ fn chat_cues_protect_the_name_not_the_handle_or_ordinary_word() {
         ("cc: jOnAs", Some("jOnAs")),
         ("@shift_bot: elena", Some("elena")),
         ("@shift_bot elena may attend.", Some("elena")),
-        ("@shift_bot elena schmidt may attend.", Some("elena schmidt")),
+        (
+            "@shift_bot elena schmidt may attend.",
+            Some("elena schmidt"),
+        ),
         ("ask elena schmidt for help.", Some("elena schmidt")),
         ("Ask elena schmidt: is it ready?", Some("elena schmidt")),
         ("Ask elena’s manager", Some("elena")),
