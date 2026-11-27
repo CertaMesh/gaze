@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "dc6691f6e149a969db2f4a978e26df4940610feb26abbba010bc1f6488315971",
-    "test": "2ec777e6577f7e304f4d6a20a85f34f63bf8d06f1c00c7c77fcb9ac5a0c0744b",
+    "dev": "bc23fcfd779d66cdec63de0ceb79acc3e4d23bee76eab9531a0f2479a3242288",
+    "test": "657440e5929a9bcc64212b1c8657211bac7ea6e1bce516dc2bf9d54af9a27391",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -315,7 +315,11 @@ class GeneratorTests(unittest.TestCase):
                 continue
             encoded = bytearray(record.text.encode("utf-8"))
             for gold in record.gold:
-                encoded[gold.start : gold.end] = b" " * (gold.end - gold.start)
+                start = gold.start
+                if gold.label == "USERNAME":
+                    # Chat mention markup (`<@` or `<@!`) directly before the user ID is not an email.
+                    start -= 3 if encoded[start - 3 : start] == b"<@!" else 2
+                encoded[start : gold.end] = b" " * (gold.end - start)
             rest = encoded.decode("utf-8", errors="replace")
             self.assertNotIn("@", rest, record.uid)
             for name in agentic.GIVEN_NAMES["test"] + agentic.SURNAMES["test"]:

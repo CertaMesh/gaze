@@ -8,13 +8,14 @@ Marked tables are compared against loaded rulepacks and Rust enums by:
 rustup run 1.96.0 cargo test -p xtask --test redaction_classes_doc
 ```
 
-`core` contains exactly 57 recognizer specs. `core-extended` loads the same bytes but widens
+`core` contains exactly 58 recognizer specs. `core-extended` loads the same bytes but widens
 [activation](#shipped-default-activation). `secrets` protects password records, hashes, and credential
 code fields. Setup includes it, while library callers and hand-written policies
 must select it: `bundled = ["core", "secrets"]` or
 `--rulepack-bundled core,secrets`.
 
-No rulepack emits `custom:username`. Optional Nym can report username, licence
+`username.chat_mention` in `core` emits `custom:username` for Slack and Discord user
+mentions. Optional Nym can also report username, licence
 plate, building number, tax ID, postal code and date classes;
 see [mapping](../explanation/safety-net/safety-nets.md#which-labels-can-fire).
 
@@ -77,6 +78,7 @@ Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
 | `core, core-extended` | `ip.v4` | `regex` | Decimal dotted-quad IPv4 addresses with octets from 0 through 255, excluding RFC 5737 documentation ranges and loopback (`127.0.0.0/8`) | `custom:ip_address` | `global` | `ipv4_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `ip.v6` | `regex` | Full, compressed (including the bare double-colon form), and IPv4-embedded IPv6 textual forms at every locale, excluding RFC 3849 and embedded RFC 5737 documentation ranges and loopback (`::1`, IPv4-mapped or IPv4-compatible `127.0.0.0/8`). The word guard excludes an address adjacent to an identifier character, so Rust and C++ double-colon paths survive; an explicit `Address:`, `Adresse:`, `IP:`, `IPv6:`, `host:` or `addr:` cue admits a glued address after full IPv6 parsing (case-insensitive cues; `global` document-basis activation, superseding #2402). `_2001:db9::1` remains outside the cue rule. A standalone path whose segments are all short hex words and which has no surrounding context is still an address | `custom:ip_address` | `global` | `ipv6_parse_non_documentation` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `eth.address` | `regex` | Forty-hex-digit Ethereum addresses prefixed by 0x and accepted by EIP-55 rules | `custom:eth_address` | `global` | `eth_eip55` | `none` | `safe_default` | yes | 0.70 | 80 |
+| `core, core-extended` | `username.chat_mention` | `regex` | Slack `<@U…>`/`<@W…>` user mentions, with an optional display name after a vertical bar, and Discord `<@…>`/`<@!…>` user snowflakes of 17 to 20 digits; the value inside the markup is the token. Channel, group, broadcast, role, emoji and timestamp markup does not match | `custom:username` | `global` | `none` | `none` | `safe_default` | yes | 0.90 | 86 |
 | `core, core-extended` | `aadhaar.in` | `regex` | Cue-anchored Indian Aadhaar or UID values containing 12 digits and passing Verhoeff | `custom:aadhaar` | `en-IN, hi-IN` | `aadhaar_verhoeff` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `nir.fr` | `regex` | Cue-anchored French NIR social-security values with 15 digits and a valid MOD-97 key | `custom:nir` | `fr-FR` | `fr_nir_mod97` | `none` | `safe_default` | yes | 0.88 | 86 |
 | `core, core-extended` | `steuer_id.de` | `regex` | Cue-anchored German 11-digit Steuer-ID values; broader German connectors require explicit digit grouping to preserve compact-value repeat ownership, excluding all-zero placeholders and vehicle-ID labels; MOD 11,10 failures retain a typed audit reason and never seed the repeat-value sweep | `custom:steuer_id` | `de-DE, de-AT, de-CH` | `de_steuer_id_mod1110` | `none` | `safe_default` | yes | 0.88 | 86 |
@@ -137,7 +139,7 @@ fallback. Grouped runs
 can extend beyond four groups or 40 bytes with a typed audit reason; the
 [labelled-identifier explanation](../explanation/detection/labelled-identifiers.md)
 describes its stop and audit rules. The `redaction_classes_doc` test pins these
-rows and the 57-spec inventory to the loaded rulepack. The
+rows and the 58-spec inventory to the loaded rulepack. The
 `bundle-tokenization-drift --verify-ack` gate separately checks the bundled
 output against its committed corpus snapshot.
 
@@ -429,8 +431,8 @@ Clean, daemon and `CorePipelineConfig` share this function.
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.field, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.field, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.us, phone.national.us.cued, phone.structural, postal.ca, postal.cued_four_digit, postal.cued_short, postal.gb, postal.ie, record_id.field, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.field, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.field, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.cued_short, postal.de, postal.gb, postal.ie, postal.us, record_id.field, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.field, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.field, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.us, phone.national.us.cued, phone.structural, postal.ca, postal.cued_four_digit, postal.cued_short, postal.gb, postal.ie, record_id.field, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, username.chat_mention, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.field, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.field, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.cued_short, postal.de, postal.gb, postal.ie, postal.us, record_id.field, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, username.chat_mention, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 Use `--locale=global` or a narrower policy to avoid compatibility expansion

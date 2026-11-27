@@ -449,6 +449,12 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
             token: ":Custom:eth_address_",
         },
         CoreCase {
+            class: "username",
+            line: "Thanks <@U07RW7V7TU>, merged",
+            raw: "U07RW7V7TU",
+            token: ":Custom:username_",
+        },
+        CoreCase {
             class: "aadhaar",
             line: "Aadhaar 2345 6789 0124",
             raw: "2345 6789 0124",
