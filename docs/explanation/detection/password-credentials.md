@@ -146,7 +146,10 @@ comma followed by another value character (`Tal99:x`, `Fj0rd,Tal99`). Any
 other quote, colon or comma ends the value, and a semicolon or backtick always
 does, so a password at the end of a JSON or code string (`…Tal99"}`,
 `…Tal99";`), in a connection string (`Password=…;User Id=sa`) or in a Markdown
-code span never takes the closing quote or the next key. JSON-escaped quotes
+code span never takes the closing quote or the next key. A value in inline or
+fenced code on the cue's line (`` `Fj0rd#Tal99` ``) is protected when it has a
+digit or a symbol. A value on its own line inside a fenced block below the cue
+stays raw. JSON-escaped quotes
 (`\"…\"`) delimit a value like plain ones. A trailing `!` stays in the value;
 sentence punctuation does not. The context guard refuses values under six
 characters, one or two plain words, symbol-only placeholders such as
@@ -159,7 +162,8 @@ please, try, again, reset, enter, forgot, invalid, incorrect, wrong and their
 German equivalents) and no digit
 (`"Please enter it again"`), or one without a digit or symbol that names the
 password itself (`"Incorrect password, try again"`; `"Passw0rd!"` stays
-protected). Ordinary passphrases with articles or pronouns
+protected), and quoted text named as the password text, copy or string
+(`The password text is "Choose a strong one"`). Ordinary passphrases with articles or pronouns
 (`"the moon is blue"`) stay protected. It also refuses matches whose
 cue part names credential metadata (name, label, hint, policy, length,
 rotation, template, field, hash, file, path, model, version, region, endpoint,

@@ -174,6 +174,9 @@ fn a_password_with_spaces_quotes_or_brackets_is_protected_whole() {
         ("The password is Fj0rd:Tal99.", "Fj0rd:Tal99"),
         ("The password is Fj0rd,Tal99 ok", "Fj0rd,Tal99"),
         ("`the password is Fj0rd#Tal99`", "Fj0rd#Tal99"),
+        ("The password is `Fj0rd#Tal99`.", "Fj0rd#Tal99"),
+        ("Das Passwort lautet `Fj0rd#Tal99`.", "Fj0rd#Tal99"),
+        ("The password is ```Fj0rd#Tal99``` ok", "Fj0rd#Tal99"),
         ("The password is \"$ecretPass9\" ok", "$ecretPass9"),
     ] {
         assert_credential(raw, "password", value);
@@ -210,6 +213,9 @@ fn password_words_without_a_credential_value_stay_raw() {
         "tests assert the password error is \"Invalid credentials provided\".",
         "The password is \"not stored in plain text\" anymore.",
         "The password is 2fa-enabled for every admin.",
+        "The password is `npm` here.",
+        "The password text is \"Choose a strong one\".",
+        "Set the password string to \"Hello world friend\".",
     ] {
         assert_no_credential(raw);
     }
