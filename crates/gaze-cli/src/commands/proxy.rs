@@ -80,6 +80,16 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
         args.upstream_gemini,
     );
     config.session_ttl = parse_duration(&args.session_ttl)?;
+    // Names match exactly, so a blank or padded name would silently declare nothing.
+    if proxy_policy
+        .restore_tools
+        .iter()
+        .any(|tool| tool.is_empty() || tool.trim() != tool)
+    {
+        return Err(CliError::ProxyDetail(
+            "invalid [proxy] restore_tools entry: empty or padded tool name".into(),
+        ));
+    }
     config = config.with_restore_tools(proxy_policy.restore_tools);
     #[cfg(feature = "dashboard")]
     let mut _dashboard_launch = None;

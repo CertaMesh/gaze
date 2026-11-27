@@ -3724,7 +3724,12 @@ fn restore_json_string(
     let restored = match reading {
         RestoreReading::Source => ctx.restore(&value.value)?,
         RestoreReading::Decoded => ctx.restore_decoded(&value.value)?,
-        RestoreReading::Withhold => return ctx.validate(&value.value, &[]),
+        // Strict restore still refuses tokens this session never minted, and the residual
+        // proof runs on the restored reading; the emitted text keeps its tokens.
+        RestoreReading::Withhold => {
+            let restored = ctx.restore(&value.value)?;
+            return ctx.validate(&restored.text, &restored.authorized_output_ranges);
+        }
     };
     ctx.validate(&restored.text, &restored.authorized_output_ranges)?;
     value.value = restored.text;

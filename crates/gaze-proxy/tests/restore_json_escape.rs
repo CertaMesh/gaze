@@ -1591,3 +1591,92 @@ async fn gemini_undeclared_function_call_args_keep_their_tokens() {
         &parts[2]["functionCall"]["args"].to_string(),
     );
 }
+
+/// The restored arguments of one streamed Chat Completions tool call whose header chunk is
+/// `first`, with the `after` deltas sent after its argument fragments.
+async fn chat_stream_arguments(
+    first: Value,
+    after: Vec<Value>,
+    declared_first_chunk_has_arguments: bool,
+) -> String {
+    let upstream = spawn_upstream(move |_, tokens| {
+        let mut header = first.clone();
+        if declared_first_chunk_has_arguments {
+            header["function"]["arguments"] = json!("");
+        }
+        let mut payloads = vec![chat_chunk(
+            json!({"role": "assistant", "tool_calls": [header]}),
+        )];
+        for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+            payloads.push(chat_chunk(json!({
+                "tool_calls": [{"index": 0, "function": {"arguments": fragment}}]
+            })));
+        }
+        payloads.extend(after.iter().cloned().map(chat_chunk));
+        (
+            "text/event-stream",
+            sse_body(&payloads) + "data: [DONE]\n\n",
+        )
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+    let body = post_legacy(&proxy, "/v1/chat/completions", chat_request(false, true)).await;
+    sse_payloads(&body)
+        .iter()
+        .filter_map(|payload| {
+            payload["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn openai_chat_stream_declared_call_named_without_arguments_restores() {
+    let header = json!({"index": 0, "id": "call_1", "type": "function",
+        "function": {"name": "save_contact"}});
+    let arguments = chat_stream_arguments(header, Vec::new(), false).await;
+    assert_exact_json("chat stream declared call, name-only header", &arguments);
+}
+
+#[tokio::test]
+async fn openai_chat_stream_call_renamed_by_a_later_chunk_keeps_its_tokens() {
+    let header = json!({"index": 0, "id": "call_1", "type": "function",
+        "function": {"name": "save_contact"}});
+    for rename in [
+        json!({"tool_calls": [{"index": 0, "function": {"name": UNDECLARED_TOOL}}]}),
+        json!({"tool_calls": [{"index": 0, "function": {"name": UNDECLARED_TOOL, "arguments": null}}]}),
+    ] {
+        let arguments = chat_stream_arguments(header.clone(), vec![rename], true).await;
+        assert_still_tokens("chat stream call renamed later", &arguments);
+    }
+}
+
+#[tokio::test]
+async fn openai_chat_ambiguous_stream_never_restores_a_named_fragment() {
+    // A tool-call delta without an `index` makes the call's stream ambiguous; a fragment
+    // that names a declared tool must not restore on its own name.
+    let upstream = spawn_upstream(|_, tokens| {
+        let payloads = vec![
+            chat_chunk(
+                json!({"tool_calls": [{"index": 0, "id": "call_1", "type": "function",
+                "function": {"name": "save_contact", "arguments": tokens.json_document()}}]}),
+            ),
+            chat_chunk(
+                json!({"tool_calls": [{"function": {"name": UNDECLARED_TOOL, "arguments": ""}}]}),
+            ),
+        ];
+        (
+            "text/event-stream",
+            sse_body(&payloads) + "data: [DONE]\n\n",
+        )
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+    let body = post_legacy(&proxy, "/v1/chat/completions", chat_request(false, true)).await;
+    let arguments: String = sse_payloads(&body)
+        .iter()
+        .filter_map(|payload| {
+            payload["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
+        })
+        .collect();
+    assert_still_tokens("chat ambiguous stream", &arguments);
+}

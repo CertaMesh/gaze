@@ -1034,7 +1034,8 @@ arguments restore only when this list names the tool exactly. The arguments of
 every other tool, tool results, documents, reasoning and thought summaries keep
 their tokens, so originals never reach a tool or service you did not declare.
 A token the model writes into one of those places stays a token. Declare only
-the tools that must act on original values.
+the tools that must act on original values. Names match exactly; `gaze proxy
+serve` rejects empty or padded names at startup.
 
 See the [Anthropic contract](../explanation/proxy/anthropic-messages-contract.md)
 for supported request schemas and explicit refusals.

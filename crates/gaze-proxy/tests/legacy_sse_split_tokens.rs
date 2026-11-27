@@ -659,11 +659,12 @@ async fn openai_responses_stream_deltas_split_across_events_restore() {
     let parsed: Value = serde_json::from_str(&arguments)
         .unwrap_or_else(|error| panic!("restored arguments do not parse ({error}): {arguments:?}"));
     assert_eq!(parsed, json!({"alias": RAW_ALIAS}));
+    // The done event repeats the arguments outside the stream's name binding, so it keeps
+    // its token; the call item in `response.completed` names itself and restores.
     let done = by_type("response.function_call_arguments.done");
-    let parsed: Value =
-        serde_json::from_str(done[0]["arguments"].as_str().expect("arguments string"))
-            .expect("done arguments parse");
-    assert_eq!(parsed, json!({"alias": RAW_ALIAS}));
+    let done_arguments = done[0]["arguments"].as_str().expect("arguments string");
+    assert_eq!(token_shape::find_tokens(done_arguments).count(), 1);
+    assert!(!done_arguments.contains("Doktor"));
 
     let completed = by_type("response.completed");
     let output = &completed[0]["response"]["output"];

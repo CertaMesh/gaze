@@ -3900,6 +3900,7 @@ fn transform_sse(
         for fragment in adapter.sse_event_stream_surfaces(event) {
             let surface = fragment.surface;
             let into_json_string = restores_into_json_string(surface.syntax, json_output);
+            let streamed = fragment.stream.is_some();
             let logical = match fragment.stream {
                 Some(stream) if !stream.is_ambiguous() && !ambiguous_streams.contains(&stream) => {
                     if !restoring_streams.contains(&stream) {
@@ -3908,7 +3909,11 @@ fn transform_sse(
                     streams.remove(&stream)
                 }
                 _ => {
-                    if !sink_restores(&surface.sink, restore_tools) {
+                    // A tool-call fragment restores only through its stream's name binding,
+                    // which an ambiguous stream does not have.
+                    let unbound_tool_fragment =
+                        streamed && matches!(surface.sink, RestoreSink::ToolInput(_));
+                    if unbound_tool_fragment || !sink_restores(&surface.sink, restore_tools) {
                         continue;
                     }
                     Some(std::mem::take(surface.text))

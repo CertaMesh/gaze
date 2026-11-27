@@ -234,9 +234,12 @@ impl ProviderAdapter for OpenAiAdapter {
         surfaces
     }
 
-    /// A Responses API stream names a function or MCP call in its `output_item` events and in
-    /// the `response` snapshots, and sends the call's arguments in `*_arguments.delta` events
-    /// keyed by the item's `output_index`, which is its position in `response.output`.
+    /// A Chat Completions chunk names a streamed tool call in any `delta.tool_calls[]` entry,
+    /// with or without `arguments`, so a later chunk that renames the call is seen. A Responses
+    /// API stream names a function or MCP call in its `output_item` events, its
+    /// `*_arguments.done` events and the `response` snapshots, and sends the call's arguments
+    /// in `*_arguments.delta` events keyed by the item's `output_index`, which is its position
+    /// in `response.output`.
     fn sse_event_tool_calls(&self, event: &SseEvent) -> Vec<(SseStreamKey, String)> {
         let data = &event.data;
         let Some(kind) = data
@@ -244,8 +247,25 @@ impl ProviderAdapter for OpenAiAdapter {
             .and_then(Value::as_str)
             .and_then(|kind| kind.strip_prefix("response."))
         else {
-            return Vec::new();
+            return chat_tool_call_names(data);
         };
+        if matches!(
+            kind,
+            "function_call_arguments.done" | "mcp_call_arguments.done"
+        ) {
+            return data
+                .get("name")
+                .and_then(Value::as_str)
+                .map(|name| {
+                    let output_index = data.get("output_index").and_then(Value::as_u64);
+                    (
+                        SseStreamKey::new("responses.arguments", [output_index]),
+                        name.to_owned(),
+                    )
+                })
+                .into_iter()
+                .collect();
+        }
         let items: Vec<(Option<u64>, &Value)> = match kind {
             "output_item.added" | "output_item.done" => data
                 .get("item")
@@ -462,9 +482,15 @@ fn collect_responses_event_surfaces<'a>(
             Some(SseStreamKey::new("responses.arguments", [output_index])),
             named_tool(),
         ),
-        "function_call_arguments.done" | "mcp_call_arguments.done" => {
-            ("arguments", SurfaceSyntax::Json, None, named_tool())
-        }
+        // The final arguments repeat the deltas outside their stream binding, so a name on
+        // this event could disagree with the call's item. They keep their tokens; clients read
+        // restored arguments from the deltas or from the call item, which names itself.
+        "function_call_arguments.done" | "mcp_call_arguments.done" => (
+            "arguments",
+            SurfaceSyntax::Json,
+            None,
+            RestoreSink::Withheld,
+        ),
         _ => {
             collect_responses_snapshot_surfaces(surfaces, kind, data);
             return;
@@ -550,6 +576,40 @@ fn collect_choice_stream_surfaces<'a>(
             }
         }
     }
+}
+
+/// The tool names a Chat Completions chunk gives its streamed tool calls, keyed like their
+/// argument fragments.
+fn chat_tool_call_names(data: &Value) -> Vec<(SseStreamKey, String)> {
+    let mut names = Vec::new();
+    for choice in data
+        .get("choices")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let choice_index = choice.get("index").and_then(Value::as_u64);
+        for call in choice
+            .get("delta")
+            .and_then(|delta| delta.get("tool_calls"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(name) = call
+                .get("function")
+                .and_then(|function| function.get("name"))
+                .and_then(Value::as_str)
+            {
+                let call_index = call.get("index").and_then(Value::as_u64);
+                names.push((
+                    SseStreamKey::new("choices.tool_calls.arguments", [choice_index, call_index]),
+                    name.to_owned(),
+                ));
+            }
+        }
+    }
+    names
 }
 
 /// Surfaces one chunk's `delta`, keying its `content` and tool-call `arguments` fragments.

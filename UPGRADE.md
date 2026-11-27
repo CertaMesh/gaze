@@ -56,6 +56,15 @@ a struct literal must add `sink` or use `PiiSurface::new`. Adapters whose
 streamed tool arguments do not name their tool implement
 `ProviderAdapter::sse_event_tool_calls`.
 
+Two streamed positions keep their tokens even for a declared tool, because they
+cannot be tied to one tool name: OpenAI Responses `*_arguments.done` events
+(read the restored arguments from the deltas, `output_item.done`, or
+`response.completed`) and tool input streamed through the legacy Anthropic
+adapter. The direct Anthropic profile that `gaze proxy serve` uses restores
+streamed input for declared tools. A tool-call stream renamed by a later chunk,
+or one whose identity is ambiguous, keeps its tokens. `gaze proxy serve` rejects
+empty or padded `restore_tools` names at startup.
+
 ### Action required: stop depending on `gaze-model-setup`
 
 The `gaze-model-setup` crate is no longer published; its code moved into
