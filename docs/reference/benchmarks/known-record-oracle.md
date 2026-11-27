@@ -40,7 +40,8 @@ Eligible leaked bytes fall from 6,774 to 1,203 (82.24%). The preregistered
 90–100% prediction applied to eligible exact-value spans with record matching
 enabled and is **not met by the shipped defaults**. Turning exact address
 parts and exact single names off leaves some record values exposed unless an
-ordinary detector finds them or an adopter opts in. This is a deliberate
+ordinary detector finds them or an adopter opts in. (Exact single names were
+later restored by ordered match kinds; see below.) This is a deliberate
 precision choice after the layer D audit, with follow-up work to measure
 narrower versions. These results are an upper bound for an adopter who
 already knows the selected record values, not context-free performance.
@@ -97,8 +98,12 @@ show positive net gains under both contracts; flexible whitespace recovers no
 gold bytes. The 14 and 24 positive counts limit confidence in the two variant
 estimates.
 
-The defaults turn exact address parts and exact single names off because their
-layer D benign counterweights rise by 29 and 45 bytes. The all-on arm recovered
+The defaults turned exact address parts and exact single names off because their
+layer D benign counterweights rose by 29 and 45 bytes. Exact single names are
+now protected again through ordered match kinds: an exact occurrence satisfies
+`case_folded`. The benign cost moved to an explicit rule instead of letter
+case: declared names on the generated English name∩word list need
+corroboration in every case. Address parts stay off. The all-on arm recovered
 337 and 123 gold bytes from those kinds, respectively, so turning them off
 leaves those leaks for ordinary detectors or an explicit adopter opt-in.
 Exact declared phone and credit-card values remain on by user decision, despite

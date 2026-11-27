@@ -459,6 +459,8 @@ fn record_spellings_closer_to_the_declared_value_are_never_less_protected() {
     const RARE: &str = r#"{"record":{"first_name":"Qorvex"}}"#;
     const COMMON: &str = r#"{"record":{"first_name":"Maren","last_name":"May"}}"#;
     const FULL: &str = r#"{"record":{"full_name":"Maren Okafor"}}"#;
+    // `Summer` is on the generated English name∩word list.
+    const WORD_NAME: &str = r#"{"record":{"first_name":"Summer","last_name":"Lindqvist"}}"#;
     const PASSPORT: &str =
         r#"{"record":{"passport":"SYN-PASS-123456"},"field_map":{"/passport":"custom:passport"}}"#;
     const NATIONAL_ID: &str = r#"{"record":{"national_id":"SYN ID 12345"},"field_map":{"/national_id":"custom:national_id"}}"#;
@@ -485,6 +487,25 @@ fn record_spellings_closer_to_the_declared_value_are_never_less_protected() {
         (COMMON, "MAY 2026 report", "MAY 2026", false),
         (COMMON, "you may proceed", "may proceed", false),
         (COMMON, "Maren called.", "Maren", true),
+        (
+            WORD_NAME,
+            "Summer schedule starts Monday",
+            "Summer schedule",
+            false,
+        ),
+        (
+            WORD_NAME,
+            "SUMMER schedule starts Monday",
+            "SUMMER schedule",
+            false,
+        ),
+        (
+            WORD_NAME,
+            "summer schedule starts Monday",
+            "summer schedule",
+            false,
+        ),
+        (WORD_NAME, "Summer Lindqvist called", "Summer", true),
         // Full names: case and whitespace spellings, never reordered names.
         (FULL, "Maren Okafor called", "Maren Okafor", true),
         (FULL, "MAREN OKAFOR called", "MAREN OKAFOR", true),

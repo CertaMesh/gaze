@@ -39,7 +39,9 @@ full Unicode case folds. Name order, email case changes, abbreviations,
 fragments, and typos are not inferred.
 
 [Common single-token names](../../../crates/gaze-recognizers/assets/record-common-names-v1.txt),
-such as `Will`, need NER person evidence, an adjacent record name, or a full
+such as `Will`, and given names that are also ordinary English words (`Summer`,
+`Dawn`; [generated list](../../../crates/gaze-recognizers/assets/record-common-name-words-en-v1.txt))
+need NER person evidence, an adjacent record name, or a full
 record name elsewhere with a name-position cue. Unlisted names such as `Maren`
 match in any letter case by default, including the declared spelling.
 A spelling closer to the declared value always satisfies a looser enabled kind:

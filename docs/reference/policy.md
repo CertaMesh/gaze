@@ -243,9 +243,11 @@ APIs return `Result<DictionaryBundle, UntransformableReason>`. They enforce the
 same short-value refusal before producing dictionaries, including for callers
 that manually build a pipeline.
 
-Common single names (`Will`, `Grace`, `May`, `Mark`) from the
-[versioned dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)
-are retained. `corroborated_single` needs a NER person span, another record name
+Common single names (`Will`, `Grace`, `May`, `Mark`, `Summer`) from the
+[curated dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)
+and the [generated English name∩word list](../../crates/gaze-recognizers/assets/record-common-name-words-en-v1.txt)
+are retained. The generated list intersects SSA given names that ranked in any
+year's top 1,000 with lowercase SCOWL en_US words. `corroborated_single` needs a NER person span, another record name
 in the phrase, or a full record name elsewhere plus a name-position cue.
 Other single names match in any letter case by default, including the declared
 spelling; letter case never decides protection. Unicode folding and Aho–Corasick match the dictionary.

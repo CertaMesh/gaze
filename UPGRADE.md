@@ -70,7 +70,10 @@ enabled kind in `record_match_kinds`. By default, an unlisted single name such
 as `Qorvex` is protected in its declared spelling as well as in other letter
 cases, and a same-case full name with extra spaces is protected like its
 upper-case copy. Before, these spellings could stay raw. Common single names
-still need corroboration. Restore is unchanged. A list such as
+still need corroboration, and that set now includes English given names that
+are also ordinary words (`Summer`, `Dawn`): a declared `Summer` that appears
+alone, without a neighbouring record name or NER person evidence, stays raw in
+every letter case. Restore is unchanged. A list such as
 `{"name_single": ["case_folded"]}` now also protects exact occurrences; to
 protect only one spelling, list only the stricter kind.
 

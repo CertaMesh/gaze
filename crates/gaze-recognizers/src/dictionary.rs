@@ -367,8 +367,10 @@ pub(crate) fn record_match_kind_with_folded(
     }
 }
 
-/// A versioned common-word dictionary, compiled once through Aho–Corasick.
-/// Full-span checks prevent a substring such as `may` from gating `Mayer`.
+/// Versioned common-word dictionaries, compiled once through Aho–Corasick: the
+/// curated multilingual list and the generated English name∩word list
+/// (`scripts/fetch/build_record_common_name_words.py`). Full-span checks prevent
+/// a substring such as `may` from gating `Mayer`.
 fn record_name_is_common(name: &str) -> bool {
     record_name_is_common_folded(&name.case_fold().collect::<String>())
 }
@@ -376,11 +378,15 @@ fn record_name_is_common(name: &str) -> bool {
 pub(crate) fn record_name_is_common_folded(folded: &str) -> bool {
     static COMMON: OnceLock<AhoCorasick> = OnceLock::new();
     let dictionary = COMMON.get_or_init(|| {
-        let terms = include_str!("../assets/record-common-names-v1.txt")
-            .lines()
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(|line| line.case_fold().collect::<String>())
-            .collect::<BTreeSet<_>>();
+        let terms = [
+            include_str!("../assets/record-common-names-v1.txt"),
+            include_str!("../assets/record-common-name-words-en-v1.txt"),
+        ]
+        .into_iter()
+        .flat_map(str::lines)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| line.case_fold().collect::<String>())
+        .collect::<BTreeSet<_>>();
         AhoCorasickBuilder::new()
             .build(terms)
             .expect("static common-word dictionary")
@@ -1163,6 +1169,10 @@ mod tests {
     fn uncommon_single_record_name_matches_without_corroboration() {
         assert!(record_name_is_common("Will"));
         assert!(record_name_is_common("GRACE"));
+        // From the generated English name∩word list.
+        assert!(record_name_is_common("Summer"));
+        assert!(record_name_is_common("dawn"));
+        assert!(!record_name_is_common("Summers"));
         assert!(!record_name_is_common("Maren"));
         assert!(!record_name_is_common("Okafor"));
         let key = gaze::record_dictionary_name(&PiiClass::Name, 0);
