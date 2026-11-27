@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `gaze_mcp_core::ConversationRegistry` keeps one host, with its own Session,
+  per host-authenticated `ConversationId`, with close, idle expiry (default
+  30 minutes) and a live-conversation limit (default 64) that refuses new ids
+  instead of evicting. `RmcpFrontend::into_conversation_handler` routes each
+  call by `HostCallContext::conversation` and refuses calls without one.
+  The factory receives the `ConversationId` it opens. Two conversations never
+  share mappings, and each refuses the other's tokens on strict restore.
+- `gaze mcp doctor` reports the declared protection profile (bundled `core`
+  rules, Resolve/Strict, no NER or Nym) and the session scope.
 - Release binaries are reproducible. `scripts/release/build-binary.sh` builds
   them with remapped source, Cargo and toolchain paths, and refuses any `rustc`
   other than the rustup toolchain in `rust-toolchain.toml`. The release workflow
@@ -18,10 +27,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Daemon v2 `clean_blocks` reuses the committed result of an unchanged block
+  when nothing learned since the last commit can reach it, so a warm turn no
+  longer re-cleans the whole conversation. Responses stay byte-identical to a
+  full clean; `cache_hit` can now be `true`. Reuse is off for `resync`, with
+  `--audit-db`, and for a request that adds or changes no block. Retained
+  results count against the v2 state budget.
 - Release binaries now include the `mcp` feature, so `gaze mcp install`,
   `doctor`, `serve` and `bridge` work without a source build. The release
   smoke test runs a stdio `gaze mcp serve` call. On macOS arm64 the binary
   grows from 47.2 MB to 54.6 MB, with no new linked libraries.
+- `HostCallContext` gains a `conversation` field. Struct literals must set it
+  or use `..Default::default()`.
+- `gaze mcp serve` scopes its Session to the stdio connection and shares only
+  the resident pipeline and tool registry.
 - MCP tool results include the fixed `resultType: "complete"` discriminator
   for protocol 2026-07-28 and newer. Direct serialization of rmcp results also
   includes it; rmcp omits it for older negotiated protocol versions. Tool-error
@@ -54,6 +73,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [bundle-tokenization-drift] The `secrets` snapshot records rulepack version
   0.2.0. Its existing fixture detections remain unchanged.
 
+
+### Removed
+
+- The `gaze-model-setup` crate is folded into `gaze-cli`, its only consumer.
+  `gaze setup` installs and verifies the same pinned NER, Nym and GLiNER DOB
+  bundles through the CLI `setup` feature. The workspace now publishes 14
+  crates; `gaze-model-setup` receives no further releases.
 
 ### Security
 

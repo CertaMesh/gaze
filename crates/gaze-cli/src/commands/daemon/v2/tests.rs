@@ -552,6 +552,7 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
     let mut state = open(&mut d, "conversation-a");
     let mut texts = vec!["Earlier Selene Exampleton.".to_string(), "".to_string()];
     let mut oldest = None;
+    let mut hits = 0;
     for turn in 0..20 {
         texts.push(if turn % 2 == 0 {
             format!("Record name: Selene Exampleton{turn}.")
@@ -588,7 +589,14 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
             for key in ["clean_text", "manifest", "tokens"] {
                 assert_eq!(actual[key], expected[key], "turn {turn}: {key}");
             }
-            assert_eq!(actual["cache_hit"], false);
+            hits += usize::from(actual["cache_hit"] == true);
+        }
+        if turn == 4 {
+            // The new record teaches `Selene Exampleton`, which leaf-0 repeats.
+            assert_eq!(
+                state["blocks"][0]["cache_hit"], false,
+                "late value reaches leaf-0"
+            );
         }
         assert_committed_v1_identity(&mut d, "conversation-a", &texts, &state);
         let session = &d.v2.sessions["conversation-a"].session;
@@ -604,6 +612,7 @@ fn twenty_turn_same_namespace_oracle_covers_late_values_reorder_edit_and_old_res
             assert_eq!(session.restore_strict(&old.token).unwrap(), old.raw);
         }
     }
+    assert!(hits > 0, "unchanged blocks reuse their committed result");
 }
 
 #[test]
@@ -1632,4 +1641,118 @@ fn untransformable_failure_reports_the_closed_reason() {
     let body: Value = serde_json::from_str(d.v2.error(other, None).get()).unwrap();
     assert_eq!(body["error"], "Pipeline");
     assert!(body.get("reason").is_none());
+}
+
+#[test]
+fn old_block_quoting_a_newly_minted_token_is_cleaned_again() {
+    let mut d = daemon();
+    let state = open(&mut d, "literal");
+    let hex = d.v2.sessions["literal"].session.session_hex();
+    // Unowned until a later turn mints Email_2. Ownership feeds the safety-net
+    // view, so reusing this block across that mint would not be proven exact.
+    let literal = format!("Quoted <{hex}:Email_2> stays as written.");
+    let state = clean(
+        &mut d,
+        &state,
+        vec![block("a", "alice@example.invalid"), block("b", &literal)],
+    );
+    let texts = [
+        "alice@example.invalid".to_string(),
+        literal.clone(),
+        "bob@example.invalid".to_string(),
+    ];
+    let Oracle {
+        output: expected,
+        entries: oracle_entries,
+        ..
+    } = oracle(&d, "literal", &texts);
+    let result = clean(
+        &mut d,
+        &state,
+        vec![
+            json!({"id":"a","sha256":hash(&texts[0])}),
+            json!({"id":"b","sha256":hash(&literal)}),
+            block("c", &texts[2]),
+        ],
+    );
+    let blocks = result["blocks"].as_array().unwrap();
+    for (actual, expected) in blocks.iter().zip(&expected) {
+        for key in ["clean_text", "manifest", "tokens"] {
+            assert_eq!(actual[key], expected[key], "{key}");
+        }
+    }
+    let hits: Vec<_> = blocks.iter().map(|b| b["cache_hit"].clone()).collect();
+    assert_eq!(hits, [json!(true), json!(false), json!(false)]);
+    assert_eq!(
+        d.v2.sessions["literal"].session.snapshot_entries(),
+        oracle_entries,
+        "reuse commits the same session state as a full clean"
+    );
+}
+
+fn hits(result: &Value) -> Vec<Value> {
+    result["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["cache_hit"].clone())
+        .collect()
+}
+
+#[test]
+fn reuse_requires_the_same_context_bytes() {
+    let mut d = daemon();
+    let state = open(&mut d, "context");
+    let with_context = |state: &Value, blocks: Vec<Value>, name: &str| {
+        let mut request = clean_request(state, blocks);
+        request["context"] = json!({"record":{"name":name}});
+        request
+    };
+    let first = send(
+        &mut d,
+        with_context(
+            &state,
+            vec![block("a", "alice@example.invalid")],
+            "Qorvex Exampleton",
+        ),
+    );
+    assert_eq!(first["op"], "clean_blocks", "{first}");
+    let a = json!({"id":"a","sha256":hash("alice@example.invalid")});
+    let same = send(
+        &mut d,
+        with_context(
+            &first,
+            vec![a.clone(), block("b", "bob@example.invalid")],
+            "Qorvex Exampleton",
+        ),
+    );
+    assert_eq!(hits(&same), [json!(true), json!(false)]);
+    let b = json!({"id":"b","sha256":hash("bob@example.invalid")});
+    let changed = send(
+        &mut d,
+        with_context(
+            &same,
+            vec![a, b, block("c", "carol@example.invalid")],
+            "Velmor Exampleton",
+        ),
+    );
+    assert_eq!(hits(&changed), [json!(false), json!(false), json!(false)]);
+}
+
+#[test]
+fn audit_database_disables_reuse_and_retains_no_results() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut d = daemon_with_audit(Some(&dir.path().join("audit.db")));
+    let state = open(&mut d, "audited");
+    let state = clean(&mut d, &state, vec![block("a", "alice@example.invalid")]);
+    assert!(d.v2.sessions["audited"].cache.is_empty());
+    let result = clean(
+        &mut d,
+        &state,
+        vec![
+            json!({"id":"a","sha256":hash("alice@example.invalid")}),
+            block("b", "bob@example.invalid"),
+        ],
+    );
+    assert_eq!(hits(&result), [json!(false), json!(false)]);
 }

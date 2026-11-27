@@ -96,7 +96,7 @@ test installation from crates.io.
 
 ## Pre-tag model-setup ownership gate
 
-Before the first `gaze-model-setup` publication, dispatch `release.yml` on the
+Before tagging a release that changes model setup, dispatch `release.yml` on the
 reviewed preparation branch:
 
 ```sh
@@ -120,8 +120,7 @@ mBERT bundle through the shipped installer, then checks:
 
 Zero-test results fail. The `model-setup-ownership-<commit>` artifact retains
 commit, commands, toolchain, hashes, owner/mode inventory, and test receipts.
-Temporary models are deleted on exit. Publish order places `gaze-recognizers`
-before `gaze-model-setup` at the coordinated version.
+Temporary models are deleted on exit.
 
 ## Reproduce a release binary
 

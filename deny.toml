@@ -9,6 +9,8 @@ ignore = [
     "RUSTSEC-2026-0195",
     # RUSTSEC-2026-0192 (ttf-parser): dev-only document fixture/rendering path through imageproc -> ab_glyph; no safe upgrade is available. Revisit after imageproc/ab_glyph moves to a maintained font parser or by 2026-10-02.
     "RUSTSEC-2026-0192",
+    # RUSTSEC-2026-0543 (chrono): informational "unmaintained", no vulnerability and no patched version. Beyond gaze-cli and gaze-proxy, chrono is a normal dependency of rmcp, schemars and pdfium-render, so replacing our own uses would not remove it. Revisit when those crates move to jiff or time, or by 2027-02-26.
+    "RUSTSEC-2026-0543",
 ]
 
 [licenses]

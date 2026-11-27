@@ -310,7 +310,6 @@ const PUBLIC_CRATE_SLUGS: &[&str] = &[
     "gaze-inspection",
     "gaze-recognizers",
     "gaze-assembly",
-    "gaze-model-setup",
     "gaze-mcp-core",
     "gaze-mcp-rmcp",
     "gaze-mcp-bridge",

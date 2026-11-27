@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:8233afed2b5b2a8897e3ab99fe6f6b109ae095753b882558ed8bb8ba051dfd2f",
+  "id": "gaze-benchmark-v1:009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -82,10 +82,11 @@
       "scripts/bench/invisible_separator_cells.py": "5d0e1d8beff7b01dac1971bd4c01e264ee5f9fc67795eb9e621ba071d4117324",
       "scripts/bench/ip_adjacent_gain.py": "5bd80284889be703cbbce018cbf35d74010a6eacc9b195c36398ebc41d8fd006",
       "scripts/bench/issuer_credential_cells.py": "869cb0809040c4b3d3d8d7fe797dc909ec5c252cf509b1516e11f4260e7af398",
+      "scripts/bench/json_structure_census.py": "3013fd90505ca9c8e9ad80d94f95716b3f31aacd5fdfe1aad59dab10eb011fe3",
       "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",
-      "scripts/bench/known_record_arm.py": "41e2a585eb2eb7707348123dddfeb64ae19638599e848e067d6c064c8718a997",
+      "scripts/bench/known_record_arm.py": "3aa74c2e8993e02298b23f65e52d2a1e7bf441f6513381e463fb035c1f568ab0",
       "scripts/bench/known_record_attribution.py": "34e6f26aaab7378da4505306badb14cadd8c70932fd4460f0e0182f97d6d720f",
-      "scripts/bench/known_record_cells.py": "fd23bacc4cc0c74fc813bc3eb6ee81e1be9d811938e5107c81d3173137c46c04",
+      "scripts/bench/known_record_cells.py": "6791c8e859532515b57bd24a5864369e79a3fed09998f500c7b3def2c57c59e3",
       "scripts/bench/known_record_gain.py": "fe2007f6ed5e3f3a82bb3b1f7f9c3c17821488bcbabef62b0b6fa7557b1b2a6c",
       "scripts/bench/known_record_shipping_gate.py": "d78c3d9d8ce0a0146f56678befd5c722ec86d34cd562a3341e97346dfd6b8a6a",
       "scripts/bench/layer_display.py": "b37c4f763bc5f7eee4340ac0cfd041e4434f279449a31adf5177f30055434df1",

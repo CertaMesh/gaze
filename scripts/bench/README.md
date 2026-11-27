@@ -103,6 +103,38 @@ uv run --project scripts/bench python scripts/bench/outcome_counters.py prove \
   --release v0.17.0 --check docs/reference/benchmarks/outcome-counters-v0.17.0.json
 ```
 
+## JSON structure census
+
+`json_structure_census.py` maps every false-positive byte of a record to the
+innermost JSON or log position it lands in and to the recognizers that
+detected it. Positions are keys, numbers, `true`/`false`/`null`, tool
+selectors, tool arguments, ordinary string values, syntax and log keys; a
+protected range that cuts an escape sequence in two also counts. Every
+position except an ordinary string value or prose is critical: a change there
+can break parsing, typing or tool dispatch (F2). Serialized JSON inside a
+string is decoded with a byte map, so nested positions map back to source
+bytes. Tool selectors come from a declared list of provider envelopes, never
+from a generic key such as `name` alone. Only rebuildable texts are read; the
+metadata-only holdout is reported as unreadable bytes. The report also gives
+the gold bytes a blanket learned-detector veto per position would expose; for
+unreadable documents it gives only an upper bound. It reads one config (the
+production config unless `--config` names another) and fails when that
+config's population is incomplete. JSON it cannot verify stays a plain
+string: quoted JSON inside a log value, serialized JSON that does not start
+its string, lone surrogate escapes and duplicate keys. Those cases can only
+undercount critical bytes.
+
+```bash
+uv run --project scripts/bench python scripts/bench/json_structure_census.py report \
+  target/bench-data/gate-base/full/observations-v1.jsonl.gz --output target/gate/census-base.json
+uv run --project scripts/bench python scripts/bench/json_structure_census.py gate \
+  target/gate/census-base.json target/gate/census-candidate.json
+```
+
+`gate` fails on any critical false-positive byte the candidate adds at a
+document offset where the base had none. It is a diagnostic beside the gain
+gate, not a replacement for it.
+
 ## Scored-label contracts
 
 A scored-label contract says which corpus labels count as gold PII. Without
@@ -723,10 +755,12 @@ pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
 The [field-labelled record-ID specification](../../docs/reference/benchmarks/specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json)
 differs from it only in the validation vocabulary, which adds the field-labelled
 record-ID rules `customer_id.field`, `employee_id.field` and `record_id.field`.
-The [prose credential specification](../../docs/reference/benchmarks/specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json)
+The [generator v31 specification](../../docs/reference/benchmarks/specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json)
 adds generator v31's prose credential cells.
-The [current specification](../../docs/reference/benchmarks/specifications/8233afed2b5b2a8897e3ab99fe6f6b109ae095753b882558ed8bb8ba051dfd2f.json)
-differs from the prose credential one only in the `known_record_cells.py` and
+The [JSON structure census specification](../../docs/reference/benchmarks/specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json)
+differs from it only by adding `json_structure_census.py` to the measuring closure.
+The [current specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
+differs from the JSON structure census one only in the `known_record_cells.py` and
 `known_record_arm.py` digests: known-record cell generator v7, which reads
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
