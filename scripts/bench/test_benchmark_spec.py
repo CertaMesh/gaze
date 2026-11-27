@@ -195,7 +195,9 @@ def capture(folder, docs, spec, protect, policy, revision=REVISION):
                        'ner_threshold': 0.3, 'policy_sha256': capture_identity.file_digest(policy),
                        'sampling_seed': 20260710, 'warmup_count': 1, 'measured_repetitions': 1},
         'runner_provenance': {'policy': {'path': str(policy), 'sha256': capture_identity.file_digest(policy)},
-                              'model_bundles': [], 'policy_dependencies': {'files': {}}},
+                              'model_bundles': [], 'policy_dependencies': {'files': {}},
+                              # Producers record their machine; fixtures run on this one.
+                              'machine': capture_identity.machine_identity()},
         'runs': [runs['C']], 'benchmark_spec': spec,
         'subject_build': {'version': 1, 'mode': 'producer-build',
                           'source': {'revision': revision, 'dirty': False},
