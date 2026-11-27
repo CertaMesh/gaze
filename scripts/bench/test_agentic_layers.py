@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "1a4d44deff1a09c5020ee80db548698de292bc7ca25524206fe66a846feaf27b",
-    "test": "8380d500b949265ef5e01f9a8b801819fd8d83373474f87abcdc535a4df33944",
+    "dev": "81840173c4e14dea1d01fe54f5e19380afd520b786e8e03c711f6d77a54b9faa",
+    "test": "8f876ca82de10c1c205da74b9d42c6a036d1e0c74a385e5280a4fd1db0ad5cf7",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -467,9 +467,10 @@ class RepeatSliceTests(unittest.TestCase):
         self.assertIn(agentic.NBSP, texts["nbsp"])
 
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
-        # Address cells record their benign designators as decoys.
+        # Some A/D surfaces explicitly record public values (for example a
+        # designator beside an address or a page number beside a PAN).
         for record in agentic.generate("test"):
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_")):
+            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_", "card_security_code_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -2293,7 +2294,8 @@ class GateTests(unittest.TestCase):
 
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
-                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16", "invisible_card_twin"), "IBAN": (),
+                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16", "invisible_card_twin",
+                                               "card_code_reference_twin"), "IBAN": (),
                           "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped", "invisible_tax_twin"), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})

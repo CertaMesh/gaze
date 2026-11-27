@@ -55,9 +55,10 @@ import structured_input_cells as structured_input
 import invisible_separator_cells as invisible_separators
 import issuer_credential_cells as issuer_credentials
 import prose_credential_cells as prose_credentials
+import card_security_code_cells as card_codes
 
 
-GENERATOR_VERSION = 31
+GENERATOR_VERSION = 32
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -3157,6 +3158,7 @@ del C_, _zip_se, _zip_pl, _zip_six, _zip_br, _zip_three
 # Layer A card cells carry checksum-invalid twins that contract v2 credits on
 # every surface; the gate maps them to their label by family.
 CUE_FAMILY_LABELS = {cell.family: cell.shape.label for cell in CUE_CELLS}
+CUE_FAMILY_LABELS["card_and_code"] = "CREDITCARDNUMBER"
 # Their layer D twins join the credit guard: a false-positive rise on them
 # fails the gate outright.
 CREDIT_GUARD_FAMILIES["CREDITCARDNUMBER"] = tuple(sorted({
@@ -3176,6 +3178,8 @@ CREDIT_GUARD_SINCE.update({family: 11 for family in government_ids.TAX_GUARD_FAM
 CREDIT_GUARD_FAMILIES["CREDITCARDNUMBER"] += ("invisible_card_twin",)
 CREDIT_GUARD_FAMILIES["TAXNUM"] += ("invisible_tax_twin",)
 CREDIT_GUARD_SINCE.update({"invisible_card_twin": 27, "invisible_tax_twin": 27})
+CREDIT_GUARD_FAMILIES["CREDITCARDNUMBER"] += (card_codes.REFERENCE_TWIN,)
+CREDIT_GUARD_SINCE[card_codes.REFERENCE_TWIN] = 32
 
 
 def guard_families(generator_version: int) -> list[str]:
@@ -4499,6 +4503,7 @@ GENERATOR_ADDITIONS = {
     28: ("invisible_bom_", "invisible_joined_", "invisible_boundary_"),
     29: "issuer_credentials_",
     31: prose_credentials.SURFACE_PREFIX,
+    32: card_codes.SURFACE_PREFIX,
 }
 
 
@@ -4544,6 +4549,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    31: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v31.json"),
     30: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v30.json"),
     29: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v29.json"),
     28: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v28.json"),
@@ -4831,6 +4837,7 @@ def generate(partition: str) -> list[Record]:
         + invisible_separators.records(sys.modules[__name__], partition)
         + issuer_credentials.records(sys.modules[__name__], partition)
         + prose_credentials.records(sys.modules[__name__], partition)
+        + card_codes.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)
