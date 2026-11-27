@@ -1,6 +1,9 @@
-//! Request-local policy inheritance. Edges connect the complete record value to
-//! detections that share its bytes; equal normalized values share one node.
+//! Request-local policy inheritance. Overlapping detections are connected, and
+//! equal normalized values share one node. Only components containing a complete
+//! record claim inherit a policy, including through overlaps at distant copies.
 //! No edge discovers a match or changes the evidence used by the resolver/sweep.
+//! This planner never probes opaque callbacks. The preceding repeat sweep still
+//! consults runtime policy to admit an uncovered copy, even if inheritance then refuses.
 use super::*;
 use std::collections::{BTreeSet, HashMap};
 
@@ -57,28 +60,21 @@ impl RecordPolicy {
         }
         let mut edges = HashMap::<&str, BTreeSet<&str>>::new();
         let mut occurrences = HashMap::new();
-        // A containing or partially overlapping winner must not restore any of
-        // the ID either. Index interval ends so disjoint IDs don't scan the pool.
-        let mut max_end = 0;
-        let intervals: Vec<_> = spans
-            .iter()
-            .map(|(&(start, end), &v)| {
-                max_end = max_end.max(end);
-                (start, end, max_end, v)
-            })
-            .collect();
-        for &(start, end, _, id) in &intervals {
-            if !claims.contains(id) {
-                continue;
+        // In start order, if *any* earlier interval overlaps this one, the
+        // furthest-ending one does. One edge therefore preserves connectivity
+        // without enumerating every pair, even for many nested detections.
+        let mut furthest = None;
+        for (&(start, end), &id) in &spans {
+            if claims.contains(id) {
+                *occurrences.entry(id).or_insert(0usize) += 1;
+                edges.entry(id).or_default();
             }
-            *occurrences.entry(id).or_insert(0usize) += 1;
-            let first = intervals.partition_point(|&(_, _, max_end, _)| max_end <= start);
-            for &(_, other_end, _, other) in intervals[first..].iter().take_while(|i| i.0 < end) {
-                if other_end <= start {
-                    continue;
-                }
+            if let Some((_, other)) = furthest.filter(|&(previous_end, _)| start < previous_end) {
                 edges.entry(id).or_default().insert(other);
                 edges.entry(other).or_default().insert(id);
+            }
+            if furthest.is_none_or(|(previous_end, _)| end > previous_end) {
+                furthest = Some((end, id));
             }
         }
         let mut classes = HashMap::<&str, BTreeSet<PiiClass>>::new();
@@ -110,7 +106,7 @@ impl RecordPolicy {
             }
             // A single span with only its own class needs no inheritance. Its
             // ordinary runtime lookup (including an opaque rule) stays untouched.
-            if occurrences[id] == 1 && edges[id].len() == 1 && classes[id].len() == 1 {
+            if occurrences[id] == 1 && edges[id].is_empty() && classes[id].len() == 1 {
                 continue;
             }
             let mut stack = vec![id];

@@ -454,10 +454,17 @@ impl Rule for Wrapped {
 
 #[test]
 fn record_inheritance_does_not_probe_opaque_callbacks() {
-    for nested in [false, true] {
+    for (nested, input, refused, expected_calls) in [
+        (false, "AX-52819", false, 1), // Ordinary winner action.
+        (true, "AX-52819", true, 0),   // Inheritance refuses without running the callback.
+        // The existing sweep calls the rule once to admit an uncovered copy.
+        // Inheritance then refuses the unknown shared policy without calling again.
+        (false, "AX-52819. Later AX-52819.", true, 1),
+    ] {
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let mut record = candidate(0..8, field(), "synthetic.record");
         record.complete_record_id = true;
+        record.source = "structural.test_record".into();
         let mut candidates = vec![record];
         if nested {
             candidates.push(candidate(3..8, PiiClass::Name, "synthetic.inner"));
@@ -470,15 +477,17 @@ fn record_inheritance_does_not_probe_opaque_callbacks() {
             }),
         );
         let session = Session::new(crate::Scope::Ephemeral).unwrap();
-        let output = clean(&p, &session, "AX-52819");
-        if nested {
+        let output = clean(&p, &session, input);
+        if refused {
             assert!(matches!(output, Err(Error::OpaqueRecordPolicy)));
-            assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
             assert!(session.snapshot_entries().is_empty());
         } else {
             assert!(output.is_ok());
-            assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         }
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            expected_calls
+        );
     }
 }
 
