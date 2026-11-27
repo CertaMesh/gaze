@@ -1,0 +1,1 @@
+- The bundled core rules protect three- and four-digit card security codes written after a directly labelled payment card in English or German. A bare short number must end the card field; unrelated amounts, counts and references do not qualify.

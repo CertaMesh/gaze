@@ -2742,8 +2742,14 @@ fn collect_credit_card_findings(
     // The cued rule records a Luhn failure for a whole card layout. Scan it first, then
     // include the structural scanner's Luhn-valid windows; overlap resolution keeps the
     // longer cued value, including a trailing three-digit group.
-    for captures in card_cued_pattern().captures_iter(&view.text) {
-        let matched = captures.get(1).expect("card cue value capture");
+    let mut cursor = 0;
+    while let Some(captures) = card_cued_pattern().captures_at(&view.text, cursor) {
+        let matched = captures
+            .get(1)
+            .or_else(|| captures.get(2))
+            .expect("card cue value capture");
+        // The suffix may inspect the first letter of the next card cue.
+        cursor = matched.end();
         let raw = matched.as_str();
         findings.push(StructuralFinding {
             class: PiiClass::custom("credit_card").expect("valid custom class"),
@@ -2870,6 +2876,16 @@ const CARD_CUED_PATTERN: &str = r###"(?x)
 )
 (?:[\x20\x{00A0}\x{202F}-]\d{3})?
 (?:[^\d\x20\x{00A0}\x{202F}-]|[\x20\x{00A0}\x{202F}-][^\d]|[\x20\x{00A0}\x{202F}-]?\z)
+| (?ix:\b(?:
+    (?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?card(?:[\x20_-]?(?:number|num|no|nr))?
+  | (?:kredit|debit|bank|ec|giro|geld|prepaid)[\x20-]?karte(?:nnummer|nnr)?
+  | karten?(?:[\p{Zs}\t]+(?:nummer|nr)|n(?:nummer|nr))|visa|master[\x20]?card|amex|american\x20express|diners(?:\x20club)?|maestro|jcb|unionpay|girocard
+  )\b\.?[\p{Zs}\t]*(?:(?:is|ist|lautet)\b[\p{Zs}\t]*)?[:=]?[\p{Zs}\t]*
+  ([2-6][0-9]{15,18}|3[0-9]{13,14}
+  |[2-6][0-9]{3}(?:[\p{Zs}-][0-9]{4}){3}(?:[\p{Zs}-][0-9]{3})?
+  |[2-6][0-9]{3}[\p{Zs}-][0-9]{6}[\p{Zs}-][0-9]{4,5}
+  |(?:5[06-9]|6[0-9])(?:[0-9]{10,13}|[0-9]{2}(?:[\p{Zs}-][0-9]{4}){2}))
+  [\p{Zs}\t]+[0-9]{3,4}\b[\p{Zs}\t]*(?:\z|[^\d\p{Zs}\t-]))
 "###;
 
 fn iban_structural_pattern() -> &'static Regex {

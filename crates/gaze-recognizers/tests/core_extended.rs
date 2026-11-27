@@ -268,7 +268,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 57);
+    assert_eq!(core.recognizers.len(), 58);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -283,6 +283,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "age.phrase",
         "birth_date.answer",
         "card.cued_short",
+        "card.security_code",
         // Bilingual cue-anchored government-ID recognizers with no national shape stay on
         // document basis (`global`).
         "tax_number.cue_anchored",
