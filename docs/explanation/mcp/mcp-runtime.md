@@ -183,10 +183,10 @@ Audit session ids do not partition any of this state, and a model-written
 `ConversationRegistry` holds one host, with its own Session, per
 host-authenticated `ConversationId`. The first call for an id opens the
 conversation through a factory that receives the id and the caller's
-`Principal`, shares resident pipelines,
-and builds the conversation's own Session, empty or imported from that
-conversation's trusted snapshot. `tools/list` reads a cached tool catalog and
-does not open a conversation. Closing it with `close`, or leaving it idle past
+`Principal`, shares resident pipelines, and builds the conversation's own
+Session, empty or imported from that conversation's trusted snapshot. Once any
+host exists, `tools/list` reads its cached tool catalog and does not open a
+conversation. Closing it with `close`, or leaving it idle past
 `ConversationLimits::idle_timeout` (default 30 minutes), drops its Session, so a
 later call with the same id gets what the factory builds: empty, so earlier
 tokens no longer restore, unless the factory imports that conversation's
@@ -194,11 +194,15 @@ snapshot. The factory may run twice for one id when two calls race, so it must
 not consume its snapshot, and every host it builds must list the same tools.
 A live conversation answers only the principal id that opened it: another
 principal holding the id gets `conversation-forbidden`, never the Session. Roles
-do not count. After the conversation closes or expires, the id is free again.
+do not count. Ownership is not persisted: after close, expiry or a restart, the
+id opens for whichever principal calls next. A factory that imports a snapshot
+must import it only when the snapshot's recorded owner equals the principal id
+it receives, and build an empty Session otherwise; that is why it receives the
+`Principal`.
 At `max_conversations` live entries (default 64) a new id is refused rather than
 evicting a live conversation. `ConversationLimits::new` refuses zero for either
-limit. The registry is memory-only: after a restart every
-id starts from what the factory builds. A call already in flight keeps its host until it returns.
+limit. The registry is memory-only: after a restart every id starts from what
+the factory builds. A call already in flight keeps its host until it returns.
 
 Embedded HTTP hosts pass the registry to `RmcpFrontend::into_conversation_handler`
 and set `HostCallContext::conversation` in authenticated middleware. A call
@@ -208,11 +212,16 @@ returns `conversation-limit`. See the
 
 The built-in rmcp HTTP transport gives each caller its own conversation.
 `RmcpFrontend::http(..).serve_conversations(registry, shutdown)` opens one
-conversation per principal id that the `PrincipalResolver` returns, and
-`Frontend::serve(host, ...)` refuses HTTP with `SharedHttpHost` because every
-caller would share that host. Callers are kept apart only as well as the
-resolver tells them apart: a `FixedPrincipalResolver` puts every caller in one
-conversation.
+conversation per principal id that the `PrincipalResolver` returns; the
+conversation id is the principal id. `Frontend::serve(host, ...)` refuses HTTP
+with `SharedHttpHost` because every caller would share that host. Callers are
+kept apart only as well as the resolver tells them apart, so
+`serve_conversations` also refuses HTTP with `SharedHttpHost` when
+`PrincipalResolver::distinguishes_callers` is false, as it is for
+`FixedPrincipalResolver`. A custom resolver that returns one principal for
+several callers must override it to return false. Do not share that registry
+with `into_conversation_handler`, because a middleware-set id could equal a
+principal id.
 
 `gaze mcp serve` treats one stdio connection as one conversation: each server
 process has its own memory-only Session, which ends with the connection. A client

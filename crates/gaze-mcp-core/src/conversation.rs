@@ -15,10 +15,16 @@
 //!   which receives the id and the opening [`Principal`] so it can bind
 //!   per-conversation resources or import that conversation's trusted snapshot.
 //!   The conversation then belongs to that principal: a call for the same id from
-//!   any other principal id is refused with [`ConversationError::PrincipalMismatch`]. The factory runs outside the registry
-//!   lock; when two calls race to open one id, the first inserted host wins and
-//!   the other is dropped unused, so the factory must be safe to run twice for
-//!   one id (for example, read a snapshot without consuming it). Every host it
+//!   any other principal id is refused with
+//!   [`ConversationError::PrincipalMismatch`]. Ownership lives only as long as
+//!   the entry: after close, expiry or a restart, the id opens for whichever
+//!   principal calls next. A factory that imports a snapshot must check that the
+//!   snapshot's recorded owner equals the principal id it receives, and build an
+//!   empty Session otherwise. The factory runs outside the registry lock; when
+//!   two calls race to open one id, the first inserted host wins, the other is
+//!   dropped unused, and a racing call from another principal is refused. So the
+//!   factory must be safe to run twice for one id (for example, read a snapshot
+//!   without consuming it). Every host it
 //!   builds must list the same tools: `tools/list` for a conversation that is not
 //!   live reads the catalog of the first host built.
 //! - **Close:** [`ConversationRegistry::close`] drops the entry. A later call with
@@ -28,7 +34,8 @@
 //! - **Expiry:** an entry unused for [`ConversationLimits::idle_timeout`] is
 //!   dropped on the next registry access, with the same effect as close.
 //! - **Capacity:** at [`ConversationLimits::max_conversations`] live entries (never
-//!   zero; [`ConversationLimits::new`] refuses zero limits) a new id is refused with [`ConversationError::Capacity`]. Live conversations are
+//!   zero; [`ConversationLimits::new`] refuses zero limits) a new id is refused
+//!   with [`ConversationError::Capacity`]. Live conversations are
 //!   never evicted to make room, because that would silently drop their restore
 //!   authority.
 //! - **Restart:** the registry is memory-only. After a restart every id starts
@@ -472,6 +479,35 @@ mod tests {
             registry.host(&owner(), &a),
             Err(ConversationError::PrincipalMismatch)
         ));
+    }
+
+    #[test]
+    fn two_principals_racing_to_open_one_id_never_share_it() {
+        // Both factories run before either inserts, so only the insert-path
+        // owner check can refuse the second principal.
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let gate = barrier.clone();
+        let registry = Arc::new(ConversationRegistry::new(
+            move |_, _| {
+                gate.wait();
+                Ok(Arc::new(Host) as Arc<dyn DispatchHost>)
+            },
+            ConversationLimits::default(),
+        ));
+        let id = ConversationId::new("raced");
+        let open = |who: &'static str| {
+            let (registry, id) = (registry.clone(), id.clone());
+            std::thread::spawn(move || registry.host(&Principal::new(who), &id))
+        };
+        let (a, b) = (open("synthetic-a"), open("synthetic-b"));
+        let results = [a.join().unwrap(), b.join().unwrap()];
+        let refused = results
+            .iter()
+            .filter(|r| matches!(r, Err(ConversationError::PrincipalMismatch)))
+            .count();
+        assert_eq!(refused, 1);
+        assert!(results.iter().any(Result::is_ok));
+        assert_eq!(registry.len(), 1);
     }
 
     #[test]

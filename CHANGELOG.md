@@ -20,7 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Two conversations never share mappings, and each refuses the other's tokens
   on strict restore.
 - `RmcpFrontend::serve_conversations` serves the built-in stdio or HTTP
-  transport with one conversation per resolved principal id.
+  transport with one conversation per resolved principal id. It refuses HTTP
+  when the new `PrincipalResolver::distinguishes_callers` is false, as it is
+  for `FixedPrincipalResolver`.
 - `gaze mcp doctor` reports the declared protection profile (bundled `core`
   rules, Resolve/Strict, no NER or Nym) and the session scope.
 - Release binaries are reproducible. `scripts/release/build-binary.sh` builds

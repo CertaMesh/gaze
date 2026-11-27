@@ -27,11 +27,12 @@ pub enum RmcpFrontendError {
     #[error("duplicate tool registration: {0}")]
     DuplicateTool(String),
 
-    /// The built-in HTTP transport was handed one host for every caller. It
-    /// serves each caller its own conversation; use
-    /// [`crate::RmcpFrontend::serve_conversations`].
+    /// The built-in HTTP transport would give every caller one Session: it was
+    /// handed one host, or a resolver that cannot tell callers apart. Use
+    /// [`crate::RmcpFrontend::serve_conversations`] with a resolver whose
+    /// [`crate::PrincipalResolver::distinguishes_callers`] is true.
     #[error(
-        "built-in HTTP gives each caller its own Session; serve it with RmcpFrontend::serve_conversations"
+        "built-in HTTP gives each caller its own Session; serve it with RmcpFrontend::serve_conversations and a PrincipalResolver that tells callers apart"
     )]
     SharedHttpHost,
 

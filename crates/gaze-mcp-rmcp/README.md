@@ -149,7 +149,9 @@ conversations shares Rule-evidence mappings, HMAC labels, and restore authority.
 Audit session ids do not partition this state. The built-in HTTP transport
 therefore refuses `Frontend::serve(host, ...)` with
 `RmcpFrontendError::SharedHttpHost`; `RmcpFrontend::serve_conversations` serves
-it with one conversation per resolved principal id.
+it with one conversation per resolved principal id, and refuses a resolver whose
+`PrincipalResolver::distinguishes_callers` is false, such as
+`FixedPrincipalResolver`.
 
 For private conversations, keep a `gaze_mcp_core::ConversationRegistry` whose
 factory builds a host with a fresh `Session`, and serve it with
@@ -192,10 +194,11 @@ pipelines, and model handles can be shared between hosts. Derive the conversatio
 id from an authenticated identity, never from tool arguments or `_meta`. A live
 conversation answers only the principal that opened it. Close a
 conversation with `ConversationRegistry::close`; idle conversations expire after
-`ConversationLimits::idle_timeout`. The factory receives the `ConversationId`
-and the opening `Principal`,
-so after expiry or a restart it can import only that conversation's trusted
-snapshot into the new host. It runs outside the registry lock; keep it bounded,
+`ConversationLimits::idle_timeout`. Ownership is not persisted, so after expiry
+or a restart any principal can reopen an id. The factory receives the
+`ConversationId` and the opening `Principal`: import that conversation's trusted
+snapshot only when its recorded owner equals the principal id, and otherwise
+build an empty Session. It runs outside the registry lock; keep it bounded,
 because the call that opened the conversation waits for it.
 
 ## rmcp version policy
