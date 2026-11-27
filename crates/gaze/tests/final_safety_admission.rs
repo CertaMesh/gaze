@@ -212,8 +212,13 @@ fn a_new_raw_residual_after_fallback_is_resolved_on_every_route() {
     for route in [Route::Live, Route::Staged, Route::Trace] {
         let (pipeline, seen) = pipeline(Terminal::Raw);
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let (doc, spans, report) = run(&pipeline, &session, route, SafetyNetPolicy::default())
-            .unwrap_or_else(|error| panic!("{route:?} denied a resolvable residual: {error:?}"));
+        let (doc, spans, report) = run(
+            &pipeline,
+            &session,
+            route,
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        )
+        .unwrap_or_else(|error| panic!("{route:?} denied a resolvable residual: {error:?}"));
         let CleanDocument::Text(text) = doc else {
             panic!("text");
         };
@@ -253,7 +258,13 @@ fn final_admission_allows_live_token_reflags_without_destructive_fallback() {
     for route in [Route::Live, Route::Staged, Route::Trace] {
         let (pipeline, seen) = pipeline(Terminal::Token);
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let (doc, spans, _) = run(&pipeline, &session, route, SafetyNetPolicy::default()).unwrap();
+        let (doc, spans, _) = run(
+            &pipeline,
+            &session,
+            route,
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        )
+        .unwrap();
         let CleanDocument::Text(text) = doc else {
             panic!("text");
         };
@@ -290,7 +301,12 @@ fn final_admission_rejects_terminal_errors_and_malformed_or_mismatched_spans() {
         for route in [Route::Live, Route::Staged, Route::Trace] {
             let (pipeline, seen) = pipeline(terminal);
             let session = Session::new(Scope::Ephemeral).unwrap();
-            let result = run(&pipeline, &session, route, SafetyNetPolicy::default());
+            let result = run(
+                &pipeline,
+                &session,
+                route,
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+            );
             match terminal {
                 Terminal::Error => assert!(matches!(
                     result,
@@ -318,8 +334,13 @@ fn final_admission_clear_output_retains_default_one_way_fallback_and_trace() {
     for route in [Route::Live, Route::Staged, Route::Trace] {
         let (pipeline, seen) = pipeline(Terminal::Clear);
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let (doc, spans, report) =
-            run(&pipeline, &session, route, SafetyNetPolicy::default()).unwrap();
+        let (doc, spans, report) = run(
+            &pipeline,
+            &session,
+            route,
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        )
+        .unwrap();
         let CleanDocument::Text(text) = doc else {
             panic!("text");
         };
@@ -359,8 +380,13 @@ fn final_admission_does_not_change_tolerant_fallback_or_no_net_contract() {
         .rule(DefaultRule::new(Action::Preserve))
         .build()
         .unwrap();
-    let (doc, spans, report) =
-        run(&no_net, &session, Route::Live, SafetyNetPolicy::default()).unwrap();
+    let (doc, spans, report) = run(
+        &no_net,
+        &session,
+        Route::Live,
+        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+    )
+    .unwrap();
     assert!(matches!(doc, CleanDocument::Text(text) if text == RAW));
     assert!(spans.is_empty());
     assert!(report.suspects.is_empty());
@@ -422,7 +448,12 @@ fn final_admission_rejects_malformed_registry_spans_before_manifest_filtering() 
                 MalformedModel(terminal),
             )]));
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let result = run(&pipeline, &session, Route::Live, SafetyNetPolicy::default());
+        let result = run(
+            &pipeline,
+            &session,
+            Route::Live,
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        );
         assert!(
             matches!(
                 result,
@@ -446,7 +477,7 @@ fn final_admission_reversible_success_preserves_trace_and_staged_restore() {
             RawDocument::Text(raw.into()),
             &[LocaleTag::Global],
             &dictionaries,
-            SafetyNetPolicy::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
         .unwrap();
     let CleanDocument::Text(staged_text) = staged_doc else {
@@ -460,7 +491,7 @@ fn final_admission_reversible_success_preserves_trace_and_staged_restore() {
             raw,
             &[LocaleTag::Global],
             &dictionaries,
-            SafetyNetPolicy::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
         .unwrap();
     let CleanDocument::Text(live_text) = live_doc else {

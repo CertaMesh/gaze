@@ -74,7 +74,7 @@ fn second_batch_after_noop_preserves_raw_and_scans_exact_reversible_output() {
             "pré tail",
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
-            SafetyNetPolicy::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
         .expect("eligible no-op first resolve must get one complete reversible batch");
     let CleanDocument::Text(text) = doc else {
@@ -203,7 +203,12 @@ fn second_batch_latest_report_deletes_new_interval_and_retains_both_batches_and_
             })
             .build()
             .unwrap();
-        let result = run(&p, &session, first, SafetyNetPolicy::default());
+        let result = run(
+            &p,
+            &session,
+            first,
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        );
         if terminal == 1 {
             let (CleanDocument::Text(text), spans, _) = result.unwrap() else {
                 panic!("text")
@@ -341,7 +346,13 @@ fn second_batch_ineligible_and_not_applicable_paths_keep_exact_sweeps() {
         ("raw".into(), Ok(vec![mismatch(0..3)])),
         (redaction_marker(&PiiClass::Name), Ok(vec![])),
     ]);
-    run(&p, &session, "raw", SafetyNetPolicy::default()).unwrap();
+    run(
+        &p,
+        &session,
+        "raw",
+        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+    )
+    .unwrap();
     assert!(steps.lock().unwrap().is_empty());
     for protected in [false, true] {
         let token = session
@@ -358,7 +369,13 @@ fn second_batch_ineligible_and_not_applicable_paths_keep_exact_sweeps() {
                 }),
             ),
         ]);
-        run(&p, &session, "raw", SafetyNetPolicy::default()).unwrap();
+        run(
+            &p,
+            &session,
+            "raw",
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        )
+        .unwrap();
         assert!(steps.lock().unwrap().is_empty());
     }
 }
@@ -411,7 +428,7 @@ fn second_batch_all_item_preflight_cannot_hide_fatal_after_unsupported() {
                 "é x",
                 &[LocaleTag::Global],
                 &DictionaryBundle::default(),
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             );
             assert!(matches!(
                 result,
@@ -451,10 +468,15 @@ fn second_batch_logger_failure_keeps_live_mappings_and_immediate_audits_in_both_
                     RawDocument::Text("aa bb".into()),
                     &[LocaleTag::Global],
                     &DictionaryBundle::default(),
-                    SafetyNetPolicy::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
                 )
             } else {
-                run(&p, &session, "aa bb", SafetyNetPolicy::default())
+                run(
+                    &p,
+                    &session,
+                    "aa bb",
+                    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+                )
             };
             assert!(result.is_err());
             assert_eq!(rows.lock().unwrap().len(), fail_at);
@@ -504,10 +526,15 @@ fn second_batch_success_then_backend_failure_retains_new_mapping_without_fallbac
                 RawDocument::Text("raw".into()),
                 &[LocaleTag::Global],
                 &DictionaryBundle::default(),
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             )
         } else {
-            run(&p, &session, "raw", SafetyNetPolicy::default())
+            run(
+                &p,
+                &session,
+                "raw",
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+            )
         };
         assert!(matches!(
             result,
@@ -570,9 +597,13 @@ fn five_sweeps_can_mean_ten_backend_calls_and_still_only_one_second_batch() {
         .register_safety_net(Script(passive.clone()))
         .build()
         .unwrap();
-    let (CleanDocument::Text(text), spans, _) =
-        run(&p, &session, &texts[0], SafetyNetPolicy::default()).unwrap()
-    else {
+    let (CleanDocument::Text(text), spans, _) = run(
+        &p,
+        &session,
+        &texts[0],
+        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+    )
+    .unwrap() else {
         panic!("text")
     };
     assert_eq!(text, texts[4]);
@@ -645,9 +676,13 @@ fn five_sweeps_tokenize_a_plannable_fallback_residual_without_an_extra_sweep() {
         .register_safety_net(Script(passive.clone()))
         .build()
         .unwrap();
-    let (CleanDocument::Text(text), spans, _) =
-        run(&p, &session, &texts[0], SafetyNetPolicy::default()).unwrap()
-    else {
+    let (CleanDocument::Text(text), spans, _) = run(
+        &p,
+        &session,
+        &texts[0],
+        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+    )
+    .unwrap() else {
         panic!("text")
     };
     assert_eq!(text, texts[4]);
@@ -687,7 +722,7 @@ fn second_batch_protected_first_noop_and_staged_success_publish_only_on_commit()
             RawDocument::Text("primary raw".into()),
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
-            SafetyNetPolicy::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
         .unwrap()
     else {
@@ -790,7 +825,12 @@ fn second_batch_terminal_registry_malformed_spans_are_enforced_before_conversion
             .build()
             .unwrap();
         assert!(matches!(
-            run(&p, &session, &texts[0], SafetyNetPolicy::default()),
+            run(
+                &p,
+                &session,
+                &texts[0],
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact)
+            ),
             Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
         ));
         assert!(queue.lock().unwrap().is_empty());
@@ -827,7 +867,7 @@ fn second_batch_then_fallback_trace_keeps_original_raw_coordinates() {
             "a b c",
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
-            SafetyNetPolicy::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
         .unwrap()
     else {

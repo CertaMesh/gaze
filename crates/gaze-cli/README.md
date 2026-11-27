@@ -114,9 +114,9 @@ Flags:
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
 | `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` replaces the suspect span with a one-way `[REDACTED:<class>]` marker (the bytes do not come back; the marker is not a token and restore returns it verbatim) and records an audit row; `resolve` tokenizes the suspect span directly as a restorable token of the suspect's class, then runs the nets once more; what it cannot handle goes to `--safety-net-fallback`. Defaults to `resolve`. Mode catalog and posture guide: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md). |
-| `--safety-net-fallback <strict\|tolerant\|redact>` | Residual action for `--safety-net-mode resolve`, and only for `resolve`: what happens when the resolve pass cannot tokenize a suspect because it overlaps an existing token (`OverlapConflict`) or the post-resolve re-run still reports one (`ResidualSuspect`). `strict` rejects the document and exits `3`; `tolerant` ships the residual bytes; `redact` tokenizes the re-run's residuals when every one can be tokenized reversibly and otherwise replaces them with a one-way `[REDACTED:<class>]` marker (a first-pass refusal always gets the marker). Defaults to `redact`. Ignored by `strict`, `tolerant`, and `redact` modes: those are terminal per suspect and their failure paths are typed errors that fail closed, not a cascade. One-hop only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Lowering table and audit rows: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md#the-fallback-applies-only-under-resolve). |
+| `--safety-net-fallback <strict\|tolerant\|redact\|refuse>` | Residual action for `--safety-net-mode resolve`, and only for `resolve`: what happens when the resolve pass cannot tokenize a suspect because it overlaps an existing token (`OverlapConflict`) or the post-resolve re-run still reports one (`ResidualSuspect`). `strict` rejects the document and exits `3`; `tolerant` ships the residual bytes; `redact` tokenizes the re-run's residuals when every one can be tokenized reversibly and otherwise replaces them with a one-way `[REDACTED:<class>]` marker (a first-pass refusal always gets the marker); `refuse` runs the same reversible steps as `redact` and rejects the document with exit `3` wherever `redact` would write a marker or a residual would ship. Defaults to `refuse`. Ignored by `strict`, `tolerant`, and `redact` modes: those are terminal per suspect and their failure paths are typed errors that fail closed, not a cascade. One-hop only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Lowering table and audit rows: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md#the-fallback-applies-only-under-resolve). |
 
-Full command reference: [CLI reference](../../docs/reference/cli.md). Safety-net `resolve` defaults to a `redact` fallback; this can make one-way replacements. Use the [mode catalog](../../docs/explanation/safety-net/safety-net-modes.md) to choose the required restore and refusal behavior.
+Full command reference: [CLI reference](../../docs/reference/cli.md). Safety-net `resolve` defaults to a `refuse` fallback: output is restorable or refused, never one-way. Use the [mode catalog](../../docs/explanation/safety-net/safety-net-modes.md) to choose the required restore and refusal behavior.
 
 ## `restore`
 
@@ -276,7 +276,7 @@ none, so `index search` without `--safety-net` fails closed with a typed
 | `--safety-net-timeout-ms <ms>` | Safety-net subprocess timeout. |
 
 With a net configured, residual suspects on ingest are tokenized when all of
-them can be, and otherwise redact or fail closed per `index ingest --on-residual {redact,strict}` (default `redact`):
+them can be, and otherwise fail closed or redact per `index ingest --on-residual {refuse,strict,redact}` (default `refuse`):
 
 ```console
 $ gaze index --safety-net nym --nym-model-dir <dir> ingest ./notes --on-residual strict
@@ -392,7 +392,7 @@ Output adds `leak_report.stats` with suspect, uncovered, partial-bleed, class-mi
 
 Dev-only `--safety-net-mode tolerant` warns on stderr and exits `0` when uncovered/partial-bleed suspects remain. Strict mode returns `SuspectedLeak` (exit `3`) with empty stdout. Class mismatches warn but do not fail strict mode; findings wholly inside owned placeholders are dropped before action.
 
-Default CLI and `SafetyNetPolicy::default()` behavior is `resolve` plus `redact` fallback. See the [mode catalog](../../docs/explanation/safety-net/safety-net-modes.md) for overlap, residual, one-way replacement, and tolerant opt-in rules.
+Default CLI and `SafetyNetPolicy::default()` behavior is `resolve` plus `refuse` fallback. See the [mode catalog](../../docs/explanation/safety-net/safety-net-modes.md) for overlap, residual, one-way replacement, and tolerant opt-in rules.
 
 ### Latency budget (`openai-filter`)
 

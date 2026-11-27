@@ -18,8 +18,8 @@ same pair. See the [observer contract](safety-nets.md#observer-only-contract).
 | `tolerant` | Warn and ship unchanged suspect bytes. | Yes | Never. Development only |
 
 Findings inside issued placeholders are dropped before any action. Under
-`Resolve` and `Redact`, name/location/organization sub-word findings remain raw
-with `Preserve` audit rows; strict fallback instead refuses them as residuals.
+`Redact`, and `Resolve` with the `redact` fallback, name/location/organization
+sub-word findings remain raw with `Preserve` audit rows; the `strict` and `refuse` fallbacks instead refuse them as residuals.
 See [sub-word suspects](safety-nets.md#sub-word-suspects-are-never-acted-on).
 
 ## The fallback applies only under resolve
@@ -113,7 +113,7 @@ Each action writes one audit row per suspect, never the suspect's bytes. The
 | `fallback` | the fallback decides a residual suspect | `Redact` under the `redact` fallback; `Preserve` under `refuse`, `strict` or `tolerant` |
 
 Fallback rows are loser rows (`conflict_loser = true`) and carry the reason in
-`fallback_triggered`. Under the `strict` fallback the row is written before the
+`fallback_triggered`. Under the `strict` and `refuse` fallbacks the row is written before the
 document is rejected, so it survives for forensic replay even though stdout is
 empty. Suspect metadata also goes to the
 [`safety_net_log` table](safety-nets.md#safety_net_log-audit-table) when an audit

@@ -216,7 +216,11 @@ impl Doc {
     }
 
     fn run(&self, h: &Harness) -> gaze::Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
-        h.run(&self.session, Self::RAW, SafetyNetPolicy::default())
+        h.run(
+            &self.session,
+            Self::RAW,
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        )
     }
 
     fn token(&self, value: &str) -> String {
@@ -512,7 +516,7 @@ fn a_refused_terminal_round_denies_without_deleting() {
             h.run(
                 &session,
                 "primary alpha bravo charlie",
-                SafetyNetPolicy::default()
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact)
             ),
             Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
         ),
@@ -578,7 +582,11 @@ fn a_surviving_acted_on_span_stays_denied() {
     );
     assert!(
         matches!(
-            h.run(&session, "primary tail rest", SafetyNetPolicy::default()),
+            h.run(
+                &session,
+                "primary tail rest",
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact)
+            ),
             Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
         ),
         "a span the fallback claims to have removed, still present, must fail closed"
@@ -623,7 +631,11 @@ fn a_surviving_acted_on_span_found_only_after_the_round_still_denies() {
     );
     assert!(
         matches!(
-            h.run(&session, "primary tail rest", SafetyNetPolicy::default()),
+            h.run(
+                &session,
+                "primary tail rest",
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact)
+            ),
             Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
         ),
         "a broken fallback promise must deny however late it shows up"

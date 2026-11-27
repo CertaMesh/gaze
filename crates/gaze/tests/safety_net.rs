@@ -345,7 +345,7 @@ fn tokenizing_pipeline_with_net(net: MockNet) -> Pipeline {
         .expect("pipeline")
 }
 
-/// The observer-only policy. `clean_with_safety_net*` defaults to `Resolve` + `Redact`
+/// The observer-only policy. `clean_with_safety_net*` defaults to `Resolve` + `Refuse`
 /// (`SafetyNetPolicy::default()`), so a test that wants "report but never mutate" must say so.
 fn observer_policy() -> gaze::SafetyNetPolicy {
     gaze::SafetyNetPolicy::new(gaze::SafetyNetMode::Strict, gaze::SafetyNetFallback::Redact)
@@ -971,7 +971,7 @@ fn clean_with_safety_net_convenience_api_uses_the_documented_default() {
         gaze::SafetyNetPolicy::default(),
         gaze::SafetyNetPolicy::new(
             gaze::SafetyNetMode::Resolve,
-            gaze::SafetyNetFallback::Redact
+            gaze::SafetyNetFallback::Refuse
         )
     );
 
@@ -1690,7 +1690,10 @@ fn fallback_redaction_is_traced_as_fallback_redact() {
         &pipeline,
         &session,
         RESIDUAL_RAW,
-        gaze::SafetyNetPolicy::default(),
+        gaze::SafetyNetPolicy::new(
+            gaze::SafetyNetMode::Resolve,
+            gaze::SafetyNetFallback::Redact,
+        ),
     );
 
     let fallback = trace
@@ -1809,7 +1812,10 @@ fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens(
             &session,
             RawDocument::Text(RESIDUAL_RAW.to_string()),
             &[gaze::LocaleTag::Global],
-            gaze::SafetyNetPolicy::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Resolve,
+                gaze::SafetyNetFallback::Redact,
+            ),
         )
         .unwrap_or_else(|err| panic!("{expected_reason:?}: {err:?}"));
         let clean = text(clean);
@@ -2162,7 +2168,10 @@ fn first_pass_refusal_redacts_only_the_exposed_suspect() {
             &session,
             RawDocument::Text(raw.clone()),
             &[gaze::LocaleTag::Global],
-            gaze::SafetyNetPolicy::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Resolve,
+                gaze::SafetyNetFallback::Redact,
+            ),
         )
         .unwrap_or_else(|err| panic!("{refusal:?}: {err:?}"));
         let clean = text(clean);
