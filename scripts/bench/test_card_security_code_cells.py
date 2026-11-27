@@ -108,7 +108,10 @@ def test_boundary_forms_and_paired_public_references(partition):
             elif form == "parentheses":
                 assert re.fullmatch(rf" \(CV[VC]: {code}\)", rest)
             elif form == "conjunction":
-                assert re.fullmatch(rf" (?:and CV[VC]|und Prüfnummer): {code}", rest)
+                if partition == "test":
+                    assert re.fullmatch(rf" (?:and the CVV is|und die Prüfnummer ist) {code}", rest)
+                else:
+                    assert re.fullmatch(rf" (?:and CVV|und Prüfnummer): {code}", rest)
             else:
                 assert re.fullmatch(rf"[;,] CV[VC]: {code} \([^)]+\)", rest)
         if len(code) == 4:

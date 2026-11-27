@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:f9c04e81f082f51d09134cac708471cfd81829d4171083691611b913f402c741",
+  "id": "gaze-benchmark-v1:63ce27efb93c84f6fe7f0f98878cbcd6683448c45408cf7db07a2fc406d3b9c0",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -15,7 +15,7 @@
         "D": 9130,
         "R": 12801
       },
-      "corpus_sha256": "9bb76d85b3845ceb7993d17e55c7cdbb4e902b397b0f80f384abbee2ced079f7",
+      "corpus_sha256": "2bda84bcc41d82193e8e4120b1b71b22367056bc9fdf3ebc451b2a25d98976db",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -39,7 +39,7 @@
       "scripts/bench/build_native_mcp_operation.py": "d05aee2a9ee6a10c8aea1e3ea52d03f353ec7c753c529219940ba9001c245b55",
       "scripts/bench/build_native_session_proxy.py": "5dac39c24a2d5a9fcd0e81d5008ac5063ab357d83c7aa3d2dda4c06a41293bf9",
       "scripts/bench/capture_identity.py": "bc2be1f6b41da3db4b33e85eb4143bf2cb527e24188a1ff538869148921db0d5",
-      "scripts/bench/card_security_code_cells.py": "9f75f98700450c7674a70e70b0db5c072b7cb12e6b98a199271c07fe42f35b37",
+      "scripts/bench/card_security_code_cells.py": "bba917da8656c9a6a45db483ec6bf8acfe1572ed9e8740ef9482183f9dca329f",
       "scripts/bench/check_detection_identity.py": "d3048e9a1f47842c9ce8b580adb2da0cb4b78f6f7e1c1beff603d003f3ceb34d",
       "scripts/bench/check_nym_session_stability.py": "43e822ebfd0a5fd15040e626c2d904e8590b0bad20a4529d782929cc1d0c419e",
       "scripts/bench/check_personal_id_checksum_identity.py": "cdcdfabf3dcdf68e42d3a9f1bfcf2dfc662367b388a70373b1d42e0d42ae7a1b",
@@ -225,6 +225,7 @@
       "bsn.nl",
       "card.cued",
       "card.cued_short",
+      "card.security_code",
       "card.structural",
       "cnpj.br",
       "collision-family:government-id",
@@ -353,7 +354,7 @@
       "A": {
         "documents": 20617,
         "document_ids_sha256": "23a73f0a6554cfd77d3b6ecd7f46babc606e7b3fa8178933e27c98bd832dc614",
-        "descriptors_sha256": "d1ad250e9ef67b928b1b413f111d16d808695bbeeccafa18221232d24a659665"
+        "descriptors_sha256": "7d16817a7a061335228219387902fcca7efc4c2c55258929e5833ae0110597e7"
       },
       "D": {
         "documents": 9130,

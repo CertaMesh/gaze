@@ -2006,7 +2006,7 @@ every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
 part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) adds the JSON structure census to the measuring closure; and the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) changes the known-record cell and arm harness digests.
-The card security code cells enter the [current specification](specifications/f9c04e81f082f51d09134cac708471cfd81829d4171083691611b913f402c741.json) in generator v32.
+In generator v32, the [current specification](specifications/63ce27efb93c84f6fe7f0f98878cbcd6683448c45408cf7db07a2fc406d3b9c0.json) adds the card security code cells and the `card.security_code` source ID to the validation vocabulary.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2570,8 +2570,9 @@ The [generator](../../../scripts/bench/card_security_code_cells.py) adds 798
 documents per partition: 700 in A and 98 in D. In English and German, A pairs
 a PAN with a separately scored three- or four-digit code: bare after a space,
 after `CVV:` or `CVC:`, or before `(CVV)` or `(CVC)`. Other disclosures put
-the assignment inside parentheses, after `and` or `und`, or before a note
-about the back of the card. A direct code label after a valid compact PAN
+the assignment inside parentheses, after a conjunction, or before a note about
+the back of the card. Dev uses `and CVV:` / `und Prüfnummer:`; test uses
+`and the CVV is` / `und die Prüfnummer ist`. A direct code label after a valid compact PAN
 does not need a card word before the number.
 The PAN is `CREDITCARDNUMBER` and the code digits are `SECURITYTOKEN`; the
 separator and the cue are not gold. PANs are compact (12–19 digits) or grouped

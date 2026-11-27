@@ -765,8 +765,9 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/f9c04e81f082f51d09134cac708471cfd81829d4171083691611b913f402c741.json)
-adds [generator v32's card security code cells](../../docs/reference/benchmarks/README.md#card-security-codes-generator-v32).
+The [current specification](../../docs/reference/benchmarks/specifications/63ce27efb93c84f6fe7f0f98878cbcd6683448c45408cf7db07a2fc406d3b9c0.json)
+adds [generator v32's card security code cells](../../docs/reference/benchmarks/README.md#card-security-codes-generator-v32)
+and the `card.security_code` source ID to the validation vocabulary.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

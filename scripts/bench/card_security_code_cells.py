@@ -35,7 +35,7 @@ BOUNDARY_COPY = {
         "long": "Public catalogue keys for the printed stationery. Card: {R}",
     },
     ("test", "en"): {
-        "parentheses": "Debit card number {P} (CVC: {N})", "conjunction": "My card is {P} and CVC: {N}",
+        "parentheses": "Debit card number {P} (CVC: {N})", "conjunction": "My card is {P} and the CVV is {N}",
         "note": "Debit card: {P}, CVV: {N} (printed on the reverse)", "number": "Card no. {P} {N}",
         "code_only": "Use {P} CVV: {N}", "help": "Public build history:\n{R} CVC form version {N}",
         "long": "The print shop lists one stock reference per item. Card: {R}",
@@ -47,7 +47,7 @@ BOUNDARY_COPY = {
         "long": "Öffentliches Verzeichnis für Spielkarten, je ein Artikelcode. Kartennummer: {R}",
     },
     ("test", "de"): {
-        "parentheses": "Debitkarte {P} (CVV: {N})", "conjunction": "Kreditkarte: {P} und Prüfnummer: {N}",
+        "parentheses": "Debitkarte {P} (CVV: {N})", "conjunction": "Kreditkarte: {P} und die Prüfnummer ist {N}",
         "note": "Kartennummer: {P}, CVC: {N} (hinten aufgedruckt)", "number": "Bitte verwenden: Karte Nr. {P} {N}",
         "code_only": "Für den Einkauf: {P} CVV: {N}", "help": "Öffentliche Druckauflagen:\n{R} CVV-Formularversion {N}",
         "long": "Artikelkennzeichen für Landkarten im öffentlichen Vertrieb. Kartennummer: {R}",
