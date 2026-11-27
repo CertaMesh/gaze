@@ -124,6 +124,7 @@ fn prose_ids_protect_one_whole_token_and_restore_its_source_bytes() {
         ("My case number ", "Q73", "."),
         ("My claim ID: ", "X42", "."),
         ("My customer ID: ", "AB3–Q7", "."),
+        ("Customer ID: ", "AB3--Q7", "."),
         ("Lookup ", "A-B-C-D-38451", "."),
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
@@ -152,7 +153,9 @@ fn carrier_and_artifact_names_are_not_prose_record_ids() {
     for text in [
         "Release ACCT_57293 fixes a compiler warning.",
         "Release `ACCT_57293` fixes a compiler warning.",
+        "Release (ACCT_57293) is documented.",
         "Build tag: ACCT_57293",
+        "The build number is `ACCT_57293`.",
         "Draft AX-4111111111111112.",
         r#"{"comment":"＂","name":"ACCT_57293"}"#,
     ] {

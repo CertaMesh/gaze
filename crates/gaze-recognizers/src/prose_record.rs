@@ -36,7 +36,7 @@ impl ProseRecordRecognizer {
     ) -> crate::Result<Self> {
         // A connector is mandatory (including the period in `Fall-Nr.123`).
         // The cue owns one value on its own line, not the next word containing a digit.
-        let cue = Regex::new(&format!(r#"(?i)\b(?:{cue})(?:[\p{{Zs}}\t]*[.:=#]+[\p{{Zs}}\t]*|[\p{{Zs}}\t]+)(?:(?:is|as|ist|lautet)[\p{{Zs}}\t]+)?["'„“]?(?P<value>[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*(?:[\p{{Pd}}_/:.][\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*)*)"#)).map_err(RecognizerError::InvalidRegex)?;
+        let cue = Regex::new(&format!(r#"(?i)\b(?:{cue})(?:[\p{{Zs}}\t]*[.:=#]+[\p{{Zs}}\t]*|[\p{{Zs}}\t]+)(?:(?:is|as|ist|lautet)[\p{{Zs}}\t]+)?["'„“]?(?P<value>[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*(?:[\p{{Pd}}_/:.]+[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*)*)"#)).map_err(RecognizerError::InvalidRegex)?;
         Ok(Self {
             id,
             class,
@@ -115,6 +115,11 @@ impl Recognizer for ProseRecordRecognizer {
                 Regex::new(r"\b[\p{L}\p{N}]+(?:[\p{Pd}_/][\p{L}\p{N}]+)+\b")
                     .expect("static compound token regex")
             });
+            static ARTIFACT: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(r#"(?i)\b(?:release|build|version|katalognummer)\b(?:[\p{Zs}\t]+(?:tag|id|number|nr)\b)?(?:[\p{Zs}\t]+(?:is|ist|lautet)\b)?[\p{Zs}\t:#`"'„“(\[]+"#)
+                    .expect("static artifact label regex")
+            });
+            let mut owners = ARTIFACT.find_iter(input).peekable();
             let mut seeds: Vec<_> = ctx
                 .prior_candidates
                 .unwrap_or_default()
@@ -141,20 +146,14 @@ impl Recognizer for ProseRecordRecognizer {
                 }
                 // An immediate artifact label owns the unqualified value, not a more
                 // distant mention of a person. Independent detectors still see the text.
-                let mut words = input[..token.start()]
-                    .trim_end_matches([' ', '\t', ':', '#', '`', '"', '\'', '„', '“'])
-                    .rsplit([' ', '\t', '\n']);
-                let mut owner = words.next().unwrap_or_default();
-                if matches!(
-                    owner.to_ascii_lowercase().as_str(),
-                    "tag" | "id" | "number" | "nr"
-                ) {
-                    owner = words.find(|w| !w.is_empty()).unwrap_or_default();
-                }
-                if matches!(
-                    owner.to_ascii_lowercase().as_str(),
-                    "release" | "build" | "version" | "katalognummer"
-                ) {
+                while owners
+                    .next_if(|label| label.end() < token.start())
+                    .is_some()
+                {}
+                if owners
+                    .next_if(|label| label.end() == token.start())
+                    .is_some()
+                {
                     continue;
                 }
                 let mut groups = value.split(|c: char| !c.is_alphanumeric());
@@ -176,7 +175,8 @@ impl Recognizer for ProseRecordRecognizer {
                     || seeds[first..]
                         .iter()
                         .take_while(|r| r.start < token.end())
-                        .any(|r| r.end <= token.end())
+                        // A rule already covering the whole ID has no missing boundary.
+                        .any(|r| r.end <= token.end() && **r != token.range())
                 {
                     matches.push(token.range());
                 }
