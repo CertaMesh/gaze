@@ -148,3 +148,13 @@ def test_own_cores_outside_the_possible_range_fail():
     assert any("own_cores" in f for f in f8.check(r, BUDGETS))
     r["host"]["probes"] = [dict(QUIET, own_cores=1.0), QUIET]
     assert any("own_cores" in f for f in f8.check(r, BUDGETS))
+
+def test_every_amendment_matches_the_live_budget():
+    # A budget changes only through a dated amendment; the latest one per budget is in force.
+    latest = {}
+    for amendment in BUDGETS["amendments"]:
+        assert amendment["date"] and amendment["reason"] and amendment["measurements"]
+        for name, change in amendment["change"].items():
+            latest[(amendment["envelope"], name)] = change["to"]
+    for (envelope, name), value in latest.items():
+        assert BUDGETS["envelopes"][envelope]["budgets"][name] == value
