@@ -297,6 +297,25 @@ pub(crate) fn register_rulepack_recognizers(
                     collision.clone(),
                 );
             }
+            RawMatch::ProseRecordId {
+                ref cue_pattern,
+                complete_joined,
+            } => {
+                builder.recognizer_with_membership(
+                    gaze_recognizers::ProseRecordRecognizer::new(
+                        recognizer.id,
+                        recognizer.class,
+                        cue_pattern,
+                        complete_joined,
+                        recognizer.scoring.base,
+                        recognizer.scoring.priority,
+                        recognizer.token.family.unwrap_or_else(|| "counter".into()),
+                        recognizer.locales,
+                        recognizer.locale_basis,
+                    )?,
+                    collision.clone(),
+                );
+            }
             RawMatch::FieldLabelled { field_labels, .. } => {
                 // Field context is format provenance: a label binds in every document locale.
                 builder.recognizer_with_membership(

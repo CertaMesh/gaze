@@ -1350,7 +1350,19 @@ impl RecognizerRegistry {
         }) {
             candidates.extend(detect_declared(recognizer.as_ref(), input, ctx)?);
         }
-        let post_candidates = self.detect_post_candidates(input, ctx, &candidates)?;
+        let validated = self
+            .entries
+            .iter()
+            .any(|r| r.requires_validated_prior())
+            .then(|| {
+                crate::validator_veto::apply(candidates.clone(), self, input, ctx.source_spans).0
+            });
+        let post_candidates = self.detect_post_candidates(
+            input,
+            ctx,
+            &candidates,
+            validated.as_deref().unwrap_or_default(),
+        )?;
         candidates.extend(post_candidates);
         Ok(candidates)
     }
@@ -1360,12 +1372,14 @@ impl RecognizerRegistry {
         input: &str,
         ctx: &DetectContext<'_>,
         prior: &[Candidate],
+        validated: &[Candidate],
     ) -> Result<Vec<Candidate>, DetectError> {
         let locale_chain = LocaleChain::from(ctx.locale_chain);
         let mut prior_ctx =
             DetectContext::new(ctx.locale_chain, ctx.dictionaries).with_prior_candidates(prior);
         prior_ctx.source_spans = ctx.source_spans;
         prior_ctx.fields = ctx.fields;
+        prior_ctx.structured_carrier = ctx.structured_carrier;
         prior_ctx.degraded.set(ctx.degraded.get());
         let mut added = Vec::new();
         for recognizer in self.entries.iter().filter(|recognizer| {
@@ -1373,6 +1387,11 @@ impl RecognizerRegistry {
                 && (recognizer.locale_basis() == LocaleBasis::Format
                     || locale_chain.intersects(recognizer.locales()))
         }) {
+            prior_ctx.prior_candidates = Some(if recognizer.requires_validated_prior() {
+                validated
+            } else {
+                prior
+            });
             added.extend(detect_declared(recognizer.as_ref(), input, &prior_ctx)?);
         }
         ctx.degraded.set(prior_ctx.degraded.get());
@@ -1475,6 +1494,7 @@ impl RecognizerRegistry {
                     DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
                 locale_ctx.source_spans = ctx.source_spans;
                 locale_ctx.fields = ctx.fields;
+                locale_ctx.structured_carrier = ctx.structured_carrier;
                 locale_ctx.degraded.set(ctx.degraded.get());
                 let mut class_candidates = Vec::new();
                 for (index, recognizer) in self
@@ -1550,15 +1570,21 @@ impl RecognizerRegistry {
             .filter(|candidate| !candidate.regex_guard_rejected)
             .cloned()
             .collect::<Vec<_>>();
-        let post_candidates = self.detect_post_candidates(input, ctx, &active_candidates)?;
-        candidates.extend(
+        let (mut candidates, mut vetoed) =
+            crate::validator_veto::apply(candidates, self, input, ctx.source_spans);
+        let post_candidates =
+            self.detect_post_candidates(input, ctx, &active_candidates, &candidates)?;
+        let (post, post_vetoed) = crate::validator_veto::apply(
             post_candidates
                 .into_iter()
-                .filter(|candidate| candidate.score >= min_score(&candidate.class)),
+                .filter(|candidate| candidate.score >= min_score(&candidate.class))
+                .collect(),
+            self,
+            input,
+            ctx.source_spans,
         );
-
-        let (mut candidates, vetoed) =
-            crate::validator_veto::apply(candidates, self, input, ctx.source_spans);
+        candidates.extend(post);
+        vetoed.extend(post_vetoed);
 
         // A labelled capture may extend through grouped value bytes, but an independently
         // validated value of another class starts a new field. A vetoed lookalike must never

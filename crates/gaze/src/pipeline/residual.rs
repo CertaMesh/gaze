@@ -85,6 +85,7 @@ pub(super) fn fragment_action(action: Action) -> Action {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn plan(
     pipeline: &Pipeline,
     segment: &occurrence::Segment,
@@ -93,6 +94,7 @@ pub(super) fn plan(
     raw: &str,
     context: &RuleContext,
     locales: &[crate::LocaleTag],
+    records: &record_policy::RecordPolicy,
 ) -> Result<Plan> {
     #[cfg(test)]
     let mut work = Work::default();
@@ -117,16 +119,25 @@ pub(super) fn plan(
     // Require the original policy as well as its real standalone fallback policy.
     let mut admitted = Vec::with_capacity(segment.originals.len());
     let mut actions = Vec::with_capacity(segment.originals.len());
-    for (candidate, (class, _)) in segment.originals.iter().zip(&views) {
-        let own = preview(&candidate.class);
-        let view = preview(class);
+    for ((candidate, (class, _)), span) in segment
+        .originals
+        .iter()
+        .zip(&views)
+        .zip(&segment.original_raw)
+    {
+        let own = records.preview(span, preview(&candidate.class));
+        let view = records.preview(span, preview(class));
         admitted.push(protective(own) && protective(view));
         actions.push(view.map(fragment_action));
     }
     let blocking = segment
         .selections
         .iter()
-        .map(|selection| preview(&selection.class).map(Action::is_protective))
+        .map(|s| {
+            records
+                .preview(&s.raw, preview(&s.class))
+                .map(Action::is_protective)
+        })
         .collect::<Vec<_>>();
     let blocks = blocking
         .iter()

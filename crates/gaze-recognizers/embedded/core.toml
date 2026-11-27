@@ -2168,6 +2168,7 @@ license = "Apache-2.0"
 id = "customer_id.field"
 safety_tier = "safe_default"
 class = "custom:customer_id"
+cooperates_with = ["customer_id.prose"]
 enabled = true
 locales = ["global"]
 locale_basis = "format"
@@ -2195,6 +2196,7 @@ license = "Apache-2.0"
 id = "employee_id.field"
 safety_tier = "safe_default"
 class = "custom:employee_id"
+cooperates_with = ["employee_id.prose"]
 enabled = true
 locales = ["global"]
 locale_basis = "format"
@@ -2225,6 +2227,7 @@ license = "Apache-2.0"
 id = "record_id.field"
 safety_tier = "safe_default"
 class = "custom:record_id"
+cooperates_with = ["record_id.prose"]
 enabled = true
 locales = ["global"]
 locale_basis = "format"
@@ -2249,3 +2252,52 @@ priority = 100
 [recognizers.source]
 origin = "project-authored"
 license = "Apache-2.0"
+
+[[recognizers]]
+id = "customer_id.prose"
+safety_tier = "safe_default"
+class = "custom:customer_id"
+cooperates_with = ["customer_id.field"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+[recognizers.match]
+kind = "prose_record_id"
+cue_pattern = '''customer[ \t-]+(?:id|number)|kundennummer|kunden[- ]id'''
+[recognizers.scoring]
+base = 0.90
+priority = 100
+[recognizers.token]
+
+[[recognizers]]
+id = "employee_id.prose"
+safety_tier = "safe_default"
+class = "custom:employee_id"
+cooperates_with = ["employee_id.field"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+[recognizers.match]
+kind = "prose_record_id"
+cue_pattern = '''employee[ \t-]+(?:id|number)|personalnummer|mitarbeiter[- ]id'''
+[recognizers.scoring]
+base = 0.90
+priority = 100
+[recognizers.token]
+
+[[recognizers]]
+id = "record_id.prose"
+safety_tier = "safe_default"
+class = "custom:record_id"
+cooperates_with = ["record_id.field"]
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+[recognizers.match]
+kind = "prose_record_id"
+cue_pattern = '''(?:case|claim|member)[ \t-]+(?:id|number)|(?:my|your|his|her|our|their)[ \t]+(?:case|claim)(?:[ \t-]+(?:id|number))?|fallnummer|fall[- ]nr|(?-i:FN)|versichertennummer|mrn'''
+complete_joined = true
+[recognizers.scoring]
+base = 0.87
+priority = 85
+[recognizers.token]

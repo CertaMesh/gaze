@@ -108,6 +108,168 @@ fn path(segments: &[&str]) -> FieldPath {
 }
 
 #[test]
+fn prose_ids_protect_one_whole_token_and_restore_its_source_bytes() {
+    let (pipeline, active) = stock();
+    for (before, id, after) in [
+        ("Please look up ", "LLY-40718", "."),
+        ("See ", "KC-96-11842", " again."),
+        ("Lookup ", "ACCT_IN_40871", "; thanks."),
+        ("Check ", "ACCT/IN/40871", " today."),
+        ("Meine Fall-Nr.", "64312071", ", bitte prüfen."),
+        ("Meine Fall-Nr. ist ", "Q73", "."),
+        ("FN: ", "6412\u{200b}5072", "."),
+        ("The customer ID is ", "nx_6418/z2", "."),
+        ("Employee ID: ", "qr-701829", " was entered."),
+        ("[handoff] My case ", "Q73", " is open."),
+        ("My case number ", "Q73", "."),
+        ("My claim ID: ", "X42", "."),
+        ("My customer ID: ", "AB3–Q7", "."),
+        ("Customer ID: ", "AB3--Q7", "."),
+        ("Lookup ", "A-B-C-D-38451", "."),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let raw = format!("{before}{id}{after}");
+        let cleaned = clean(&pipeline, &active, &session, &raw).unwrap();
+        let replacement = cleaned
+            .strip_prefix(before)
+            .and_then(|s| s.strip_suffix(after));
+        assert!(
+            replacement.is_some_and(|s| s.starts_with('<')
+                && s.ends_with('>')
+                && s.matches('<').count() == 1
+                && !s.to_lowercase().contains("postal")),
+            "{raw} -> {cleaned}"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            raw
+        );
+    }
+}
+
+#[test]
+fn carrier_and_artifact_names_are_not_prose_record_ids() {
+    let (pipeline, active) = stock();
+    for text in [
+        "Release ACCT_57293 fixes a compiler warning.",
+        "Release `ACCT_57293` fixes a compiler warning.",
+        "Release (ACCT_57293) is documented.",
+        "Build tag: ACCT_57293",
+        "The build number is `ACCT_57293`.",
+        "Draft AX-4111111111111112.",
+        r#"{"comment":"＂","name":"ACCT_57293"}"#,
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert_eq!(clean(&pipeline, &active, &session, text).unwrap(), text);
+    }
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let fields = std::collections::BTreeMap::from([(
+        "name".to_owned(),
+        gaze::Value::String("ACCT_57293".to_owned()),
+    )]);
+    let out = pipeline
+        .pseudonymize_transaction_with_detect_context(
+            &mut session.begin_transaction(),
+            RawDocument::Structured(fields.clone()),
+            active.as_slice(),
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+    assert!(matches!(out, CleanDocument::Structured(actual) if actual == fields));
+}
+
+#[test]
+fn completed_record_cannot_restore_an_irreversibly_redacted_postal_suffix() {
+    let (pipeline, active) = pipeline(
+        "[[rule]]\nkind = \"class\"\nclass = \"custom:postal_code\"\naction = \"redact\"\n",
+        r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
+    );
+    let rows = Rows::default();
+    let pipeline = pipeline.with_redaction_logger(rows.clone());
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let cleaned = clean(&pipeline, &active, &session, "LLY-40718").unwrap();
+    assert_eq!(cleaned, "[REDACTED]");
+    let entries = std::mem::take(&mut *rows.0.lock().unwrap());
+    let winner = entries.iter().find(|row| !row.conflict_loser).unwrap();
+    assert_eq!(winner.action, gaze::Action::Redact);
+    assert_eq!(winner.source, "prose_record_id");
+    assert_eq!(winner.class, gaze::PiiClass::custom("record_id").unwrap());
+    assert_eq!(
+        pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+        cleaned
+    );
+    assert!(!session
+        .snapshot_entries()
+        .iter()
+        .any(|e| e.raw.contains("40718")));
+}
+
+#[test]
+fn prose_completion_preserves_the_policy_of_an_enclosed_card() {
+    let (pipeline, active) = pipeline(
+        "[[rule]]\nkind = \"class\"\nclass = \"custom:credit_card\"\naction = \"redact\"\n",
+        r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
+    );
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let raw = "Reference: AX-4111111111111111.";
+    let output = clean(&pipeline, &active, &session, raw).unwrap();
+    assert!(
+        !output.contains("AX-") && !output.contains("4111111111111111"),
+        "{output}"
+    );
+    assert!(output.ends_with("[REDACTED]."), "{output}");
+    assert!(!session
+        .snapshot_entries()
+        .iter()
+        .any(|e| e.raw.contains("4111111111111111")));
+}
+
+#[test]
+fn outer_record_policy_covers_nested_and_independent_detections_in_either_order() {
+    let (pipeline, active) = pipeline_for_probe(
+        "[[rule]]\nkind = \"class\"\nclass = \"custom:employee_id\"\naction = \"redact\"\n",
+    );
+    for raw in [
+        "Employee ID: AX-4111111111111111.",
+        "Employee ID: ACCT_57293. Later ACCT_57293.",
+        "See ACCT_57293. Employee ID: ACCT_57293.",
+        "See ＡＣＣＴ_５７２９３. Employee ID: ACCT_57293.",
+        "See AX-4111111111111111. Employee ID: AX-4111111111111111.",
+        "Employee ID: AX-4111111111111111. Card: 4111111111111111.",
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let cleaned = clean(&pipeline, &active, &session, raw).unwrap();
+        assert!(cleaned.contains("[REDACTED"), "{cleaned}");
+        assert!(
+            !cleaned.chars().any(char::is_numeric)
+                && !cleaned.contains("AX-")
+                && !cleaned.contains("ACCT_"),
+            "{cleaned}"
+        );
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            cleaned
+        );
+        assert!(
+            session.snapshot_entries().is_empty(),
+            "no restorable fragments: {raw}"
+        );
+    }
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let cleaned = clean(
+        &pipeline,
+        &active,
+        &session,
+        "Employee ID: ACCT_57293. Later ACCT_64817.",
+    )
+    .unwrap();
+    assert_eq!(
+        pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+        "Employee ID: [REDACTED]. Later ACCT_64817."
+    );
+}
+
+#[test]
 fn labelled_strings_protect_with_shape_and_restore() {
     let (pipeline, active) = stock();
     for (input, raw) in [

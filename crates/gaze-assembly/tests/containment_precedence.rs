@@ -262,6 +262,29 @@ fn assert_protected_claims_replaced(
 // ---------------------------------------------------------------------------
 // One entity, one token.
 
+#[test]
+fn record_floor_reaches_the_url_enclosing_an_independent_card_copy() {
+    let employee = "Employee ID: AX-4111111111111111.";
+    let url = "Later https://example.invalid/?x=4111111111111111.";
+    let unrelated = "https://other.example.invalid/help";
+    let policy = policy("en-US", &[("custom:employee_id", Action::Redact)], "");
+    for (first, second) in [(employee, url), (url, employee)] {
+        let run = clean_run(&policy, &format!("{first} {second} See {unrelated}."), None);
+        assert!(!run.text.contains(unrelated));
+        let restored = run.session.restore_strict_text(&run.text).unwrap();
+        assert!(restored.contains(unrelated));
+        assert!(!restored.contains("4111111111111111"), "{restored}");
+        assert!(run.logger.entries().iter().any(|row| !row.conflict_loser
+            && row.class.as_custom_name() == Some("url")
+            && row.action == Action::Redact));
+        assert!(!run
+            .session
+            .snapshot_entries()
+            .iter()
+            .any(|e| e.raw.contains("4111111111111111")));
+    }
+}
+
 /// The reference letter: five tokens on main, one IBAN token now.
 #[test]
 fn pl_letter_is_one_iban_token_under_all_tokenize() {
