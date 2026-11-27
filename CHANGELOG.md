@@ -169,13 +169,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in prose: `password.prose` for passwords and passphrases given after an EN/DE
   password cue, `security_token.prose` for security codes, tokens and API keys
   behind an explicit security cue, and `security_token.pem_base64` for
-  base64-encoded private keys such as Kubernetes `tls.key` values. Credential
-  metadata (names, hints, policies, lengths), card verification digits and
-  encoded public certificates stay raw.
+  base64-encoded private keys such as Kubernetes `tls.key` values, wrapped,
+  indented or JSON-escaped. Credential metadata (names, hints, policies,
+  lengths), card verification digits, encoded public certificates, and code
+  and agent text beside a credential word (model names, versions, file names,
+  identifiers, paths) stay raw.
 - `driver_license.cue_anchored` also protects licence numbers with a second
-  letter group after the first, such as `B-XY123456` and `NZDL1234567`.
+  letter group after the first, such as `B-XY123456` and `NZDL1234567`, behind
+  a driver cue; the generic `license number` cue keeps one letter group.
 - Benchmark generator v31 adds EN/DE prose credential and base64 private-key
   cells with benign counterweights; generator v30 rebuilds byte-for-byte.
+  Generator v32 adds further credential forms and agent-text counterweights;
+  generator v31 rebuilds byte-for-byte.
 - Policies accept an `[outcomes]` table with `possibly_sensitive = "protect"`
   (default), `"refuse"` or `"pass_audited"`. No recognizer produces that
   outcome yet, so output is unchanged. Untransformable refusals now have one

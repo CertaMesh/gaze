@@ -416,6 +416,8 @@ fn driver_license_with_a_second_letter_group() {
     ] {
         assert_id_removed(text, value, &context);
     }
+    // The generic `license number` cue also names software licences; it keeps one letter group.
+    assert_unchanged("Enter the license number WIN-PRO123456 to activate Office.");
 }
 
 #[test]
@@ -1687,8 +1689,9 @@ fn shared_connector_grammar_is_byte_identical_across_the_family() {
     // Then the count, so an EXTRA stray copy (or a sixth rule that forgot to join the array) is caught too.
     assert_eq!(
         core.matches(SHARED_CONNECTOR).count(),
-        CONNECTOR_FAMILY.len() + 2,
-        "each family uses the shared connector; the labelled tax rule has three cue/value arms",
+        CONNECTOR_FAMILY.len() + 3,
+        "each family uses the shared connector; the labelled tax rule has three cue/value arms \
+         and the cued driver-licence rule two",
     );
 }
 

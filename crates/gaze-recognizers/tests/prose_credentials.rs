@@ -92,6 +92,49 @@ fn a_password_named_in_prose_is_one_span_without_its_sentence_punctuation() {
 }
 
 #[test]
+fn a_password_with_spaces_quotes_or_brackets_is_protected_whole() {
+    for (raw, value) in [
+        (
+            "Das Passwort lautet \"Grüne Tür 7 offen\".",
+            "Grüne Tür 7 offen",
+        ),
+        (
+            "The passphrase is \"blue Moon 42 rising\".",
+            "blue Moon 42 rising",
+        ),
+        ("The password is \"Xk9#mmL2 ab\".", "Xk9#mmL2 ab"),
+        (
+            "The passphrase is \"correct horse battery staple\".",
+            "correct horse battery staple",
+        ),
+        (
+            "My password is \"correct field horse 7\"",
+            "correct field horse 7",
+        ),
+        ("My password is \"Tr'ust9x\" now.", "Tr'ust9x"),
+        ("Das Passwort ist Fj0rd'Tal99 seit gestern.", "Fj0rd'Tal99"),
+        ("password: Fj0rd\"Tal99", "Fj0rd\"Tal99"),
+        (
+            "{\"msg\":\"Das Passwort ist \\\"Fj0rd#Tal99\\\".\"}",
+            "Fj0rd#Tal99",
+        ),
+        (
+            "{\"message\":\"my password is \\\"Qu1ll#Xy\\\" ok\"}",
+            "Qu1ll#Xy",
+        ),
+        ("The password is Xk9(mmL2 ok", "Xk9(mmL2"),
+        ("The password is Xk9{mm}L2 now.", "Xk9{mm}L2"),
+        ("The password is gr8-Pa55w0rd(old).", "gr8-Pa55w0rd(old)"),
+        (
+            "Note that my email password is now Quarry2'Kranich66 after the lockout.",
+            "Quarry2'Kranich66",
+        ),
+    ] {
+        assert_credential(raw, "password", value);
+    }
+}
+
+#[test]
 fn password_words_without_a_credential_value_stay_raw() {
     for raw in [
         "Your password must contain at least 12 characters and one digit.",
@@ -103,6 +146,17 @@ fn password_words_without_a_credential_value_stay_raw() {
         "Password policy (version 2 applies): rotate every 90 days.",
         "Your password: ********",
         "'password' => Hash::make('secret'),",
+        "The password is read from DB_PASSWORD.",
+        "Store the password as bcrypt_hash in the DB.",
+        "Please reset the password as admin_user first.",
+        "The password is user_password_hash.",
+        "Load the password from vault/kv/app before it works.",
+        "The password is ~/.config/app/pw",
+        "Password is at C:\\Users\\bob2\\pw.txt",
+        "Read the password from $DB_PASS_2 at startup.",
+        "The password is \"too short\".",
+        "The password file is secrets2.txt in the repo.",
+        "Migration 12 renamed the password column to pwd_hash_v2 last sprint.",
     ] {
         assert_no_credential(raw);
     }
@@ -151,6 +205,20 @@ fn short_numbers_and_words_behind_a_security_cue_stay_raw() {
         "API key name: ci-deploy-07",
         "API key rotation job rotate-keys-2026 finished.",
         "Der Sicherheitscode-Hinweis für Konto SEC-4821 wurde entfernt.",
+        "The API key works with claude-3-opus and gpt-4-turbo.",
+        "Rotate the API key before deploying release v2.14.0-rc1.",
+        "API key fehlt in Version 2.1.0beta3.",
+        "The API key version is 2.1.0beta3.",
+        "The security code check failed on commit 3f9a2b1c.",
+        "Access token lifetime is configured in settings_v2.py.",
+        "Our API key for Stripe lives in us-east-1 now.",
+        "The API key region is us-east-1.",
+        "The session token is refreshed by auth_service_v2 every hour.",
+        "API key usage is tracked in table api_usage_2024.",
+        "The access token comes from get_token_v2 here.",
+        "The verification code was sent at 20261127 09:00.",
+        "The security code CVE-2024-12345 was patched.",
+        "The API key is gpt-4o-mini compatible.",
     ] {
         assert_no_credential(raw);
     }
@@ -200,6 +268,18 @@ fn a_base64_encoded_private_key_is_protected_whole_at_every_alignment() {
         &format!("{wrapped}\nkind: Secret\n"),
         "security_token",
         &wrapped,
+    );
+    let indented = wrapped.replace('\n', "\n    ");
+    assert_credential(
+        &format!("data:\n  tls.key: |\n    {indented}\n  tls.crt: none\n"),
+        "security_token",
+        &indented,
+    );
+    let escaped = wrapped.replace('\n', "\\n");
+    assert_credential(
+        &format!("{{\"k\":\"{escaped}\"}}"),
+        "security_token",
+        &escaped,
     );
     assert_credential(
         &format!("{{\"tls.key\":\"{}\"}}", blob.replace('/', "\\/")),

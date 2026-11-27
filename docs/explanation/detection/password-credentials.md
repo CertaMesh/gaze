@@ -132,25 +132,39 @@ cover these, and the private keys that deployment files carry base64-encoded.
 
 `password.prose` starts at a password, passphrase, Passwort or Kennwort cue,
 including German compounds such as `WLAN-Passwort`. The value follows the cue
-directly, after `:` or `=`, after a copula or preposition (`is`, `was`, `to`,
-`as`, `from`, `ist`, `lautet`, `sei`, `auf`, `zu`, `von`) that may come behind
-up to eight connector words, or in quotes behind those words. An unquoted value
-needs a digit or a symbol other than word punctuation, so `password to log in`
-and `password reset-link` are not credentials. A trailing `!` stays in the
-value; sentence punctuation does not. The context guard refuses values under
-six characters, plain words, symbol-only placeholders such as `********`, URLs,
-email addresses, and matches whose connector words name credential metadata
-(name, label, hint, policy, length, rotation, template, field, and their German
-equivalents): a password's hint or policy is not the password.
+after `:` or `=`, or after a copula or preposition (`is`, `was`, `to`, `as`,
+`from`, `ist`, `lautet`, `sei`, `auf`, `zu`, `von`) that may come behind up to
+eight connector words; there a quoted value may be any phrase of six or more
+characters, so `The passphrase is "correct horse battery staple"` is protected.
+Directly after the cue, or quoted behind connector words alone, the value needs
+a digit or a symbol. An unquoted value always needs a digit or a symbol other
+than word punctuation, so `password to log in` and `password reset-link` are
+not credentials; `_` does not count, so identifiers such as `DB_PASSWORD` or
+`bcrypt_hash` are not values either. Quotes and brackets inside a value stay
+in it (`Fj0rd'Tal99`, `gr8-Pa55w0rd(old)`), and JSON-escaped quotes
+(`\"…\"`) delimit a value like plain ones. A trailing `!` stays in the value;
+sentence punctuation does not. The context guard refuses values under six
+characters, one or two plain words, symbol-only placeholders such as
+`********`, URLs, email addresses, paths without digits, Windows paths,
+environment references and ALL_CAPS identifiers. It also refuses matches whose
+cue part names credential metadata (name, label, hint, policy, length,
+rotation, template, field, hash, file, path, model, version, region, endpoint,
+table, service, commit, and their German equivalents): a password's hint or
+policy is not the password. Metadata words inside a quoted value do not count.
 
 `security_token.prose` starts at an explicit security cue: German
 `Sicherheits-`, `Zugangs-`, `Anmelde-`, `Verifizierungs-` and
 `Bestätigungs-` tokens, codes and keys, English security, access, auth,
 verification, session, API, bearer and one-time tokens, codes and keys, and
-`Token-ID`. Up to eight connector words may stand between cue and value. The
-value has at least eight characters and both a letter and a digit, or is an
-all-digit one-time code of six to eight digits. Three- and four-digit card
-security codes stay raw here; the same metadata guard applies. The bare word `token` is not a cue, because agent text uses it for
+`Token-ID`. The value follows the cue directly, or after `:`, `=`, `,` or a
+copula (`is`, `ist`, `lautet`, `der Code`, …) that may come behind up to eight
+connector words. Connector words alone never introduce a value, so in
+`Rotate the API key before deploying release v2.14.0-rc1` the version stays
+text. The value has at least eight characters and both a letter and a digit,
+or is an all-digit one-time code of six to eight digits. Three- and four-digit
+card security codes stay raw here. The same metadata guard applies, and
+versions, model names (`gpt-4o-mini`, `claude-3-opus`), CVE identifiers, file
+names and numbered snake_case identifiers (`auth_service_v2`) are refused. The bare word `token` is not a cue, because agent text uses it for
 model tokens and tokenizer names; a value introduced only by `token` therefore
 stays raw unless the anchored rule owns it.
 
@@ -159,12 +173,19 @@ stays raw unless the anchored rule owns it.
 protects the whole contiguous base64 run, so `tls.key:` values in Kubernetes
 secrets, `KEY_B64=` environment lines and keys inside a larger encoded JSON
 file are one restorable span. Wrapped `base64` output continues through lines
-of at least 16 characters and a final padded line; an unpadded short final line
+of at least 16 characters and a final padded line, including indented YAML
+block scalars and JSON-escaped `\n` and `\r\n` line breaks; an unpadded short final line
 stays raw, and it encodes only the public END armour. Encoded certificates and
 public keys stay raw.
 
 Known residuals: a value placed before its cue (`I entered … as the password`),
-a value after `like`/`wie` without quotes, an unquoted spaced passphrase, and a
-value that ends in `?`, whose last character is read as sentence punctuation.
+a value after `like`/`wie` without quotes, an unquoted spaced passphrase, a
+value that ends in `?`, whose last character is read as sentence punctuation, a
+value that starts with a bracket or ends with an unpaired closing bracket, a
+value in a parenthesised aside, and a security value behind connector words
+without a copula (`Sicherheitscode für den Zugriff auf unser System …`).
+Grouped one-time codes (`482 913`, `4829-13`) and spaced tokens
+(`"k3j9 ww2p x7a9"`) stay raw; a later change owns them together with card
+security codes.
 Generator v31 measures these phrasings with the rest; see the
 [benchmark contract](../../reference/benchmarks/README.md).
