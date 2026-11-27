@@ -1050,7 +1050,7 @@ mod tests {
     #[cfg(feature = "setup")]
     #[test]
     fn setup_flags_decide_whether_the_policy_carries_the_dob_judge() {
-        use gaze_model_setup::InstallOutcome;
+        use crate::model_setup::InstallOutcome;
 
         let ner = PathBuf::from("/tmp/synthetic-ner");
         for (flags, expect_judge) in [(&[][..], false), (&["--dob-judge"][..], true)] {
@@ -1083,7 +1083,7 @@ mod tests {
     #[test]
     fn failed_dob_install_says_how_to_retry_or_skip() {
         let err = setup::resolve_dob_judge(true, None, |_| {
-            Err(gaze_model_setup::SetupError::PathResolve {
+            Err(crate::model_setup::SetupError::PathResolve {
                 message: "offline".to_string(),
             })
         })

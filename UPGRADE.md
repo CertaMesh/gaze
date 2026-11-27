@@ -29,6 +29,17 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: stop depending on `gaze-model-setup`
+
+The `gaze-model-setup` crate is no longer published; its code moved into
+`gaze-cli`. Rust callers of `install_ner_bundle`, `install_nym_bundle`,
+`install_gliner_dob_bundle` or the `default_*_model_dir` helpers should run
+`gaze setup` (or `gaze setup --non-interactive --model-dir <dir>`) instead, or
+keep the last published `gaze-model-setup` 0.17 release pinned. The bundle
+pins and verification (`gaze_recognizers::verify_davlan_ner_bundle`,
+`gaze_recognizers::verify_gliner_dob_bundle` and
+`gaze_recognizers::safety_net::nym::verify_nym_bundle`) are unchanged.
+
 ### Action required: expect strict restore to refuse malformed token spellings
 
 `gaze restore` (strict is the default) and daemon v1 `restore` now refuse text
@@ -149,6 +160,19 @@ correlation, embedded middleware supplies `HostCallContext::audit_session_id` in
 request extensions. The host selects the Session independently of that id.
 `DispatchArgs::session_id` is removed. `rmcp_args_to_dispatch_args` now returns
 `DispatchArgs` directly because translation no longer validates an argument id.
+
+### Action required: give each MCP conversation its own Session
+
+`HostCallContext` gains a `conversation: Option<ConversationId>` field. Struct
+literals must set it or end with `..HostCallContext::default()`.
+
+A host that serves several conversations must not share one `Session` across
+them. Build a `gaze_mcp_core::ConversationRegistry` whose factory receives the
+`ConversationId` and returns a host with that conversation's own Session, then
+serve it with `RmcpFrontend::into_conversation_handler`. Middleware sets
+`HostCallContext::conversation` from an authenticated identity; calls without it
+fail with `conversation-required`. Do not build hosts in the rmcp service factory
+for isolation: under protocol 2026-07-28 rmcp calls it once per request.
 
 ### Action required: replace positional context arrays
 

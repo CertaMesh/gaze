@@ -291,8 +291,8 @@ The supported inputs are `.png`, `.jpg`, `.jpeg`, and single-page `.pdf`. The
 | Verb | Effect |
 |---|---|
 | `install` | Write client config using absolute `current_exe()` with `["mcp", "serve"]`; update marker-fenced AGENTS.md guidance idempotently. |
-| `doctor` | Check dependencies, config, manifest store and guidance marker. |
-| `serve` | Run stdio MCP with agent-tier `gaze_read_file` and `gaze_read_text`. |
+| `doctor` | Check dependencies, config, manifest store and guidance marker; report the protection profile and session scope. |
+| `serve` | Run stdio MCP with agent-tier `gaze_read_file` and `gaze_read_text`. Each connection has its own memory-only Session. |
 
 ```sh
 cargo install gaze-cli --features mcp,document
