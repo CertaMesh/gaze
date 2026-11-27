@@ -181,10 +181,20 @@ before it is read and cached in `target/heldout-panels/`; nothing is
 committed. Each document runs in its own daemon session. The report carries
 both corpora's attribution.
 
-Neither script enters the gain gate, the capture or the benchmark
-specification: each writes only its own report, and no capture or gate module
-imports them. Do not tune a rule against a panel; a tuned panel is no longer
-held out.
+Each panel's label-scope map is frozen in `heldout_panels.py`: a gold label
+without a ruling stops the run. The `DISPUTED` ledger there records where a
+panel's annotation policy differs from Gaze's contract, such as GraSCCo ward
+and room codes labelled `ID`, and the standalone places and brand uses that
+PrivacyBench+ leaves unlabelled. The report lists what each entry covers beside
+the as-annotated scores, which the ledger never changes, and for GraSCCo also
+the exposure with disputed gold treated as neutral.
+
+Neither script enters the gain gate or the capture: each writes only its own
+report, and no capture or gate module imports them, so neither joins the
+capture closure or changes a layer sub-specification. Like every non-test
+module under `scripts/bench/`, they still change the full benchmark
+specification ID. Do not tune a rule against a panel; a tuned panel is no
+longer held out.
 
 ## Scored-label contracts
 

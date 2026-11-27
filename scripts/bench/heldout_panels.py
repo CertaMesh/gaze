@@ -13,6 +13,12 @@ measure real annotated text from outside the project, with the metrics of
   Gaze does not target (generic dates, titles, professions, hospitals,
   countries, ages, organizations) are neutral; the rest are scored.
 
+Each panel's label-scope map (`*_TYPES`, `*_UNTYPED`, `GRASCCO_NEUTRAL`) is
+frozen: a gold label without a ruling stops the run. Known differences between
+a panel's annotation policy and Gaze's contract live in the `DISPUTED` ledger,
+which reports what falls under each entry beside the as-annotated scores and
+never changes them.
+
 The panels stay outside the gain gate and the capture: this script writes
 only its own report, never a record, scorecard or cache entry, and no gate
 or capture module imports it. Never tune a rule against a panel; a panel that
@@ -97,8 +103,78 @@ GRASCCO_NEUTRAL = frozenset({"DATE", "NAME_TITLE", "PROFESSION", "AGE", "LOCATIO
                              "LOCATION_ORGANIZATION", "LOCATION_COUNTRY"})
 
 
+_MAX_CODE_DIGITS = 5
+
+
+def _ward_or_room_code(text: str, start: int, end: int, label: str) -> bool:
+    # Case and record numbers carry long digit runs ("Fallnummer: 23346011");
+    # ward, room and theatre codes ("A33", "3 Süd", "OP II") do not.
+    return label == "ID" and sum(ch.isdigit() for ch in text[start:end]) <= _MAX_CODE_DIGITS
+
+
+# Disputed-label ledger. Each entry is a known difference between a panel's
+# annotation policy and Gaze's contract. The ledger never changes the
+# as-annotated scores; it reports what falls under each entry beside them.
+# `gold` entries match gold spans by rule; `stray` entries match predictions
+# that cover no gold by predicted class.
+DISPUTED: dict[str, tuple[dict, ...]] = {
+    "grascco_pii_v2": ({
+        "key": "ward_room_codes", "applies_to": "gold", "rule": _ward_or_room_code,
+        "rule_text": f"gold ID with at most {_MAX_CODE_DIGITS} digits",
+        "reason": ("GraSCCo labels ward, room and theatre codes as ID. They name a place in a "
+                   "hospital, not a patient, so Gaze does not target them: a policy difference, "
+                   "not a leak."),
+    },),
+    "privacybench_plus": ({
+        "key": "standalone_places", "applies_to": "stray", "classes": frozenset({"location"}),
+        "rule_text": "stray prediction of class location",
+        "reason": ("PrivacyBench+ leaves standalone places (states, cities) unlabelled; Gaze "
+                   "protects them. Masking them costs utility but is restorable."),
+    }, {
+        "key": "brand_uses", "applies_to": "stray", "classes": frozenset({"organization"}),
+        "rule_text": "stray prediction of class organization",
+        "reason": ("PrivacyBench+ leaves brand uses of company names unlabelled. This bucket also "
+                   "holds genuine false positives such as department names; the rule cannot "
+                   "separate them, so it is an upper bound on the disputed share."),
+    }),
+}
+
+
 class PanelError(Exception):
     pass
+
+
+def _overlaps(start: int, end: int, spans) -> bool:
+    return any(s < end and e > start for s, e, *_ in spans)
+
+
+def ledger(panel: str, scored: Sequence[metrics.Item], types: Mapping[str, frozenset[str]],
+           untyped: Mapping[str, str]) -> dict:
+    """What each disputed-label entry covers, and exposure with disputed gold made neutral."""
+    entries, without = {}, list(scored)
+    for entry in DISPUTED.get(panel, ()):
+        row = {"applies_to": entry["applies_to"], "rule": entry["rule_text"], "reason": entry["reason"]}
+        if entry["applies_to"] == "gold":
+            matched = [metrics.Item(i.uid, i.group, i.text,
+                                    [g for g in i.gold if entry["rule"](i.text, *g)],
+                                    i.predictions, neutral=i.neutral) for i in scored]
+            exposure = metrics.score_items(matched, types, untyped)["exposure"]
+            row.update(gold_spans=sum(len(i.gold) for i in matched),
+                       **{k: exposure[k] for k in ("fully_hidden", "partially_exposed", "completely_missed")})
+            without = [metrics.Item(i.uid, i.group, i.text,
+                                    [g for g in i.gold if not entry["rule"](i.text, *g)], i.predictions,
+                                    neutral=[*i.neutral, *((s, e) for s, e, label in i.gold
+                                                          if entry["rule"](i.text, s, e, label))])
+                       for i in without]
+        else:
+            row["stray_predicted_spans"] = sum(
+                1 for i in scored for s, e, cls in i.predictions
+                if cls in entry["classes"] and not _overlaps(s, e, i.gold) and not _overlaps(s, e, i.neutral))
+        entries[entry["key"]] = row
+    result = {"entries": entries}
+    if any(e["applies_to"] == "gold" for e in DISPUTED.get(panel, ())):
+        result["exposure_without_disputed_gold"] = metrics.score_items(without, types, untyped)["exposure"]
+    return result
 
 
 def _sha256(data: bytes) -> str:
@@ -261,6 +337,7 @@ def run(binary: Path, policy: Path, *, panels: Sequence[str], cache: Path, downl
             "daemon_errors": errors,
             "latency_ms": {"p50": _percentile(latencies, 0.5), "p95": _percentile(latencies, 0.95)},
             **metrics.score_items(scored, types, untyped),
+            "disputed_labels": ledger(name, scored, types, untyped),
         }
     return result
 

@@ -125,3 +125,34 @@ def test_a_daemon_that_exits_stops_the_panel(tmp_path):
     items = [panels.metrics.Item(f"d{n}", "g", "Grüße Anna", [], ()) for n in range(3)]
     with pytest.raises(panels.PanelError, match="stub stopped"):
         panels.predict(items, _stub(tmp_path), tmp_path / "policy.toml")
+
+
+def test_ledger_separates_ward_codes_from_case_numbers_without_changing_scores():
+    text = "Station A33, Fallnummer: 23346011, Zimmer 3 Süd."
+    gold = [(8, 11, "ID"), (25, 33, "ID"), (42, 47, "ID")]
+    # Gaze protects the case number only.
+    item = panels.metrics.Item("Muster", "Muster", text, gold, [(25, 33, "custom:record_id")])
+    types, untyped = panels.GRASCCO_TYPES, panels.GRASCCO_UNTYPED
+    before = panels.metrics.score_items([item], types, untyped)
+    result = panels.ledger("grascco_pii_v2", [item], types, untyped)
+    codes = result["entries"]["ward_room_codes"]
+    assert (codes["gold_spans"], codes["fully_hidden"], codes["completely_missed"]) == (2, 0, 2)
+    without = result["exposure_without_disputed_gold"]
+    assert (without["fully_hidden"], without["completely_missed"]) == (1, 0)
+    assert panels.metrics.score_items([item], types, untyped) == before
+    assert before["exposure"]["completely_missed"] == 2
+
+
+def test_ledger_counts_only_unlabelled_place_and_organization_strays():
+    text = "Dr. Schmidt in Ohio met Acme HR on Wednesday."
+    gold = [(4, 11, "NAME_FAMILY")]
+    predictions = [(4, 11, "name"), (15, 19, "location"), (24, 31, "organization"),
+                   (35, 44, "custom:date"), (0, 11, "location")]
+    item = panels.metrics.Item("x", "c", text, gold, predictions)
+    entries = panels.ledger("privacybench_plus", [item], panels.PRIVACYBENCH_TYPES,
+                            panels.PRIVACYBENCH_UNTYPED)["entries"]
+    # The location span overlapping gold is not a stray; the date stray belongs to no entry.
+    assert entries["standalone_places"]["stray_predicted_spans"] == 1
+    assert entries["brand_uses"]["stray_predicted_spans"] == 1
+    assert "exposure_without_disputed_gold" not in panels.ledger(
+        "privacybench_plus", [item], panels.PRIVACYBENCH_TYPES, panels.PRIVACYBENCH_UNTYPED)
