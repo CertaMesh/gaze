@@ -14,7 +14,7 @@ import prose_record_id_cells as cells
 @pytest.mark.parametrize("partition", api.PARTITIONS)
 def test_whole_value_gold_and_public_twins(partition):
     records = cells.records(api, partition)
-    assert Counter(r.layer for r in records) == {"A": 770, "D": 535}
+    assert Counter(r.layer for r in records) == {"A": 770, "D": 555}
     personal, public, selectors, names, numeric = set(), set(), set(), set(), set()
     for r in records:
         assert r.surface.startswith(cells.SURFACE_PREFIX)
@@ -50,6 +50,18 @@ def test_whole_value_gold_and_public_twins(partition):
     assert personal == public
     assert selectors == personal | numeric
     assert names == {v for v in personal if "/" not in v}
+
+
+@pytest.mark.parametrize("partition", api.PARTITIONS)
+def test_case_plus_digits_has_exact_switch_and_test_case_twins(partition):
+    records = cells.records(api, partition)
+    positive = Counter(r.gold[0].value for r in records if r.surface.endswith("_case_digits"))
+    assert positive.total() == api.DOCS_PER_FAMILY
+    for surface, syntax in (("switch", r"switch \(\w+\) \{ case (\d+):"),
+                            ("test_case", r"\btest case (\d+)\b")):
+        twins = [r for r in records if r.family == "public_case" and r.surface.endswith("_" + surface)]
+        assert all(r.layer == "D" and not r.gold for r in twins)
+        assert Counter(n for r in twins for n in re.findall(syntax, r.text)) == positive
 
 
 def test_partitions_have_disjoint_values_and_wording():

@@ -94,6 +94,13 @@ def records(api, partition):
         ):
             emit("A", lang, "record_id", cue, index, template, {"V": (serial, "RECORD_ID")})
         selector("numeric_selector", index, serial)
+        for surface, development, held_out in (
+            ("switch", "switch (opcode) { case {V}: flush(); break; }",
+             "switch (status) { case {V}: return retry(); default: return stop(); }"),
+            ("test_case", "The regression suite includes test case {V} for empty input.",
+             "Please rerun test case {V} after updating the parser."),
+        ):
+            emit("D", "en", "public_case", surface, index, development if dev else held_out, {"V": (serial, None)})
         for shape, pattern in (("compact", "{p}{n}"), ("hyphen", "{p}-{n}"),
                                ("underscore", "{p}_{n}_{s}"), ("slash", "{p}{n}/{s}"),
                                ("mixed", "{p}-{n}/{s}")):

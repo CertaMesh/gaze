@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:8a9917c12b565fd176ab0d5ec3606c2341b6b90dd3a6d3bd32558c2a213ccf53",
+  "id": "gaze-benchmark-v1:884f2c810370129bbca26b9f83d2855fa826cf49fa9b03b06c429a26a4011096",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -9,13 +9,13 @@
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 43055,
+      "documents": 43075,
       "documents_by_layer": {
         "A": 20687,
-        "D": 9567,
+        "D": 9587,
         "R": 12801
       },
-      "corpus_sha256": "011776a9577ec795e76a89689f73a3b3b8c6b4eabbac7de16c351b37a3a7916e",
+      "corpus_sha256": "7b1436623abd78ee3e1a63c277894a9ba5a5a67a772c31cf0982ad2f49cc85ca",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -127,7 +127,7 @@
       "scripts/bench/probe_postal_coverage.py": "f484620e3c7d2f4f100d0b99619a9c05754cb0a9813461cb1e757082a48af364",
       "scripts/bench/producer_build_binding.py": "db267264b37473f81f0cb6db610f48fd2941ad176ed72ba38c8354e7efbcf411",
       "scripts/bench/prose_credential_cells.py": "014163202ab7393252331f2a00d938a148e4e92f029e5303a007f85caf0858cf",
-      "scripts/bench/prose_record_id_cells.py": "7003a07f6bb08e52614410682b7150c147c87fdc2ea9911d4c148273c4401bdc",
+      "scripts/bench/prose_record_id_cells.py": "bfb9efb3a22d981728af2cd3b7b6f5e655ede0fef04f94762922e326b1a53edd",
       "scripts/bench/prove_refusal_history.py": "7853d4ac0b21d124c7bc01bb4e5393fd7c76fe7d32b7ae974002fd1591c2c697",
       "scripts/bench/proxy_request_order.py": "4ee000a628bc3473b1d4e263bd43ac75d90ded20760c66ae0f5322509094baf8",
       "scripts/bench/publish_mcp_operation_evidence.py": "9c0a379c9283855f1527b63df9770a50151fd112c7b4e196c79cbc36837ad5cd",
@@ -356,9 +356,9 @@
         "descriptors_sha256": "4e8f8822a7bc536d836ce009401abf5d5287d6cd9a1f3ebcfbcba0f7619b5653"
       },
       "D": {
-        "documents": 9567,
-        "document_ids_sha256": "c385cc23aa2f1a68518eeadc73ba67464bcfd5ac6d03b53f0bc200f08a71d7e5",
-        "descriptors_sha256": "f116f02698b2ef163150af5508ed141050036d790062f81ba51c273868b541a9"
+        "documents": 9587,
+        "document_ids_sha256": "d6a09ea84531fca1b899a9279614dbd8c631a95e55e204c8e852eb5c5cee5a6b",
+        "descriptors_sha256": "afd3a0a490e2960a97430f002802c64eac3d1894bb04e8ce6c505cc9de385bd7"
       },
       "R": {
         "documents": 12801,
