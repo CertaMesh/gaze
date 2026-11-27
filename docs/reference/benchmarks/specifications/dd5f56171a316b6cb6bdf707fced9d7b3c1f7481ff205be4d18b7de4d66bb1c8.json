@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:509d617f9e9c8312e52ac438c7f0514ce86bd0428deb3d7eadc1a9b0515655a5",
+  "id": "gaze-benchmark-v1:dd5f56171a316b6cb6bdf707fced9d7b3c1f7481ff205be4d18b7de4d66bb1c8",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -9,13 +9,13 @@
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 47157,
+      "documents": 47189,
       "documents_by_layer": {
-        "A": 21977,
-        "D": 11099,
-        "R": 14081
+        "A": 21987,
+        "D": 11111,
+        "R": 14091
       },
-      "corpus_sha256": "d5d6c6946295e56cb7543877e016caf49c12a6e27a419f6a5f7eadda447785dc",
+      "corpus_sha256": "2663ded191a96fc83b3861ef3cf8949e526c32d6dbdb41417abf0386a6bdb752",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -59,7 +59,7 @@
       "scripts/bench/dictionary_sequence_generators.py": "5b16b437dd4f08776ec0029da2759ce32e3774396662bbf76fba0c7144262a55",
       "scripts/bench/dictionary_sequence_history.py": "e2b49d720f676e1b14cd345417c228bb17a36a8436314328f2ca33f8e28e6e70",
       "scripts/bench/dictionary_sequences.py": "e1a3ad188410f2933c24a109b9712645a61da99ca90262e617b566f32f1bcbf3",
-      "scripts/bench/escaped_separator_cells.py": "80881101cf0d275904be04f1df5c3b4eb94b8f7c357161eb0bdd9f2a0a97da19",
+      "scripts/bench/escaped_separator_cells.py": "b29cc8e29e3fc2cd68d796009a48c6eb381f99e0d9840fd7ad0fbfeadbb10c1d",
       "scripts/bench/evidence_bridge.py": "b3f737e35a0242daa579db8f9440d25dab097a4af0b5cf1c44849e99696cc5c0",
       "scripts/bench/evidence_eval.py": "2b9dc86fa742496b20014831b36c13ee65139a39a9f32a5099d42bce7a38c68b",
       "scripts/bench/evidence_home_paths.py": "f20dfe6593e3350d789b60799dad06fa3b135adf12940da12b03b846191b191d",
@@ -233,6 +233,7 @@
       "collision-family:phone-or-imei",
       "cpf.br",
       "customer_id.field",
+      "customer_id.prose",
       "davlan-mbert-ner-hrl-onnx",
       "driver_license.cue_anchored",
       "driver_license.labelled",
@@ -240,6 +241,7 @@
       "email.header.name",
       "email.header.name.paren",
       "employee_id.field",
+      "employee_id.prose",
       "eth.address",
       "iban.cued",
       "iban.structural",
@@ -277,6 +279,7 @@
       "postal.ie",
       "postal.us",
       "record_id.field",
+      "record_id.prose",
       "security_token.anchored",
       "security_token.bare",
       "security_token.code",
@@ -352,19 +355,19 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 21977,
-        "document_ids_sha256": "5eeb78122024a25be45724d09d067b546e80607d949c62baf4b81a6afb9922aa",
-        "descriptors_sha256": "ec0c504791a46905056726d2825b5247788c51db4fb7fbbf7d0fee97c4d140fe"
+        "documents": 21987,
+        "document_ids_sha256": "54013875c1b614a792d878fc1a60bdcf6ac1e3865fe2a485549595113213da0c",
+        "descriptors_sha256": "7d7def3ebcabd07753d66e02a6c740e6c1db53c6fc267a3231e4361e17b10118"
       },
       "D": {
-        "documents": 11099,
-        "document_ids_sha256": "756474da6a4a819797a06095e1d383a74c2a7554668b2dadce62c7b116191e09",
-        "descriptors_sha256": "7778b4e24d20cfe040e6acceeb378ff77d6bad06c80e8ca19b341155a77366a4"
+        "documents": 11111,
+        "document_ids_sha256": "e4cfa169911d50f4686813023a4afec6056b5b8f2d7905681b07374da4b56572",
+        "descriptors_sha256": "94cb5a3e2b2e2d1564f053b47889ba64d03cacabf32a86bf96c56da4990d49ce"
       },
       "R": {
-        "documents": 14081,
-        "document_ids_sha256": "4184b5c9bf73027af759bc14564dab8495a734b7310b3f36a0c1bcce68f2daa8",
-        "descriptors_sha256": "901edcaa1663a17b71be65b2bfc0239a7b262394e4abc6c00566fb0ef0b14eab"
+        "documents": 14091,
+        "document_ids_sha256": "3857c2ff2ac59d8d20a811f1641315bcc0cfb865a60fe122e1e72f27530160ea",
+        "descriptors_sha256": "76985298fea17740c44b6bdcf8f8b2c9054bc10704f8288bcae422b76aa703b8"
       }
     }
   }

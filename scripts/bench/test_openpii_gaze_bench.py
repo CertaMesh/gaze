@@ -1957,7 +1957,8 @@ class ConfigTests(unittest.TestCase):
                   if name.startswith("pinned_rule_")}
         self.assertTrue(all(set(table) == {"id"} for table in pinned.values()), pinned)
         ids = {table["id"] for table in pinned.values()}
-        self.assertEqual(ids, {"customer_id.field", "employee_id.field", "record_id.field"})
+        self.assertEqual(ids, {f"{family}.{surface}" for family in ("customer_id", "employee_id", "record_id")
+                               for surface in ("field", "prose")})
         self.assertTrue(ids <= benchmark.COMMITTED_SOURCE_ID_VOCABULARY)
 
     def test_all_no_opf_config_names_are_present_and_spelled_exactly(self) -> None:

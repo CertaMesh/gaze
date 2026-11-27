@@ -28,3 +28,12 @@ id = "employee_id.field"
 
 [pinned_rule_record_id_field]
 id = "record_id.field"
+
+[pinned_rule_customer_id_prose]
+id = "customer_id.prose"
+
+[pinned_rule_employee_id_prose]
+id = "employee_id.prose"
+
+[pinned_rule_record_id_prose]
+id = "record_id.prose"

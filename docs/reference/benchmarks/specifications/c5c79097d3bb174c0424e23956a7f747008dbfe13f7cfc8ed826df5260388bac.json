@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:8c6bea3500e646c4be39d7aef7e046defe6362c655a12ba2c3df5d7f43983cc9",
+  "id": "gaze-benchmark-v1:c5c79097d3bb174c0424e23956a7f747008dbfe13f7cfc8ed826df5260388bac",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -232,6 +232,7 @@
       "collision-family:phone-or-imei",
       "cpf.br",
       "customer_id.field",
+      "customer_id.prose",
       "davlan-mbert-ner-hrl-onnx",
       "driver_license.cue_anchored",
       "driver_license.labelled",
@@ -239,6 +240,7 @@
       "email.header.name",
       "email.header.name.paren",
       "employee_id.field",
+      "employee_id.prose",
       "eth.address",
       "iban.cued",
       "iban.structural",
@@ -276,6 +278,7 @@
       "postal.ie",
       "postal.us",
       "record_id.field",
+      "record_id.prose",
       "security_token.anchored",
       "security_token.bare",
       "security_token.code",

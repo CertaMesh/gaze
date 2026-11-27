@@ -35,7 +35,9 @@ def strings(value):
 def test_carriers_decode_once_and_raw_source_bytes_are_fully_annotated(partition):
     rows = cells.records(api, partition)
     assert len({r.uid for r in rows}) == len(rows)
-    assert Counter(r.layer for r in rows) == {"A": 1280, "D": 1482, "R": 1280}
+    assert Counter(r.layer for r in rows) == {"A": 1290, "D": 1494, "R": 1290}
+    # The non-matrix cases have different carrier and decoding contracts below.
+    rows = [r for r in rows if not r.surface.startswith(cells.SURFACE_PREFIX + "carrier_")]
     by_surface = Counter((r.surface, r.layer) for r in rows)
     assert by_surface.pop((cells.SURFACE_PREFIX + "literal_zwsp_views", "D")) == 10
     assert len(by_surface) == 32 * 3
@@ -77,6 +79,68 @@ def test_carriers_decode_once_and_raw_source_bytes_are_fully_annotated(partition
         assert all(s.value == raw for s in spans)
         assert [(m.start(), m.end()) for m in re.finditer(re.escape(raw.encode()), r.text.encode())] == [
             (s.start, s.end) for s in spans]
+
+
+@pytest.mark.parametrize("partition", api.PARTITIONS)
+def test_targeted_carrier_locations_and_source_ownership(partition):
+    positive = {"json_before_cue", "json_phone_space", "html_doctype", "html_zwj", "json_bom"}
+    negative = {"json_double", "html_double", "json_key", "html_attribute", "html_comment", "html_script"}
+    prefix = cells.SURFACE_PREFIX + "carrier_"
+    rows = [r for r in cells.records(api, partition) if r.surface.startswith(prefix)]
+    assert Counter((r.surface.removeprefix(prefix), r.layer) for r in rows) == {
+        **{(s, layer): 2 for s in positive for layer in "AR"}, **{(s, "D"): 2 for s in negative}}
+    ssns = {}
+    for r in rows:
+        case = r.surface.removeprefix(prefix)
+        assert len(r.gold) == {"A": 1, "R": 2, "D": 0}[r.layer]
+        assert len(r.decoys) == (r.layer == "D")
+        spans = r.gold or r.decoys
+        raw = spans[0].value
+        assert raw.isascii() and all(s.value == raw for s in spans)
+        assert [(s.start, s.end) for s in spans] == [
+            (m.start(), m.end()) for m in re.finditer(re.escape(raw.encode()), r.text.encode())]
+        if case.startswith("json_"):
+            doc = json.loads(r.text)
+            decoded = json.loads('"' + raw + '"')
+            if case == "json_key":
+                assert list(doc["schema"]) == ["SSN: " + decoded]
+                assert all(decoded not in v for v in strings(doc))
+            else:
+                assert sum(v.endswith(decoded) for v in strings(doc)) == len(spans)
+        else:
+            decoded = html.unescape(raw)
+            parser = TextNodes()
+            parser.feed(r.text)
+            if case in positive or case == "html_double":
+                assert sum(n.endswith(decoded) for n in parser.nodes) == len(spans)
+            elif case == "html_attribute":
+                assert parser.nodes == ["Preview"] and f'data-sample="SSN: {raw}"' in r.text
+            elif case == "html_comment":
+                assert parser.nodes == ["Preview"] and f"<!-- SSN: {raw} -->" in r.text
+            elif case == "html_script":
+                # Script data is raw text: no HTML entity decoding takes place here.
+                assert parser.nodes == [f'const sample = "SSN: {raw}";'] and "<script>" in r.text
+        if case == "json_phone_space":
+            assert r"\t" in raw and all(s.label == "TELEPHONENUM" for s in spans)
+            assert re.fullmatch(r"\+1 \((?:312|415)\)\t5\u200b55-01\d{2}", decoded)
+            continue
+        if r.gold:
+            assert all(s.label == "SSN" for s in spans)
+        if case == "json_double":
+            assert r"\\u200b" in raw and r"\u200b" in decoded and "\u200b" not in decoded
+            decoded = json.loads('"' + decoded + '"')
+        elif case == "html_double":
+            assert "&amp;#8203;" in raw and "&#8203;" in decoded and "\u200b" not in decoded
+            decoded = html.unescape(decoded)
+        elif case == "html_doctype":
+            assert r.text.startswith("<!DOCTYPE html>SSN: " + raw)
+        elif case == "json_before_cue":
+            assert r"\nSSN: " + raw in r.text and any("\nSSN: " + decoded in v for v in strings(doc))
+        glyph = {"html_zwj": "\u200d", "json_bom": "\ufeff"}.get(case, "\u200b")
+        assert re.fullmatch(r"9\d\d-\d" + glyph + r"\d-\d{4}", decoded)
+        ssns.setdefault(case, set()).add(decoded.replace(glyph, ""))
+    assert len(ssns["json_before_cue"]) == 2
+    assert all(values == ssns["json_before_cue"] for values in ssns.values())
 
 
 @pytest.mark.parametrize("partition", api.PARTITIONS)
@@ -147,8 +211,8 @@ def test_interior_cut_and_group_boundaries_reconstruct_the_same_value(partition)
 
 def test_partitions_are_disjoint_and_reproducible():
     sets = []
-    for partition, digest in (("dev", "5bffed3eaadb11d8d27661ae7b32ec724e2d1dc2b50528995d063c673ce380e2"),
-                              ("test", "86466ba68e96da242e7e15724d182eea8c44e1933e39e9c68ed5fc709c3ff9a6")):
+    for partition, digest in (("dev", "f4dcb1e6ceacfc418f6e56320b50df06ce729e3b5210301c6ee177ce2fe07740"),
+                              ("test", "06a7c5dc31fa3648b16391532cf8b46c5e94fe27e96ea98ded26ba795ec09735")):
         rows = cells.records(api, partition)
         assert hashlib.sha256(api.corpus_bytes(rows)).hexdigest() == digest
         values = {json.loads('"' + r.gold[0].value + '"').replace("\u200b", "")
