@@ -2001,7 +2001,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary, and the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [current specification](specifications/8ab2bbcd8b39edc68547111a9e7fcd483bdc932d5d77ea1518cbc2b6fc888b35.json) adds the generator v32 credential-form and agent-text cells and the prose credential recognizers to the validation vocabulary.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary, and the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [current specification](specifications/ff043b1166866365e4ff0c70a9be5937d2c086510174767410e5ebd74a72d4e8.json) adds the generator v32 credential-form and agent-text cells and the prose credential recognizers to the validation vocabulary.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2554,7 +2554,7 @@ byte-for-byte; its contract is frozen as
 | --- | ---: | ---: | ---: | ---: |
 | v30 | 19,687 | 8,832 | 12,611 | 41,130 |
 | v31 | 19,917 | 9,032 | 12,801 | 41,750 |
-| v32 | 20,117 | 9,202 | 12,801 | 42,120 |
+| v32 | 20,147 | 9,212 | 12,801 | 42,160 |
 
 No release has been measured on generator v31 or v32 yet. The v30 history rows
 above stay bound to the v30 specification; the backfill runs outside the PR
@@ -2563,13 +2563,14 @@ critical path.
 ### Credential forms and agent text (generator v32)
 
 The same generator module adds `credential_agent_text_` cells: 210 documents
-per partition (200 A, 170 D). Layer A holds credential forms the v31 cells do
+per partition (230 A, 180 D). Layer A holds credential forms the v31 cells do
 not write: quoted spaced passphrases that end in a word, passwords with an
 inner apostrophe or a closed bracket, quoted passwords inside JSON-escaped
 strings, passwords that end a JSON or code string literal, `$`-led passwords,
 weak passwords that contain the word password, digit-free passphrases with
 function words, passwords behind a place noun (`for my email`, `für die Seite`),
-passwords in `;`-separated connection strings,
+passwords in `;`-separated connection strings, passwords in inline and fenced
+Markdown code,
 and wrapped base64 private keys in an indented YAML block scalar, behind
 JSON-escaped `\n` line breaks, and beside a sibling YAML key, which is not gold. Each whole value is gold; a wrapped key's
 indentation and escape sequences are part of its run. Layer D carries agent

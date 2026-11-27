@@ -264,6 +264,8 @@ AGENT_TEXT = {
             ("My passphrase is \"{V}\".", "sentence"),
             ("Server=db;Password={V};User Id=sa;", "plain"),
             ("The password is {V} ok", "hyphen_stem"),
+            ("The password is `{V}`.", "plain"),
+            ("The password is ```{V}``` ok", "plain"),
         ],
         "password_de": [
             ("Das Passwort lautet \"{V}\".", "phrase"),
@@ -271,6 +273,7 @@ AGENT_TEXT = {
             ('{"content":"Das Passwort lautet {V}","b":"x y"}', "plain"),
             ("Das Passwort für die Seite lautet {V}.", "plain"),
             ("Das Passwort lautet \"{V}\".", "sentence_de"),
+            ("Das Passwort lautet `{V}`.", "plain"),
         ],
         "benign_en": [
             ("The API key works with {D} and the embeddings model.", "model"),
@@ -285,6 +288,7 @@ AGENT_TEXT = {
             ("The security code {D} was patched last week.", "cve"),
             ("The password prompt is {D}.", "ui"),
             ("Change the error for a wrong password to {D}.", "ui"),
+            ("The password text is {D}.", "ui"),
             ("The password is {D} for every admin.", "hyphen"),
         ],
         "benign_de": [
@@ -308,6 +312,8 @@ AGENT_TEXT = {
             ("Honestly my passphrase was '{V}' all along.", "sentence"),
             ('"ConnectionString": "Host=db;Password={V};Username=app"', "plain"),
             ("Told them the VPN password is {V} for now.", "hyphen_stem"),
+            ("ok so the staging password is `{V}`, rotate it later", "plain"),
+            ("Paste this: the password is\n```\n{V}\n```", "fenced_lines"),
         ],
         "password_de": [
             ("Das WLAN-Passwort war zuletzt \"{V}\".", "phrase"),
@@ -315,6 +321,7 @@ AGENT_TEXT = {
             ('{"note":"Kennwort ist {V}","id":"n1 n2"}', "plain"),
             ("Das Kennwort für meine E-Mail ist {V}.", "plain"),
             ("Mein Passwort war ehrlich gesagt '{V}'.", "sentence_de"),
+            ("Das Testkennwort ist `{V}` bis Freitag.", "plain"),
         ],
         "benign_en": [
             ("Since the upgrade our access token only gets accepted by {D} endpoints.", "model"),
@@ -329,6 +336,7 @@ AGENT_TEXT = {
             ("A security code review flagged {D} in the auth library.", "cve"),
             ("For a failed sign-in the password banner now reads {D} in bold.", "ui"),
             ("QA wants the forgot-password dialog to say {D} instead.", "ui"),
+            ("Marketing wants the password copy to be {D} on signup.", "ui"),
             ("Our VPN password is {D} on every laptop.", "hyphen"),
         ],
         "benign_de": [
