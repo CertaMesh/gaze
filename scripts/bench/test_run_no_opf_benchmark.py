@@ -713,6 +713,7 @@ class PolicyNerSettingsTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(
                 runner.records, "rescore", return_value=cached_card,
             ))
+            rebind = stack.enter_context(mock.patch.object(runner.records, "rebind_reuse", return_value=False))
             def publish(_args, directory, card):
                 directory.mkdir(parents=True, exist_ok=True)
                 (directory / "scorecard-v4.json").write_text(json.dumps(card))
@@ -728,6 +729,9 @@ class PolicyNerSettingsTests(unittest.TestCase):
             probe.assert_called_once()
             execute.assert_not_called()
             finish.assert_called_once_with(args, output / "quick", cached_card)
+            receipt = rebind.call_args.args[3]["subject_build"]
+            rebind.assert_called_once_with(output / "quick" / "observations-v1.jsonl.gz", spec,
+                                           receipt["binary_sha256"], {"gaze": metadata, "subject_build": receipt})
 
     def test_run_records_absent_ner_and_portable_policy_path(self) -> None:
         class StopAfterProvenance(Exception):
