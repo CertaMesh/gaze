@@ -56,9 +56,10 @@ import invisible_separator_cells as invisible_separators
 import issuer_credential_cells as issuer_credentials
 import prose_credential_cells as prose_credentials
 import prose_record_id_cells as prose_record_ids
+import escaped_separator_cells as escaped_separators
 
 
-GENERATOR_VERSION = 32
+GENERATOR_VERSION = 33
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4501,6 +4502,7 @@ GENERATOR_ADDITIONS = {
     29: "issuer_credentials_",
     31: prose_credentials.SURFACE_PREFIX,
     32: prose_record_ids.SURFACE_PREFIX,
+    33: escaped_separators.SURFACE_PREFIX,
 }
 
 
@@ -4546,6 +4548,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    32: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v32.json"),
     31: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v31.json"),
     30: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v30.json"),
     29: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v29.json"),
@@ -4835,6 +4838,7 @@ def generate(partition: str) -> list[Record]:
         + issuer_credentials.records(sys.modules[__name__], partition)
         + prose_credentials.records(sys.modules[__name__], partition)
         + prose_record_ids.records(sys.modules[__name__], partition)
+        + escaped_separators.records(sys.modules[__name__], partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)

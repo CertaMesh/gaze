@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "521676aff4c3fa5a482bb3f8dff86572d23d1654393102a13c8477dc6e559d23",
-    "test": "b21073eca54d70bd53ba49aea7e924f6e028077a39e17a57cf8910dca8d95fb0",
+    "dev": "aba6d3897319bae16d88293772c8d1b902fe19eaa8faf0deb2d4fbdec9d1e61d",
+    "test": "d5d6c6946295e56cb7543877e016caf49c12a6e27a419f6a5f7eadda447785dc",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -469,6 +469,12 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
+            if record.layer == "D" and record.surface.startswith(agentic.escaped_separators.SURFACE_PREFIX):
+                # This slice annotates the complete source spelling of its benign twin.
+                decoy, = record.decoys
+                self.assertFalse(record.gold)
+                self.assertEqual(record.text.encode()[decoy.start:decoy.end], decoy.value.encode())
+                continue
             if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_")):
                 self.assertNotIn("decoys", record.to_json())
 

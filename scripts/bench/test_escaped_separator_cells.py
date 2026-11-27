@@ -5,6 +5,7 @@ import html
 from html.parser import HTMLParser
 import ipaddress
 import json
+from pathlib import Path
 import re
 
 import pytest
@@ -155,3 +156,15 @@ def test_partitions_are_disjoint_and_reproducible():
         assert len(values) == 4 * api.DOCS_PER_FAMILY
         sets.append(({r.text for r in rows}, values))
     assert all(a.isdisjoint(b) for a, b in zip(*sets))
+
+
+def test_integrated_generator_includes_source_rows_and_rebuilds_v32():
+    root = Path(__file__).resolve().parents[2]
+    assert api.load_contract(root, version=32).sha256 == "a49ca4d597ec9666b16884214df0f9f8b9e9b0f30bcd3e227dabe93fe2e693c5"
+    for partition, digest in (("dev", "521676aff4c3fa5a482bb3f8dff86572d23d1654393102a13c8477dc6e559d23"),
+                              ("test", "b21073eca54d70bd53ba49aea7e924f6e028077a39e17a57cf8910dca8d95fb0")):
+        rows = api.generate(partition)
+        added = [r for r in rows if r.surface.startswith(cells.SURFACE_PREFIX)]
+        assert added == cells.records(api, partition)
+        frozen = api.records_as_of(32, rows)
+        assert hashlib.sha256(api.corpus_bytes(frozen)).hexdigest() == digest
