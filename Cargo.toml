@@ -4,7 +4,6 @@ members = [
     "crates/gaze-assembly",
     "crates/gaze-audit",
     "crates/gaze-inspection",
-    "crates/gaze-model-setup",
     "crates/gaze-recognizers",
     "crates/gaze-types",
     "crates/gaze-cli",
@@ -33,7 +32,6 @@ gaze-assembly = { path = "crates/gaze-assembly", version = "0.17.0" }
 gaze-mcp-bridge = { path = "crates/gaze-mcp-bridge", version = "0.17.0" }
 gaze-mcp-core = { path = "crates/gaze-mcp-core", version = "0.17.0" }
 gaze-mcp-rmcp = { path = "crates/gaze-mcp-rmcp", version = "0.17.0" }
-gaze-model-setup = { path = "crates/gaze-model-setup", version = "0.17.0" }
 gaze-recognizers = { path = "crates/gaze-recognizers", version = "0.17.0" }
 gaze-proxy = { path = "crates/gaze-proxy", version = "0.17.0" }
 gaze-proxy-dashboard = { path = "crates/gaze-proxy-dashboard", version = "0.17.0" }

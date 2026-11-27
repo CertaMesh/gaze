@@ -395,10 +395,21 @@ pub struct SessionTransaction<'session> {
     session: &'session Session,
     identity: Arc<SessionIdentity>,
     captured_generation: u64,
+    /// The committed state this transaction started from.
+    base: Arc<SessionState>,
+    /// Changes staged since `base`, computed once per semantic revision.
+    reuse_delta: Option<(u64, Arc<ReuseDelta>)>,
     staged: SessionState,
     manifest_limit: Option<usize>,
     manifest_charge: Option<(usize, [usize; 5])>,
     capacity_exceeded: bool,
+}
+
+/// Additions staged since a transaction began, for [`SessionTransaction::reuse_unaffected`].
+struct ReuseDelta {
+    tokens: Vec<String>,
+    undelimited_token: bool,
+    sweep: Option<SweepMatcher>,
 }
 
 /// A validated commit holding the session's exclusive publication lock.
@@ -608,6 +619,8 @@ impl Session {
             identity: Arc::clone(&self.identity),
             captured_generation: state.generation,
             staged: (*state).clone(),
+            base: state,
+            reuse_delta: None,
             manifest_limit: None,
             manifest_charge: None,
             capacity_exceeded: false,
@@ -1234,6 +1247,95 @@ impl<'session> SessionTransaction<'session> {
         }
     }
 
+    /// Whether cleaning the Text `raw` at the staged state would repeat, byte for
+    /// byte, an earlier clean of it that returned `clean` and changed nothing.
+    ///
+    /// The caller must have obtained `clean` by cleaning `raw` with the same
+    /// pipeline, locale chain, dictionaries and safety-net policy against the
+    /// exact committed state this transaction started from, and that clean must
+    /// have left the session unchanged (a stable final pass).
+    ///
+    /// Mappings are never removed and evidence only rises, so the staged state
+    /// differs from the start only by additions. A Text clean reads them through
+    /// the repeat-value sweep, token ownership of literals in the raw or cleaned
+    /// text, and token lookup by key. The answer is `true` only when no newly
+    /// propagating value matches anywhere in `raw` under the production sweep
+    /// semantics and no newly minted token occurs in `raw` or `clean`. A new
+    /// token without `<...>` delimiters could straddle a token and raw text in
+    /// an intermediate view, so any such token answers `false`.
+    ///
+    /// Errors exactly where a fresh clean would fail on the session matcher.
+    #[doc(hidden)]
+    pub fn reuse_unaffected(&mut self, raw: &str, clean: &str) -> Result<bool> {
+        if !self.staged.deterministic_sweep {
+            return Ok(false);
+        }
+        // A fresh clean builds the full session matcher first; fail the same way.
+        self.sweep_matcher()?;
+        let delta = self.reuse_delta()?;
+        if delta.undelimited_token {
+            return Ok(false);
+        }
+        if delta
+            .tokens
+            .iter()
+            .any(|token| raw.contains(token.as_str()) || clean.contains(token.as_str()))
+        {
+            return Ok(false);
+        }
+        Ok(match &delta.sweep {
+            Some(matcher) => matcher
+                .find(&crate::normalize::normalize(raw).text)
+                .is_empty(),
+            None => true,
+        })
+    }
+
+    fn reuse_delta(&mut self) -> Result<Arc<ReuseDelta>> {
+        let revision = self.staged.semantic_revision;
+        if let Some((cached, delta)) = &self.reuse_delta {
+            if *cached == revision {
+                return Ok(Arc::clone(delta));
+            }
+        }
+        let base = &self.base;
+        let tokens: Vec<String> = self
+            .staged
+            .value_by_token
+            .keys()
+            .filter(|token| !base.value_by_token.contains_key(*token))
+            .cloned()
+            .collect();
+        let undelimited_token = tokens
+            .iter()
+            .any(|token| !(token.starts_with('<') && token.ends_with('>')));
+        let mut sources = self
+            .staged
+            .evidence_by_value
+            .iter()
+            .filter(|(key, evidence)| {
+                evidence.propagates()
+                    && !base
+                        .evidence_by_value
+                        .get(*key)
+                        .is_some_and(|before| before.propagates())
+            })
+            .map(|(key, _)| SweepSource {
+                family: key.family.clone(),
+                class: key.class.clone(),
+                raw: key.raw.clone(),
+            })
+            .collect::<Vec<_>>();
+        sources.sort_by(|a, b| (&a.family, &a.class, &a.raw).cmp(&(&b.family, &b.class, &b.raw)));
+        let delta = Arc::new(ReuseDelta {
+            tokens,
+            undelimited_token,
+            sweep: SweepMatcher::build(sources)?,
+        });
+        self.reuse_delta = Some((revision, Arc::clone(&delta)));
+        Ok(delta)
+    }
+
     /// Conservative manifest allocation charge, excluding shared identity and
     /// pipeline work buffers. Hosts separately reserve staging and matcher space.
     pub fn manifest_allocation_bytes(&self) -> usize {
@@ -1336,6 +1438,8 @@ impl<'session> SessionTransaction<'session> {
             session: self.session,
             identity: Arc::clone(&self.identity),
             captured_generation: self.captured_generation,
+            base: Arc::clone(&self.base),
+            reuse_delta: self.reuse_delta.clone(),
             staged: self.staged.clone(),
             manifest_limit: self.manifest_limit,
             manifest_charge: self.manifest_charge,

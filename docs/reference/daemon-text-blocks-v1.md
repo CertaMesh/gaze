@@ -4,9 +4,27 @@ The opt-in `text-blocks-v1` profile protects one complete outgoing text inventor
 atomically. Existing legacy and version 1 operations keep their wire format and
 sequential behavior. A session accepts one protocol version for its lifetime.
 
-Every v2 request fully cleans every active block. No detector or safety-net work
-is reused; every returned `cache_hit` is `false`. Hash-only uploads save transport
-bytes, not inference. Selective reuse requires a separate implementation.
+A `clean_blocks` request reuses the committed result of a block whose exact
+bytes and request `context` are unchanged since the session's last successful
+clean, if nothing staged since then can reach that block. Reach covers a newly
+propagating repeat value that the production sweep matches anywhere in the
+block, and a newly minted token that occurs in the block's raw or cleaned text.
+A new token without `<...>` delimiters disables reuse for that check. Every other
+block runs the full pipeline. The response is byte for byte what cleaning every
+block would return; only `cache_hit` differs.
+
+`cache_hit: true` means no detector or safety net ran for that block in any pass
+of the request. Reuse is off for `resync`, for a daemon started with
+`--audit-db`, and for a request that adds or changes no block, so every commit
+runs the configured models at least once. A reused block's redaction rows are
+replayed from its last clean.
+
+The retained results count against the session's v2 state budget, so a session
+with reuse holds less new input under `global_v2_state_bytes` than one without.
+Near that limit a reused block can be charged slightly less than a fresh clean
+of it, so a request that a full clean would refuse with `CacheCapacity` may
+succeed. Capacity refusals at the limit are outside the identity guarantee;
+results that are returned are identical.
 
 ## Open and identity
 

@@ -174,7 +174,7 @@ For library use, see [Use the `gaze setup` policy from Rust](docs/how-to/rust-li
 
 ## Workspace and crates.io
 
-Choose from the 15 published crates in the [crate map](docs/reference/crates.md).
+Choose from the 14 published crates in the [crate map](docs/reference/crates.md).
 For the Rust runtime (package `gaze-pii`, library name `gaze`):
 
 ```sh
