@@ -4741,6 +4741,20 @@ pub trait Recognizer: Send + Sync {
         false
     }
 
+    /// Whether this recognizer binds values through structured field labels. A repeat of
+    /// such a value may not become a token inside a JSON number or object key; the pipeline
+    /// refuses an exact repeat there instead of corrupting the carrier.
+    fn binds_structured_fields(&self) -> bool {
+        false
+    }
+
+    /// Whether a value at this field path is bound by one of this recognizer's labels.
+    /// A JSON-text carrier whose own path binds is a labelled value as a whole; its embedded
+    /// fields must not replace that binding.
+    fn binds_field_path(&self, _path: &[&str]) -> bool {
+        false
+    }
+
     /// What this recognizer's candidates rest on. The registry stamps it on every candidate
     /// the recognizer emits, overwriting [`Candidate::evidence`]. Defaults to
     /// [`EvidenceKind::Learned`], which the repeat-value sweep never propagates; see
@@ -4809,8 +4823,12 @@ pub struct Candidate {
     /// ([`ValidatorOnFail::Record`]); written on the winner's audit row.
     pub validator_fail_reason: Option<ValidatorFailReason>,
     /// Typed protection decision. None denotes a legacy candidate, interpreted as Protected.
-    /// Dormant until a producer and enforcing consumer are installed.
+    /// The pipeline enforces it before resolution: a confirmed-untransformable outcome
+    /// refuses the input, and a possibly sensitive one follows `[outcomes]`.
     pub outcome: Option<ProtectionOutcome>,
+    /// The structured field this candidate covers, when a field-bound recognizer emitted it.
+    /// Carries the location, JSON type and evidence, never the value.
+    pub field: Option<FieldProvenance>,
     /// Closed reason for a labelled value boundary or length limit.
     pub labelled_value_scan_reason: Option<LabelledValueScanReason>,
     /// End of the original labelled-value capture before extension, for cross-class trimming.
@@ -4851,6 +4869,7 @@ impl Candidate {
             evidence: EvidenceKind::Learned,
             validator_fail_reason: None,
             outcome: None,
+            field: None,
             labelled_value_scan_reason: None,
             labelled_value_capture_end: None,
             regex_guard_rejected: false,
@@ -4863,6 +4882,18 @@ impl Candidate {
     /// evidence tiers and the repeat-value sweep both ask this.
     pub fn checksum_validated(&self) -> bool {
         self.canonical_form.is_some() && self.validator_fail_reason.is_none()
+    }
+
+    /// Returns this candidate with a typed protection outcome.
+    pub fn with_outcome(mut self, outcome: ProtectionOutcome) -> Self {
+        self.outcome = Some(outcome);
+        self
+    }
+
+    /// Returns this candidate bound to the structured field it covers.
+    pub fn with_field(mut self, field: FieldProvenance) -> Self {
+        self.field = Some(field);
+        self
     }
 
     /// Returns this candidate with its evidence kind set.

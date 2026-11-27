@@ -30,6 +30,24 @@ pub fn normalize(input: &str) -> NormalizedText {
     NormalizedText { text, spans }
 }
 
+/// Fold a structured field label for comparison: the shared detection normalization, then
+/// lowercase and drop whitespace, `_`, `.` and every dash (ASCII `-` and Unicode dash
+/// punctuation such as U+2010 or U+2212), so `Customer-ID`, `customerId`, `customer‐id`, a
+/// fullwidth spelling and one with a zero-width space all agree.
+pub fn fold_field_label(label: &str) -> String {
+    normalize(label)
+        .text
+        .chars()
+        .filter(|&ch| {
+            !matches!(
+                ch,
+                '_' | '.' | '-' | '\u{2010}'..='\u{2015}' | '\u{2212}' | '\u{FE58}' | '\u{FE63}'
+            ) && !ch.is_whitespace()
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 /// Map a byte range of the normalized text back to the raw bytes it came from. Every
 /// normalized byte carries its source char's full raw range, so a folded 2- or 3-byte
 /// separator maps back to all of its raw bytes. Returns `None` for an empty or
