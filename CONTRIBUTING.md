@@ -48,7 +48,7 @@ pushing to a PR.
 
 ## Workspace shape
 
-The workspace has 15 published crates plus the internal `xtask` and `feature-graph-probe` crates and the detached `lint/dylint/` workspace. [docs/reference/crates.md](docs/reference/crates.md) has the full dependency map.
+The workspace has 14 published crates plus the internal `xtask` and `feature-graph-probe` crates and the detached `lint/dylint/` workspace. [docs/reference/crates.md](docs/reference/crates.md) has the full dependency map.
 
 | Crate | Role |
 |---|---|
@@ -63,7 +63,6 @@ The workspace has 15 published crates plus the internal `xtask` and `feature-gra
 | `crates/gaze-document` | OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Ships a `gaze document clean` CLI verb under the `gaze-cli` `document` feature. `BundleReport` has a versioned `bundle_version` schema. |
 | `crates/gaze-proxy` | Feature-gated HTTP proxy runtime for OpenAI, Anthropic, and Gemini SDK base-URL swaps; backs `gaze proxy`. |
 | `crates/gaze-inspection` | Provider-neutral, bounded inspection delivery: zeroizing payload wrappers and the matched producer/consumer runtime. |
-| `crates/gaze-model-setup` | Installs and verifies pinned model bundles for `gaze setup`. |
 | `crates/gaze-mcp-bridge` | Optional policy-gated MCP bridge in front of downstream MCP tools. |
 | `crates/gaze-token-bridge` | Experimental owner-side authorization and translation bridge for searching redact-before-index corpora. |
 | `crates/gaze-proxy-dashboard` | Opt-in, memory-only inspection dashboard runtime for `gaze proxy`: a killable child process owns listener/auth/store/rendering while the parent owns bounded ingress and the registration-bound activation. Among Gaze crates it depends on exactly `gaze-types` + `gaze-inspection`; shipped behind the default-off `gaze-cli` `dashboard` feature and enforced by the `dashboard-isolation` xtask gate. |

@@ -81,7 +81,7 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
 - DistilBERT safety net removed: both backends, int8 precision, its Cargo feature and the
   `runtime-tract` / `runtime-candle` features are gone. No net runs without a policy; `gaze setup`
   enables Nym, and OPF (`--safety-net openai-filter`) stays opt-in. `gaze setup` installs the pinned
-  Davlan mBERT NER bundle (`gaze_model_setup::install_ner_bundle`, verified by
+  Davlan mBERT NER bundle (the `setup` feature of `gaze-cli`, verified by
   `gaze_recognizers::verify_davlan_ner_bundle`). `gaze index ingest` requires that pinned bundle via
   `--ner-model-dir` / `GAZE_NER_MODEL_DIR` and otherwise fails closed with `IndexNerModelMissing`.
 - Audit-sink protected-path enforcer (canonical): the `gaze_module_isolation` Dylint lint resolved
