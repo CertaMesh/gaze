@@ -80,6 +80,7 @@ mod tests {
             reason: gaze_types::UntransformableReason::EncodedCarrier,
             field_path: gaze_types::FieldPath::default()
                 .child("synthetic@example.invalid".to_string()),
+            others: Vec::new(),
         });
         let dispatch = BridgeError::from_redaction(error).into_dispatch();
         assert_eq!(dispatch.untransformable_reason(), Some("encoded_carrier"));

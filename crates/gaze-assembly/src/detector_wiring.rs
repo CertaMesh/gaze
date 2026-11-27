@@ -5,8 +5,8 @@ use gaze::{
     RawMatch, RuleSpec, Rulepack, RulepackError, SafetyTier, RECORD_DICTIONARY_PREFIX,
 };
 use gaze_recognizers::{
-    AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
-    ValidatorOnFail,
+    AnchoredMatchRecognizer, DictionaryRecognizer, FieldLabelRecognizer, NormalizerKind,
+    RegexDetector, ValidatorKind, ValidatorOnFail,
 };
 
 use crate::{
@@ -294,6 +294,21 @@ pub(crate) fn register_rulepack_recognizers(
                         recognizer.scoring.priority,
                     )
                     .with_locale_metadata(runtime_locales, recognizer.locale_basis),
+                    collision.clone(),
+                );
+            }
+            RawMatch::FieldLabelled { field_labels, .. } => {
+                // Field context is format provenance: a label binds in every document locale.
+                builder.recognizer_with_membership(
+                    FieldLabelRecognizer::new(
+                        recognizer.id,
+                        recognizer.class,
+                        field_labels,
+                        recognizer.scoring.base,
+                        recognizer.scoring.priority,
+                        recognizer.token.family.as_deref().unwrap_or("counter"),
+                    )
+                    .with_locale_metadata(recognizer.locales, recognizer.locale_basis),
                     collision.clone(),
                 );
             }

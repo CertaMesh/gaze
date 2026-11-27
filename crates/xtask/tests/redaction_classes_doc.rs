@@ -139,6 +139,7 @@ fn matcher_name(matcher: &RawMatch) -> &'static str {
         RawMatch::Dictionary { .. } => "dictionary",
         RawMatch::Ner { .. } => "ner",
         RawMatch::AnchoredMatch { .. } => "anchored_match",
+        RawMatch::FieldLabelled { .. } => "field_labelled",
         _ => panic!("new RawMatch variant must be documented"),
     }
 }
