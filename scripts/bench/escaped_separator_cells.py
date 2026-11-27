@@ -86,4 +86,39 @@ def records(api, partition):
                     # A manual displaying escape syntax, not a second encoding layer to unwrap.
                     literal = "\\" + sep if kind == "json" else "&amp;" + sep[1:]
                     emit("D", "notation", surface, index, single, "Escape spelling", literal, "decoy:notation")
+
+    # Hold the code and its cue constant across carriers. These D examples
+    # are public schema/markup fixtures, not intentional disclosures. A second
+    # decoding pass or a scan outside visible HTML text would invent one.
+    carrier_rng = api.Rng(api.PARTITION_SEEDS[partition], "escaped-separator-carriers")
+    key = "note" if dev else "body"
+    for index in range(2):
+        area = carrier_rng.between(900, 949) if dev else carrier_rng.between(950, 999)
+        mid, tail = carrier_rng.digits(2), carrier_rng.digits(4)
+        def ssn(separator):
+            return f"{area}-{mid[0]}{separator}{mid[1]}-{tail}"
+
+        for surface, template, raw in (
+            ("json_double", f'{{"{key}":"Sample SSN: {{V}}"}}', ssn(r"\\u200b")),
+            ("html_double", "<p>Sample SSN: {V}</p>", ssn("&amp;#8203;")),
+            ("json_key", f'{{"schema":{{"SSN: {{V}}":"{key}"}}}}', ssn(r"\u200b")),
+            ("html_attribute", '<p data-sample="SSN: {V}">Preview</p>', ssn("&#8203;")),
+            ("html_comment", "<!-- SSN: {V} --><p>Preview</p>", ssn("&#8203;")),
+            ("html_script", '<script>const sample = "SSN: {V}";</script>', ssn("&#8203;")),
+        ):
+            emit("D", "carrier_ssn", "carrier_" + surface, index, template, "", raw, "decoy:ssn")
+
+        phone = ("+1 (312)" if dev else "+1 (415)") + r"\t5\u200b55-01" + carrier_rng.digits(2)
+        for surface, family, label, opening, closing, raw in (
+            ("json_before_cue", "ssn", "SSN", f'{{"{key}":"Summary' + r'\nSSN: ', '"', ssn(r"\u200b")),
+            ("json_phone_space", "phone", "TELEPHONENUM", f'{{"{key}":"Telephone: ', '"', phone),
+            ("html_doctype", "ssn", "SSN", "<!DOCTYPE html>SSN: ", "", ssn("&#8203;")),
+            ("html_zwj", "ssn", "SSN", "<p>SSN: ", "</p>", ssn("&zwj;")),
+            ("json_bom", "ssn", "SSN", f'{{"{key}":"SSN: ', '"', ssn(r"\uFEFF")),
+        ):
+            text = opening + "{V}" + closing
+            is_json = surface.startswith("json_")
+            emit("A", family, "carrier_" + surface, index, text + ("}" if is_json else ""), "", raw, label)
+            repeat = ',"copy":"{V}"}' if is_json else "<p>{V}</p>"
+            emit("R", family, "carrier_" + surface, index, text + repeat, "", raw, label)
     return result
