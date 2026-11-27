@@ -256,10 +256,14 @@ AGENT_TEXT = {
             ("The password is {V} as of today.", "inner_quote"),
             ('{"message":"the password is \\"{V}\\" ok"}', "plain"),
             ("His password is {V} for the VPN.", "bracket"),
+            ('{"messages":[{"role":"user","content":"my new password is {V}"}]}', "plain"),
+            ('msg = "the password is {V}";', "plain"),
+            ("The password is {V} until Monday.", "dollar"),
         ],
         "password_de": [
             ("Das Passwort lautet \"{V}\".", "phrase"),
             ('{"msg":"Mein Passwort ist \\"{V}\\"."}', "plain"),
+            ('{"content":"Das Passwort lautet {V}","b":"x y"}', "plain"),
         ],
         "benign_en": [
             ("The API key works with {D} and the embeddings model.", "model"),
@@ -272,11 +276,15 @@ AGENT_TEXT = {
             ("Store the password as {D} in the users table.", "column"),
             ("Load the password from {D} before the deploy.", "path"),
             ("The security code {D} was patched last week.", "cve"),
+            ("The password prompt is {D}.", "ui"),
+            ("Change the error for a wrong password to {D}.", "ui"),
+            ("The password is {D} for every admin.", "hyphen"),
         ],
         "benign_de": [
             ("Der API-Key fehlt in Version {D}.", "version"),
             ("Das Passwort wird beim Start aus {D} geladen.", "env"),
             ("Das Zugangstoken wird in {D} konfiguriert.", "file"),
+            ("Der Sicherheitscode ist {D}.", "hyphen"),
         ],
     },
     "test": {
@@ -285,10 +293,14 @@ AGENT_TEXT = {
             ("Note that my email password is now {V} after the lockout.", "inner_quote"),
             ('{"role":"user","content":"set the password: \\"{V}\\" please"}', "plain"),
             ("Sure, the password for the NAS is {V} today.", "bracket"),
+            ('{"input":{"notes":["the shared password is {V}"]}}', "plain"),
+            ('reply("ok, the password is {V}")', "plain"),
+            ("Heads up, the router password is now {V} again.", "dollar"),
         ],
         "password_de": [
             ("Das WLAN-Passwort war zuletzt \"{V}\".", "phrase"),
             ('{"text":"Das neue Kennwort lautet \\"{V}\\", danke"}', "plain"),
+            ('{"note":"Kennwort ist {V}","id":"n1 n2"}', "plain"),
         ],
         "benign_en": [
             ("Since the upgrade our access token only gets accepted by {D} endpoints.", "model"),
@@ -301,11 +313,15 @@ AGENT_TEXT = {
             ("Migration 12 renamed the password column to {D} last sprint.", "column"),
             ("The deploy script copies the password into {D} before boot.", "path"),
             ("A security code review flagged {D} in the auth library.", "cve"),
+            ("For a failed sign-in the password banner now reads {D} in bold.", "ui"),
+            ("QA wants the forgot-password dialog to say {D} instead.", "ui"),
+            ("Our VPN password is {D} on every laptop.", "hyphen"),
         ],
         "benign_de": [
             ("Seit {D} prüft der Server den API-Key strenger.", "version"),
             ("Im Container kommt das Passwort aus {D} vom Orchestrator.", "env"),
             ("Die Sicherheitstoken-Prüfung liegt jetzt in {D} im Repo.", "file"),
+            ("Unser Zugangscode ist {D}.", "hyphen"),
         ],
     },
 }
@@ -319,6 +335,9 @@ AGENT_VALUES = {
         "column": ["bcrypt_hash", "password_hash", "pw_digest"],
         "path": ["~/.config/app/pw", "secret/data/api", "../keys/admin"],
         "words": ["copper", "lagoon", "walrus", "meteor", "crimson", "thistle"],
+        "ui": ['"Please enter it again"', '"Incorrect password, try again"', '"Reset your account"'],
+        "hyphen": ["2fa-enabled", "SHA256-basiert", "e2e-tested"],
+        "sibling": ["databaseConnectionName", "replicaHostOverride", "sessionAffinityMode"],
     },
     "test": {
         "model": ["gemini-1.5-pro", "o3-mini", "phi-3-medium"],
@@ -329,6 +348,9 @@ AGENT_VALUES = {
         "column": ["passwd_bcrypt", "secret_digest", "pwd_hash_v2"],
         "path": ["/run/secrets/db_pw", "/etc/app/secret3", "C:\\ProgramData\\app\\pw"],
         "words": ["birch", "lantern", "pebble", "orchid", "harbor", "violet"],
+        "ui": ['"Something went wrong on our side"', '"Did you forget it?"', "'Not the right one, sorry'"],
+        "hyphen": ["mfa-protected", "AES256-signed", "SSO-only"],
+        "sibling": ["clusterIssuerReference", "rotationWindowHours", "metricsScrapeEnabled"],
     },
 }
 
@@ -360,6 +382,8 @@ def agent_text_records(api, partition):
             return " ".join(words)
         if kind == "inner_quote":
             return stem()[:-1] + "'" + rng.choice(STEMS[partition]) + rng.digits(2)
+        if kind == "dollar":
+            return "$" + stem() + rng.choice("#%&*+@")
         if kind == "bracket":
             opener, closer = rng.choice(["()", "[]", "{}"])
             return stem() + opener + rng.choice(values["words"]) + closer
@@ -395,6 +419,10 @@ def agent_text_records(api, partition):
                 else "stringData:\n  key.b64: |\n    {V}\n")
         emit("A", "pem_base64", "yaml_block", index, yaml,
              {"V": ("\n    ".join(lines), "SECURITYTOKEN")}, "en")
+        whole = "".join(pem_wrapped())
+        sibling = ("data:\n  tls_key: {V}\n  " + rng.choice(values["sibling"]) + ": primary\n" if partition == "test"
+                   else "key:\n  tls_key: {V}\n  " + rng.choice(values["sibling"]) + ": true\n")
+        emit("A", "pem_base64", "yaml_sibling_key", index, sibling, {"V": (whole, "SECURITYTOKEN")}, "en")
         lines = pem_wrapped()
         escaped = '{"secret":"{V}"}' if partition == "test" else '{"key_b64":"{V}"}'
         emit("A", "pem_base64", "json_escaped_lines", index, escaped,

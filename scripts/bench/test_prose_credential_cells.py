@@ -75,7 +75,7 @@ class AgentTextCellsTests(unittest.TestCase):
             records = cells.agent_text_records(api, partition)
             self.assertEqual(
                 {layer: sum(r.layer == layer for r in records) for layer in "ADR"},
-                {"A": 80, "D": 130, "R": 0},
+                {"A": 130, "D": 170, "R": 0},
             )
             for record in records:
                 self.assertTrue(record.surface.startswith(cells.AGENT_TEXT_PREFIX))
@@ -87,7 +87,7 @@ class AgentTextCellsTests(unittest.TestCase):
 
     def test_wrapped_keys_decode_to_private_armour(self):
         for record in cells.agent_text_records(api, "test"):
-            if record.family != "pem_base64":
+            if record.family != "pem_base64" or "sibling" in record.surface:
                 continue
             value = record.gold[0].value
             joined = value.replace("\\n", "").replace("\n", "").replace(" ", "")
@@ -105,6 +105,8 @@ class AgentTextCellsTests(unittest.TestCase):
                 self.assertTrue(value[-1].isalpha())
             elif kind == "inner_quote":
                 self.assertIn("'", value)
+            elif kind == "dollar":
+                self.assertTrue(value.startswith("$"))
             elif kind == "bracket":
                 self.assertIn(value[-1], ")]}")
 

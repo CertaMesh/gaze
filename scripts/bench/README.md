@@ -721,7 +721,7 @@ differs from it only in the validation vocabulary, which adds the field-labelled
 record-ID rules `customer_id.field`, `employee_id.field` and `record_id.field`.
 The [generator v31 specification](../../docs/reference/benchmarks/specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json)
 adds generator v31's prose credential cells.
-The [current specification](../../docs/reference/benchmarks/specifications/1a5d1c920d190c7d4b522e3fb26b04a48a5bebb0d70aeb33db94e8d8f5b6e549.json)
+The [current specification](../../docs/reference/benchmarks/specifications/e7c068965709436a626368581da3e7626b85e1e3ddba4e2ab1eae6a00a160f87.json)
 adds generator v32's credential-form and agent-text cells and the prose
 credential recognizers to the validation vocabulary.
 Previous manifests retain their original identities.
