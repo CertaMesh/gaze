@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Capture all known-record cells once; replay every scored-label contract.
+"""Capture all known-record cells once per profile; replay every scored-label contract.
+
+The `default` profile uses the gate policy and writes to the output directory.
+The `core` profile (`known_record_cells.CORE_PROFILE_POLICY`: bundled `core`,
+no NER or safety net) writes to `<output>/core`. Each profile is gated on its own.
 
 This auxiliary known-record arm supplements the full C/A/D/R gain gate.
 Its observation record uses the standard single-population replay format;
@@ -45,6 +49,19 @@ def main():
     binary, receipt = subject_build.build(subject, ["policy-file"], release=True,
                                          builder=subject_build.cargo_build_binary)
     output.mkdir(parents=True, exist_ok=True)
+    core_policy = output/"core-profile-policy.toml"
+    core_policy.write_text(cells.CORE_PROFILE_POLICY, encoding="utf-8")
+    profiles = {"default": (policy, output), "core": (core_policy, output/"core")}
+    assert tuple(profiles) == cells.CAPTURE_PROFILES
+    for profile, (profile_policy, profile_output) in profiles.items():
+        capture(profile, subject, profile_policy, args.model_dir.resolve(), profile_output,
+                pairs=pairs, documents=documents, contexts=contexts, corpus_sha=corpus_sha,
+                probe=probe, measurements=measurements, binary=binary, receipt=receipt)
+
+
+def capture(profile, subject, policy, model_dir, output, *, pairs, documents, contexts, corpus_sha,
+            probe, measurements, binary, receipt):
+    output.mkdir(parents=True, exist_ok=True)
     writer = records.RecordWriter(documents, measurements, corpus_sha256=corpus_sha, binary=binary)
     transport = score.BenchSubprocess
 
@@ -54,7 +71,7 @@ def main():
 
     environment = dict(os.environ, GAZE_BENCH_KNOWN_RECORD_ARM="1")
     with patch.object(score, "BenchSubprocess", ContextTransport):
-        run = score.run_config(subject, binary, "policy-file", documents, args.model_dir.resolve(),
+        run = score.run_config(subject, binary, "policy-file", documents, model_dir,
                                None, None, None, 0.3, output/"logs", base_environment=environment,
                                policy_path=policy, validator_measurements=measurements,
                                record_document=lambda config, doc, response, measured: writer.add(
@@ -66,7 +83,7 @@ def main():
         ROOT/"scripts/bench/known_record_attribution.py", ROOT/"scripts/bench/gaze_bench_score.py",
         ROOT/"scripts/bench/scorecard_record.py",
     )}
-    arm = {"layer": "K", "generator": cells.manifest(pairs), "harness": inputs,
+    arm = {"layer": "K", "profile": profile, "generator": cells.manifest(pairs), "harness": inputs,
            "policy_sha256": score.sha256_file(policy), "validator_binary_sha256": score.sha256_file(probe), "capture_once": True}
     arm["specification_sha256"] = hashlib.sha256(json.dumps(arm, sort_keys=True).encode()).hexdigest()
     card = {
@@ -85,7 +102,8 @@ def main():
         contract = score.SCORED_LABEL_CONTRACT_V1 if version == 1 else score.load_scored_label_contract(ROOT/f"docs/reference/benchmarks/scored-labels-v{version}.json")
         replayed = records.rescore(record_path, contract, max_workers=1)
         (output/f"scorecard-v{version}.json").write_text(json.dumps(replayed, indent=2) + "\n")
-    print(json.dumps({"observations": len(writer.rows), "pairs": len(pairs), "record_sha256": card["observation_record"]["sha256"]}))
+    print(json.dumps({"profile": profile, "observations": len(writer.rows), "pairs": len(pairs),
+                      "record_sha256": card["observation_record"]["sha256"]}))
 
 
 if __name__ == "__main__":

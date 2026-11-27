@@ -489,6 +489,12 @@ Generator version 7 rebuilds the unlisted-name control with rare declared names
 and superstring twins, and adds `control_uncorroborated_word_name` for given
 names that are also ordinary words. It has 120 pairs; the pinned v7 corpus hash
 is `9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0`.
+Generator version 8 adds `control_exact_unlisted_field_name` (coined declared
+names as whole `contact` field values, with superstring twins) and the `core`
+capture profile (bundled `core`, no NER or safety net). The capture writes the
+core profile's record and scorecards to `<output>/core`. It has 122 pairs; the
+pinned v8 corpus hash is
+`61a56f5ea2c7cf920500aa587c84adb2cb1c4029c6ca7bcc90d7f167f4c78dc1`.
 The model-free tests pin all pre-existing v5 pairs byte for byte, including
 their match kinds and buckets. Keep historical v5 results under their original
 specification; compare each implementation against the same v6 cells.
@@ -759,12 +765,15 @@ The [generator v31 specification](../../docs/reference/benchmarks/specifications
 adds generator v31's prose credential cells.
 The [JSON structure census specification](../../docs/reference/benchmarks/specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json)
 differs from it only by adding `json_structure_census.py` to the measuring closure.
-The [current specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
+The [known-record v7 specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
 differs from the JSON structure census one only in the `known_record_cells.py` and
 `known_record_arm.py` digests: known-record cell generator v7, which reads
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
+The [current specification](../../docs/reference/benchmarks/specifications/05083af71c51f58963c68c52b0e2d893f2e7a4ef6d46c046c273afd750e4980a.json)
+differs from the v7 one only in the `known_record_cells.py` digest: cell
+generator v8 and the `core` capture profile.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
