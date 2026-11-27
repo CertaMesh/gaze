@@ -103,8 +103,8 @@ class TypedRefusalProducerGuardTests(unittest.TestCase):
             check_row(self, row, row["response"])
 
     def test_guard_rejects_fabricated_incomplete_emitters(self):
-        # On main no fixture row refuses, so feed the same check_row the live
-        # fixture uses with fabricated pinned-identity outputs.
+        # Feed the same check_row the live fixture uses with fabricated
+        # pinned-identity outputs, including shapes the producer never writes.
         checked = first_path_failures = mixed_ordinary = rejected = 0
         for row in load():
             expected = row["expected_refused_ranges"]
