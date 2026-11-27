@@ -129,6 +129,11 @@ pub(crate) fn published_files(root: &Path) -> Result<PublishedFiles> {
         paths.insert(crate_readme.strip_prefix(root)?.to_path_buf());
     }
 
+    // Changelog fragments become CHANGELOG.md text at release time.
+    for path in changelog_fragments(root)? {
+        paths.insert(path);
+    }
+
     // Follow only one hop from directly published text, never recurse through docs.
     let cited_doc = Regex::new(r"docs/[A-Za-z0-9_./-]+\.md")?;
     for source in paths.clone() {
@@ -152,6 +157,22 @@ pub(crate) fn published_files(root: &Path) -> Result<PublishedFiles> {
         paths: paths.into_iter().collect(),
         published_crates,
     })
+}
+
+/// Root-relative paths of the Markdown files under `changelog.d/`.
+pub(crate) fn changelog_fragments(root: &Path) -> Result<Vec<PathBuf>> {
+    let dir = root.join("changelog.d");
+    let mut paths = Vec::new();
+    if dir.is_dir() {
+        for entry in fs::read_dir(&dir).context("list changelog.d")? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|ext| ext == "md") {
+                paths.push(path.strip_prefix(root)?.to_path_buf());
+            }
+        }
+    }
+    paths.sort();
+    Ok(paths)
 }
 
 fn scan_user_paths(file: &Path, text: &str) -> Result<Vec<Finding>> {
@@ -692,9 +713,13 @@ mod tests {
 
     #[test]
     fn changelog_public_links_fit_the_allowlist() {
-        let changelog = include_str!("../../../CHANGELOG.md");
+        let root = crate::repo::repo_root().expect("repo root");
+        let mut changelog = include_str!("../../../CHANGELOG.md").to_string();
+        for fragment in changelog_fragments(&root).expect("changelog fragments") {
+            changelog.push_str(&fs::read_to_string(root.join(fragment)).expect("read fragment"));
+        }
         let url = Regex::new(r#"https?://[^\s<>()\[\]"'`]+"#).expect("URL pattern");
-        for hit in url.find_iter(changelog) {
+        for hit in url.find_iter(&changelog) {
             let candidate = hit
                 .as_str()
                 .trim_end_matches(['.', ',', ';', ':', '!', '?']);
