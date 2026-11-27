@@ -293,8 +293,10 @@ impl ProviderAdapter for OpenAiAdapter {
             })
             .filter_map(|(output_index, item)| {
                 let name = item.get("name").and_then(Value::as_str)?;
+                // An unreadable index stays `None`, which makes every compatible stream
+                // ambiguous rather than dropping the name.
                 Some((
-                    SseStreamKey::new("responses.arguments", [Some(output_index?)]),
+                    SseStreamKey::new("responses.arguments", [output_index]),
                     name.to_owned(),
                 ))
             })

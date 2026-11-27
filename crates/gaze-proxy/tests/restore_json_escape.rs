@@ -1683,3 +1683,36 @@ async fn openai_chat_ambiguous_stream_never_restores_a_named_fragment() {
         .collect();
     assert_still_tokens("chat ambiguous stream", &arguments);
 }
+
+#[tokio::test]
+async fn openai_responses_call_named_at_an_unreadable_index_keeps_its_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let mut payloads = vec![
+            json!({"type": "response.output_item.added", "output_index": 0,
+            "item": {"type": "function_call", "id": "fc_0", "call_id": "call_0",
+                "name": "save_contact", "arguments": ""}}),
+        ];
+        for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+            payloads.push(json!({"type": "response.function_call_arguments.delta",
+                "item_id": "fc_0", "output_index": 0, "delta": fragment}));
+        }
+        // A name the proxy cannot place may rename call 0 in the client.
+        payloads.push(
+            json!({"type": "response.output_item.added", "output_index": 0.0,
+            "item": {"type": "function_call", "id": "fc_x", "call_id": "call_x",
+                "name": UNDECLARED_TOOL, "arguments": ""}}),
+        );
+        ("text/event-stream", sse_body(&payloads))
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+    let mut request = responses_request(false);
+    request["stream"] = json!(true);
+    let body = post_legacy(&proxy, "/v1/responses", request).await;
+    let arguments: String = sse_payloads(&body)
+        .iter()
+        .filter(|payload| payload["type"] == "response.function_call_arguments.delta")
+        .filter_map(|payload| payload["delta"].as_str())
+        .collect();
+    assert_still_tokens("responses call named at an unreadable index", &arguments);
+}
