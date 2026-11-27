@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:0e2c06667146b16d0403cfbe4609e37fe22a015d12e818e04426f757361df1b3",
+  "id": "gaze-benchmark-v1:f9c04e81f082f51d09134cac708471cfd81829d4171083691611b913f402c741",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -9,13 +9,13 @@
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 42338,
+      "documents": 42548,
       "documents_by_layer": {
-        "A": 20437,
-        "D": 9100,
+        "A": 20617,
+        "D": 9130,
         "R": 12801
       },
-      "corpus_sha256": "8f876ca82de10c1c205da74b9d42c6a036d1e0c74a385e5280a4fd1db0ad5cf7",
+      "corpus_sha256": "9bb76d85b3845ceb7993d17e55c7cdbb4e902b397b0f80f384abbee2ced079f7",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,7 +24,7 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "786f7dc5824065a96a44f00bcdc7c83606d798b83e4b6798d03318d4317da63a"
+      "generated": "eb58d6e728ae47f5c10e11633d3286aa15d55c919872f247049823e747d7d7d9"
     },
     "harness": {
       "scripts/bench/agentic_layers.py": "9483171790c82c8451e22a413225cd7d886328dac75ff2e5f21d9aa121ce0abc",
@@ -39,7 +39,7 @@
       "scripts/bench/build_native_mcp_operation.py": "d05aee2a9ee6a10c8aea1e3ea52d03f353ec7c753c529219940ba9001c245b55",
       "scripts/bench/build_native_session_proxy.py": "5dac39c24a2d5a9fcd0e81d5008ac5063ab357d83c7aa3d2dda4c06a41293bf9",
       "scripts/bench/capture_identity.py": "bc2be1f6b41da3db4b33e85eb4143bf2cb527e24188a1ff538869148921db0d5",
-      "scripts/bench/card_security_code_cells.py": "d82e33ffba90ef7b1e1d94f258cb83c217ad685b4db3147731233388cb164511",
+      "scripts/bench/card_security_code_cells.py": "9f75f98700450c7674a70e70b0db5c072b7cb12e6b98a199271c07fe42f35b37",
       "scripts/bench/check_detection_identity.py": "d3048e9a1f47842c9ce8b580adb2da0cb4b78f6f7e1c1beff603d003f3ceb34d",
       "scripts/bench/check_nym_session_stability.py": "43e822ebfd0a5fd15040e626c2d904e8590b0bad20a4529d782929cc1d0c419e",
       "scripts/bench/check_personal_id_checksum_identity.py": "cdcdfabf3dcdf68e42d3a9f1bfcf2dfc662367b388a70373b1d42e0d42ae7a1b",
@@ -351,14 +351,14 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 20437,
-        "document_ids_sha256": "9ba5a2bea6d1ca5ce9b83af92c638079bd7684168a04494bcc22d199c0a5db37",
-        "descriptors_sha256": "b08cfaf52ef3a3b717b18146e438a6f1f25bb4d1dabf5d181f4d6c073968627f"
+        "documents": 20617,
+        "document_ids_sha256": "23a73f0a6554cfd77d3b6ecd7f46babc606e7b3fa8178933e27c98bd832dc614",
+        "descriptors_sha256": "d1ad250e9ef67b928b1b413f111d16d808695bbeeccafa18221232d24a659665"
       },
       "D": {
-        "documents": 9100,
-        "document_ids_sha256": "b32d2cb6e8cc6c966acf1fa13ad52bfe12c2a584d6a9b5cfab85c31cfbb8f9b5",
-        "descriptors_sha256": "01f3a1b664e305b221e58ec00382f6d845b2e27f565e2558b893a9ccbd022370"
+        "documents": 9130,
+        "document_ids_sha256": "6b06df10fd77d9532410ce8ab7de65749538fad077959ed269582f7e038469de",
+        "descriptors_sha256": "773a067554c16205cf763ae52e5edc5b69a51b3f9093d2793bac3fed07a94dac"
       },
       "R": {
         "documents": 12801,

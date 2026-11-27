@@ -2006,7 +2006,7 @@ every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
 part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) adds the JSON structure census to the measuring closure; and the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) changes the known-record cell and arm harness digests.
-The card security code cells enter the [current specification](specifications/0e2c06667146b16d0403cfbe4609e37fe22a015d12e818e04426f757361df1b3.json) in generator v32.
+The card security code cells enter the [current specification](specifications/f9c04e81f082f51d09134cac708471cfd81829d4171083691611b913f402c741.json) in generator v32.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2566,23 +2566,31 @@ critical path.
 
 ### Card security codes (generator v32)
 
-The [generator](../../../scripts/bench/card_security_code_cells.py) adds 588
-documents per partition: 520 in A and 68 in D. In English and German, A pairs
-an explicitly labelled PAN with a separately scored three- or four-digit code:
-bare after a space, after `CVV:` or `CVC:`, or before `(CVV)` or `(CVC)`.
+The [generator](../../../scripts/bench/card_security_code_cells.py) adds 798
+documents per partition: 700 in A and 98 in D. In English and German, A pairs
+a PAN with a separately scored three- or four-digit code: bare after a space,
+after `CVV:` or `CVC:`, or before `(CVV)` or `(CVC)`. Other disclosures put
+the assignment inside parentheses, after `and` or `und`, or before a note
+about the back of the card. A direct code label after a valid compact PAN
+does not need a card word before the number.
 The PAN is `CREDITCARDNUMBER` and the code digits are `SECURITYTOKEN`; the
 separator and the cue are not gold. PANs are compact (12–19 digits) or grouped
 4-4-4, 4-4-4-4, 4-6-5, 4-6-4 or 4-4-4-4-3. Short Maestro PANs appear in
 4-4-4 and compact 12–15 forms; the 14- and 15-digit forms also cover Diners
-and Amex. Each valid PAN has a cued checksum-invalid twin. In 208 of the A
+and Amex. Each card-labelled PAN has a cued checksum-invalid twin. In 208 of the A
 records, the second number is explicitly a page or invoice
 number: only the PAN is gold, so protecting the public number costs FP bytes.
 
 D has no gold. Each PAN layout has a checksum-failed public reference of the
 same shape next to a public number; these references join the card credit guard.
-Other controls use non-PAN references, incidental CVV/CVC mentions, amounts and
-form metadata. None discloses a security code. V32 totals 42,338 documents per
-partition (20,437 A, 9,100 D, 12,801 R). V31 rebuilds byte-for-byte under its
+One twin contrasts a four-group PAN and a space-separated code after `Karte Nr.`
+or `Card no.` with a single public stock reference after `Kartennummer:` or
+`Card:`. The reference has the same digits, in five uniformly hyphenated groups
+of four; no 12–19 digit window passes Luhn. Other controls use an unlabelled
+checksum-invalid reference followed by code help or form metadata, non-PAN
+references, incidental CVV/CVC mentions and amounts. None discloses a security
+code. V32 totals 42,548 documents per partition (20,617 A, 9,130 D, 12,801 R).
+V31 rebuilds byte-for-byte under its
 [frozen contract](scored-labels-agentic-generator-v31.json); no v32 detection
 result is claimed here.
 

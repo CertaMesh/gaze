@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "81840173c4e14dea1d01fe54f5e19380afd520b786e8e03c711f6d77a54b9faa",
-    "test": "8f876ca82de10c1c205da74b9d42c6a036d1e0c74a385e5280a4fd1db0ad5cf7",
+    "dev": "cffcbf44541b3a3980145ba78a03c7a732d73d096cf55856e5410b97fc1c987d",
+    "test": "9bb76d85b3845ceb7993d17e55c7cdbb4e902b397b0f80f384abbee2ced079f7",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -274,6 +274,11 @@ class GeneratorTests(unittest.TestCase):
         records = self.corpora["test"]
         uids = {record.uid for record in records}
         for record in records:
+            if record.surface == "card_security_code_boundary_code_only":
+                # Without a preceding card label the Luhn-failing counterpart
+                # is a public reference followed by code help, not another PAN.
+                self.assertIn(f"{record.group}-boundary_help-benign", uids)
+                continue
             # Cued card cells alternate validity per document instead
             # (`CueCellTests.test_card_cells_carry_both_validities`).
             if record.validity == agentic.VALID and not record.surface.startswith(("cue_", "coverage_")):
