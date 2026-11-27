@@ -362,7 +362,8 @@ span's class, not its label and threshold, and the CLI refuses the combination.
 ### Runtime
 
 ONNX Runtime on CPU with deterministic compute, one inter-op thread and four
-intra-op threads by default (`--nym-intra-threads`, `GAZE_NYM_INTRA_THREADS`).
+intra-op threads by default (`--nym-intra-threads` on the CLI, `GAZE_NYM_INTRA_THREADS`
+for the library's `NymConfig::from_env`).
 Piece scores are bit-identical across thread counts; the
 [thread-count proof](../../reference/benchmarks/gates/nym-intra-threads/README.md)
 records the evidence.
