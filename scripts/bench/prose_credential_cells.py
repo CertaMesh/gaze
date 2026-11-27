@@ -266,6 +266,8 @@ AGENT_TEXT = {
             ("The password is {V} ok", "hyphen_stem"),
             ("The password is `{V}`.", "plain"),
             ("The password is ```{V}``` ok", "plain"),
+            ("The password I sent by text is \"{V}\".", "plain"),
+            ("The passphrase is `{V}`.", "phrase"),
         ],
         "password_de": [
             ("Das Passwort lautet \"{V}\".", "phrase"),
@@ -274,6 +276,7 @@ AGENT_TEXT = {
             ("Das Passwort für die Seite lautet {V}.", "plain"),
             ("Das Passwort lautet \"{V}\".", "sentence_de"),
             ("Das Passwort lautet `{V}`.", "plain"),
+            ("Das Passwort aus dem Text ist \"{V}\".", "plain"),
         ],
         "benign_en": [
             ("The API key works with {D} and the embeddings model.", "model"),
@@ -314,6 +317,8 @@ AGENT_TEXT = {
             ("Told them the VPN password is {V} for now.", "hyphen_stem"),
             ("ok so the staging password is `{V}`, rotate it later", "plain"),
             ("Paste this: the password is\n```\n{V}\n```", "fenced_lines"),
+            ("Your new password string is '{V}', keep it safe.", "plain"),
+            ("Use passphrase `{V}` for the vault.", "phrase"),
         ],
         "password_de": [
             ("Das WLAN-Passwort war zuletzt \"{V}\".", "phrase"),
@@ -322,6 +327,7 @@ AGENT_TEXT = {
             ("Das Kennwort für meine E-Mail ist {V}.", "plain"),
             ("Mein Passwort war ehrlich gesagt '{V}'.", "sentence_de"),
             ("Das Testkennwort ist `{V}` bis Freitag.", "plain"),
+            ("Das Kennwort aus meiner SMS ist '{V}'.", "plain"),
         ],
         "benign_en": [
             ("Since the upgrade our access token only gets accepted by {D} endpoints.", "model"),

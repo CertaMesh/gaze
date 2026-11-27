@@ -75,7 +75,7 @@ class AgentTextCellsTests(unittest.TestCase):
             records = cells.agent_text_records(api, partition)
             self.assertEqual(
                 {layer: sum(r.layer == layer for r in records) for layer in "ADR"},
-                {"A": 230, "D": 180, "R": 0},
+                {"A": 260, "D": 180, "R": 0},
             )
             for record in records:
                 self.assertTrue(record.surface.startswith(cells.AGENT_TEXT_PREFIX))
