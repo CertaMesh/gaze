@@ -1584,6 +1584,7 @@ window_chars = 48
                 PiiClass::custom("iban").expect("valid custom class"),
                 PiiClass::Custom("family:payment-card-or-iban".to_string()),
                 PiiClass::custom("credit_card").expect("valid custom class"),
+                PiiClass::custom("security_token").expect("valid custom class"),
                 PiiClass::custom("ip_address").expect("valid custom class"),
                 PiiClass::custom("eth_address").expect("valid custom class"),
                 PiiClass::custom("url").expect("valid custom class"),
