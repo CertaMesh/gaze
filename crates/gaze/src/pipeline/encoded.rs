@@ -11,26 +11,42 @@ fn invisible(cp: u32) -> bool {
     matches!(cp, 0xad | 0x200b..=0x200d | 0x2060 | 0xfeff)
 }
 
-fn json_gaps(raw: &str, literals: &JsonStringLiterals<'_>, gaps: &mut Vec<Range<usize>>) {
+struct Edit {
+    source: Range<usize>,
+    /// Invisible spellings disappear; JSON whitespace retains its lexical boundary.
+    whitespace: Option<char>,
+}
+
+fn json_edits(raw: &str, literals: &JsonStringLiterals<'_>, edits: &mut Vec<Edit>) {
     for literal in literals.values() {
         let mut at = literal.start;
         while let Some(offset) = raw[at..literal.end].find('\\') {
             at += offset;
             // scan() already validated the JSON. Consuming both bytes of every short
             // escape is essential: a literal backslash followed by `u` isn't Unicode.
-            if raw.as_bytes()[at + 1] == b'u' {
-                if invisible(u32::from_str_radix(&raw[at + 2..at + 6], 16).unwrap()) {
-                    gaps.push(at..at + 6);
-                }
-                at += 6;
-            } else {
-                at += 2;
+            let (width, scalar) = match raw.as_bytes()[at + 1] {
+                b'u' => (
+                    6,
+                    char::from_u32(u32::from_str_radix(&raw[at + 2..at + 6], 16).unwrap()),
+                ),
+                b'n' => (2, Some('\n')),
+                b'r' => (2, Some('\r')),
+                b't' => (2, Some('\t')),
+                b'f' => (2, Some('\x0c')),
+                _ => (2, None),
+            };
+            if let Some(ch) = scalar.filter(|c| c.is_whitespace() || invisible(*c as u32)) {
+                edits.push(Edit {
+                    source: at..at + width,
+                    whitespace: ch.is_whitespace().then_some(ch),
+                });
             }
+            at += width;
         }
     }
 }
 
-fn html_gaps(raw: &str, gaps: &mut Vec<Range<usize>>) -> Result<()> {
+fn html_edits(raw: &str, edits: &mut Vec<Edit>) -> Result<()> {
     static REFERENCE: LazyLock<regex::Regex> = LazyLock::new(|| {
         regex::Regex::new(r"&(?:#[xX]([0-9a-fA-F]+)|#([0-9]+)|ZeroWidthSpace|Negative(?:Medium|Thick|Thin|VeryThin)Space|NoBreak|shy|zwn?j);").unwrap()
     });
@@ -48,6 +64,9 @@ fn html_gaps(raw: &str, gaps: &mut Vec<Range<usize>>) -> Result<()> {
                 tokens.set_state(state);
             }
             Token::EndTag(_) => references_enabled = true,
+            Token::Doctype(tag) if tag.name.eq_ignore_ascii_case(b"html") => {
+                references_enabled = true
+            }
             Token::String(s) if references_enabled => {
                 let source = raw
                     .get(s.span.start..s.span.end)
@@ -63,7 +82,10 @@ fn html_gaps(raw: &str, gaps: &mut Vec<Range<usize>>) -> Result<()> {
                         continue;
                     }
                     let m = cap.get(0).unwrap();
-                    gaps.push(s.span.start + m.start()..s.span.start + m.end());
+                    edits.push(Edit {
+                        source: s.span.start + m.start()..s.span.start + m.end(),
+                        whitespace: None,
+                    });
                 }
             }
             _ => {}
@@ -75,8 +97,9 @@ fn html_gaps(raw: &str, gaps: &mut Vec<Range<usize>>) -> Result<()> {
 struct View {
     text: String,
     raw_spans: Vec<(usize, usize)>,
-    /// Each retained byte's position in the ordinary normalized text.
-    primary: Vec<usize>,
+    /// Each view byte owns a range in ordinary normalized text. Only a removed
+    /// encoded invisible creates a gap; a contracted whitespace escape owns its full range.
+    primary: Vec<(usize, usize)>,
 }
 
 impl View {
@@ -85,13 +108,13 @@ impl View {
         normalized: &NormalizedText,
         literals: &JsonStringLiterals<'_>,
     ) -> Result<Option<Self>> {
-        let mut gaps = Vec::new();
+        let mut edits = Vec::new();
         if raw.trim_start().starts_with('<') && raw.contains('&') {
-            html_gaps(raw, &mut gaps)?;
+            html_edits(raw, &mut edits)?;
         } else if raw.contains("\\u") {
-            json_gaps(raw, literals, &mut gaps);
+            json_edits(raw, literals, &mut edits);
         }
-        if gaps.is_empty() {
+        if !edits.iter().any(|edit| edit.whitespace.is_none()) {
             return Ok(None);
         }
         let mut view = Self {
@@ -100,18 +123,30 @@ impl View {
             primary: Vec::new(),
         };
         let mut start = 0;
-        for gap in gaps {
-            let end = start + normalized.spans[start..].partition_point(|&(s, _)| s < gap.start);
+        for edit in edits {
+            let end =
+                start + normalized.spans[start..].partition_point(|&(s, _)| s < edit.source.start);
             view.text.push_str(&normalized.text[start..end]);
             view.raw_spans
                 .extend_from_slice(&normalized.spans[start..end]);
-            view.primary.extend(start..end);
-            // Only ASCII source bytes were removed; normalization maps each byte to itself.
-            start = end + gap.len();
+            view.primary.extend((start..end).map(|i| (i, i + 1)));
+            // Every source spelling is ASCII, unchanged by primary normalization.
+            start = end + edit.source.len();
+            if let Some(ch) = edit.whitespace {
+                let folded = normalize(ch.encode_utf8(&mut [0; 4])).text;
+                view.text.push_str(&folded);
+                view.raw_spans.extend(std::iter::repeat_n(
+                    (edit.source.start, edit.source.end),
+                    folded.len(),
+                ));
+                view.primary
+                    .extend(std::iter::repeat_n((end, start), folded.len()));
+            }
         }
         view.text.push_str(&normalized.text[start..]);
         view.raw_spans.extend_from_slice(&normalized.spans[start..]);
-        view.primary.extend(start..normalized.text.len());
+        view.primary
+            .extend((start..normalized.text.len()).map(|i| (i, i + 1)));
         Ok(Some(view))
     }
 
@@ -121,9 +156,9 @@ impl View {
             .primary
             .get(candidate.span.clone())
             .ok_or_else(mapping_error)?;
-        let span = *positions.first().ok_or_else(mapping_error)?
-            ..*positions.last().ok_or_else(mapping_error)? + 1;
-        if span.len() == candidate.span.len() {
+        let span = positions.first().ok_or_else(mapping_error)?.0
+            ..positions.last().ok_or_else(mapping_error)?.1;
+        if !positions.windows(2).any(|p| p[0].1 < p[1].0) {
             return Ok(None);
         }
         candidate.span = span;
@@ -132,7 +167,7 @@ impl View {
                 .primary
                 .get(end.checked_sub(1).ok_or_else(mapping_error)?)
                 .ok_or_else(mapping_error)?
-                + 1;
+                .1;
         }
         Ok(Some(candidate))
     }

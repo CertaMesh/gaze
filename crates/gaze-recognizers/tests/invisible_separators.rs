@@ -119,10 +119,37 @@ fn encoded_identifiers_and_repeats_cover_only_the_exact_source_spans() {
 }
 
 #[test]
+fn encoded_json_whitespace_before_a_cue_is_a_boundary() {
+    for boundary in [r"\n", r"\r\n", r"\t", r"\u0020"] {
+        assert_exact_token(
+            &format!(r#"{{"note":"Résumé{boundary}SSN: "#),
+            r"959-7\u200b3-4567",
+            r#""}"#,
+        );
+    }
+    // Contracted whitespace inside a crossing match owns its complete source spelling.
+    assert_exact_token(
+        r#"{"note":"Telephone: "#,
+        r"+1\u0020(312) 55\u200B5-0100",
+        r#""}"#,
+    );
+}
+
+#[test]
+fn encoded_html_text_after_a_doctype_does_not_need_an_opening_element() {
+    assert_exact_token("<!doctype html>SSN: ", "959-7&shy;3-4567", "");
+}
+
+#[test]
 fn encoded_lookalikes_do_not_become_identifier_boundaries() {
     for input in [
         r#"{"message":"SSN: 959-7\\u200b3-4567"}"#,
         r#"{"message":"SSN: 959-7\u20zz3-4567"}"#,
+        r#"{"note":"header\\nSSN: 959-7\u200b3-4567"}"#,
+        r#"{"note":"header\qSSN: 959-7\u200b3-4567"}"#,
+        // A real invisible elsewhere must not license this whitespace-only identifier.
+        r#"{"note":"SSN: 959\u002073\u00204567; co\u200boperate"}"#,
+        r#"{"note":"header\nSSN: 959-73-4567; co\u200boperate"}"#,
         r#"{"SSN: 959-7\u200b3-4567":"public key example"}"#,
         r"SSN: 959-7\u200b3-4567",
         r"SSN: 959-7&#8203;3-4567",
