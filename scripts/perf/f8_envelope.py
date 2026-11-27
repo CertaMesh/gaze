@@ -84,6 +84,7 @@ FOREIGN = re.compile(
 TOKEN_PREFIX = re.compile(r"(?<![0-9A-Za-z])([0-9a-f]{8})(?=:|@gaze-fake\.invalid)")
 PLATFORMS = {"laptop": ("Darwin", "arm64"), "server": ("Linux", "x86_64")}
 PROBE_SECONDS = 5.0
+LOAD_TIME_CONSTANT = 60.0
 EXCHANGE_TIMEOUT = 600.0
 COLD_RUNS_MIN = 5
 HISTORY_TURNS = 12
@@ -275,9 +276,8 @@ class Daemon:
         self.peak = 0
         self.samples: list[int] = []
         self.probes = probes
-        # (wall time, cumulative CPU seconds) of the daemon over the last minute,
-        # matching the window of load1.
-        self._cpu: list[tuple[float, float]] = []
+        # The daemon's share of load1, damped like load1 itself and starting at 0.
+        self._last_cpu: tuple[float, float] | None = None
         self.own_cores = 0.0
         # A reader thread owns stdout, so buffered replies are never stranded
         # behind a select() on an already drained descriptor.
@@ -305,15 +305,32 @@ class Daemon:
             self._stop.wait(PROBE_SECONDS)
 
     def _own_cores(self) -> float:
-        used = cpu_seconds(self.proc.pid)
-        now = time.monotonic()
-        if used is not None:
-            self._cpu.append((now, used))
-        self._cpu = [s for s in self._cpu if now - s[0] <= 60.0] or self._cpu[-1:]
-        if len(self._cpu) >= 2 and self._cpu[-1][0] > self._cpu[0][0]:
-            (t0, c0), (t1, c1) = self._cpu[0], self._cpu[-1]
-            self.own_cores = max(0.0, (c1 - c0) / (t1 - t0))
+        self.observe_cpu(time.monotonic(), cpu_seconds(self.proc.pid))
         return self.own_cores
+
+    def observe_cpu(self, now: float, used: float | None) -> None:
+        """Fold one CPU-time sample into the damped share.
+
+        load1 is an exponentially damped average with a 60 s time constant. Each
+        increment is damped by one extra step, so the estimate stays below the
+        daemon's true share and never hides foreign load.
+        """
+        if used is None:
+            return
+        if self._last_cpu is not None:
+            then, before = self._last_cpu
+            dt = now - then
+            if dt > 0:
+                a = math.exp(-dt / LOAD_TIME_CONSTANT)
+                cores = max(0.0, used - before) / dt
+                self.own_cores = self.own_cores * a + cores * (1 - a) * a
+        self._last_cpu = (now, used)
+
+    def own_cores_at(self, now: float) -> float:
+        """The share after the daemon stopped: load1 keeps decaying it."""
+        if self._last_cpu is None:
+            return 0.0
+        return self.own_cores * math.exp(-max(0.0, now - self._last_cpu[0]) / LOAD_TIME_CONSTANT)
 
     def rss(self) -> int | None:
         rss = rss_bytes(self.proc.pid)
@@ -526,7 +543,7 @@ def measure(args) -> dict:
         policy_sha = sha256_file(policy)
         shutil.rmtree(work, ignore_errors=True)
     # load1 still carries the daemon's last minute right after it exits.
-    end_probe = host_probe(daemon.own_cores)
+    end_probe = host_probe(daemon.own_cores_at(time.monotonic()))
     probes.append(end_probe)
 
     pipeline_ids = {pid for _, pid in cold}
@@ -578,6 +595,10 @@ def check(receipt: dict, budgets: dict) -> list[str]:
     if len(probes) < 2 or not all(own_load(p.get("load", [99])[0], p.get("own_cores", 0.0)) < QUIET_LOAD_1M
                                   and not p.get("foreign") for p in probes):
         failures.append("host was not quiet at every probe; the receipt is diagnostic only")
+    cpus = receipt.get("host", {}).get("cpu_count") or 0
+    if probes and (probes[0].get("own_cores", 0.0) != 0.0
+                   or not all(0.0 <= p.get("own_cores", 0.0) <= cpus for p in probes)):
+        failures.append("probe own_cores out of range; the receipt is diagnostic only")
     if receipt.get("budgets_sha256") != sha256_file(BUDGETS):
         failures.append("receipt was measured against a different budgets file")
     if receipt.get("workload", {}).get("daemon_args"):

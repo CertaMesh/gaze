@@ -18,7 +18,7 @@ def receipt(turn, quiet=True, concurrency=1, **overrides):
         "schema": f8.SCHEMA, "envelope": "laptop", "quiet": True,
         "budgets_sha256": f8.sha256_file(f8.BUDGETS),
         "policy_source": "gaze setup --non-interactive",
-        "host": {"os": "Darwin", "machine": "arm64", "probes": probes},
+        "host": {"os": "Darwin", "machine": "arm64", "cpu_count": 18, "probes": probes},
         "workload": {"concurrent_sessions": concurrency, "daemon_args": []},
         "samples_ms": {"turn": turn, "reclean": [100.0] * 20, "restore": [5.0] * 20, "cold_start": [900.0] * 5},
         "rss_bytes": {"steady": 800_000_000, "peak": 1_000_000_000},
@@ -54,7 +54,7 @@ def test_receipt_must_match_the_decided_configuration():
         "daemon flags": {"workload": {"concurrent_sessions": 1, "daemon_args": ["--safety-net", "none"]}},
         "budgets file": {"budgets_sha256": "0" * 64},
         "gaze setup": {"policy_source": "custom"},
-        "platform": {"host": {"os": "Linux", "machine": "x86_64", "probes": [QUIET, QUIET]}},
+        "platform": {"host": {"os": "Linux", "machine": "x86_64", "cpu_count": 4, "probes": [QUIET, QUIET]}},
     }
     for needle, override in cases.items():
         failures = f8.check(receipt([100.0] * 100, **override), BUDGETS)
@@ -129,3 +129,22 @@ def test_cpu_seconds_reads_this_process():
     while time.process_time() < deadline:
         pass
     assert f8.cpu_seconds(os.getpid()) - start >= 0.2
+
+
+def test_own_share_never_exceeds_what_the_daemon_added_to_load1():
+    # Four busy cores for 30 s add 4 * (1 - e^-0.5) to load1; the estimate must stay below.
+    import math
+    daemon = f8.Daemon.__new__(f8.Daemon)
+    daemon._last_cpu, daemon.own_cores = None, 0.0
+    for step in range(7):
+        daemon.observe_cpu(step * 5.0, step * 5.0 * 4)
+    assert 0 < daemon.own_cores <= 4 * (1 - math.exp(-0.5))
+    assert daemon.own_cores_at(30.0 + 60.0) < daemon.own_cores * 0.37
+
+
+def test_own_cores_outside_the_possible_range_fail():
+    r = receipt([100.0] * 100)
+    r["host"]["probes"] = [QUIET, {"load": [0.5] * 3, "own_cores": 99.0, "foreign": [], "quiet": True}, QUIET]
+    assert any("own_cores" in f for f in f8.check(r, BUDGETS))
+    r["host"]["probes"] = [dict(QUIET, own_cores=1.0), QUIET]
+    assert any("own_cores" in f for f in f8.check(r, BUDGETS))
