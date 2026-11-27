@@ -1356,7 +1356,7 @@ fn classify_request_block<'a>(
                 Some(component),
                 inventory,
             )?,
-            ("tool_use", "input") => classify_arbitrary_value(
+            ("tool_use", "input") => classify_tool_use_input(
                 &member.value,
                 RequestCarrierClass::PromptMutable,
                 Some(component),
@@ -1618,23 +1618,44 @@ fn classify_arbitrary_value<'a>(
     component: Option<PromptComponent>,
     inventory: &mut FinalRequestCarrierInventory<'a>,
 ) -> Result<(), CodecErrorCode> {
+    classify_value(node, class, component, inventory, false)
+}
+
+/// Final classification of `tool_use.input`, whose numbers passed typed scalar admission.
+fn classify_tool_use_input<'a>(
+    node: &'a JsonNode,
+    class: RequestCarrierClass,
+    component: Option<PromptComponent>,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    classify_value(node, class, component, inventory, true)
+}
+
+fn classify_value<'a>(
+    node: &'a JsonNode,
+    class: RequestCarrierClass,
+    component: Option<PromptComponent>,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+    admitted_numbers: bool,
+) -> Result<(), CodecErrorCode> {
     match &node.kind {
         JsonKind::Object(members) => {
             inventory.set_object_order(node.occurrence, SemanticObjectOrder::DecodedKeys)?;
             for member in members {
                 classify_key(member, class, component, inventory)?;
-                classify_arbitrary_value(&member.value, class, component, inventory)?;
+                classify_value(&member.value, class, component, inventory, admitted_numbers)?;
             }
             Ok(())
         }
         JsonKind::Array(values) => {
             for value in values {
-                classify_arbitrary_value(value, class, component, inventory)?;
+                classify_value(value, class, component, inventory, admitted_numbers)?;
             }
             Ok(())
         }
         JsonKind::String(_) => classify_string_node(node, class, component, inventory),
         JsonKind::Bool(_) | JsonKind::Null => Ok(()),
+        JsonKind::Number(_) if admitted_numbers => Ok(()),
         JsonKind::Number(_) => Err(CodecErrorCode::InternalCoverageFailure),
     }
 }
@@ -2267,7 +2288,7 @@ fn transform_request_block(
                 saw_name = true;
             }
             ("tool_use", "input") => {
-                transform_request_mutable(&mut member.value, ctx, ledger)?;
+                transform_tool_use_input(&mut member.value, ctx, ledger)?;
                 saw_input = true;
             }
             ("tool_result", "tool_use_id") => {
@@ -2589,6 +2610,25 @@ fn transform_request_mutable(
     ctx: &mut RequestTransformContext<'_>,
     ledger: &mut CoverageLedger,
 ) -> Result<(), CodecErrorCode> {
+    transform_request_value(node, ctx, ledger, false)
+}
+
+/// `tool_use.input` admits numbers (typed scalar admission); other mutable request JSON keeps
+/// rejecting them.
+fn transform_tool_use_input(
+    node: &mut JsonNode,
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    transform_request_value(node, ctx, ledger, true)
+}
+
+fn transform_request_value(
+    node: &mut JsonNode,
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+    admit_numbers: bool,
+) -> Result<(), CodecErrorCode> {
     match &mut node.kind {
         JsonKind::Object(members) => {
             ledger.mark(node.occurrence)?;
@@ -2599,23 +2639,48 @@ fn transform_request_mutable(
                 if !transformed_keys.insert(member.key.value.clone()) {
                     return Err(CodecErrorCode::TransformedKeyCollision);
                 }
-                transform_request_mutable(&mut member.value, ctx, ledger)?;
+                transform_request_value(&mut member.value, ctx, ledger, admit_numbers)?;
             }
             Ok(())
         }
         JsonKind::Array(values) => {
             ledger.mark(node.occurrence)?;
             for value in values {
-                transform_request_mutable(value, ctx, ledger)?;
+                transform_request_value(value, ctx, ledger, admit_numbers)?;
             }
             Ok(())
         }
         JsonKind::String(_) => transform_request_string(node, ctx, ledger),
         JsonKind::Bool(_) | JsonKind::Null => ledger.mark(node.occurrence),
-        JsonKind::Number(_) => {
+        JsonKind::Number(spelling) => {
             ledger.mark(node.occurrence)?;
-            Err(CodecErrorCode::UnsupportedRequestSurface)
+            if admit_numbers {
+                admit_request_number(spelling, &node.path, ctx)
+            } else {
+                Err(CodecErrorCode::UnsupportedRequestSurface)
+            }
         }
+    }
+}
+
+/// Typed scalar admission for a number in mutable request JSON. The number is scanned as a
+/// whole JSON-number leaf: a labelled identifier refuses with the pipeline's typed
+/// `Untransformable` reason, and any other detection refuses because a token would change
+/// the number's type. A number nothing detects passes with its original spelling.
+fn admit_request_number(
+    spelling: &str,
+    path: &gaze_types::FieldPath,
+    ctx: &mut RequestTransformContext<'_>,
+) -> Result<(), CodecErrorCode> {
+    let field = gaze_types::FieldProvenance::new(
+        path.clone(),
+        gaze_types::JsonScalarType::Number,
+        gaze_types::FieldEvidence::ValidatedParse,
+    );
+    if ctx.protect_field(spelling, &field)? == spelling {
+        Ok(())
+    } else {
+        Err(CodecErrorCode::UnsupportedRequestSurface)
     }
 }
 

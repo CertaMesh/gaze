@@ -1366,6 +1366,7 @@ impl<'pipeline, 'context, 'transaction, 'session>
             Some(gaze_types::FieldContext::Fragment { field, offset }) => {
                 context.with_field_fragment(field, offset)
             }
+            Some(gaze_types::FieldContext::Spans(spans)) => context.with_field_spans(spans),
             _ => context,
         };
         let result = self.pipeline.resolve_boundary_text_transaction_in_context(
@@ -1451,7 +1452,16 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         prefix_cache_write_mode: PrefixCacheWriteMode,
         field: Option<&gaze_types::FieldProvenance>,
     ) -> Result<String, CodecErrorCode> {
-        let output = self.protect_preserving_tokens(input, prefix_cache_write_mode, field)?;
+        // A leaf whose whole text strictly parses as one JSON object or array (a tool call's
+        // `arguments`, a JSON tool result) carries its own fields: bind them exactly as a
+        // whole-document clean does. Prose that merely contains JSON gets no field context.
+        let embedded = self.pipeline.json_text_field_spans(
+            input,
+            &field.map(|field| field.path.clone()).unwrap_or_default(),
+        );
+        let field = if embedded.is_empty() { field } else { None };
+        let output =
+            self.protect_preserving_tokens(input, prefix_cache_write_mode, field, &embedded)?;
         let resolved = self.pipeline.resolve_staged_owned_text(
             self.transaction,
             &output,
@@ -1603,6 +1613,7 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
         input: &str,
         prefix_cache_write_mode: PrefixCacheWriteMode,
         field: Option<&gaze_types::FieldProvenance>,
+        embedded: &[(std::ops::Range<usize>, gaze_types::FieldProvenance)],
     ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
         let original = self
@@ -1628,20 +1639,24 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             })
         };
         for range in &ranges {
-            prepared.push_str(&self.protect_unstaged_segment(
-                &input[cursor..range.start],
+            prepared.push_str(&self.protect_gap_pieces(
+                input,
+                cursor..range.start,
                 prefix_cache_write_mode,
                 field_context(cursor),
+                embedded,
             )?);
             let start = prepared.len();
             prepared.push_str(&input[range.clone()]);
             caller_owned.insert((start, prepared.len()));
             cursor = range.end;
         }
-        prepared.push_str(&self.protect_unstaged_segment(
-            &input[cursor..],
+        prepared.push_str(&self.protect_gap_pieces(
+            input,
+            cursor..input.len(),
             prefix_cache_write_mode,
             field_context(cursor),
+            embedded,
         )?);
         let prepared = self.coalesce_unpublished_rule_tokens(&prepared, &caller_owned)?;
         if self
@@ -1653,6 +1668,41 @@ impl PipelineRequestPseudonymizer<'_, '_, '_, '_> {
             return Err(CodecErrorCode::ProtectionFailedClosed);
         }
         Ok(prepared)
+    }
+
+    /// One gap between owned tokens. With a carried JSON document's scalars, a scalar wholly
+    /// inside the gap keeps complete context and the part an owned token cuts is a fragment.
+    fn protect_gap_pieces(
+        &mut self,
+        input: &str,
+        gap: std::ops::Range<usize>,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+        field: Option<gaze_types::FieldContext<'_>>,
+        embedded: &[(std::ops::Range<usize>, gaze_types::FieldProvenance)],
+    ) -> Result<String, CodecErrorCode> {
+        if embedded.is_empty() {
+            return self.protect_unstaged_segment(&input[gap], prefix_cache_write_mode, field);
+        }
+        let mut output = String::with_capacity(gap.len());
+        for (piece, kind) in gaze::field_pieces(gap, embedded) {
+            let field = match &kind {
+                gaze::FieldPiece::Spans(spans) => {
+                    (!spans.is_empty()).then_some(gaze_types::FieldContext::Spans(spans))
+                }
+                gaze::FieldPiece::Fragment { field, offset } => {
+                    Some(gaze_types::FieldContext::Fragment {
+                        field,
+                        offset: *offset,
+                    })
+                }
+            };
+            output.push_str(&self.protect_unstaged_segment(
+                &input[piece],
+                prefix_cache_write_mode,
+                field,
+            )?);
+        }
+        Ok(output)
     }
 }
 
@@ -3489,6 +3539,37 @@ impl RequestResidualScan<'_, '_> {
             .all(|hit| rule_hit_is_covered(&expanded, &covered, hit.span)))
     }
 
+    /// A JSON number is a whole scalar leaf: scan it with its field path so a labelled
+    /// identifier refuses with the typed `Untransformable` reason before forwarding. Any other
+    /// detection is left to [`Self::probe`], which refuses a number that would change.
+    fn admit_labelled_number(
+        &self,
+        field: &gaze_types::FieldPath,
+        spelling: &str,
+    ) -> Result<(), ProxyError> {
+        let provenance = gaze_types::FieldProvenance::new(
+            field.clone(),
+            gaze_types::JsonScalarType::Number,
+            gaze_types::FieldEvidence::ValidatedParse,
+        );
+        let session =
+            Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
+        let mut transaction = session.begin_transaction();
+        match self.pipeline.resolve_boundary_text_transaction_in_context(
+            &mut transaction,
+            spelling,
+            gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries)
+                .with_field(&provenance),
+        ) {
+            Err(refusal)
+                if matches!(refusal.error, gaze::ProtectionError::Untransformable { .. }) =>
+            {
+                Err(ProxyError::Refused { refusal })
+            }
+            _ => Ok(()),
+        }
+    }
+
     fn probe(
         &self,
         field_path: &crate::adapter::CoveragePath,
@@ -3527,6 +3608,7 @@ impl RequestResidualScan<'_, '_> {
         let Value::Object(root) = body else {
             return self.walk(
                 &crate::adapter::CoveragePath::default(),
+                &gaze_types::FieldPath::default(),
                 "",
                 body,
                 false,
@@ -3539,6 +3621,7 @@ impl RequestResidualScan<'_, '_> {
                 (true, "model", Value::String(text)) => visit(&key.as_str().into(), text, true)?,
                 _ => self.walk(
                     &key.as_str().into(),
+                    &gaze_types::FieldPath::default().child(key.clone()),
                     key,
                     value,
                     CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
@@ -3556,9 +3639,11 @@ impl RequestResidualScan<'_, '_> {
     /// field paths. An empty JSON key or one containing `.` or `[` can make distinct nodes
     /// render the same path string. Such subtrees stop trusting path equality and are probed
     /// unconditionally. Extra probing is safe: a surfaced position is already clean.
+    #[allow(clippy::too_many_arguments)]
     fn walk(
         &self,
         path: &crate::adapter::CoveragePath,
+        field: &gaze_types::FieldPath,
         leaf_key: &str,
         value: &Value,
         in_carrier_subtree: bool,
@@ -3573,13 +3658,16 @@ impl RequestResidualScan<'_, '_> {
             }
             Value::Number(number) => {
                 if in_carrier_subtree || !NON_CARRIER_NUMERIC_KEYS.contains(&leaf_key) {
-                    visit(path, &number.to_string(), false)?;
+                    let spelling = number.to_string();
+                    self.admit_labelled_number(field, &spelling)?;
+                    visit(path, &spelling, false)?;
                 }
             }
             Value::Array(items) => {
                 for (index, item) in items.iter().enumerate() {
                     self.walk(
                         &path.index(index),
+                        &field.child(index.to_string()),
                         leaf_key,
                         item,
                         in_carrier_subtree,
@@ -3593,6 +3681,7 @@ impl RequestResidualScan<'_, '_> {
                     let child_path = path.member(key);
                     self.walk(
                         &child_path,
+                        &field.child(key.clone()),
                         key,
                         child,
                         in_carrier_subtree || CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
@@ -5161,6 +5250,7 @@ mod tests {
         gaze::ProtectionError::Untransformable {
             reason: gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath,
             field_path: gaze_types::FieldPath::new(["synthetic-key@example.invalid".into()]),
+            others: Vec::new(),
         }
         .into()
     }
@@ -7062,3 +7152,7 @@ mod tests {
 #[cfg(test)]
 #[path = "server/repeat_coverage_tests.rs"]
 mod repeat_coverage_tests;
+
+#[cfg(test)]
+#[path = "server/json_carrier_tests.rs"]
+mod json_carrier_tests;

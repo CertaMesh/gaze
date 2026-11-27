@@ -378,6 +378,38 @@ class ValidatorRecallTests(unittest.TestCase):
         )
         self.assertEqual(result["shape_only_recall"]["full_coverage_recall"], 1.0)
 
+    def test_compiled_probe_survives_a_typed_refusal_and_answers_the_next_document(
+        self,
+    ) -> None:
+        # A labelled JSON number refuses typed on the `core` floor. The probe records no
+        # predictions for it and keeps answering, so the capture never aborts.
+        repo_root = Path(__file__).resolve().parents[2]
+        probe = benchmark.validator_probe_binary(repo_root)
+        if not probe.is_file():
+            self.skipTest("validator recall probe has not been built")
+
+        refused_text = '{"customer_id":731284}'
+        refused = benchmark.Document(
+            uid="validator-refused",
+            text=refused_text,
+            language="en",
+            region="US",
+            source_dataset="synthetic",
+            spans=(benchmark.Span(15, 21, "CUSTOMER_ID"),),
+        )
+        following = self.document()
+        measurements = benchmark.collect_validator_measurements(
+            probe, [refused, following], [refused.uid, following.uid]
+        )
+        self.assertEqual(
+            measurements["documents"][refused.uid]["predictions"],
+            {"validator_backed": [], "shape_only": []},
+        )
+        card = benchmark.validator_recall_by_label(
+            [following], [following.uid], measurements
+        )["CREDITCARDNUMBER"]
+        self.assertEqual(card["shape_only_recall"]["full_coverage_recall"], 1.0)
+
 
 class ContractTests(unittest.TestCase):
     def test_contract_score_does_not_compensate_restore_failure(self) -> None:
