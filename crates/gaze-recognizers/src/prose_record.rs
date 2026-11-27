@@ -116,7 +116,7 @@ impl Recognizer for ProseRecordRecognizer {
                     .expect("static compound token regex")
             });
             static ARTIFACT: LazyLock<Regex> = LazyLock::new(|| {
-                Regex::new(r#"(?i)\b(?:release|build|version|katalognummer)\b(?:[\p{Zs}\t]+(?:tag|id|number|nr)\b)?(?:[\p{Zs}\t]+(?:is|ist|lautet)\b)?[\p{Zs}\t:#`"'„“(\[]+"#)
+                Regex::new(r#"(?i)\b(?:release|build|version|katalognummer)\b(?:[\p{Zs}\t]+(?:tag|id|number|nr)\b)?(?:[\p{Zs}\t]+(?:is|ist|lautet)\b)?[\p{Zs}\t:=#`"'„“(\[]+"#)
                     .expect("static artifact label regex")
             });
             let mut owners = ARTIFACT.find_iter(input).peekable();
@@ -171,12 +171,11 @@ impl Recognizer for ProseRecordRecognizer {
                     .chain(groups)
                     .any(|g| g.len() == 5 && g.bytes().all(|b| b.is_ascii_digit()));
                 let first = seeds.partition_point(|r| r.start < token.start());
-                if zip_group
-                    || seeds[first..]
-                        .iter()
-                        .take_while(|r| r.start < token.end())
-                        // A rule already covering the whole ID has no missing boundary.
-                        .any(|r| r.end <= token.end() && **r != token.range())
+                let mut inside = seeds[first..].iter().take_while(|r| r.start < token.end());
+                // Completion must not displace a recognizer that owns the entire ID,
+                // even when its value contains an otherwise eligible five-digit group.
+                if !inside.clone().any(|r| **r == token.range())
+                    && (zip_group || inside.any(|r| r.end <= token.end()))
                 {
                     matches.push(token.range());
                 }

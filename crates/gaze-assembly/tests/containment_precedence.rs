@@ -372,6 +372,28 @@ class = "custom:address"
     assert_eq!(shape(&run.text), "Adresse: <Custom:address_1>");
 }
 
+#[test]
+fn complete_adopter_id_keeps_its_class_and_action_with_a_five_digit_group() {
+    let extra = r#"
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "order-id"
+class = "custom:order_id"
+pattern = '\bORD-\d{5,6}\b'
+"#;
+    for (action, expected) in [
+        (Action::Tokenize, "<Custom:order_id_1>"),
+        (Action::Preserve, "ORD-57293"),
+    ] {
+        let run = clean_run(
+            &policy("global", &[("custom:order_id", action)], extra),
+            "ORD-57293",
+            None,
+        );
+        assert_eq!(shape(&run.text), expected);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The guard.
 

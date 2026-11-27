@@ -155,6 +155,8 @@ fn carrier_and_artifact_names_are_not_prose_record_ids() {
         "Release `ACCT_57293` fixes a compiler warning.",
         "Release (ACCT_57293) is documented.",
         "Build tag: ACCT_57293",
+        "Build tag = ACCT_57293.",
+        "Build tag=ACCT_57293.",
         "The build number is `ACCT_57293`.",
         "Draft AX-4111111111111112.",
         r#"{"comment":"＂","name":"ACCT_57293"}"#,
