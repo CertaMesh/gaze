@@ -1,5 +1,6 @@
 mod lineage;
 mod occurrence;
+mod outcomes;
 mod protection;
 use occurrence::{Batch, Ledger, Occurrence, Origin, Relation};
 mod recovery;
@@ -314,6 +315,7 @@ pub struct Pipeline {
     rules: Vec<crate::rule::RuleEntry>,
     residual_coverage: bool,
     caller_fields: CallerFields,
+    outcomes: crate::policy::OutcomesPolicy,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -637,7 +639,19 @@ impl Pipeline {
         self.registry = policy.registry.clone();
         self.rules = policy.rules.clone();
         self.caller_fields = policy.caller_fields.clone();
+        self.outcomes = policy.outcomes;
         self
+    }
+
+    /// Replace the `[outcomes]` dispositions applied before resolution.
+    pub fn with_outcomes(mut self, outcomes: crate::policy::OutcomesPolicy) -> Self {
+        self.outcomes = outcomes;
+        self
+    }
+
+    /// The `[outcomes]` dispositions applied before resolution.
+    pub fn outcomes(&self) -> crate::policy::OutcomesPolicy {
+        self.outcomes
     }
 
     /// Replace the caller-declared fields located in each cleaned text document.
@@ -798,14 +812,24 @@ impl Pipeline {
                 )
                 .map(CleanDocument::Structured)
             }
-            RawDocument::Text(text) => Ok(CleanDocument::Text(self.pseudonymize_text(
-                target,
-                &text,
-                None,
-                DocumentKind::Text,
-                locale_chain,
-                dictionaries,
-            )?)),
+            RawDocument::Text(text) => {
+                // The same field context every text clean passes: a whole-JSON document's
+                // labelled fields bind here too.
+                let fields = document_field_spans(&text, &self.caller_fields);
+                Ok(CleanDocument::Text(
+                    self.redact_text_with_manifest_uncached(
+                        target,
+                        &text,
+                        None,
+                        DocumentKind::Text,
+                        locale_chain,
+                        dictionaries,
+                        None,
+                        (!fields.is_empty()).then_some(gaze_types::FieldContext::Spans(&fields)),
+                    )?
+                    .text,
+                ))
+            }
             _ => Err(Error::UnsupportedRawDocumentVariant),
         }
     }
@@ -1293,9 +1317,21 @@ impl Pipeline {
         if let Some(field) = field {
             ctx = ctx.with_fields(field);
         }
+        // A whole-input JSON number leaf: no repeat may become a token inside it.
+        let whole_number = match field {
+            Some(gaze_types::FieldContext::WholeInput(provenance))
+                if provenance.json_type == gaze_types::JsonScalarType::Number =>
+            {
+                Some(provenance)
+            }
+            _ => None,
+        };
         let (pool, vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
+        // Refusals wait for the repeat sweep, so the one error names every refused field.
+        let (pool, mut refusals) =
+            self.enforce_outcomes(target, pool, field_name, document_kind)?;
         let mut whole = {
             let _perf = gaze_types::perf_span!("resolve1_ns");
             recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?
@@ -1307,7 +1343,10 @@ impl Pipeline {
             text,
             field_name,
             locale_chain,
+            whole_number,
+            &mut refusals,
         )?;
+        self.raise_refusals(target, refusals, field_name, document_kind)?;
         // House numbers are licensed by the final street spans, so they can only be
         // found once resolution (and the repeat-value sweep) has settled; the pool is
         // then resolved once more with them added. Every other candidate is unchanged,
@@ -1740,6 +1779,8 @@ impl Pipeline {
         text: &str,
         field_name: Option<&str>,
         locale_chain: &[crate::LocaleTag],
+        whole_number: Option<&gaze_types::FieldProvenance>,
+        refusals: &mut outcomes::Refusals,
     ) -> Result<BTreeMap<(usize, usize), SweepLink>> {
         let _perf = gaze_types::perf_span!("sweep_ns");
         let winners = whole.primary.iter().chain(&whole.recovered);
@@ -1779,6 +1820,8 @@ impl Pipeline {
                     .is_protective()
             })
         });
+        let uncovered =
+            self.guard_field_bound_repeats(uncovered, normalized, text, whole_number, refusals)?;
         let mut links = BTreeMap::new();
         let mut added = Vec::new();
         for hit in crate::sweep::select(uncovered) {
@@ -3235,6 +3278,12 @@ impl Pipeline {
             entry = entry.with_validator_fail_reason(reason);
         }
         entry.labelled_value_scan_reason = detection.labelled_value_scan_reason;
+        if let Some(outcome) = detection.outcome {
+            entry = entry.with_protection_outcome(outcome);
+        }
+        if let Some(field) = &detection.field {
+            entry = entry.with_field_provenance(field);
+        }
         if detection.collision_family.is_some() || detection.collision_variant.is_some() {
             entry = entry.with_collision_metadata(
                 detection.collision_family.clone(),
@@ -3396,6 +3445,10 @@ struct IndexedDetection {
     /// Set when the value was kept although its checksum failed (`ValidatorOnFail::Record`).
     validator_fail_reason: Option<ValidatorFailReason>,
     labelled_value_scan_reason: Option<LabelledValueScanReason>,
+    /// Typed decision of a field-bound winner; `None` is the legacy protected contract.
+    outcome: Option<gaze_types::ProtectionOutcome>,
+    /// The structured field a field-bound winner covers, audited without its path segments.
+    field: Option<gaze_types::FieldProvenance>,
 }
 
 struct CleanText {
@@ -5074,9 +5127,16 @@ pub struct PipelineBuilder {
     restore_boundary_dlp_audit: bool,
     rules: Vec<crate::rule::RuleEntry>,
     caller_fields: CallerFields,
+    outcomes: crate::policy::OutcomesPolicy,
 }
 
 impl PipelineBuilder {
+    /// Apply these `[outcomes]` dispositions to typed candidate outcomes.
+    pub fn outcomes(mut self, outcomes: crate::policy::OutcomesPolicy) -> Self {
+        self.outcomes = outcomes;
+        self
+    }
+
     /// Locate these caller-declared fields in every cleaned text document.
     pub fn caller_fields(mut self, fields: CallerFields) -> Self {
         self.caller_fields = fields;
@@ -5251,6 +5311,7 @@ impl PipelineBuilder {
             rules: self.rules,
             residual_coverage: true,
             caller_fields: self.caller_fields,
+            outcomes: self.outcomes,
         })
     }
 }
@@ -5917,6 +5978,8 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
                     sweep_link: None,
                     validator_fail_reason: None,
                     labelled_value_scan_reason: None,
+                    outcome: None,
+                    field: None,
                 }
             })
         })
@@ -5964,6 +6027,8 @@ fn indexed_detection_from_candidate(
         sweep_link: None,
         validator_fail_reason: candidate.validator_fail_reason,
         labelled_value_scan_reason: candidate.labelled_value_scan_reason,
+        outcome: candidate.outcome,
+        field: candidate.field,
     }
 }
 
