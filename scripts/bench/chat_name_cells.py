@@ -106,3 +106,84 @@ def records(api, partition):
             for index, template in enumerate(templates):
                 emit("D", cue, index, "ordinary", template, {})
     return result
+
+
+BOUNDARY_PREFIX = "chat_boundaries_"
+
+# {G} and {S} identify people; {W} introduces a name-word and {B} reuses
+# the exact same spelling with its ordinary meaning. Inflection belongs to
+# the sentence, not the identifier. No predicates depend on a recognizer.
+BOUNDARIES = {
+    ("dev", "en"): {
+        "handle_verb": "@guestlistbot {G} will bring extra chairs.",
+        "ask_verb": "People who ask {G} may get an earlier appointment.",
+        "word_again": "hi, my name is {W}. the pool is closed all {B}.",
+        "single_colon": "Could you ask {G}: is the hall open?",
+        "pair_colon": "Please ask {G} {S}: how many chairs fit?",
+        "single_possessive": "Please cc {G}'s assistant on the invoice.",
+        "pair_possessive": "Can you ask {G} {S}’s deputy instead?",
+        "calendar": "Please cc May invoices to the archive.",
+        "demonym": "Ask Irish publishers about international shipping rates.",
+        "word": "@guestlistbot bill the room hire to the events budget.",
+    },
+    ("test", "en"): {
+        "handle_verb": "@rosterbot {G} may need a later shift.",
+        "ask_verb": "Guests who ask {G} will get their badges today.",
+        "word_again": "my name is {W}; the warning light flashes {B} when the battery is low.",
+        "single_colon": "Let's ask {G}: when does the shift finish?",
+        "pair_colon": "We should ask {G} {S}: are there any lockers left?",
+        "single_possessive": "Can you ask {G}’s supervisor for a key?",
+        "pair_possessive": "Please cc {G} {S}'s office on the reply.",
+        "calendar": "@rosterbot March shifts should include a handover.",
+        "demonym": "Please ask Dutch galleries whether they lend paintings.",
+        "word": "Please cc rose orders to the nursery's shared inbox.",
+    },
+    ("dev", "de"): {
+        "handle_verb": "@gaestebot {G} will am Fenster sitzen.",
+        "ask_verb": "Frag {G} lieber vorher nach dem Schlüssel.",
+        "word_again": "Ich heiße {W}. Der {B} der Lage ist mir bewusst.",
+        "single_colon": "Bitte frag {G}: Wie groß ist der Raum?",
+        "pair_colon": "Frag {G} {S}: Gibt es noch freie Plätze?",
+        "single_possessive": "Bitte frag {G}s Vertretung nach dem Termin.",
+        "pair_possessive": "Frag {G} {S}s Team nach dem Lageplan.",
+        "calendar": "@gaestebot August ist der einzige ausgebuchte Monat.",
+        "demonym": "Frag Berliner Buchhandlungen nach den Lieferfristen.",
+        "word": "Ich frag mal beim Kundendienst nach.",
+    },
+    ("test", "de"): {
+        "handle_verb": "@planungsbot {G} kann erst am Nachmittag kommen.",
+        "ask_verb": "Bitte frag {G} morgen nach dem Dienstplan.",
+        "word_again": "ich heiße {W}. meine schürze ist auch {B}.",
+        "single_colon": "Wir sollten nachfragen. Frag {G}: Wann ist der Raum frei?",
+        "pair_colon": "Bitte frag {G} {S}: Wer schließt den Raum ab?",
+        "single_possessive": "Frag {G}’ Kollegen nach der Übergabe.",
+        "pair_possessive": "Bitte frag {G} {S}s Abteilung nach dem Formular.",
+        "calendar": "@planungsbot April hat nur dreißig Tage.",
+        "demonym": "Bitte frag Wiener Verlage nach ihren Herbstprogrammen.",
+        "word": "Frag lieber zuerst am Schalter nach.",
+    },
+}
+
+
+def boundary_records(api, partition):
+    result = []
+    for language in ("en", "de"):
+        key = partition, language
+        _, _, word, given, surname = CAST[key]
+        for shape, template in BOUNDARIES[key].items():
+            word_form = word if key == ("dev", "de") else word.lower()
+            first = given.lower() if shape in ("handle_verb", "ask_verb") else given
+            text, gold = api._fill(template, {
+                "G": (first, "GIVENNAME"), "S": (surname, "SURNAME"),
+                "W": (word_form, "GIVENNAME"), "B": (word_form, None),
+            })
+            layer = "D" if shape in ("calendar", "demonym", "word") else "A"
+            result.append(api.Record(
+                uid=f"agentic-{partition}-{layer}-chat-boundary-{language}-{shape}",
+                partition=partition, layer=layer, family="chat_name", language=language,
+                region={"en": "US", "de": "DE"}[language], text=text, gold=gold,
+                validity=api.BENIGN if layer == "D" else api.UNCHECKED,
+                surface=f"{BOUNDARY_PREFIX}{language}_{shape}", group=f"{partition}-chat-name-{language}",
+                template=f"chat-boundary/{partition}/{language}/{shape}",
+            ))
+    return result

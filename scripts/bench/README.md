@@ -765,8 +765,12 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/75331b401559d44ee4aeb1530f625b1231df256be989028b21293250d2cbdffd.json)
+The [chat corpus specification](../../docs/reference/benchmarks/specifications/75331b401559d44ee4aeb1530f625b1231df256be989028b21293250d2cbdffd.json)
 adds generator v32's [EN/DE chat name cells](../../docs/reference/benchmarks/README.md#names-in-chat-generator-v32).
+The [chat rule vocabulary specification](../../docs/reference/benchmarks/specifications/a1573ead260cc4e07852bc92a4514bc7c3e09d1697f0218a0b7904f8a5eb5d62.json)
+adds `name.chat_cue` to the validation vocabulary for the same corpus.
+The [current specification](../../docs/reference/benchmarks/specifications/b12892ef5bd7ae7fcec863583fc3943b9e2e0717222c5f0ada3811ae02a92875.json)
+keeps that vocabulary and adds generator v33's [name boundaries](../../docs/reference/benchmarks/README.md#chat-name-boundaries-generator-v33).
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

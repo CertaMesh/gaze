@@ -62,7 +62,50 @@ def test_chat_gold_and_counterweights(partition, language):
 
 
 def test_partitions_have_disjoint_text_and_values():
-    dev, test = [cells.records(api, p) for p in api.PARTITIONS]
+    dev, test = [cells.records(api, p) + cells.boundary_records(api, p) for p in api.PARTITIONS]
     assert not {r.text for r in dev} & {r.text for r in test}
     assert not {g.value.casefold() for r in dev for g in r.gold} & {
         g.value.casefold() for r in test for g in r.gold}
+
+
+@pytest.mark.parametrize("partition,digest", [
+    ("dev", "14c6d8bdf320efce893ce993e9b3c2da61f72d73dc097d7044c2361998f5896f"),
+    ("test", "0bc390fe15428d1c69d4250ae1e134b9f7102f97dc30a5ac9874affc204d980f"),
+])
+def test_v32_corpus_and_contract_are_frozen(partition, digest):
+    rows = api.records_as_of(32, api.generate(partition))
+    assert hashlib.sha256(api.corpus_bytes(rows)).hexdigest() == digest
+    assert api.load_contract(ROOT, version=32).sha256 == "882911932297d6f459d34f5971a9ec7266eda9290a23afcf838f88d4776366d1"
+
+
+@pytest.mark.parametrize("partition", api.PARTITIONS)
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_boundary_gold_ends_at_the_name(partition, language):
+    rows = [r for r in cells.boundary_records(api, partition) if r.language == language]
+    assert Counter(r.layer for r in rows) == {"A": 7, "D": 3}
+    _, _, word, given, surname = cells.CAST[partition, language]
+    for row in rows:
+        shape = row.surface.removeprefix(f"{cells.BOUNDARY_PREFIX}{language}_")
+        source = row.text.encode()
+        if shape in ("calendar", "demonym", "word"):
+            assert row.layer == "D" and not row.gold
+            continue
+        assert row.layer == "A"
+        if shape == "word_again":
+            (g,) = row.gold
+            assert (g.label, g.value.casefold()) == ("GIVENNAME", word.casefold())
+            assert source.count(g.value.encode()) == 2 and source.index(g.value.encode()) == g.start
+        else:
+            expected = [("GIVENNAME", given)]
+            if shape.startswith("pair_"):
+                expected.append(("SURNAME", surname))
+            assert [(g.label, g.value.casefold()) for g in row.gold] == [(k, v.casefold()) for k, v in expected]
+            tail = source[row.gold[-1].end:].decode()
+            if shape.endswith("colon"):
+                assert tail.startswith(":")
+            elif shape.endswith("possessive"):
+                assert re.match(r"(?:'s|’s|s|’) ", tail)
+            else:
+                assert shape in ("ask_verb", "handle_verb") and re.match(r" \w+ ", tail)
+        for g in row.gold:
+            assert source[g.start:g.end].decode() == g.value

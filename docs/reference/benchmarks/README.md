@@ -2005,7 +2005,8 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) adds the JSON structure census to the measuring closure; the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) updates the known-record cell and arm harness digests; and the [current specification](specifications/75331b401559d44ee4aeb1530f625b1231df256be989028b21293250d2cbdffd.json) adds generator v32's chat name cells.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) adds the JSON structure census to the measuring closure; the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) updates the known-record cell and arm harness digests; the [chat corpus specification](specifications/75331b401559d44ee4aeb1530f625b1231df256be989028b21293250d2cbdffd.json) adds generator v32's chat name cells; the [chat rule vocabulary specification](specifications/a1573ead260cc4e07852bc92a4514bc7c3e09d1697f0218a0b7904f8a5eb5d62.json) adds the chat-name rule to the validation vocabulary;
+and the [current specification](specifications/b12892ef5bd7ae7fcec863583fc3943b9e2e0717222c5f0ada3811ae02a92875.json) adds generator v33's name boundaries without changing that vocabulary.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2586,6 +2587,21 @@ or recognizer output. Dev and test use distinct names, handles and messages.
 Each v32 partition has **41,894 documents**: 20,043 A, 9,050 D and 12,801 R.
 Both v31 partitions rebuild byte-for-byte with the [frozen v31 contract](scored-labels-agentic-generator-v31.json).
 No release has been measured here under v32; existing results retain their original specification.
+
+### Chat name boundaries (generator v33)
+
+The `chat_boundaries_` cells add 14 A and 6 D messages per partition. A
+separates a person's name from the following ordinary word: a bot may be told
+who *will* attend, for example, without `will` being that person's surname.
+Other A messages introduce a name such as `amber` and later use the same
+spelling for a colour. Only the first occurrence is gold. Colons, English
+possessive `'s` or `’s`, and German genitive `s` or `’` after a name ending in
+`s` are outside the single or paired name. D puts month names, demonyms, and
+ordinary name-words after weak cues; no person is identified by those words.
+
+The v33 partition totals are 20,057 A, 9,056 D and 12,801 R (41,914 documents).
+The [v32 contract](scored-labels-agentic-generator-v32.json) and both v32
+partition hashes are frozen. Historical results remain under their own specifications.
 
 ### Measured adjacency layer history
 
