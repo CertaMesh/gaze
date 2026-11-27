@@ -109,6 +109,15 @@ class KnownRecordCellTests(unittest.TestCase):
             expected = positive.probe_kind.value if positive.probe_kind else cells.CONTROL_MEASURED_KIND[positive.control_kind]
             self.assertEqual(positive.measured_kind(), expected)
 
+    def test_v7_pairs_keep_identical_bytes(self) -> None:
+        import hashlib
+        v7 = [p for p in self.pairs if p.positive.variant != "unlisted_field"]
+        self.assertEqual(len(v7), 120)
+        self.assertEqual(
+            hashlib.sha256(cells.corpus_bytes(v7)).hexdigest(),
+            "9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0",
+        )
+
     def test_generation_is_deterministic_and_pinned(self) -> None:
         again = cells.generate()
         self.assertEqual(cells.corpus_bytes(again), cells.corpus_bytes(self.pairs))

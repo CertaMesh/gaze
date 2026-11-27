@@ -70,8 +70,8 @@ UNLISTED_NAME_TWINS = {"Maren": "Marenhaus", "Tamsin": "Tamsinware", "Odalys": "
 WORD_NAMES = ("Summer", "Dawn", "Ivy", "Autumn")
 # Coined single names that are neither listed names nor words, declared as a
 # whole structured field value; NER has no name context there.
-FIELD_NAMES = ("Qorvex", "Zentha", "Vaskor", "Drennic")
-FIELD_NAME_TWINS = {"Qorvex": "Qorvexline", "Zentha": "Zenthaport", "Vaskor": "Vaskorbank", "Drennic": "Drennicware"}
+FIELD_NAMES = ("Qorvex", "Zentha")
+FIELD_NAME_TWINS = {"Qorvex": "Qorvexline", "Zentha": "Zenthaport"}
 # Known-record capture profiles. `default` is the gate policy `gaze setup`
 # writes. `core` is the declared MCP protection profile (bundled `core`, no NER
 # or safety net; see `gaze mcp doctor`), where a declared value has only the

@@ -771,9 +771,12 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/05083af71c51f58963c68c52b0e2d893f2e7a4ef6d46c046c273afd750e4980a.json)
+The [current specification](../../docs/reference/benchmarks/specifications/d39fc69bde396649b8076262d7d5f4097f4d4245319678e027b78cf30db2b8bc.json)
 differs from the v7 one only in the `known_record_cells.py` digest: cell
-generator v8 and the `core` capture profile.
+generator v8, which defines the `core` capture profile policy. The per-profile
+capture loop lives in `scripts/ci/known_record_normalization_capture.py`,
+which the specification does not cover; each K `capture.json` pins it in
+`arm.harness`.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
