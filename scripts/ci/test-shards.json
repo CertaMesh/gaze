@@ -81,6 +81,7 @@
     "gaze-pii::safety_net_registry",
     "gaze-pii::safety_net_subword",
     "gaze-pii::session_snapshot_byte_stability",
+    "gaze-pii::session_snapshot_compat",
     "gaze-pii::session_v3_v4_compat",
     "gaze-pii::strict_protection",
     "gaze-pii::terminal_admission",
