@@ -29,6 +29,25 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: expect refusals where the safety net used to redact
+
+The default safety-net fallback changed from `redact` to `refuse`. Output is
+now either fully restorable or refused: where Gaze used to write a one-way
+`[REDACTED:<class>]` marker, `gaze clean`, `gaze daemon` and `gaze eval` exit
+`3` with `SafetyNetFallback`, and Rust callers of `SafetyNetPolicy::default()`
+or `clean_with_safety_net*` get `Error::SafetyNetFallback(reason)`. Suspects
+the resolve pass can tokenize are unaffected.
+
+- To keep the old behavior, pass `--safety-net-fallback redact` (index ingest:
+  `--on-residual redact`) or `SafetyNetPolicy::new(SafetyNetMode::Resolve,
+  SafetyNetFallback::Redact)`. Markers remain one-way and never restore.
+- Handle the refusal like any other typed refusal: retry without the flagged
+  content, or route it to a human.
+- `match` on `SafetyNetFallback` needs an arm for the new `Refuse` variant if it
+  does not already have a wildcard (the enum is `#[non_exhaustive]`).
+
+Manifests and snapshots are unchanged; older manifests still restore.
+
 ### Action required: stop depending on `gaze-model-setup`
 
 The `gaze-model-setup` crate is no longer published; its code moved into

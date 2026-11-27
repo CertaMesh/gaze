@@ -156,6 +156,11 @@ pub enum SafetyNetFallback {
     /// Reject with [`Error::SafetyNetFallback`] if an actionable suspect remains; net errors
     /// propagate. This checks configured nets only, not detection completeness.
     Redact,
+    /// The reversible default. Runs every reversible step [`Self::Redact`] runs (a second
+    /// resolve round and residual tokenization), then rejects the document with
+    /// [`Error::SafetyNetFallback`] wherever `Redact` would write a one-way marker. Output is
+    /// therefore either fully restorable or refused; nothing is deleted.
+    Refuse,
 }
 
 /// Post-detection safety-net policy: a primary [`SafetyNetMode`] plus the residual
@@ -173,8 +178,9 @@ pub enum SafetyNetFallback {
 /// | `Redact`   | any        | `Redact`                                  |
 /// | `Resolve`  | `f`        | `Resolve { on_residual: f }`              |
 ///
-/// [`Default`] is `Resolve` + `Redact` — the shipped production default since v0.8.1 and the
-/// policy every policy-less convenience entry point (`clean_with_safety_net*`) uses.
+/// [`Default`] is `Resolve` + `Refuse`: every suspect is tokenized reversibly or the document is
+/// refused. It is the policy every policy-less convenience entry point
+/// (`clean_with_safety_net*`) uses. `Resolve` + `Redact` was the default from v0.8.1 until 1.0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SafetyNetPolicy {
@@ -241,11 +247,14 @@ pub enum PrefixCacheWriteMode {
     Suppress,
 }
 
+/// The shipped default: resolve reversibly, refuse what cannot be resolved
+/// ([`SafetyNetFallback::Refuse`]). One-way redaction needs an explicit
+/// [`SafetyNetFallback::Redact`] or [`SafetyNetMode::Redact`].
 impl Default for SafetyNetPolicy {
     fn default() -> Self {
         Self {
             mode: SafetyNetMode::Resolve,
-            fallback: SafetyNetFallback::Redact,
+            fallback: SafetyNetFallback::Refuse,
         }
     }
 }
@@ -2083,6 +2092,7 @@ impl Pipeline {
                                 decision,
                                 SafetyNetDecision::Resolve {
                                     on_residual: SafetyNetFallback::Redact
+                                        | SafetyNetFallback::Refuse
                                 }
                             ) {
                                 return Err(Error::SafetyNetFallback(
@@ -2239,22 +2249,15 @@ impl Pipeline {
                             document_kind,
                             field_path,
                         )?;
-                        // `Strict` promises to reject a document that still has a residual
-                        // suspect. A sub-word is never cut, but it is still a residual: refuse
-                        // rather than ship it raw under the fail-closed fallback.
-                        if reason.is_none() && matches!(on_residual, SafetyNetFallback::Strict) {
-                            reason = follow_up
-                                .suspects
-                                .iter()
-                                .find(|suspect| {
-                                    suspect_is_unactionable_subword(&clean.text, suspect)
-                                })
-                                .map(fallback_reason_for);
-                        }
                         // Only a successful first resolve (including a no-op) reaches here.
                         // Freeze a complete second batch before effects, then replace the residual
                         // source with a fresh report. Historical observations never drive deletion.
-                        if reason.is_some() && matches!(on_residual, SafetyNetFallback::Redact) {
+                        if reason.is_some()
+                            && matches!(
+                                on_residual,
+                                SafetyNetFallback::Redact | SafetyNetFallback::Refuse
+                            )
+                        {
                             // Judged here, in the text the re-run reported on. The planner is
                             // shared with the terminal round, whose targets were judged at scan
                             // time and may since sit next to a seam its own deletion made.
@@ -2296,6 +2299,23 @@ impl Pipeline {
                                 )?;
                             }
                         }
+                        // `Strict` and `Refuse` promise to reject a document that still has a
+                        // residual suspect. A sub-word is never cut, but it is still a residual:
+                        // refuse rather than ship it raw under a fail-closed fallback.
+                        if reason.is_none()
+                            && matches!(
+                                on_residual,
+                                SafetyNetFallback::Strict | SafetyNetFallback::Refuse
+                            )
+                        {
+                            reason = follow_up
+                                .suspects
+                                .iter()
+                                .find(|suspect| {
+                                    suspect_is_unactionable_subword(&clean.text, suspect)
+                                })
+                                .map(fallback_reason_for);
+                        }
                         (reason, Some(follow_up))
                     }
                 };
@@ -2326,8 +2346,10 @@ impl Pipeline {
                         // Only a residual the post-resolution re-run found: a first-pass refusal
                         // is the resolver declining those suspects, and the fallback does not
                         // overrule it.
-                        let tokenized = matches!(on_residual, SafetyNetFallback::Redact)
-                            && residual_report.is_some()
+                        let tokenized = matches!(
+                            on_residual,
+                            SafetyNetFallback::Redact | SafetyNetFallback::Refuse
+                        ) && residual_report.is_some()
                             && !actionable.is_empty()
                             && self.tokenize_fallback_residuals(
                                 target,
@@ -2342,8 +2364,11 @@ impl Pipeline {
                         // rows are about to claim, before deletion shifts clean spans and the
                         // affine mapper stops being exact. A tokenizing fallback promised to
                         // delete nothing.
+                        // `Refuse` only ships output it tokenized; otherwise it rejects below.
                         let terminal_provenance =
-                            if matches!(on_residual, SafetyNetFallback::Redact) {
+                            if matches!(on_residual, SafetyNetFallback::Redact)
+                                || (tokenized && matches!(on_residual, SafetyNetFallback::Refuse))
+                            {
                                 let promised: &[&LeakSuspect] =
                                     if tokenized { &[] } else { &actionable };
                                 Some((
@@ -2976,7 +3001,7 @@ impl Pipeline {
     ///
     /// One `decided_by: Fallback` audit row per actionable suspect, labelled with what the
     /// fallback does to that suspect's bytes ([`fallback_row_action`]), then the action itself:
-    /// `Strict` rejects the document, `Tolerant` ships it, `Redact` deletes the spans (audit rows
+    /// `Strict` and `Refuse` reject the document, `Tolerant` ships it, `Redact` deletes the spans (audit rows
     /// already written here, so the redactor is told not to log again).
     #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_fallback(
@@ -3003,7 +3028,9 @@ impl Pipeline {
             )?;
         }
         match on_residual {
-            SafetyNetFallback::Strict => Err(Error::SafetyNetFallback(reason)),
+            SafetyNetFallback::Strict | SafetyNetFallback::Refuse => {
+                Err(Error::SafetyNetFallback(reason))
+            }
             SafetyNetFallback::Tolerant => Ok(()),
             SafetyNetFallback::Redact => self.redact_safety_net_suspects(
                 target,
@@ -3708,7 +3735,9 @@ fn suspect_action_span(suspect: &LeakSuspect) -> Range<usize> {
 /// `fallback_audit_rows_name_the_residual_and_state_the_action_taken`.
 fn fallback_row_action(on_residual: SafetyNetFallback) -> Action {
     match on_residual {
-        SafetyNetFallback::Strict | SafetyNetFallback::Tolerant => Action::Preserve,
+        SafetyNetFallback::Strict | SafetyNetFallback::Tolerant | SafetyNetFallback::Refuse => {
+            Action::Preserve
+        }
         SafetyNetFallback::Redact => Action::Redact,
     }
 }
@@ -6670,7 +6699,7 @@ mod tests {
                 text,
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             )
             .expect("re-flagging the marker must be a no-op, not a failure");
 

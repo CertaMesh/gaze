@@ -1057,6 +1057,7 @@ pub(crate) fn safety_net_policy(
             SafetyNetFallback::Strict => gaze::SafetyNetFallback::Strict,
             SafetyNetFallback::Tolerant => gaze::SafetyNetFallback::Tolerant,
             SafetyNetFallback::Redact => gaze::SafetyNetFallback::Redact,
+            SafetyNetFallback::Refuse => gaze::SafetyNetFallback::Refuse,
         },
     )
 }

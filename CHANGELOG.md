@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** the safety-net default is now `resolve` with the new `refuse`
+  fallback (`SafetyNetFallback::Refuse`, `--safety-net-fallback refuse`) in
+  `SafetyNetPolicy::default()`, `gaze clean`, `gaze daemon`, `gaze eval`, and
+  `gaze index ingest --on-residual`. `refuse` runs every reversible step the
+  `redact` fallback runs and rejects the document with
+  `Error::SafetyNetFallback` (CLI exit 3) where `redact` wrote a one-way
+  `[REDACTED:<class>]` marker. One-way markers now require an explicit
+  `redact`. `CorpusIngestor::with_safety_net_resolution` also uses `refuse`.
 - A labelled JSON number now refuses, typed, instead of leaking or becoming an
   unquoted token: `Untransformable` with `json_number_no_text_only_path` (CLI
   exit 8, no output). A repeat of a bound ID that is or overlaps a JSON number

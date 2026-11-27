@@ -6,6 +6,10 @@ is available in Git history.
 
 ## Decision
 
+Superseded for 1.0: the default fallback is `refuse`, which keeps every
+reversible step below and refuses instead of writing a marker (see
+[safety-net modes](safety-net-modes.md)).
+
 Use `resolve` with a `redact` fallback by default. Try reversible tokenization
 first; replace only suspects that cannot be resolved with a visible one-way
 marker. Keep `strict` for deployments that must stop on an uncovered suspect.

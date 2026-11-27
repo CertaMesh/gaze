@@ -58,6 +58,6 @@ Options:
       --safety-net-mode <SAFETY_NET_MODE>
           Safety-net handling mode for suspected leaks [default: resolve] [possible values: strict, tolerant, redact, resolve]
       --safety-net-fallback <SAFETY_NET_FALLBACK>
-          Fallback when safety-net resolve or redact cannot complete [default: redact] [possible values: strict, tolerant, redact]
+          Fallback when safety-net resolve cannot complete. `refuse` keeps output restorable or refuses it; `redact` writes one-way markers [default: refuse] [possible values: strict, tolerant, redact, refuse]
   -h, --help
           Print help

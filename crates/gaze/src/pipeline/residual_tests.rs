@@ -970,6 +970,55 @@ impl SafetyNet for ScriptNet {
         Ok(found)
     }
 }
+/// The default `Refuse` fallback runs the same reversible branch as `Redact`: the resolvable
+/// sequence ships byte-identical to `Redact`'s output and restores exactly. Where `Redact` would
+/// delete the declined mismatch, `Refuse` rejects the document with a typed reason instead.
+#[test]
+fn default_refuse_fallback_tokenizes_what_redact_tokenizes_and_refuses_what_it_deletes() {
+    let run = |declined: bool, fallback: SafetyNetFallback| {
+        let mut p = pipeline(pair(), true);
+        let calls = NetCalls::default();
+        for net in 0..2 {
+            p.safety_nets.push(Arc::new(ScriptNet {
+                net,
+                step: std::sync::Mutex::new(0),
+                calls: calls.clone(),
+                declined,
+            }));
+        }
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let result = p
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                RAW,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, fallback),
+            )
+            .map(|(output, _, _, _)| text(output).replace(&session.session_hex(), "s"));
+        (result, session)
+    };
+    assert_eq!(
+        SafetyNetPolicy::default(),
+        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Refuse)
+    );
+
+    let (redacted, _) = run(false, SafetyNetFallback::Redact);
+    let (refused, session) = run(false, SafetyNetFallback::Refuse);
+    let refused = refused.unwrap();
+    assert_eq!(refused, redacted.unwrap());
+    let refused = refused.replace("<s:", &format!("<{}:", session.session_hex()));
+    assert_eq!(session.restore_strict_text(&refused).unwrap(), RAW);
+
+    let (deleted, _) = run(true, SafetyNetFallback::Redact);
+    assert!(deleted.is_ok(), "Redact deletes the declined residual");
+    let (refused, _) = run(true, SafetyNetFallback::Refuse);
+    assert!(
+        matches!(refused, Err(Error::SafetyNetFallback(_))),
+        "Refuse must reject what Redact deletes: {refused:?}"
+    );
+}
+
 /// The straddling mismatch reaches the fallback as its exposed one-byte gap, which the planner can
 /// resolve: alone, it is tokenized and restore is exact. Beside a plain-text mismatch
 /// the planner declines, the fallback is the final authority over both and deletes them.
@@ -993,7 +1042,7 @@ fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority(
                 RAW,
                 &[crate::LocaleTag::Global],
                 &DictionaryBundle::default(),
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             )
             .unwrap();
         wire_fixture(RAW, &manifest, &trace);
