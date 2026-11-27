@@ -593,12 +593,13 @@ def main() -> int:
         return 0
     if args.command == "check":
         receipt = json.loads(args.receipt.read_text())
-        failures = check(receipt, json.loads(BUDGETS.read_text()))
+        budgets = json.loads(BUDGETS.read_text())
+        failures = check(receipt, budgets)
         print(json.dumps(metrics(receipt), indent=2))
         for failure in failures:
             print(f"FAIL {failure}")
         print("F8 PASS" if not failures else "F8 FAIL")
-        if not json.loads(BUDGETS.read_text())["envelopes"][receipt["envelope"]]["release_gate"]:
+        if not budgets["envelopes"].get(receipt["envelope"], {}).get("release_gate", True):
             print(f"note: the {receipt['envelope']} envelope is a published receipt and does not gate the release")
         return 1 if failures else 0
     base, cand = (json.loads(p.read_text()) for p in (args.base, args.candidate))

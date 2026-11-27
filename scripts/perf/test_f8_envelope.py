@@ -121,4 +121,6 @@ def test_every_amendment_matches_the_live_budget():
     for (envelope, name), value in latest.items():
         live = BUDGETS["envelopes"][envelope]
         assert (live["budgets"][name] if name in live["budgets"] else live[name]) == value
-    assert BUDGETS["envelopes"]["laptop"]["release_gate"] is True
+    # Every envelope gates unless its latest amendment says otherwise.
+    for name, envelope in BUDGETS["envelopes"].items():
+        assert envelope["release_gate"] is latest.get((name, "release_gate"), True)

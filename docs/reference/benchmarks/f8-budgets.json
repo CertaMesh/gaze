@@ -70,11 +70,11 @@
       "unchanged": "every budget number in both envelopes; the laptop envelope still gates the release",
       "reason": "For 1.0 the server envelope is a published, measured receipt and does not gate the release. One session with no queue already uses about 2.4 of the 4 vCPUs, so a turn costs about 3 CPU-seconds and a 4-session burst cannot finish much under 3 s however it is scheduled. Reaching the 250 ms p50 needs about 12x less work per turn, and even the 420 ms ceiling from the first amendment needs about 7x. Concurrent session cleaning in the daemon or sharding sessions across processes would gain at most about 1.2x, so neither was built. Dropping the neutral Nym view, a smaller Nym model, and a different server workload or hardware stay ruled out for 1.0.",
       "measurements": {
-        "combined_server_receipt": "main 9ff7ad9 plus request-wide inference reuse, four Nym intra-op threads and the own-load quiet check (4b34991), a1.medium orb, quiet (554 probes), F8 FAIL: turn p50 3161 ms, p95 7341 ms, p99 10361 ms, reclean p95 56503 ms, restore p95 11.9 ms, cold start max 3842 ms, peak RSS 827351040 bytes; output digest b1e519ba identical to main",
+        "combined_server_receipt": "main 9ff7ad9 plus request-wide inference reuse, four Nym intra-op threads and the own-load quiet check (PRs #939, #941 and #942), a1.medium orb, quiet (554 probes), F8 FAIL: turn p50 3161 ms, p95 7341 ms, p99 10361 ms, reclean p95 56503 ms, restore p95 11.9 ms, cold start max 3842 ms, peak RSS 827351040 bytes; output digest b1e519ba identical to main",
         "main_9ff7ad9_server_receipt": "turn p50 11383 ms, p95 21346 ms, p99 27493 ms, reclean p95 97785 ms",
         "single_session_server": "same binary, concurrency 1, 16 samples: turn p50 1284 ms, max 5981 ms, reclean median about 14.5 s; daemon CPU 2.37 cores averaged over 25 s"
       },
-      "reinstate": "The server envelope gates the release again once the post-1.0 work that cuts per-turn CPU lands (Nym windows per turn first, then reclean), with a fresh quiet server receipt."
+      "reinstate": "The server envelope gates the release again once the post-1.0 work that cuts per-turn CPU lands (Nym windows per turn first, then reclean), with a fresh quiet server receipt. The first amendment's condition still applies then: if the server misses only on turn p50, a further dated amendment may raise it, never above 420 ms."
     }
   ]
 }
