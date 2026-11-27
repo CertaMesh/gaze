@@ -57,7 +57,7 @@ import issuer_credential_cells as issuer_credentials
 import prose_credential_cells as prose_credentials
 
 
-GENERATOR_VERSION = 31
+GENERATOR_VERSION = 32
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4469,6 +4469,34 @@ def _coverage_records(partition: str) -> list[Record]:
     return records
 
 
+def _clinical_de_records(partition: str) -> list[Record]:
+    rng = Rng(PARTITION_SEEDS[partition], "clinical-de")
+    dev = partition == "dev"
+    records = []
+    for i in range(DOCS_PER_FAMILY):
+        dob = _de_date(_birth_parts(rng, partition))
+        # BNetzA media landlines, Bonn notice 148/2021. Area and subscriber
+        # digits are preserved; only their presentation varies.
+        area, prefix = ("030", "23125") if dev else ("069", "90009")
+        tail = rng.digits(3)
+        for layer, family, shape, template, value, label in [
+            ("A", "birth_date", "star", "Personalien: (* {V})" if dev else "Patientin, * {V}", dob, "DATEOFBIRTH"),
+            ("A", "birth_date", "header", "Personalien:\n* {V}" if dev else "Stammdaten:\r\n* {V}", dob, "DATEOFBIRTH"),
+            ("A", "birth_date", "geb", "Aufnahme, geb. {V}" if dev else "Stammdaten: geb. {V}.", dob, "DATEOFBIRTH"),
+            ("A", "phone", "paren", "Rückruf: {V}" if dev else "Erreichbar unter {V}.", f"({area}) {prefix} - {tail}", "TELEPHONENUM"),
+            ("A", "phone", "grouped", "Tel. {V}" if dev else "Durchwahl: {V}", f"({area}) {prefix}{'.' if dev else '/'}{tail}", "TELEPHONENUM"),
+            ("A", "phone", "slash", "Kontakt: {V}" if dev else "Telefon der Patientin: {V}", f"{area}/{prefix}-{tail}", "TELEPHONENUM"),
+            ("D", "birth_date", "bullet", "* {V}: Untersuchung" if dev else "* {V}, Kontrolltermin", dob, None),
+            ("D", "birth_date", "date", "Aufnahme am {V}" if dev else "Entlassung am {V}", dob, None),
+            ("D", "phone", "lab", "Blutdruck: {V} mmHg" if dev else "RR {V} mmHg im Sitzen", f"{rng.between(100, 145)}/{rng.between(60, 95)}", None),
+            ("D", "phone", "dose", "Dosierung: {V}" if dev else "Einnahmeschema {V} Tabletten", f"{rng.between(1, 2)}-0-{rng.between(0, 2)}", None),
+            ("D", "phone", "range", "Referenzbereich {V} mg/dl" if dev else "Laborbereich {V} mg/dl", f"({area}) {rng.between(100, 150)} - {rng.between(200, 250)}", None),
+        ]:
+            records.append(_coverage_record(partition, layer, "clinical_" + family, "clinical_de_" + shape, i,
+                                            template, {"V": (value, label)}, "de", "DE"))
+    return records
+
+
 # The surface prefix each generator version added. Every earlier document stays
 # byte identical, so an older corpus is a filter of the current one, with
 # the v16 BSN label, v18 personal-ID gold and v30 card-twin corrections
@@ -4499,6 +4527,7 @@ GENERATOR_ADDITIONS = {
     28: ("invisible_bom_", "invisible_joined_", "invisible_boundary_"),
     29: "issuer_credentials_",
     31: prose_credentials.SURFACE_PREFIX,
+    32: "clinical_de_",
 }
 
 
@@ -4544,6 +4573,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    31: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v31.json"),
     30: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v30.json"),
     29: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v29.json"),
     28: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v28.json"),
@@ -4831,6 +4861,7 @@ def generate(partition: str) -> list[Record]:
         + invisible_separators.records(sys.modules[__name__], partition)
         + issuer_credentials.records(sys.modules[__name__], partition)
         + prose_credentials.records(sys.modules[__name__], partition)
+        + _clinical_de_records(partition)
     )
     check_lookalike_pairs(records)
     check_address_cells(records)

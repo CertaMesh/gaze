@@ -2558,6 +2558,12 @@ byte-for-byte; its contract is frozen as
 | --- | ---: | ---: | ---: | ---: |
 | v30 | 19,687 | 8,832 | 12,611 | 41,130 |
 | v31 | 19,917 | 9,032 | 12,801 | 41,750 |
+| v32 | 19,977 | 9,082 | 12,801 | 41,860 |
+
+Generator v32 adds German clinical birth markers and national telephone formats,
+with dated list items, encounter dates, lab ranges and dosing schedules as
+counterweights. Gold covers the date or telephone value alone. Telephone gold
+uses valid BNetzA media numbers; it does not measure parser-invalid phone recall.
 
 No release has been measured on generator v31 yet. The v30 history rows above
 stay bound to the v30 specification; the v31 backfill runs outside the PR
