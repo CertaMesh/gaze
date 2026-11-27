@@ -16,8 +16,8 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "ead514a882f8a19dfac18a7f94cbf706eaeee32e78cd2d54342b84a515246b56"
-PAIRS = 116
+PINNED_CORPUS_SHA256 = "9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0"
+PAIRS = 120
 
 
 def recorder_kind(text: str, raw: str) -> str:
@@ -91,11 +91,17 @@ class KnownRecordCellTests(unittest.TestCase):
 
     def test_preexisting_v5_pairs_keep_identical_bytes_kinds_and_buckets(self) -> None:
         import hashlib
-        legacy = [p for p in self.pairs if not p.positive.variant.startswith("term_")]
-        self.assertEqual(len(legacy), 84)
+        # v7 rebuilt the unlisted-name pairs and added the word-name control;
+        # every other v5 pair keeps its bytes.
+        legacy = [
+            p for p in self.pairs
+            if not p.positive.variant.startswith("term_")
+            and p.positive.variant not in {"unlisted_alone", "word_name_alone"}
+        ]
+        self.assertEqual(len(legacy), 80)
         self.assertEqual(
             hashlib.sha256(cells.corpus_bytes(legacy)).hexdigest(),
-            "9e1bb24c206a90b7978423ab9adaaa2bac11a7241b75ea5a0c9a59a85dffad45",
+            "ca48f27477840342ab189b2e6461e2ebb8f420802d8150ab7a9c52f85ea8290a",
         )
         for pair in legacy:
             positive = pair.positive
@@ -204,17 +210,20 @@ class KnownRecordCellTests(unittest.TestCase):
                 else:
                     self.assertEqual(hits, [], positive.uid)
 
-    def test_counterweights_match_only_the_priced_unlisted_lure(self) -> None:
-        priced = 0
+    def test_counterweights_never_match_a_record_value(self) -> None:
         for pair in self.pairs:
             twin = pair.counterweight
-            matches = cells.model_matches(twin.text, twin.record)
-            if twin.variant == "unlisted_alone":
-                self.assertEqual(len(matches), 1, twin.uid)
-                priced += 1
-            else:
-                self.assertEqual(matches, [], twin.uid)
-        self.assertEqual(priced, 4)
+            self.assertEqual(cells.model_matches(twin.text, twin.record), [], twin.uid)
+
+    def test_name_controls_follow_the_common_name_dictionaries(self) -> None:
+        for name in cells.UNLISTED_NAMES:
+            self.assertNotIn(name.casefold(), cells.COMMON_NAMES)
+        for name in (*cells.WORD_NAMES, *cells.LISTED_COMMON_NAMES):
+            self.assertIn(name.casefold(), cells.COMMON_NAMES)
+        rare = pair_of(self.pairs, "unlisted_alone").positive
+        self.assertEqual(len(cells.model_matches(rare.text, rare.record)), 1)
+        word = pair_of(self.pairs, "word_name_alone").positive
+        self.assertEqual(cells.model_matches(word.text, word.record), [])
 
     def test_corroborated_lure_fails_generation(self) -> None:
         twin = pair_of(self.pairs, "listed_adjacent_peer").counterweight
@@ -349,13 +358,12 @@ class ProofArmTests(unittest.TestCase):
             self.assertEqual(set(off), set(on))
             for group, kinds in on.items():
                 self.assertEqual(off[group], list(cells.DEFAULT_MATCH_KINDS[group]))
+                self.assertEqual(len(kinds), len(set(kinds)))
                 added = set(kinds) - set(off[group])
-                if group == "name_single":
-                    self.assertEqual(added, {"corroborated_single"})
-                elif group == "name_multi":
-                    self.assertEqual(added, {"whitespace_flexible", "whitespace_case_folded"})
-                else:
-                    self.assertEqual(added, {"whitespace_flexible"})
+                probes = set(cells.PROBE_KINDS_BY_GROUP.get(group, ("whitespace_flexible",)))
+                self.assertEqual(added, probes - set(off[group]))
+            if any(field.class_name == "Name" and len(field.raw.split()) > 1 for field in cell.record):
+                self.assertEqual(set(on["name_multi"]) - set(off["name_multi"]), {"whitespace_flexible"})
 
     def test_kind_switch_detects_an_ignored_override(self) -> None:
         a = {"x": {"final_protection_trace": [{"raw_start": 0, "raw_end": 4}]}}
@@ -387,8 +395,9 @@ class VariantTallyTests(unittest.TestCase):
         self.assertEqual(rows["positive"]["gold_recovered_bytes"], width)
         self.assertEqual(rows["positive"]["false_positive_added_bytes"], 0)
         self.assertEqual(rows["counterweight"]["gold_recovered_bytes"], 0)
-        self.assertEqual(rows["counterweight"]["false_positive_added_bytes"], width)
-        self.assertEqual(rows["counterweight"]["target_protected_bytes"], width)
+        twin_width = pair.counterweight.targets[0].end - pair.counterweight.targets[0].start
+        self.assertEqual(rows["counterweight"]["false_positive_added_bytes"], twin_width)
+        self.assertEqual(rows["counterweight"]["target_protected_bytes"], twin_width)
 
     def test_unpaired_baseline_fails_closed(self) -> None:
         pairs = cells.generate()

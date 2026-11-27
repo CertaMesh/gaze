@@ -11,6 +11,8 @@ mod commands;
 mod error;
 mod io;
 mod logger;
+#[cfg(feature = "setup")]
+mod model_setup;
 #[cfg(feature = "perf-timers")]
 mod perf;
 mod pipeline;

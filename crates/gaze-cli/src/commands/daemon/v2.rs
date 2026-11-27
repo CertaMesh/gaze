@@ -1,4 +1,10 @@
-//! Atomic, complete-inventory Text protection. There are deliberately no output hits.
+//! Atomic, complete-inventory Text protection.
+//!
+//! A block whose bytes and request context are unchanged since the last commit
+//! reuses its committed result when the session transaction proves that nothing
+//! staged since then can reach it (`SessionTransaction::reuse_unaffected`).
+//! Every other block runs the full pipeline, and every pass still covers the
+//! whole inventory, so the response equals an uncached clean byte for byte.
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt;
 use std::io::{self, Write};
@@ -154,6 +160,19 @@ struct Live {
     opening: Box<RawValue>,
     receipt: Option<Receipt>,
     last_seen: Instant,
+    /// Final-pass results of the last commit, valid only at its state.
+    cache: HashMap<String, CachedBlock>,
+    /// Keyed digest of the context those results were cleaned with.
+    cache_context: [u8; 32],
+}
+
+struct CachedBlock {
+    sha256: String,
+    clean_text: String,
+    manifest: Vec<EmittedTokenSpan>,
+    report: LeakReport,
+    audit: Vec<RedactionEntry>,
+    bytes: usize,
 }
 
 impl Live {
@@ -166,6 +185,14 @@ impl Live {
             + raw_bytes(&self.blocks)
             + self.opening.get().len()
             + self.receipt.as_ref().map_or(0, Receipt::bytes)
+            + self.cache.values().map(|c| c.bytes).sum::<usize>()
+    }
+
+    /// The committed result for `block` when its exact bytes are retained.
+    fn cached(&self, block: &RawBlock) -> Option<&CachedBlock> {
+        let cached = self.cache.get(&block.id)?;
+        let retained = self.blocks.iter().find(|b| b.id == block.id)?;
+        (cached.sha256 == block.sha256 && retained.text == block.text).then_some(cached)
     }
 }
 
@@ -687,6 +714,8 @@ impl Daemon {
             opening: response.clone(),
             receipt: None,
             last_seen: Instant::now(),
+            cache: HashMap::new(),
+            cache_context: [0; 32],
         };
         if self
             .v2
@@ -787,6 +816,16 @@ impl Daemon {
                 })
                 .transpose()?;
         let inventory = inventory(r, live, op == "resync", limits)?;
+        let context_digest = self
+            .v2
+            .digest(r.0.get("context").map_or("", |raw| raw.get()));
+        // Resync never reuses. A request without any new or changed block runs
+        // fully, so each commit invokes the configured models at least once.
+        let reuse = op == "clean_blocks"
+            && self.logger.audit.is_none()
+            && live.cache_context == context_digest
+            && inventory.iter().any(|block| live.cached(block).is_none());
+        let mut ran = vec![!reuse; inventory.len()];
         let (pipeline, dictionaries) = inputs
             .as_ref()
             .map(|(p, d)| (p, d))
@@ -823,27 +862,54 @@ impl Daemon {
             let before = transaction.semantic_revision();
             let mut pass = Vec::new();
             let mut reports = Vec::new();
-            for block in &inventory {
-                let (clean, manifest, report) = pipeline
-                    .clean_transaction_with_safety_net_policy_detect_context(
-                        &mut transaction,
-                        RawDocument::Text(block.text.clone()),
-                        self.locale_chain.as_slice(),
-                        dictionaries,
-                        policy,
-                    )
-                    .map_err(|error| {
+            let mut pass_audit = Vec::new();
+            for (index, block) in inventory.iter().enumerate() {
+                let mark = audit.mark().map_err(|_| Failure::Pipeline)?;
+                let hit = match live.cached(block).filter(|_| reuse) {
+                    Some(cached) => transaction
+                        .reuse_unaffected(&block.text, &cached.clean_text)
+                        .map_err(|error| protection_failure(pipeline, error))?
+                        .then_some(cached),
+                    None => None,
+                };
+                let (clean_text, manifest, report) = if let Some(cached) = hit {
+                    audit.replay(&cached.audit).map_err(|_| {
                         if audit.capacity_exceeded() {
                             Failure::CacheCapacity
                         } else {
-                            protection_failure(pipeline, error)
+                            Failure::Pipeline
                         }
                     })?;
+                    (
+                        cached.clean_text.clone(),
+                        cached.manifest.clone(),
+                        cached.report.clone(),
+                    )
+                } else {
+                    ran[index] = true;
+                    let (clean, manifest, report) = pipeline
+                        .clean_transaction_with_safety_net_policy_detect_context(
+                            &mut transaction,
+                            RawDocument::Text(block.text.clone()),
+                            self.locale_chain.as_slice(),
+                            dictionaries,
+                            policy,
+                        )
+                        .map_err(|error| {
+                            if audit.capacity_exceeded() {
+                                Failure::CacheCapacity
+                            } else {
+                                protection_failure(pipeline, error)
+                            }
+                        })?;
+                    let gaze::CleanDocument::Text(clean_text) = clean else {
+                        return Err(Failure::Pipeline);
+                    };
+                    (clean_text, manifest, report)
+                };
                 enforce_safety_net_mode(&report, policy)
                     .map_err(|error| Failure::Protection(DaemonError::Cli(error).variant()))?;
-                let gaze::CleanDocument::Text(clean_text) = clean else {
-                    return Err(Failure::Pipeline);
-                };
+                pass_audit.push(audit.since(mark).map_err(|_| Failure::Pipeline)?);
                 reports.push(report);
                 pass.push(BlockResult {
                     id: block.id.clone(),
@@ -889,13 +955,14 @@ impl Daemon {
                 )?;
             }
             if before == transaction.semantic_revision() {
-                results = Some((pass, reports));
+                results = Some((pass, reports, pass_audit));
                 break;
             }
         }
-        let (mut results, reports) = results.ok_or(Failure::CacheConvergence)?;
+        let (mut results, reports, block_audit) = results.ok_or(Failure::CacheConvergence)?;
         let generation = live.generation + u64::from(initial != transaction.semantic_revision());
-        for (result, raw) in results.iter_mut().zip(&inventory) {
+        for ((result, raw), ran) in results.iter_mut().zip(&inventory).zip(&ran) {
+            result.cache_hit = !ran;
             result.validated_generation = generation;
             validate_result(&transaction, result, raw)?;
         }
@@ -956,10 +1023,47 @@ impl Daemon {
             .flush(&reports, audit_session_id)
             .map_err(|_| Failure::Pipeline)?;
         prepared.commit();
+        // The final pass was stable, so every result is a no-op clean at the
+        // state just committed: exactly what `reuse_unaffected` requires.
+        let cache = results
+            .into_iter()
+            .zip(reports)
+            .zip(block_audit)
+            .map(|((result, report), audit)| {
+                let bytes = result_bytes(std::slice::from_ref(&result))
+                    .saturating_add(report_allocation_bytes(&report).unwrap_or(usize::MAX / 4))
+                    .saturating_add(
+                        audit
+                            .iter()
+                            .map(|entry| {
+                                serde_json::to_vec(entry)
+                                    .map_or(usize::MAX / 4, |json| json.len().saturating_mul(16))
+                                    .saturating_add(std::mem::size_of::<RedactionEntry>())
+                            })
+                            .sum::<usize>(),
+                    );
+                let cached = CachedBlock {
+                    sha256: result.sha256,
+                    clean_text: result.clean_text,
+                    manifest: result.manifest,
+                    report,
+                    audit,
+                    bytes,
+                };
+                (result.id, cached)
+            })
+            .collect();
         let live = self.v2.sessions.get_mut(id).expect("validated session");
         live.blocks = inventory;
         live.revision += 1;
         live.generation = generation;
+        // Reuse never runs with an audit database, so keep nothing it cannot use.
+        live.cache = if self.logger.audit.is_none() {
+            cache
+        } else {
+            HashMap::new()
+        };
+        live.cache_context = context_digest;
         Ok(response)
     }
 
@@ -994,7 +1098,7 @@ impl Daemon {
                 gaze::BoundedRestoreError::CapExceeded => Failure::CacheCapacity,
                 _ => Failure::RestoreFailed,
             })?;
-        restore_pass2_validate(&assessment, RestoreMode::Strict)
+        restore_pass2_validate(&text, &assessment, RestoreMode::Strict)
             .map_err(|_| Failure::UnknownToken)?;
         let text = assessment.into_restored().text;
         #[derive(Serialize)]

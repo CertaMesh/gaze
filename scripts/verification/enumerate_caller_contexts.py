@@ -33,7 +33,7 @@ for p in sorted((ROOT / 'scripts/bench').glob('*.py')):
     sources[str(p.relative_to(ROOT))] = hashlib.sha256(p.read_bytes()).hexdigest()
 for p in [ROOT / 'docs/reference/benchmarks/scored-labels-v2.json', ROOT / 'docs/reference/benchmarks/scored-labels-agentic.json', ROOT / 'scripts/bench/lookalike_cue_vocabulary.json', ROOT / 'crates/gaze-cli/src/commands/setup.rs']:
     sources[str(p.relative_to(ROOT))] = hashlib.sha256(p.read_bytes()).hexdigest()
-for p in [ROOT / 'docs/reference/benchmarks/dictionary-sequences/generator-v1.py.gz', ROOT / 'crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl', ROOT / 'crates/gaze-recognizers/assets/record-common-names-v1.txt']:
+for p in [ROOT / 'docs/reference/benchmarks/dictionary-sequences/generator-v1.py.gz', ROOT / 'crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl', ROOT / 'crates/gaze-recognizers/assets/record-common-names-v1.txt', ROOT / 'crates/gaze-recognizers/assets/record-common-name-words-en-v1.txt']:
     sources[str(p.relative_to(ROOT))] = hashlib.sha256(p.read_bytes()).hexdigest()
 dataset = args.dataset
 sources['dataset/test.parquet'] = hashlib.sha256(dataset.read_bytes()).hexdigest()

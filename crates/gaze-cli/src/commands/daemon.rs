@@ -457,7 +457,7 @@ impl Daemon {
         let assessment = session
             .assess_restore_text(&text)
             .map_err(|_| (session_id.clone(), DaemonError::RestoreFailed))?;
-        restore_pass2_validate(&assessment, RestoreMode::Strict).map_err(|error| {
+        restore_pass2_validate(&text, &assessment, RestoreMode::Strict).map_err(|error| {
             let variant = if matches!(error, CliError::UnknownToken { .. }) {
                 DaemonError::UnknownToken
             } else {
@@ -838,6 +838,29 @@ impl DeferredRedactions<'_> {
         self.0.deferred.lock().map_or(true, |slot| {
             slot.as_ref().is_some_and(|buffer| buffer.exceeded)
         })
+    }
+
+    /// Number of rows buffered so far in this pass.
+    fn mark(&self) -> Result<usize, RedactionLogError> {
+        let slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        Ok(slot.as_ref().expect("active audit scope").entries.len())
+    }
+
+    /// Rows buffered since `mark`, in order.
+    fn since(&self, mark: usize) -> Result<Vec<RedactionEntry>, RedactionLogError> {
+        let slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        Ok(slot.as_ref().expect("active audit scope").entries[mark..].to_vec())
+    }
+
+    /// Buffer rows a reused block produced when it was last cleaned.
+    fn replay(&self, entries: &[RedactionEntry]) -> Result<(), RedactionLogError> {
+        let mut slot = self.0.deferred.lock().map_err(|_| audit_buffer_error())?;
+        let buffer = slot.as_mut().expect("active audit scope");
+        for entry in entries {
+            buffer.reserve_entry(entry)?;
+            buffer.entries.push(entry.clone());
+        }
+        Ok(())
     }
 
     fn reset_pass(&self) -> Result<(), RedactionLogError> {

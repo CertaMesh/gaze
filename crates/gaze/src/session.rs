@@ -395,10 +395,21 @@ pub struct SessionTransaction<'session> {
     session: &'session Session,
     identity: Arc<SessionIdentity>,
     captured_generation: u64,
+    /// The committed state this transaction started from.
+    base: Arc<SessionState>,
+    /// Changes staged since `base`, computed once per semantic revision.
+    reuse_delta: Option<(u64, Arc<ReuseDelta>)>,
     staged: SessionState,
     manifest_limit: Option<usize>,
     manifest_charge: Option<(usize, [usize; 5])>,
     capacity_exceeded: bool,
+}
+
+/// Additions staged since a transaction began, for [`SessionTransaction::reuse_unaffected`].
+struct ReuseDelta {
+    tokens: Vec<String>,
+    undelimited_token: bool,
+    sweep: Option<SweepMatcher>,
 }
 
 /// A validated commit holding the session's exclusive publication lock.
@@ -608,6 +619,8 @@ impl Session {
             identity: Arc::clone(&self.identity),
             captured_generation: state.generation,
             staged: (*state).clone(),
+            base: state,
+            reuse_delta: None,
             manifest_limit: None,
             manifest_charge: None,
             capacity_exceeded: false,
@@ -955,9 +968,9 @@ impl Session {
     /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
     /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
     /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
-    /// should use [`Session::export`]. Current snapshots emit v6, or v7 when the manifest holds a
-    /// JSON-escaped value, so older readers fail closed before restore while the signature binds
-    /// the emitted envelope bytes.
+    /// should use [`Session::export`]. Current snapshots emit v6, v7 when the manifest holds a
+    /// JSON-escaped value, or v8 when the session holds a private-identifier key, so older
+    /// readers fail closed before restore while the signature binds the emitted envelope bytes.
     ///
     /// ```rust
     /// use gaze::{
@@ -1234,6 +1247,95 @@ impl<'session> SessionTransaction<'session> {
         }
     }
 
+    /// Whether cleaning the Text `raw` at the staged state would repeat, byte for
+    /// byte, an earlier clean of it that returned `clean` and changed nothing.
+    ///
+    /// The caller must have obtained `clean` by cleaning `raw` with the same
+    /// pipeline, locale chain, dictionaries and safety-net policy against the
+    /// exact committed state this transaction started from, and that clean must
+    /// have left the session unchanged (a stable final pass).
+    ///
+    /// Mappings are never removed and evidence only rises, so the staged state
+    /// differs from the start only by additions. A Text clean reads them through
+    /// the repeat-value sweep, token ownership of literals in the raw or cleaned
+    /// text, and token lookup by key. The answer is `true` only when no newly
+    /// propagating value matches anywhere in `raw` under the production sweep
+    /// semantics and no newly minted token occurs in `raw` or `clean`. A new
+    /// token without `<...>` delimiters could straddle a token and raw text in
+    /// an intermediate view, so any such token answers `false`.
+    ///
+    /// Errors exactly where a fresh clean would fail on the session matcher.
+    #[doc(hidden)]
+    pub fn reuse_unaffected(&mut self, raw: &str, clean: &str) -> Result<bool> {
+        if !self.staged.deterministic_sweep {
+            return Ok(false);
+        }
+        // A fresh clean builds the full session matcher first; fail the same way.
+        self.sweep_matcher()?;
+        let delta = self.reuse_delta()?;
+        if delta.undelimited_token {
+            return Ok(false);
+        }
+        if delta
+            .tokens
+            .iter()
+            .any(|token| raw.contains(token.as_str()) || clean.contains(token.as_str()))
+        {
+            return Ok(false);
+        }
+        Ok(match &delta.sweep {
+            Some(matcher) => matcher
+                .find(&crate::normalize::normalize(raw).text)
+                .is_empty(),
+            None => true,
+        })
+    }
+
+    fn reuse_delta(&mut self) -> Result<Arc<ReuseDelta>> {
+        let revision = self.staged.semantic_revision;
+        if let Some((cached, delta)) = &self.reuse_delta {
+            if *cached == revision {
+                return Ok(Arc::clone(delta));
+            }
+        }
+        let base = &self.base;
+        let tokens: Vec<String> = self
+            .staged
+            .value_by_token
+            .keys()
+            .filter(|token| !base.value_by_token.contains_key(*token))
+            .cloned()
+            .collect();
+        let undelimited_token = tokens
+            .iter()
+            .any(|token| !(token.starts_with('<') && token.ends_with('>')));
+        let mut sources = self
+            .staged
+            .evidence_by_value
+            .iter()
+            .filter(|(key, evidence)| {
+                evidence.propagates()
+                    && !base
+                        .evidence_by_value
+                        .get(*key)
+                        .is_some_and(|before| before.propagates())
+            })
+            .map(|(key, _)| SweepSource {
+                family: key.family.clone(),
+                class: key.class.clone(),
+                raw: key.raw.clone(),
+            })
+            .collect::<Vec<_>>();
+        sources.sort_by(|a, b| (&a.family, &a.class, &a.raw).cmp(&(&b.family, &b.class, &b.raw)));
+        let delta = Arc::new(ReuseDelta {
+            tokens,
+            undelimited_token,
+            sweep: SweepMatcher::build(sources)?,
+        });
+        self.reuse_delta = Some((revision, Arc::clone(&delta)));
+        Ok(delta)
+    }
+
     /// Conservative manifest allocation charge, excluding shared identity and
     /// pipeline work buffers. Hosts separately reserve staging and matcher space.
     pub fn manifest_allocation_bytes(&self) -> usize {
@@ -1336,6 +1438,8 @@ impl<'session> SessionTransaction<'session> {
             session: self.session,
             identity: Arc::clone(&self.identity),
             captured_generation: self.captured_generation,
+            base: Arc::clone(&self.base),
+            reuse_delta: self.reuse_delta.clone(),
             staged: self.staged.clone(),
             manifest_limit: self.manifest_limit,
             manifest_charge: self.manifest_charge,
@@ -2930,8 +3034,16 @@ fn parse_ascii_ordinal(raw: &str) -> Option<u32> {
 fn malformed_restore_token_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| {
-        Regex::new(r"<(?:[0-9a-f]{8}:)?(?:Email|Name|Location|Organization|email|name|location|organization|Custom:family:[a-z0-9_-]+|Custom:[a-z0-9_]*|custom:family:[a-z0-9_-]+|custom:[a-z0-9_]*)_?>")
-            .expect("malformed restore token regex must compile")
+        let builtin = crate::detector::BUILTIN_CLASS_NAMES.join("|");
+        let builtin_lower = crate::detector::BUILTIN_CLASS_NAMES
+            .iter()
+            .map(|name| name.to_ascii_lowercase())
+            .collect::<Vec<_>>()
+            .join("|");
+        Regex::new(&format!(
+            r"<(?:[0-9a-f]{{8}}:)?(?:{builtin}|{builtin_lower}|Custom:family:[a-z0-9_-]+|Custom:[a-z0-9_]*|custom:family:[a-z0-9_-]+|custom:[a-z0-9_]*)_?>"
+        ))
+        .expect("malformed restore token regex must compile")
     })
 }
 
@@ -3073,6 +3185,65 @@ fn snapshot_signing_preimage(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Writes the checked-in v6, v7 and v8 snapshot fixtures that
+    /// `tests/session_snapshot_compat.rs` pins. Minting a JSON-escaped spelling
+    /// and recording evidence are crate-private, so the writer lives here.
+    /// Regenerate only when a fixture's intended content changes; never to make
+    /// a failing compatibility test pass:
+    /// `cargo test -p gaze-pii --lib -- --ignored write_snapshot_compat_fixtures`.
+    #[test]
+    #[ignore = "writes tests/fixtures/session_snapshot_v{6,7,8}.bin"]
+    fn write_snapshot_compat_fixtures() {
+        let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+        let base = |scope: &str| {
+            let session = Session::new(Scope::Conversation(scope.to_string())).unwrap();
+            session.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
+            session.record_evidence(
+                None,
+                &PiiClass::Name,
+                "Dr. Schmidt",
+                ManifestEvidence::Pattern,
+            );
+            session
+                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                .unwrap();
+            session
+                .tokenize(&PiiClass::custom("postal_code").unwrap(), "12345")
+                .unwrap();
+            session
+        };
+
+        let v6 = base("compat-v6").export().unwrap();
+        assert_eq!(v6.0[0], SNAPSHOT_VERSION_V6);
+
+        let session = base("compat-v7");
+        session
+            .tokenize_spelled(
+                DEFAULT_COUNTER_FAMILY,
+                &PiiClass::Name,
+                ESCAPED_NAME,
+                SourceSpelling::JsonEscaped,
+            )
+            .unwrap();
+        let v7 = session.export().unwrap();
+        assert_eq!(v7.0[0], SNAPSHOT_VERSION_V7);
+
+        let session = base("compat-v8");
+        session
+            .opaque_identifier("class", "synthetic_record_name")
+            .unwrap();
+        let v8 = session.export().unwrap();
+        assert_eq!(v8.0[0], SNAPSHOT_VERSION_V8);
+
+        for (version, snapshot) in [(6, v6), (7, v7), (8, v8)] {
+            std::fs::write(
+                format!("{fixtures}/session_snapshot_v{version}.bin"),
+                snapshot.0,
+            )
+            .unwrap();
+        }
+    }
 
     #[test]
     fn opaque_identifiers_are_private_scoped_and_persist_in_trusted_snapshots() {

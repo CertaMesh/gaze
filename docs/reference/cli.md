@@ -19,9 +19,9 @@ Every verb below is defined by the clap `Subcommand` enum in
 | `gaze audit purge` | Manually delete redaction-log metadata rows older than an ISO 8601 UTC timestamp. See [guide](#gaze-audit-purge). | always |
 | [`gaze audit safety-net query`](../../crates/gaze-cli/README.md#audit-safety-net-query) | Print filtered `safety_net_log` rows as TSV. See [guide](#gaze-audit-safety-net-query). | always |
 | `gaze document clean` | OCR a PNG/JPG/PDF into a split `SafeBundle` (`agent/clean.md`, `agent/report.json`, `owner/manifest.json`). See [guide](#gaze-document-clean) and [crate README](../../crates/gaze-document/README.md). | `document` |
-| `gaze mcp install` | Install `gaze mcp serve` into a supported MCP client config. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
-| `gaze mcp doctor` | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
-| `gaze mcp serve` | Run the stdio MCP server exposing agent-tier document tools. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
+| `gaze mcp install` | Install `gaze mcp serve` into a supported MCP client config. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp`; in the release binary |
+| `gaze mcp doctor` | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp`; in the release binary |
+| `gaze mcp serve` | Run the stdio MCP server exposing agent-tier document tools. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../../crates/gaze-cli/README.md#mcp-installation). | `mcp`; in the release binary |
 | `gaze proxy` | Run or manage the multi-provider HTTP chokepoint daemon. See [guide](#gaze-proxy) and [crate README](../../crates/gaze-proxy/README.md). | built into the default release binary since v0.8.1 |
 
 ## Warnings and exit codes
@@ -73,7 +73,8 @@ before any work runs.
 
 `gaze restore --session-file <PATH>` reads UTF-8 text on stdin and prints the
 restored text exactly. Restore semantics match the JSON form: strict mode
-rejects a token the session did not issue with `UnknownToken`, a tampered
+rejects a token the session did not issue, or a malformed token spelling such
+as `<deadbeef:Email_>` or a bare `<name>` tag, with `UnknownToken`, a tampered
 session fails with `InvalidSignature`, and an expired one with `BlobExpired`,
 all exit `3` with nothing on stdout. A missing file, or one that is not a
 session file, fails with `SessionFile` (exit `4`). With `--restore-mode tolerant`,
@@ -290,8 +291,8 @@ The supported inputs are `.png`, `.jpg`, `.jpeg`, and single-page `.pdf`. The
 | Verb | Effect |
 |---|---|
 | `install` | Write client config using absolute `current_exe()` with `["mcp", "serve"]`; update marker-fenced AGENTS.md guidance idempotently. |
-| `doctor` | Check dependencies, config, manifest store and guidance marker. |
-| `serve` | Run stdio MCP with agent-tier `gaze_read_file` and `gaze_read_text`. |
+| `doctor` | Check dependencies, config, manifest store and guidance marker; report the protection profile and session scope. |
+| `serve` | Run stdio MCP with agent-tier `gaze_read_file` and `gaze_read_text`. Each connection has its own memory-only Session. |
 
 ```sh
 cargo install gaze-cli --features mcp,document
@@ -302,6 +303,7 @@ gaze mcp serve
 
 The CLI verbs require the `mcp` feature. Document tools require the `document`
 feature as well, because the tool implementations live in `gaze-document`.
+The release binaries include both features.
 
 | Option | Purpose |
 |--------|---------|

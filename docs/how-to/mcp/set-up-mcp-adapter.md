@@ -11,13 +11,13 @@ responses.
 
 ## Prerequisites
 
-- A `gaze` binary built with the `mcp` feature.
-- Add the `document` feature when `gaze_read_file` is needed.
+- A `gaze` binary with the `mcp` and `document` features. The release
+  binaries include both.
 - A supported MCP client installed: Claude Code, Claude Desktop, or Cursor.
 - Optional: Tesseract and pdfium when `gaze_read_file` will read image or PDF
   documents.
 
-Install from the repository with both MCP and document tools enabled:
+To build from the repository instead, enable both features:
 
 ```sh
 cargo install --path crates/gaze-cli --features mcp,document

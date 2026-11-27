@@ -31,7 +31,10 @@ async fn serve_stdio(args: ServeArgs) -> Result<(), CliError> {
         .unwrap_or_else(default_manifest_dir)
         .join("calls");
     let manifest = Arc::new(FileManifestStore::new(manifest_dir)?);
-    let host = Arc::new(McpHost::new(manifest, args.max_file_size)?);
+    // One stdio connection is one conversation: it gets its own Session, which
+    // ends with the process.
+    let shared = Arc::new(Shared::new(manifest, args.max_file_size)?);
+    let host = Arc::new(McpHost::open(shared)?);
     let frontend = RmcpFrontend::stdio(Arc::new(FixedPrincipalResolver::agent("gaze-cli")));
     frontend
         .serve(host, ShutdownToken::new())
@@ -39,22 +42,38 @@ async fn serve_stdio(args: ServeArgs) -> Result<(), CliError> {
         .map_err(|err| CliError::McpDetail(format!("mcp stdio server failed: {err}")))
 }
 
+/// The declared MCP protection profile: bundled rules with Resolve/Strict
+/// tokenization, without NER or Nym models. Doctor reports it from this value.
+pub(crate) fn protection_profile() -> gaze_assembly::CorePipelineConfig {
+    gaze_assembly::CorePipelineConfig::new()
+}
+
+/// How `gaze mcp serve` scopes Sessions. Doctor reports this text.
+pub(crate) const SESSION_SCOPE: &str =
+    "one memory-only Session per stdio connection; it ends with the connection";
+
 pub(crate) fn default_manifest_dir() -> PathBuf {
     ProjectDirs::from("dev", "Gaze", "gaze")
         .map(|dirs| dirs.data_dir().join("mcp-manifests"))
         .unwrap_or_else(|| PathBuf::from(".gaze").join("mcp-manifests"))
 }
 
-struct McpHost {
+/// Resources every conversation shares. None of them holds a token mapping.
+struct Shared {
     registry: ToolRegistry,
     auth: AllowAgentAuth,
     manifest: Arc<FileManifestStore>,
     pipeline: gaze_assembly::CorePipeline,
-    session: gaze::Session,
     session_id_policy: SessionIdPolicy,
 }
 
-impl McpHost {
+/// One conversation: the shared resources plus its own Session.
+struct McpHost {
+    shared: Arc<Shared>,
+    session: gaze::Session,
+}
+
+impl Shared {
     fn new(manifest: Arc<FileManifestStore>, max_file_size: Option<u64>) -> Result<Self, CliError> {
         let mut registry = ToolRegistry::new();
         let mut opts = gaze_document::mcp::GazeReadOpts::default();
@@ -63,19 +82,30 @@ impl McpHost {
         }
         gaze_document::mcp::register_tools(&mut registry, opts)
             .map_err(|err| CliError::McpDetail(format!("mcp tool registration failed: {err}")))?;
-        let pipeline = gaze_assembly::CorePipelineConfig::new()
+        let pipeline = protection_profile()
             .build()
             .map_err(|err| CliError::McpDetail(format!("mcp redaction pipeline failed: {err}")))?;
-        let session = gaze::Session::new(gaze::Scope::Ephemeral)
-            .map_err(|err| CliError::McpDetail(format!("mcp session init failed: {err}")))?;
         Ok(Self {
             registry,
             auth: AllowAgentAuth,
             manifest,
             pipeline,
-            session,
             session_id_policy: SessionIdPolicy::default_strict(),
         })
+    }
+}
+
+impl McpHost {
+    /// A host for a new conversation, with a fresh Session.
+    fn open(shared: Arc<Shared>) -> Result<Self, CliError> {
+        let session = gaze::Session::new(gaze::Scope::Ephemeral)
+            .map_err(|err| CliError::McpDetail(format!("mcp session init failed: {err}")))?;
+        Ok(Self { shared, session })
+    }
+
+    #[cfg(test)]
+    fn new(manifest: Arc<FileManifestStore>, max_file_size: Option<u64>) -> Result<Self, CliError> {
+        Self::open(Arc::new(Shared::new(manifest, max_file_size)?))
     }
 }
 
@@ -89,18 +119,19 @@ impl DispatchHost for McpHost {
         external_session_id: Option<&str>,
         host_context: gaze_mcp_core::HostContextSelection,
     ) -> Result<ToolResponse, DispatchError> {
+        let shared = self.shared.as_ref();
         let envelope = PiiEnvelope::new(
-            &self.registry,
-            &self.auth,
-            self.manifest.as_ref(),
-            self.pipeline.pipeline(),
+            &shared.registry,
+            &shared.auth,
+            shared.manifest.as_ref(),
+            shared.pipeline.pipeline(),
             &self.session,
-            self.pipeline.locale_chain().as_slice(),
-            &self.session_id_policy,
+            shared.pipeline.locale_chain().as_slice(),
+            &shared.session_id_policy,
         );
         envelope
-            .with_context_policy(self.pipeline.policy(), self.pipeline.rulepacks())
-            .with_dictionaries(self.pipeline.dictionaries())
+            .with_context_policy(shared.pipeline.policy(), shared.pipeline.rulepacks())
+            .with_dictionaries(shared.pipeline.dictionaries())
             .dispatch(
                 principal,
                 tool_name,
@@ -112,7 +143,7 @@ impl DispatchHost for McpHost {
     }
 
     fn list_tools(&self) -> Vec<ToolDescriptor> {
-        self.registry.list().into_iter().cloned().collect()
+        self.shared.registry.list().into_iter().cloned().collect()
     }
 }
 
@@ -432,6 +463,7 @@ mod manifest_store_tests {
         let mut failing_registry = ToolRegistry::new();
         if failure {
             let descriptor = host
+                .shared
                 .registry
                 .list()
                 .into_iter()
@@ -444,14 +476,14 @@ mod manifest_store_tests {
             if failure {
                 &failing_registry
             } else {
-                &host.registry
+                &host.shared.registry
             },
-            &host.auth,
+            &host.shared.auth,
             &probe,
-            host.pipeline.pipeline(),
+            host.shared.pipeline.pipeline(),
             &host.session,
-            host.pipeline.locale_chain().as_slice(),
-            &host.session_id_policy,
+            host.shared.pipeline.locale_chain().as_slice(),
+            &host.shared.session_id_policy,
         );
         // fixture-cited(crates/gaze-cli/src/commands/mcp/serve.rs:commands::mcp::serve::manifest_store_tests::success_preserves_audit_context_on_disk)
         // fixture-cited(crates/gaze-cli/src/commands/mcp/serve.rs:commands::mcp::serve::manifest_store_tests::failure_preserves_audit_context_on_disk)

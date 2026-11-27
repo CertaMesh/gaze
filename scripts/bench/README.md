@@ -103,6 +103,38 @@ uv run --project scripts/bench python scripts/bench/outcome_counters.py prove \
   --release v0.17.0 --check docs/reference/benchmarks/outcome-counters-v0.17.0.json
 ```
 
+## JSON structure census
+
+`json_structure_census.py` maps every false-positive byte of a record to the
+innermost JSON or log position it lands in and to the recognizers that
+detected it. Positions are keys, numbers, `true`/`false`/`null`, tool
+selectors, tool arguments, ordinary string values, syntax and log keys; a
+protected range that cuts an escape sequence in two also counts. Every
+position except an ordinary string value or prose is critical: a change there
+can break parsing, typing or tool dispatch (F2). Serialized JSON inside a
+string is decoded with a byte map, so nested positions map back to source
+bytes. Tool selectors come from a declared list of provider envelopes, never
+from a generic key such as `name` alone. Only rebuildable texts are read; the
+metadata-only holdout is reported as unreadable bytes. The report also gives
+the gold bytes a blanket learned-detector veto per position would expose; for
+unreadable documents it gives only an upper bound. It reads one config (the
+production config unless `--config` names another) and fails when that
+config's population is incomplete. JSON it cannot verify stays a plain
+string: quoted JSON inside a log value, serialized JSON that does not start
+its string, lone surrogate escapes and duplicate keys. Those cases can only
+undercount critical bytes.
+
+```bash
+uv run --project scripts/bench python scripts/bench/json_structure_census.py report \
+  target/bench-data/gate-base/full/observations-v1.jsonl.gz --output target/gate/census-base.json
+uv run --project scripts/bench python scripts/bench/json_structure_census.py gate \
+  target/gate/census-base.json target/gate/census-candidate.json
+```
+
+`gate` fails on any critical false-positive byte the candidate adds at a
+document offset where the base had none. It is a diagnostic beside the gain
+gate, not a replacement for it.
+
 ## Scored-label contracts
 
 A scored-label contract says which corpus labels count as gold PII. Without
@@ -406,7 +438,10 @@ At scorer initialization, stable provenance IDs are loaded from every committed
 `scripts/bench/no_opf_models.toml`. That file's `[builtin_source_ids]` declaration
 adds built-in producer IDs only from committed ground truth; tests require every
 declared ID to appear as a string literal in the read-only `gaze-recognizers`
-sources. Runtime producer assertions never extend this vocabulary. An exact,
+sources. Its id-only `pinned_rule_*` tables add rulepack IDs registered ahead of
+the detection change that ships them, so that change and its base measure under
+one specification; the vocabulary is unchanged once the rule lands. Runtime
+producer assertions never extend this vocabulary. An exact,
 case-sensitive vocabulary match may skip only the protected-content reproduction
 check; source-ID grammar, ordering, non-empty, and uniqueness validation still
 apply. Missing, unreadable, malformed, or empty committed vocabulary inputs abort
@@ -450,6 +485,10 @@ The other half keep the same non-ASCII spelling in record and text, with gold
 spans covering the original UTF-8 bytes. Every pair has a one-digit-off public
 fixture reference as its benign twin. The pinned v6 corpus hash is
 `ead514a882f8a19dfac18a7f94cbf706eaeee32e78cd2d54342b84a515246b56`.
+Generator version 7 rebuilds the unlisted-name control with rare declared names
+and superstring twins, and adds `control_uncorroborated_word_name` for given
+names that are also ordinary words. It has 120 pairs; the pinned v7 corpus hash
+is `9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0`.
 The model-free tests pin all pre-existing v5 pairs byte for byte, including
 their match kinds and buckets. Keep historical v5 results under their original
 specification; compare each implementation against the same v6 cells.
@@ -514,7 +553,10 @@ side-by-side `validator_backed_recall` and `shape_only_recall`. The dataset bloc
 reports a full available-population `validator_gold_census` with validator pass
 and fail counts. Labels without an applicable validator say `not_applicable` and
 use null pass/fail and recall fields, so not-applicable cannot be confused with a
-measured zero.
+measured zero. A document the pipeline refuses with a typed untransformable
+error emits no output, so the probe reports no predictions for it: a refusal
+never earns diagnostic recall, and the benchmark producer reports the refusal
+itself as typed refusal evidence.
 
 These fields define schema v4. Older schema-v3 artifacts remain readable for
 diagnostic replay and their aggregate evidence is not rewritten. Because v3
@@ -708,8 +750,21 @@ also includes the bounded inference-equivalence and key-mutation tools in the
 measuring source closure. The
 [refusal contract specification](../../docs/reference/benchmarks/specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json)
 also binds complete typed refusal evidence from pinned producers and the versioned refusal gate.
-The [current specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
+The [pipeline-producer specification](../../docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json)
 pins the pipeline's typed refusal producer, `gaze-pipeline-typed-refusal-v1`.
+The [field-labelled record-ID specification](../../docs/reference/benchmarks/specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json)
+differs from it only in the validation vocabulary, which adds the field-labelled
+record-ID rules `customer_id.field`, `employee_id.field` and `record_id.field`.
+The [generator v31 specification](../../docs/reference/benchmarks/specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json)
+adds generator v31's prose credential cells.
+The [JSON structure census specification](../../docs/reference/benchmarks/specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json)
+differs from it only by adding `json_structure_census.py` to the measuring closure.
+The [current specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
+differs from the JSON structure census one only in the `known_record_cells.py` and
+`known_record_arm.py` digests: known-record cell generator v7, which reads
+the generated English name-word dictionary. That dictionary is a crate asset,
+not a harness input; the pinned v7 corpus hash, not the specification, detects
+any change to it.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
