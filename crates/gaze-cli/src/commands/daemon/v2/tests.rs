@@ -1623,6 +1623,7 @@ fn untransformable_failure_reports_the_closed_reason() {
     let error = gaze::Error::Protection(gaze::ProtectionError::Untransformable {
         reason: gaze_types::UntransformableReason::JsonNumberNoTextOnlyPath,
         field_path: gaze_types::FieldPath::new(["synthetic-key@example.invalid".into()]),
+        others: Vec::new(),
     });
     let failure = protection_failure(&d.pipeline, error);
     let raw = d.v2.error(failure, None);

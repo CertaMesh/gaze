@@ -12,8 +12,12 @@ fn core_extended() -> Rulepack {
         embedded("core-extended").expect("core-extended embedded rulepack"),
     ))
     .expect("core-extended loads");
+    // These suites drive regex rules over prose. Field-labelled rules read only
+    // structured fields, never prose, and have their own suites.
     rulepack.recognizers.retain(|recognizer| {
-        !recognizer.id.starts_with("email.") && !recognizer.id.starts_with("name.")
+        !recognizer.id.starts_with("email.")
+            && !recognizer.id.starts_with("name.")
+            && matches!(recognizer.matcher, RawMatch::Regex { .. })
     });
     rulepack
 }
