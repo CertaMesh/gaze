@@ -520,6 +520,7 @@ def test_certificate_resolves_executing_spec_before_replay(tmp_path, evidence, m
         name = 'scripts/bench/gaze_bench_score.py'
         if mutation == 'removed':
             del harness[name]
+            spec['inputs']['capture_closure'].remove(name)
         else:
             harness[name if mutation == 'changed' else 'scripts/bench/extra.py'] = 'f' * 64
     elif mutation == 'vocabulary':
@@ -755,3 +756,96 @@ def test_registered_current_specification_matches_the_measuring_tree():
     labels = {path.stem: specs.file_digest(path) for path in
               (root / "docs/reference/benchmarks").glob("scored-labels-v*.json")}
     assert {k: v for k, v in inputs["contracts"].items() if k.startswith("scored-labels-")} == labels
+
+
+def _respec(spec, **changes):
+    value = copy.deepcopy(spec['inputs'])
+    for path, item in changes.items():
+        node = value
+        *parents, leaf = path.split('|')
+        for name in parents:
+            node = node[name]
+        node[leaf] = item
+    return specs.manifest(value)
+
+
+OUTSIDE = 'scripts/bench/known_record_cells.py'
+
+
+def test_live_closure_excludes_known_record_harness_but_binds_capture_code():
+    closure = specs.capture_closure(ROOT)
+    assert OUTSIDE not in closure and 'scripts/bench/known_record_arm.py' not in closure
+    for name in ('run_no_opf_benchmark.py', 'scorecard_record.py', 'gaze_bench_score.py',
+                 'agentic_layers.py', 'government_id_cells.py', 'refusal_gate.py',
+                 'benchmark-protocol.json', 'uv.lock'):
+        assert f'scripts/bench/{name}' in closure
+
+
+def test_layer_sub_specs_change_only_with_their_inputs():
+    spec = synthetic_spec(ROOT, make_population())
+    assert OUTSIDE in spec['inputs']['harness']
+    original = specs.layer_specs(spec)
+    assert set(original) == {'C', 'A', 'D', 'R'}
+    outside = _respec(spec, **{f'harness|{OUTSIDE}': '0' * 64})
+    assert outside['id'] != spec['id'] and specs.layer_specs(outside) == original
+    inside = _respec(spec, **{'harness|scripts/bench/scorecard_record.py': '0' * 64})
+    assert all(specs.layer_specs(inside)[layer] != original[layer] for layer in original)
+    corpus = specs.layer_specs(_respec(spec, corpus_sha256='0' * 64))
+    assert [layer for layer in original if corpus[layer] != original[layer]] == ['C']
+    generator = specs.layer_specs(_respec(spec, **{'generator|corpus_sha256': '0' * 64}))
+    assert [layer for layer in original if generator[layer] != original[layer]] == ['A', 'D', 'R']
+    population = specs.layer_specs(_respec(spec, **{'population|D|descriptors_sha256': '0' * 64}))
+    assert [layer for layer in original if population[layer] != original[layer]] == ['D']
+    # A manifest without a closure binds every harness file.
+    legacy = copy.deepcopy(spec['inputs'])
+    del legacy['capture_closure']
+    legacy = specs.manifest(legacy)
+    assert specs.layer_specs(_respec(legacy, **{f'harness|{OUTSIDE}': '0' * 64})) != specs.layer_specs(legacy)
+
+
+def test_gate_admits_outside_closure_change_and_refuses_gated_layer_change():
+    spec = synthetic_spec(ROOT, make_population())
+    a = _scorecard(dict.fromkeys(('C', 'A', 'D', 'R'), 0))
+    a['benchmark_spec'] = spec
+    b = copy.deepcopy(a)
+    b['benchmark_spec'] = _respec(spec, **{f'harness|{OUTSIDE}': '0' * 64})
+    assert agentic.compare_layers(a, b)['verdict'] != 'not_comparable'
+    b['benchmark_spec'] = _respec(spec, **{'population|A|descriptors_sha256': '0' * 64})
+    with pytest.raises(agentic.LayerError, match='^benchmark_spec_mismatch$'):
+        agentic.compare_layers(a, b)
+
+
+def test_reused_capture_rebinds_to_executing_spec_and_build(tmp_path):
+    docs = make_population()
+    spec = synthetic_spec(ROOT, docs)
+    policy = tmp_path / 'policy.toml'
+    policy.write_text('[ner]\nthreshold = 0.3\n')
+    pins = capture(tmp_path / 'capture', docs, spec, True, policy, revision='b' * 40)
+    record = tmp_path / pins['record']['file']
+    header, observations = records._read(record)
+    before = records.rescore(record, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+    binary = header['binary_sha256']
+    receipt = {**header['scorecard']['subject_build'], 'source': {'revision': REVISION, 'dirty': False}}
+    current = {'gaze': receipt['source'], 'subject_build': receipt}
+    for changed, reason in ((_respec(spec, **{'harness|scripts/bench/agentic_layers.py': '0' * 64}),
+                             'benchmark_spec_mismatch'), (spec, 'another executable')):
+        with pytest.raises(records.RecordError, match=reason):
+            records.rebind_reuse(record, changed, binary if reason != 'another executable' else '0' * 64, current)
+    assert records._read(record) == (header, observations)
+    executing = _respec(spec, **{f'harness|{OUTSIDE}': '0' * 64})
+    original_sha = capture_identity.file_digest(record)
+    assert records.rebind_reuse(record, executing, binary, current)
+    rebound, rebound_observations = records._read(record)
+    assert rebound_observations == observations
+    assert rebound['benchmark_spec_id'] == executing['id']
+    assert rebound['scorecard']['capture_reuse'] == {
+        'version': 1, 'captured_benchmark_spec_id': spec['id'],
+        'captured': {'gaze': {'revision': 'b' * 40, 'dirty': False},
+                     'subject_build': header['scorecard']['subject_build']},
+        'captured_record_sha256': original_sha}
+    after = records.rescore(record, score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+    for field in ('runs', 'layers', 'dataset', 'scoring'):
+        assert after[field] == before[field]
+    cert.full_record(record, executing, REVISION)
+    # Replaying the same specification and build again is a no-op.
+    assert not records.rebind_reuse(record, executing, binary, current)

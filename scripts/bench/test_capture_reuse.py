@@ -146,11 +146,11 @@ class CaptureIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "docs/reference/benchmarks").mkdir(parents=True)
-            paths = {name: root / name for name in ("detector", "validator", "dataset", "negative", "Cargo.lock")}
-            paths["spec"] = root / "docs/reference/benchmarks/README.md"
+            paths = {name: root / name for name in ("detector", "validator", "dataset", "negative")}
+            unrelated = (root / "Cargo.lock", root / "docs/reference/benchmarks/README.md")
             paths["protocol"] = root / runner.benchmark_spec.PROTOCOL
             paths["protocol"].parent.mkdir(parents=True)
-            for path in paths.values():
+            for path in (*paths.values(), *unrelated):
                 path.write_bytes(b"synthetic")
             model = root / "model"
             model.mkdir()
@@ -183,6 +183,9 @@ class CaptureIdentityTests(unittest.TestCase):
                         path.write_bytes(b"changed")
                         self.assertNotEqual(read(), original)
                         path.write_bytes(b"synthetic")
+                for path in unrelated:
+                    path.write_bytes(b"changed")
+                    self.assertEqual(read(), original)
                 for field in ("seed", "warmups", "measured_repetitions", "quick_documents"):
                     previous = getattr(args, field)
                     setattr(args, field, previous + 1)

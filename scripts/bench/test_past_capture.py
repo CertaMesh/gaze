@@ -28,7 +28,7 @@ def bound_capture(tmp_path):
     card['dataset']['integrity']['component_sha256'] = {'dataiku': 'd' * 64, 'negative_corpus': 'e' * 64}
     card['dataset']['evaluated_population'] = records.score.population_summary(docs['C'])
     key = {'format': past_capture.FORMAT, 'binary_sha256': header['binary_sha256'],
-           'benchmark': {'spec_id': spec['id'], 'harness_revision': 'b' * 40,
+           'benchmark': {'layer_specs': past_capture.specs.layer_specs(spec),
                          'validator': {'source': 'independent', 'binary': 'c' * 64}},
            'subject': {'release_tag': 'v0.17.0', 'build': card['subject_build']},
            'execution': {'parameters': card['parameters'],
@@ -130,7 +130,14 @@ def key_inputs(tmp_path, monkeypatch):
     return inputs, paths, models, runtime, harness_source
 
 
-@pytest.mark.parametrize('change', ['model', 'policy', 'corpus', 'negative', 'harness', 'runtime',
+def test_harness_commit_alone_keeps_the_release_key(key_inputs):
+    inputs, _, _, _, harness_source = key_inputs
+    original = past_capture.key(**inputs)
+    harness_source.update(revision='e' * 40, harness_tree_hash='f' * 40)
+    assert past_capture.key(**inputs) == original
+
+
+@pytest.mark.parametrize('change', ['model', 'policy', 'corpus', 'negative', 'runtime',
                                     'binary', 'features', 'spec', 'validator_binary', 'validator_source',
                                     'environment', 'documents', 'release_tag', 'capture_protocol', 'response_validation'])
 def test_live_inputs_invalidate_one_at_a_time(key_inputs, change):
@@ -143,8 +150,6 @@ def test_live_inputs_invalidate_one_at_a_time(key_inputs, change):
         path.write_text(path.read_text() + '\n# changed\n')
         if change == 'policy':
             inputs['parameters']['policy_sha256'] = past_capture.identity.file_digest(path)
-    elif change == 'harness':
-        harness_source['revision'] = 'e' * 40
     elif change == 'runtime':
         runtime['closure'] = 'changed'
     elif change == 'binary':
@@ -175,21 +180,19 @@ def test_live_inputs_invalidate_one_at_a_time(key_inputs, change):
 
 
 @pytest.mark.parametrize('field', ['format', 'binary', 'release_marker', 'cache_marker',
-    'header_release', 'header_cache', 'spec', 'harness', 'build', 'parameters', 'policy', 'models',
+    'header_release', 'header_cache', 'spec', 'build', 'parameters', 'policy', 'models',
     'tag_format', 'tag_match', 'measurement', 'features', 'capture_protocol', 'response_validation'])
 def test_each_binding_guard_rejects_independently(tmp_path, field):
     path, record, key = bound_capture(tmp_path)
     header, _ = records._read(record)
     card = copy.deepcopy(header['scorecard'])
-    if field in ('format', 'binary', 'spec', 'harness', 'build', 'parameters', 'policy', 'models', 'tag_format', 'features', 'capture_protocol', 'response_validation'):
+    if field in ('format', 'binary', 'spec', 'build', 'parameters', 'policy', 'models', 'tag_format', 'features', 'capture_protocol', 'response_validation'):
         if field == 'format':
             key['format'] = 'legacy'
         elif field == 'binary':
             key['binary_sha256'] = 'e' * 64
         elif field == 'spec':
-            key['benchmark']['spec_id'] = 'changed'
-        elif field == 'harness':
-            key['benchmark']['harness_revision'] = 'c' * 40
+            key['benchmark']['layer_specs'] = {'C': 'changed'}
         elif field == 'build':
             key['subject']['build'] = {}
         elif field == 'parameters':

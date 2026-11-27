@@ -299,6 +299,10 @@ def _run(args: argparse.Namespace) -> Path:
         evidence.cache.update(status="hit" if status == "hit" else "miss", reason=status)
         if status == "hit":
             try:
+                header, _ = records._read(output_record)
+                records.rebind_reuse(output_record, spec, cache_key["binary_sha256"], {
+                    "runner_provenance": {**header["scorecard"]["runner_provenance"],
+                                          "harness_revision": harness}})
                 candidate = records.rescore(output_record, contract,
                     prepared.contract if prepared else None, max_workers=1)
                 header, _ = records._read(output_record)

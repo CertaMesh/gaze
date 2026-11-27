@@ -876,10 +876,6 @@ def observation_cache_dir(repo_root: Path, configured: Path | None) -> Path:
     return Path(common).parent / "target/bench-data/cache"
 
 
-def optional_file_sha256(path: Path) -> str | None:
-    return score.sha256_file(path) if path.is_file() else None
-
-
 def store_observations_if_unchanged(cache_dir: Path, key: Mapping[str, object],
                                     record: Path, read_key) -> None:
     if read_key()[0] != key:
@@ -905,8 +901,15 @@ def observation_cache_key(
     binary: Path,
     validator_probe: Path,
     davlan_model: Path,
-    benchmark_spec_id: str | None = None,
+    layer_specs: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
+    """Key a capture on what determines its observation bytes, never on the commit.
+
+    Source revisions, tree hashes and documentation stay out: the built
+    executables' bytes, the policy closure, models, runtime and environment, and
+    the per-layer sub-specifications (which bind the capture harness) decide
+    detection output and record contents.
+    """
     source_identity, reason = source_tree_identity(repo_root)
     if source_identity is None:
         return None, reason
@@ -919,7 +922,6 @@ def observation_cache_key(
         files = {"detector_binary": binary, "validator_binary": validator_probe,
                  "dataset": repo_path(repo_root, args.dataset),
                  "negative_corpus": repo_path(repo_root, args.negative_corpus),
-                 "benchmark_spec": repo_root / "docs/reference/benchmarks/README.md",
                  "benchmark_protocol": repo_root / benchmark_spec.PROTOCOL}
         models = {}
         policy = None
@@ -957,17 +959,9 @@ def observation_cache_key(
         "effective_inputs": inputs,
         "binary_sha256": inputs["files"]["detector_binary"],
         "record_schema_version": records.SCHEMA_VERSION,
-        "benchmark_spec_id": benchmark_spec_id,
+        "layer_specs": dict(layer_specs) if layer_specs is not None else None,
         "capture_protocol": benchmark_spec.capture_protocol(args),
         "response_validation": benchmark_spec.response_validation(args),
-        **source_identity,
-        "cargo_lock_sha256": score.sha256_file(repo_root / "Cargo.lock"),
-        "cargo_config_sha256": {
-            "repository": optional_file_sha256(repo_root / ".cargo/config.toml"),
-            "cargo_home": optional_file_sha256(
-                Path(source_environment.get("CARGO_HOME", str(Path.home() / ".cargo"))) / "config.toml"
-            ),
-        },
         "policy_sha256": policy_sha256,
         "policy_path": portable_repo_path(repo_root, policy_path) if policy_path else None,
         "policy_dependencies": policy_dependencies,
@@ -1498,7 +1492,7 @@ def _run(args: argparse.Namespace) -> int:
             agentic_prepared=agentic_prepared, document_ids=[document.uid for document in documents],
             threshold=effective_threshold, source_environment=source_environment,
             binary=binary, validator_probe=validator_probe, davlan_model=davlan_model,
-            benchmark_spec_id=spec["id"],
+            layer_specs=benchmark_spec.layer_specs(spec),
         )
 
     bypass = ("explicit_no_cache" if args.no_cache else "unbound_skip_build" if args.skip_build
@@ -1522,6 +1516,10 @@ def _run(args: argparse.Namespace) -> int:
         print(f"observation cache: {cache_status}")
         if cache_status == "hit":
             try:
+                # The executable was rebuilt from this checkout and hashes equal,
+                # so the replay binds this specification and producer build.
+                records.rebind_reuse(output_record, spec, build_receipt["binary_sha256"],
+                                     {"gaze": build_receipt["source"], "subject_build": build_receipt})
                 candidate = records.rescore(
                     output_record, scored_label_contract,
                     agentic_prepared.contract if agentic_prepared else None,

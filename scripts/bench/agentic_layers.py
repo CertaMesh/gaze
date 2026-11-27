@@ -5811,7 +5811,9 @@ def compare_layers(
 ) -> dict[str, object]:
     """Compare admitted captures or verified record replays; this is not artifact admission."""
     try:
-        benchmark_spec.require_same(base, candidate, required=False)
+        # Only the gated layers' sub-specifications must match; a harness change
+        # outside their capture closure leaves both sides comparable.
+        benchmark_spec.require_same_layers(base, candidate, required=False)
     except benchmark_spec.SpecError as error:
         raise LayerError(error.code) from error
     base_identity = _layer_identity(base)
