@@ -177,6 +177,23 @@ fn a_password_with_spaces_quotes_or_brackets_is_protected_whole() {
         ("The password is `Fj0rd#Tal99`.", "Fj0rd#Tal99"),
         ("Das Passwort lautet `Fj0rd#Tal99`.", "Fj0rd#Tal99"),
         ("The password is ```Fj0rd#Tal99``` ok", "Fj0rd#Tal99"),
+        ("My password string is \"Fj0rd#Tal99\".", "Fj0rd#Tal99"),
+        (
+            "Das Passwort aus dem Text ist \"Fj0rd#Tal99\".",
+            "Fj0rd#Tal99",
+        ),
+        (
+            "The password I sent by text is \"blue horse 42 dance\".",
+            "blue horse 42 dance",
+        ),
+        (
+            "The passphrase is `correct horse battery staple 7`.",
+            "correct horse battery staple 7",
+        ),
+        (
+            "Use passphrase `amber 42 falcon tulip` for the vault.",
+            "amber 42 falcon tulip",
+        ),
         ("The password is \"$ecretPass9\" ok", "$ecretPass9"),
     ] {
         assert_credential(raw, "password", value);

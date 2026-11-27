@@ -162,8 +162,9 @@ please, try, again, reset, enter, forgot, invalid, incorrect, wrong and their
 German equivalents) and no digit
 (`"Please enter it again"`), or one without a digit or symbol that names the
 password itself (`"Incorrect password, try again"`; `"Passw0rd!"` stays
-protected), and quoted text named as the password text, copy or string
-(`The password text is "Choose a strong one"`). Ordinary passphrases with articles or pronouns
+protected), and quoted text without a digit or symbol named as the password text, copy or
+string (`The password text is "Choose a strong one"`;
+`My password string is "Fj0rd#Tal99"` stays protected). Ordinary passphrases with articles or pronouns
 (`"the moon is blue"`) stay protected. It also refuses matches whose
 cue part names credential metadata (name, label, hint, policy, length,
 rotation, template, field, hash, file, path, model, version, region, endpoint,
