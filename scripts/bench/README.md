@@ -769,8 +769,10 @@ The [chat corpus specification](../../docs/reference/benchmarks/specifications/7
 adds generator v32's [EN/DE chat name cells](../../docs/reference/benchmarks/README.md#names-in-chat-generator-v32).
 The [chat rule vocabulary specification](../../docs/reference/benchmarks/specifications/a1573ead260cc4e07852bc92a4514bc7c3e09d1697f0218a0b7904f8a5eb5d62.json)
 adds `name.chat_cue` to the validation vocabulary for the same corpus.
-The [current specification](../../docs/reference/benchmarks/specifications/b12892ef5bd7ae7fcec863583fc3943b9e2e0717222c5f0ada3811ae02a92875.json)
+The [first v33 specification](../../docs/reference/benchmarks/specifications/b12892ef5bd7ae7fcec863583fc3943b9e2e0717222c5f0ada3811ae02a92875.json)
 keeps that vocabulary and adds generator v33's [name boundaries](../../docs/reference/benchmarks/README.md#chat-name-boundaries-generator-v33).
+The [current specification](../../docs/reference/benchmarks/specifications/6344230f48555654e039e7a401e3eef72768eae3a1da32a06128e87b2700fb4d.json)
+changes one published English counterweight to a demonym that is also a listed given name.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

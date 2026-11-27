@@ -135,7 +135,7 @@ BOUNDARIES = {
         "single_possessive": "Can you ask {G}’s supervisor for a key?",
         "pair_possessive": "Please cc {G} {S}'s office on the reply.",
         "calendar": "@rosterbot March shifts should include a handover.",
-        "demonym": "Please ask Dutch galleries whether they lend paintings.",
+        "demonym": "Please ask German galleries whether they lend paintings.",
         "word": "Please cc rose orders to the nursery's shared inbox.",
     },
     ("dev", "de"): {
