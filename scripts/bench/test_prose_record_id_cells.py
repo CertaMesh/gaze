@@ -14,7 +14,7 @@ import prose_record_id_cells as cells
 @pytest.mark.parametrize("partition", api.PARTITIONS)
 def test_whole_value_gold_and_public_twins(partition):
     records = cells.records(api, partition)
-    assert Counter(r.layer for r in records) == {"A": 780, "D": 585}
+    assert Counter(r.layer for r in records) == {"A": 800, "D": 605}
     personal, public, selectors, names, numeric = set(), set(), set(), set(), set()
     for r in records:
         assert r.surface.startswith(cells.SURFACE_PREFIX)
@@ -75,6 +75,29 @@ def test_same_login_spelling_in_public_release_and_build_tags(partition):
         assert all(r.layer == "D" and not r.gold and not r.decoys for r in controls)
         assert Counter(v for r in controls for v in re.findall(syntax, r.text)) == Counter(personal)
     assert any(r.text == "Release ACCT_57293" for r in rows) == (partition == "dev")
+
+
+@pytest.mark.parametrize("partition", api.PARTITIONS)
+@pytest.mark.parametrize("case,stem", [("lower", "[a-z]+"), ("title", "[A-Z][a-z]+")])
+def test_word_counter_login_and_software_metadata_have_identical_values(partition, case, stem):
+    rows = cells.records(api, partition)
+    surface = cells.SURFACE_PREFIX + f"counter_{case}_"
+    syntax = re.compile(rf"\b{stem}_[0-9]{{5}}\b")
+    logins = [r for r in rows if r.surface == surface + "login"]
+    counters = [r for r in rows if r.surface == surface + "metadata"]
+    assert len(logins) == len(counters) == api.DOCS_PER_FAMILY
+    personal = Counter()
+    for r in logins:
+        g, = r.gold
+        assert r.layer == "A" and g.label == "RECORD_ID" and syntax.findall(r.text) == [g.value]
+        personal[g.value] += 1
+    assert len(personal) == len(logins)
+    assert all(r.layer == "D" and not r.gold and not r.decoys for r in counters)
+    observed = []
+    for r in counters:
+        value, = syntax.findall(r.text)
+        observed.append(value)
+    assert Counter(observed) == personal
 
 
 def test_partitions_have_disjoint_values_and_wording():
