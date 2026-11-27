@@ -300,7 +300,7 @@ def _run(args: argparse.Namespace) -> Path:
         if status == "hit":
             try:
                 header, _ = records._read(output_record)
-                records.rebind_reuse(output_record, spec, cache_key["binary_sha256"], {
+                records.rebind_reuse(output_record, spec, build_receipt["binary_sha256"], {
                     "runner_provenance": {**header["scorecard"]["runner_provenance"],
                                           "harness_revision": harness}})
                 candidate = records.rescore(output_record, contract,

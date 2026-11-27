@@ -145,7 +145,7 @@ def layer_specs(value: Mapping) -> dict[str, str]:
     predate the closure bind every harness file.
     """
     inputs = validate(value)["inputs"]
-    closure = inputs.get("capture_closure") or sorted(inputs["harness"])
+    closure = inputs["capture_closure"] if "capture_closure" in inputs else sorted(inputs["harness"])
     shared = {"schema_version": value["schema_version"], "seed": inputs["seed"],
               "record_schema": inputs["record_schema"], "protocol": inputs["protocol"],
               "validation_vocabulary": inputs.get("validation_vocabulary"),
@@ -181,11 +181,15 @@ def require_same_layers(left: Mapping, right: Mapping, *, required: bool = True)
 def capture_closure(root: Path) -> list[str]:
     """Harness files reachable from the C/A/D/R entry points, plus every data/config input.
 
-    The closure follows static imports of local modules. A local dynamic import
-    would escape it, so the resolver refuses one.
+    The closure follows static imports of top-level local modules, including
+    imports inside functions. Imports it could not follow are refused: relative
+    imports, imports of a local subpackage, and runtime module loaders. The only
+    `exec` in the closure runs retained generator sources pinned by SHA-256.
     """
     bench = root / "scripts/bench"
     local = {path.stem: path for path in bench.glob("*.py")}
+    packages = {path.parent.relative_to(bench).parts[0] for path in bench.rglob("*.py")
+                if path.parent != bench}
     seen: set[str] = set()
     pending = list(CLOSURE_ENTRY_POINTS)
     while pending:
@@ -202,10 +206,13 @@ def capture_closure(root: Path) -> list[str]:
                 modules = [node.module or ""]
             elif (isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
                   and getattr(node.func, "id", getattr(node.func, "attr", None))
-                  in ("import_module", "__import__", "run_path", "run_module")):
+                  in ("import_module", "__import__", "run_path", "run_module",
+                      "spec_from_file_location", "SourceFileLoader", "exec_module", "load_module")):
                 raise SpecError("capture_closure_unresolved")
             else:
                 continue
+            if any(module.split(".")[0] in packages for module in modules):
+                raise SpecError("capture_closure_unresolved")
             pending += [module.split(".")[0] for module in modules if module.split(".")[0] in local]
     paths = [local[name] for name in seen] + sorted(bench.glob("*.json"))
     paths += [bench / "pyproject.toml", bench / "uv.lock"]

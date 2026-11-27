@@ -749,6 +749,7 @@ def test_registered_current_specification_matches_the_measuring_tree():
     inputs = manifest["inputs"]
     measured = specs.measuring_inputs(root)
     assert inputs["harness"] == measured["harness"]
+    assert inputs["capture_closure"] == measured["capture_closure"]
     assert inputs["validation_vocabulary"] == measured["validation_vocabulary"]
     assert inputs["record_schema"] == sorted(records.READABLE_SCHEMA_VERSIONS)
     protocol = json.loads((root / specs.PROTOCOL).read_text(encoding="utf-8"))
@@ -779,6 +780,40 @@ def test_live_closure_excludes_known_record_harness_but_binds_capture_code():
                  'agentic_layers.py', 'government_id_cells.py', 'refusal_gate.py',
                  'benchmark-protocol.json', 'uv.lock'):
         assert f'scripts/bench/{name}' in closure
+
+
+def test_closure_follows_lazy_and_transitive_imports_and_refuses_unfollowable_ones(tmp_path):
+    bench = tmp_path / 'scripts/bench'
+    (bench / 'helpers').mkdir(parents=True)
+    (bench / 'helpers/inner.py').write_text('')
+    (bench / 'run_no_opf_benchmark.py').write_text('def run():\n    import first\n')
+    (bench / 'first.py').write_text('from second import value\n')
+    (bench / 'second.py').write_text('value = 1\n')
+    (bench / 'unreached.py').write_text('import second\n')
+    closure = specs.capture_closure(tmp_path)
+    assert {f'scripts/bench/{name}.py' for name in ('run_no_opf_benchmark', 'first', 'second')} <= set(closure)
+    assert 'scripts/bench/unreached.py' not in closure
+    for source in ('from . import second\n', 'import helpers.inner\n',
+                   'import importlib\nimportlib.import_module("unreached")\n',
+                   'import importlib.util\nimportlib.util.spec_from_file_location("x", "unreached.py")\n'):
+        (bench / 'second.py').write_text(source)
+        with pytest.raises(specs.SpecError, match='^capture_closure_unresolved$'):
+            specs.capture_closure(tmp_path)
+
+
+@pytest.mark.parametrize('path, layers', [
+    ('seed', 'CADR'), ('record_schema', 'CADR'), ('protocol|validation', 'CADR'),
+    ('validation_vocabulary', 'CADR'), ('measuring_runtime|python', 'CADR'),
+    ('contracts|v1', 'CADR'), ('contracts|scored-labels-v2', 'CADR'), ('contracts|generated', 'ADR'),
+    ('capture_closure', 'CADR')])
+def test_each_shared_or_layer_input_changes_its_sub_specs(path, layers):
+    spec = synthetic_spec(ROOT, make_population())
+    original = specs.layer_specs(spec)
+    value = {'seed': spec['inputs']['seed'] + 1, 'record_schema': [99],
+             'validation_vocabulary': ['synthetic:changed'],
+             'capture_closure': [p for p in spec['inputs']['capture_closure'] if 'gaze_bench_score' not in p]}
+    changed = specs.layer_specs(_respec(spec, **{path: value.get(path, 'synthetic-changed')}))
+    assert ''.join(layer for layer in 'CADR' if changed[layer] != original[layer]) == layers
 
 
 def test_layer_sub_specs_change_only_with_their_inputs():

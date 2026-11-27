@@ -48,6 +48,28 @@ def bound_capture(tmp_path):
     return path, record, key
 
 
+def test_replay_from_another_harness_commit_rebinds_and_passes_binding(tmp_path):
+    path, record, key = bound_capture(tmp_path)
+    cache.store_layers(tmp_path / 'cache', key, record)
+    destination = tmp_path / 'replayed' / record.name
+    destination.parent.mkdir()
+    assert cache.restore_layers(tmp_path / 'cache', key, destination) == 'hit'
+    header, observations = records._read(destination)
+    spec_inputs = copy.deepcopy(header['scorecard']['benchmark_spec']['inputs'])
+    spec_inputs['harness']['scripts/bench/known_record_cells.py'] = '0' * 64
+    executing = past_capture.specs.manifest(spec_inputs)
+    provenance = {**header['scorecard']['runner_provenance'], 'harness_revision': 'c' * 40}
+    assert records.rebind_reuse(destination, executing, header['binary_sha256'],
+                                {'runner_provenance': provenance})
+    card = records.rescore(destination, records.score.SCORED_LABEL_CONTRACT_V1, max_workers=1)
+    rebound, rebound_observations = records._read(destination)
+    assert rebound_observations == observations
+    past_capture.validate_binding(card, rebound, key, version='v0.17.0')
+    assert card['runner_provenance']['harness_revision'] == 'c' * 40
+    assert card['benchmark_spec'] == executing
+    assert card['subject_build'] == header['scorecard']['subject_build']
+
+
 def test_fresh_store_replay_preserves_measurement_without_subject_execution(tmp_path):
     path, record, key = bound_capture(tmp_path)
     past_capture.admit(json.loads(path.read_text()), path, version='v0.17.0')
