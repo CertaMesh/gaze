@@ -1,0 +1,1 @@
+- IPv4, SSN, IBAN, and phone rules now recognize identifiers split by JSON Unicode escapes or HTML text entities for invisible separators. Restoring the token returns the original source spelling, including the escapes.

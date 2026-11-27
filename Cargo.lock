@@ -1477,6 +1477,7 @@ dependencies = [
  "gaze-types",
  "hex",
  "hmac",
+ "html5gum",
  "libc",
  "proptest",
  "pulldown-cmark",
@@ -1896,6 +1897,12 @@ name = "hmac-sha256"
 version = "1.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec9d92d097f4749b64e8cc33d924d9f40a2d4eb91402b458014b781f5733d60f"
+
+[[package]]
+name = "html5gum"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ab2ccf7fd3df0a813616f38ff8f557cdae34f06664ceb81a67241cc54bc2626"
 
 [[package]]
 name = "http"

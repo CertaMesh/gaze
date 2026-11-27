@@ -70,6 +70,86 @@ fn zwsp_identifiers_and_email_keep_exact_source_spans() {
 }
 
 #[test]
+fn encoded_identifiers_and_repeats_cover_only_the_exact_source_spans() {
+    for (sep, json) in [
+        (r"\u200B", true),
+        (r"\u00ad", true),
+        ("&#x2060;", false),
+        ("&#8204;", false),
+        ("&ZeroWidthSpace;", false),
+        ("&shy;", false),
+    ] {
+        for (cue, groups) in [
+            ("Device IP", &["10.1.2.1", "23"][..]),
+            ("SSN", &["959-", "7", "3-", "4567"][..]),
+            ("IBAN", &["GB82", "WEST", "1234", "5698", "7654", "32"][..]),
+            ("Telephone", &["+1 ", "(312) ", "5", "55-", "0100"][..]),
+        ] {
+            let value = groups.join(sep);
+            let template = if json {
+                format!(
+                    r#"{{"note":"Résumé: {cue}: VALUE","copy":["VALUE"],"word":"co{sep}operate"}}"#
+                )
+            } else {
+                format!("<p>Résumé: {cue}: VALUE</p><p>VALUE</p><p>co{sep}operate</p>")
+            };
+            let input = template.replace("VALUE", &value);
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let clean = support::clean(
+                pipeline(),
+                &session,
+                &input,
+                &[LocaleTag::EnUs, LocaleTag::Global],
+            );
+            assert_eq!(
+                gaze::token_shape::pattern().replace_all(&clean, "VALUE"),
+                template,
+                "{input} -> {clean}"
+            );
+            // A bare repeat of an IBAN can legitimately receive the no-anchor family token.
+            let entries = session.snapshot_entries();
+            assert!(!entries.is_empty());
+            assert!(
+                entries.iter().all(|entry| entry.raw == value),
+                "{input} -> {clean}"
+            );
+            assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+        }
+    }
+}
+
+#[test]
+fn encoded_lookalikes_do_not_become_identifier_boundaries() {
+    for input in [
+        r#"{"message":"SSN: 959-7\\u200b3-4567"}"#,
+        r#"{"message":"SSN: 959-7\u20zz3-4567"}"#,
+        r#"{"SSN: 959-7\u200b3-4567":"public key example"}"#,
+        r"SSN: 959-7\u200b3-4567",
+        r"SSN: 959-7&#8203;3-4567",
+        "<p>SSN: 959-7&amp;#8203;3-4567</p>",
+        "<p>SSN: 959-7&#xZZ;3-4567</p>",
+        "<p>SSN: 959-7&ZeroWidthSpace3-4567</p>",
+        "<p>Documentation address: 192.0.2.1&#8203;23</p>",
+        "<p data-note='SSN: 959-7&shy;3-4567'>text</p>",
+        "<!-- SSN: 959-7&shy;3-4567 --><p>text</p>",
+        "<script>const x = 'SSN: 959-7&shy;3-4567';</script>",
+        "<noframes><p>SSN: 959-7&shy;3-4567</p></noframes>",
+        r#"{"message":"<p>SSN: 959-7&shy;3-4567</p>"}"#,
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert_eq!(
+            support::clean(
+                pipeline(),
+                &session,
+                input,
+                &[LocaleTag::EnUs, LocaleTag::Global]
+            ),
+            input
+        );
+    }
+}
+
+#[test]
 fn word_joiner_identifiers_keep_exact_source_spans() {
     assert_grouped('\u{2060}');
     assert_exact_token("Mail: ", "al\u{2060}ice@example.invalid", "!");
@@ -239,6 +319,8 @@ fn preservation_policy_keeps_original_formatting_and_emits_no_tokens() {
         "Mail: al\u{2060}ice@example.invalid",
         "Mail: al\u{00ad}ice@example.invalid",
         "Mail: al\u{2011}ice@example.invalid",
+        r#"{"message":"SSN: 959-7\u200B3-4567"}"#,
+        "<p>Device IP: 10.83.2.1&NoBreak;23</p>",
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         assert_eq!(

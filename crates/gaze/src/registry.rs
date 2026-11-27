@@ -127,6 +127,14 @@ pub struct RecognizerRegistry {
     address_grammar: AddressGrammar,
 }
 
+type PoolResult = Result<
+    (
+        crate::resolver::CandidatePool,
+        Vec<crate::validator_veto::VetoedCandidate>,
+    ),
+    DetectError,
+>;
+
 impl std::fmt::Debug for RecognizerRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RecognizerRegistry").finish_non_exhaustive()
@@ -1350,13 +1358,13 @@ impl RecognizerRegistry {
         }) {
             candidates.extend(detect_declared(recognizer.as_ref(), input, ctx)?);
         }
-        let post_candidates = self.detect_post_candidates(input, ctx, &candidates)?;
+        let post_candidates = Self::detect_post_candidates(&self.entries, input, ctx, &candidates)?;
         candidates.extend(post_candidates);
         Ok(candidates)
     }
 
     fn detect_post_candidates(
-        &self,
+        entries: &[Arc<dyn Recognizer>],
         input: &str,
         ctx: &DetectContext<'_>,
         prior: &[Candidate],
@@ -1368,7 +1376,7 @@ impl RecognizerRegistry {
         prior_ctx.fields = ctx.fields;
         prior_ctx.degraded.set(ctx.degraded.get());
         let mut added = Vec::new();
-        for recognizer in self.entries.iter().filter(|recognizer| {
+        for recognizer in entries.iter().filter(|recognizer| {
             recognizer.requires_prior_candidates()
                 && (recognizer.locale_basis() == LocaleBasis::Format
                     || locale_chain.intersects(recognizer.locales()))
@@ -1424,29 +1432,57 @@ impl RecognizerRegistry {
         )
     }
 
-    pub(crate) fn detect_candidate_pool(
+    pub(crate) fn detect_candidate_pool(&self, input: &str, ctx: &DetectContext<'_>) -> PoolResult {
+        self.detect_pool_with(&self.entries, input, ctx)
+    }
+
+    /// Only installed identifier rules see this alternate spelling. In particular, neither
+    /// caller-known records nor field binding may infer an equivalence from an encoded break.
+    pub(crate) fn detect_encoded_identifiers(
         &self,
         input: &str,
         ctx: &DetectContext<'_>,
-    ) -> Result<
-        (
-            crate::resolver::CandidatePool,
-            Vec<crate::validator_veto::VetoedCandidate>,
-        ),
-        DetectError,
-    > {
+    ) -> PoolResult {
+        let entries: Vec<_> = self
+            .entries
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.id(),
+                    "ip.v4"
+                        | "ssn.us"
+                        | "ssn.de_cue"
+                        | "iban.structural"
+                        | "iban.cued"
+                        | "phone.structural"
+                        | "phone.e164.spaced"
+                        | "phone.e164.spaced.cued"
+                        | "phone.national.us"
+                        | "phone.national.us.cued"
+                        | "phone.national.de"
+                )
+            })
+            .cloned()
+            .collect();
+        self.detect_pool_with(&entries, input, ctx)
+    }
+
+    fn detect_pool_with(
+        &self,
+        entries: &[Arc<dyn Recognizer>],
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> PoolResult {
         let _perf = gaze_types::perf_span!("registry_ns");
         let locale_chain = LocaleChain::from(ctx.locale_chain);
-        let classes = self
-            .entries
+        let classes = entries
             .iter()
             .map(|recognizer| recognizer.supported_class().clone())
             .collect::<BTreeSet<_>>();
         let mut candidates = Vec::new();
 
         for class in classes {
-            for recognizer in self
-                .entries
+            for recognizer in entries
                 .iter()
                 .filter(|recognizer| recognizer.supported_class() == &class)
                 .filter(|recognizer| recognizer.locale_basis() == LocaleBasis::Format)
@@ -1477,8 +1513,7 @@ impl RecognizerRegistry {
                 locale_ctx.fields = ctx.fields;
                 locale_ctx.degraded.set(ctx.degraded.get());
                 let mut class_candidates = Vec::new();
-                for (index, recognizer) in self
-                    .entries
+                for (index, recognizer) in entries
                     .iter()
                     .enumerate()
                     .filter(|(_, recognizer)| recognizer.supported_class() == &class)
@@ -1550,7 +1585,8 @@ impl RecognizerRegistry {
             .filter(|candidate| !candidate.regex_guard_rejected)
             .cloned()
             .collect::<Vec<_>>();
-        let post_candidates = self.detect_post_candidates(input, ctx, &active_candidates)?;
+        let post_candidates =
+            Self::detect_post_candidates(entries, input, ctx, &active_candidates)?;
         candidates.extend(
             post_candidates
                 .into_iter()
