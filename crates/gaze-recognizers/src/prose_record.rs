@@ -115,11 +115,31 @@ impl Recognizer for ProseRecordRecognizer {
                 Regex::new(r"\b[\p{L}\p{N}]+(?:[\p{Pd}_/][\p{L}\p{N}]+)+\b")
                     .expect("static compound token regex")
             });
+            // A bare word_counter is also common tenant metadata. Its five digits
+            // alone aren't a seed; an ID cue or independent detection still counts.
+            static WORD_COUNTER: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(r"\A\p{Lu}?\p{Ll}+_[0-9]{5}\z").expect("static word counter regex")
+            });
+            static LOGIN_OWNER: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(concat!(
+                    r"(?ix)\b(?: (?:my|your|his|her|our|their|mein|dein|sein|ihr|unser)[\p{Zs}\t]+",
+                    r"(?:login|username|benutzername)(?:[\p{Zs}\t]+(?:is|was|ist|lautet))?",
+                    r"| (?:sign(?:ed)?|log(?:ged)?)[\p{Zs}\t]+in[\p{Zs}\t]+(?:as|with)",
+                    r"| meld(?:e|et|en|ete|eten)[\p{Zs}\t]+(?:mich|dich|sich|uns|euch)[\p{Zs}\t]+(?:als|mit)",
+                    r#")\b[\p{Zs}\t:=]+[`"'„“‘]?"#,
+                ))
+                    .expect("static personal login cue regex")
+            });
+            static LOGIN_USE: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(r#"(?i)\A[`"'”’“]?[\p{Zs}\t]+(?:to[\p{Zs}\t]+(?:sign|log)[\p{Zs}\t]+in|angemeldet|eingeloggt)\b"#)
+                    .expect("static login purpose regex")
+            });
             static ARTIFACT: LazyLock<Regex> = LazyLock::new(|| {
                 Regex::new(r#"(?i)\b(?:release|build|version|katalognummer)\b(?:[\p{Zs}\t]+(?:tag|id|number|nr)\b)?(?:[\p{Zs}\t]+(?:is|ist|lautet)\b)?[\p{Zs}\t:=#`"'„“(\[]+"#)
                     .expect("static artifact label regex")
             });
             let mut owners = ARTIFACT.find_iter(input).peekable();
+            let mut logins = LOGIN_OWNER.find_iter(input).peekable();
             let mut seeds: Vec<_> = ctx
                 .prior_candidates
                 .unwrap_or_default()
@@ -174,11 +194,23 @@ impl Recognizer for ProseRecordRecognizer {
                 let mut inside = seeds[first..].iter().take_while(|r| r.start < token.end());
                 // Completion must not displace a recognizer that owns the entire ID,
                 // even when its value contains an otherwise eligible five-digit group.
-                if !inside.clone().any(|r| **r == token.range())
-                    && (zip_group || inside.any(|r| r.end <= token.end()))
-                {
-                    matches.push(token.range());
+                if inside.clone().any(|r| **r == token.range()) {
+                    continue;
                 }
+                if !inside.any(|r| r.end <= token.end()) {
+                    if !zip_group {
+                        continue;
+                    }
+                    if WORD_COUNTER.is_match(value) {
+                        while logins.next_if(|m| m.end() < token.start()).is_some() {}
+                        if logins.peek().is_none_or(|m| m.end() != token.start())
+                            && !LOGIN_USE.is_match(&input[token.end()..])
+                        {
+                            continue;
+                        }
+                    }
+                }
+                matches.push(token.range());
             }
         }
         if matches.is_empty() {

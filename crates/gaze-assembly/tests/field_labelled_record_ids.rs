@@ -114,6 +114,13 @@ fn prose_ids_protect_one_whole_token_and_restore_its_source_bytes() {
         ("Please look up ", "LLY-40718", "."),
         ("See ", "KC-96-11842", " again."),
         ("Lookup ", "ACCT_IN_40871", "; thanks."),
+        ("Lookup ", "RX_40871", "."),
+        ("Employee ID: ", "Ticket_40871", "."),
+        ("I logged in as ", "ticket_40871", "."),
+        ("My login is `", "Ticket_40871", "`."),
+        ("I used ", "ticket_40871", " to sign in yesterday."),
+        ("Ich melde mich mit ", "ticket_40871", " an."),
+        ("Mein Benutzername: ", "ticket_40871", "."),
         ("Check ", "ACCT/IN/40871", " today."),
         ("Meine Fall-Nr.", "64312071", ", bitte prüfen."),
         ("Meine Fall-Nr. ist ", "Q73", "."),
@@ -151,6 +158,8 @@ fn prose_ids_protect_one_whole_token_and_restore_its_source_bytes() {
 fn carrier_and_artifact_names_are_not_prose_record_ids() {
     let (pipeline, active) = stock();
     for text in [
+        "The logs contain Ticket_40871 and batch_40872.",
+        "My login failed. The logs contain Ticket_40871.",
         "Release ACCT_57293 fixes a compiler warning.",
         "Release `ACCT_57293` fixes a compiler warning.",
         "Release (ACCT_57293) is documented.",
