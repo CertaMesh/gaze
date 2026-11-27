@@ -10,8 +10,8 @@ new version section of CHANGELOG.md and deletes the fragments.
   python3 scripts/release/changelog.py check --release 1.0.0
   python3 scripts/release/changelog.py assemble 1.0.0 --date 2026-12-01
 
-A prerelease (1.0.0-rc.1) section copies the fragments and keeps them, so the
-final release section still lists every change.
+A prerelease (1.0.0-rc.1) section copies the fragments and the [Unreleased]
+text and keeps both, so the final release section still lists every change.
 """
 import argparse
 import datetime
@@ -113,7 +113,10 @@ def assemble(root, version, date):
     released = merge(changelog[body:end], entries)
     if not released.strip():
         raise ValueError('nothing to release: no fragments and an empty Unreleased section')
-    changelog = (changelog[:start] + f'{UNRELEASED}\n\n## [{version}] - {date}\n\n'
+    # A prerelease leaves [Unreleased] in place for the final release.
+    kept = changelog[body:end].strip('\n') + '\n\n' if prerelease(version) else ''
+    kept = kept if kept.strip() else ''
+    changelog = (changelog[:start] + f'{UNRELEASED}\n\n{kept}## [{version}] - {date}\n\n'
                  + released + changelog[end:])
     link = COMPARE.search(changelog)
     if link is None:

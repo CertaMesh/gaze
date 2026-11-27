@@ -88,7 +88,11 @@ class ChangelogFragmentsTest(unittest.TestCase):
         self.assertTrue((self.root / 'changelog.d/pr.fixed.md').exists())
         changelog.assemble(self.root, '1.0.0', '2026-12-08')
         text = (self.root / 'CHANGELOG.md').read_text()
-        self.assertEqual(text.count('- Fix.'), 2)
+        final = text[text.index('## [1.0.0] -'):text.index('## [1.0.0-rc.1]')]
+        for entry in ['- Fix.', '- Legacy changed entry.', '- Legacy added entry.']:
+            self.assertIn(entry, final)
+            self.assertEqual(text.count(entry), 2)
+        self.assertTrue(text.startswith('# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-12-08\n'))
         self.assertIn('[1.0.0]: https://github.com/CertaMesh/gaze/compare/v1.0.0-rc.1...v1.0.0', text)
         self.assertFalse((self.root / 'changelog.d/pr.fixed.md').exists())
 

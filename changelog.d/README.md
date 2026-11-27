@@ -30,6 +30,8 @@ fragments. Entries join the first matching section; a new section is placed in
 Keep a Changelog order. Within a section, fragments follow file name order.
 Release tags refuse to publish while a fragment is left.
 
-For a prerelease such as `1.0.0-rc.1`, `assemble` copies the fragments into the
-prerelease section and keeps them, so the final `1.0.0` section still lists
-every change. Prerelease tags do not require the fragments to be gone.
+For a prerelease such as `1.0.0-rc.1`, `assemble` copies the fragments and any
+text still under `[Unreleased]` into the prerelease section and keeps both, so
+the final `1.0.0` section still lists every change. Each later prerelease
+repeats the earlier ones' entries. Prerelease tags do not require the fragments
+to be gone.

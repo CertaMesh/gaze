@@ -36,8 +36,8 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
   entries still written directly under `[Unreleased]`, updates the compare
   links and deletes the fragments. Review the section and commit the result.
   The tag jobs refuse to publish while a fragment is left. A prerelease
-  (`X.Y.Z-rc.N`) section copies the fragments and keeps them for the final
-  release.
+  (`X.Y.Z-rc.N`) section copies the fragments and the `[Unreleased]` text and
+  keeps both for the final release.
 - `cargo run -p xtask -- scrub-public-text --published` checks all of `CHANGELOG.md`,
   `UPGRADE.md`, root/crate READMEs, and one hop of linked Markdown under `docs/`.
   PR tests and release preflights share this set. Tag jobs also scrub that
