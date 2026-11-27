@@ -19,10 +19,11 @@ use super::decode::{
 };
 
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
-/// One intra-op thread by default: deterministic compute
-/// and no contention with the caller's own thread pool. Raise it with
-/// [`NymConfig::with_intra_threads`] when latency matters more.
-pub const DEFAULT_NYM_INTRA_THREADS: NonZeroUsize = NonZeroUsize::MIN;
+/// Four intra-op threads by default. Piece scores are bit-identical across thread
+/// counts (see `docs/reference/benchmarks/gates/nym-intra-threads/`), so the count only
+/// trades latency against CPU. Lower it with [`NymConfig::with_intra_threads`] when
+/// the caller's own thread pool needs the cores.
+pub const DEFAULT_NYM_INTRA_THREADS: NonZeroUsize = NonZeroUsize::new(4).unwrap();
 
 /// Configuration for the Nym-small safety net.
 #[derive(Debug, Clone)]

@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose input is unchanged instead of running the models again. A warm turn
   runs each model window once instead of twice. Responses are byte-identical.
   `perf-timers` builds now also report per-request timings for v2 requests.
+- The Nym safety net now runs with four ONNX Runtime intra-op threads by
+  default instead of one, which cuts its share of a warm daemon turn by about
+  a third. Piece scores are bit-identical across thread counts; the proof is in
+  `docs/reference/benchmarks/gates/nym-intra-threads/`. Lower the count with
+  `--nym-intra-threads` on `gaze clean`, `daemon` and `eval`, or with
+  `GAZE_NYM_INTRA_THREADS` for `NymConfig::from_env` in the library.
 - Daemon v2 `clean_blocks` reuses the committed result of an unchanged block
   when nothing learned since the last commit can reach it, so a warm turn no
   longer re-cleans the whole conversation. Responses stay byte-identical to a

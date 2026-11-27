@@ -409,6 +409,7 @@
     "docs/reference/benchmarks/gates/mcp-operation-order/whitespace-diagnostic.json",
     "docs/reference/benchmarks/gates/nym-inference-reuse/README.md",
     "docs/reference/benchmarks/gates/nym-inference-reuse/bounded-proof.json",
+    "docs/reference/benchmarks/gates/nym-intra-threads/README.md",
     "docs/reference/benchmarks/gold-gap-sample-v3.json",
     "docs/reference/benchmarks/government-id-cells.md",
     "docs/reference/benchmarks/history-generator-v29/history.json",
