@@ -1,0 +1,27 @@
+Third-party licences for the gaze release binary
+================================================
+
+The gaze binary is licensed under Apache-2.0 OR MIT. It statically links the
+Rust crates listed below, the C and C++ code some of them bundle, and ONNX
+Runtime. After the crate list come the notices of code vendored inside crates
+(Oniguruma, esaxx, sais-lite, and code ported into crossbeam-channel and
+atomic-waker), then ONNX Runtime's licence and third-party notices.
+
+Licences used
+-------------
+{{#each overview}}
+- {{{name}}} ({{count}} crates)
+{{/each}}
+
+{{#each licenses}}
+--------------------------------------------------------------------------------
+{{{name}}}
+
+Used by:
+{{#each used_by}}
+- {{{crate.name}}} {{{crate.version}}}{{#if crate.repository}} ({{{crate.repository}}}){{/if}}
+{{/each}}
+
+{{{text}}}
+
+{{/each}}
