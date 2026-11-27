@@ -25,6 +25,10 @@ Subcommands:
     check    gate a receipt against docs/reference/benchmarks/f8-budgets.json
     compare  require two receipts to have identical output digests
 
+Only envelopes with `release_gate: true` gate a release. The others still get a
+published, measured receipt; `check` judges it the same way and says it does
+not gate.
+
 A receipt records every latency, RSS samples, host load, binary and policy
 hashes, and one SHA-256 over the canonical cleaned outputs (manifests and token
 metadata included) with random session token prefixes normalized. Equal digests
@@ -594,6 +598,8 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL {failure}")
         print("F8 PASS" if not failures else "F8 FAIL")
+        if not json.loads(BUDGETS.read_text())["envelopes"][receipt["envelope"]]["release_gate"]:
+            print(f"note: the {receipt['envelope']} envelope is a published receipt and does not gate the release")
         return 1 if failures else 0
     base, cand = (json.loads(p.read_text()) for p in (args.base, args.candidate))
     keys = ("seed", "samples", "turns_per_sample", "concurrent_sessions")

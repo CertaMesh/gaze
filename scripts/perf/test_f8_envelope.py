@@ -119,4 +119,6 @@ def test_every_amendment_matches_the_live_budget():
         for name, change in amendment["change"].items():
             latest[(amendment["envelope"], name)] = change["to"]
     for (envelope, name), value in latest.items():
-        assert BUDGETS["envelopes"][envelope]["budgets"][name] == value
+        live = BUDGETS["envelopes"][envelope]
+        assert (live["budgets"][name] if name in live["budgets"] else live[name]) == value
+    assert BUDGETS["envelopes"]["laptop"]["release_gate"] is True

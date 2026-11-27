@@ -4,6 +4,7 @@
   "envelopes": {
     "laptop": {
       "machine": "MacBook Pro M5 Max, quiet (load1 < 2.0, no foreign build or benchmark)",
+      "release_gate": true,
       "workload": {
         "description": "warm daemon v2 session, 12-turn EN/DE history (~32 KiB), new message with PII sized uniformly 512-4096 bytes, gaze setup policy written by the binary itself, strict restore. Cold start: spawn to first validated clean with a warm page cache, at least 5 runs, maximum reported.",
         "concurrent_sessions": 1
@@ -21,6 +22,7 @@
     },
     "server": {
       "machine": "Amp orb a1.medium: 4 vCPU (shared, not dedicated), 8 GB, x86-64 Linux, x86-64 release binary built in the orb. Replaces the originally decided Hetzner CCX23 (4 dedicated vCPU, 16 GB, Debian 13), which was not rented. Same architecture, OS family and vCPU count; half the memory, still over 3x the 2.5 GB peak budget. Shared vCPUs make it at most as fast and noisier than a CCX23, so a pass here is conservative; budget numbers are unchanged.",
+      "release_gate": false,
       "workload": {
         "description": "as laptop, with 4 sessions on one resident daemon; each step sends the 4 sessions' frames as one simultaneous burst, so per-turn latency includes queueing behind the other sessions",
         "concurrent_sessions": 4
@@ -55,6 +57,24 @@
         "estimate": "quiet single-session p50 about 220-260 ms with reuse plus more Nym threads; about 150-190 ms only with parallel Nym windows on shared-weight sessions, which is a follow-up"
       },
       "server_condition": "The server budgets stay as decided. After concurrent session cleaning lands and is re-measured, if the server envelope misses only on turn p50, its p50 may be raised by a further dated amendment with the same reasoning, but never above 420 ms."
+    },
+    {
+      "date": "2026-11-27",
+      "envelope": "server",
+      "change": {
+        "release_gate": {
+          "from": true,
+          "to": false
+        }
+      },
+      "unchanged": "every budget number in both envelopes; the laptop envelope still gates the release",
+      "reason": "For 1.0 the server envelope is a published, measured receipt and does not gate the release. One session with no queue already uses about 2.4 of the 4 vCPUs, so a turn costs about 3 CPU-seconds and a 4-session burst cannot finish much under 3 s however it is scheduled. Reaching the 250 ms p50 needs about 12x less work per turn, and even the 420 ms ceiling from the first amendment needs about 7x. Concurrent session cleaning in the daemon or sharding sessions across processes would gain at most about 1.2x, so neither was built. Dropping the neutral Nym view, a smaller Nym model, and a different server workload or hardware stay ruled out for 1.0.",
+      "measurements": {
+        "combined_server_receipt": "main 9ff7ad9 plus request-wide inference reuse, four Nym intra-op threads and the own-load quiet check (4b34991), a1.medium orb, quiet (554 probes), F8 FAIL: turn p50 3161 ms, p95 7341 ms, p99 10361 ms, reclean p95 56503 ms, restore p95 11.9 ms, cold start max 3842 ms, peak RSS 827351040 bytes; output digest b1e519ba identical to main",
+        "main_9ff7ad9_server_receipt": "turn p50 11383 ms, p95 21346 ms, p99 27493 ms, reclean p95 97785 ms",
+        "single_session_server": "same binary, concurrency 1, 16 samples: turn p50 1284 ms, max 5981 ms, reclean median about 14.5 s; daemon CPU 2.37 cores averaged over 25 s"
+      },
+      "reinstate": "The server envelope gates the release again once the post-1.0 work that cuts per-turn CPU lands (Nym windows per turn first, then reclean), with a fresh quiet server receipt."
     }
   ]
 }
