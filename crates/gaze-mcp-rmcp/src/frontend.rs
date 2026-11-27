@@ -678,6 +678,7 @@ mod tests {
         let err = DispatchError::Protection(gaze::ProtectionError::Untransformable {
             reason: gaze::UntransformableReason::EncodedCarrier,
             field_path: gaze::FieldPath::new(["synthetic-key@example.invalid".into()]),
+            others: Vec::new(),
         });
         let result = dispatch_error_to_tool_result(err);
         assert_eq!(result.is_error, Some(true));
