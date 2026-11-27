@@ -84,6 +84,7 @@ def discover(root=ROOT):
         'crates/gaze-recognizers/embedded/*': 'bundle-tokenization-drift directory walk',
         'tests/ui/*': 'trybuild-fixture-hygiene directory walk',
         'lint/*': 'Dylint and class-map gate inputs',
+        'changelog.d/*': 'changelog fragments read by scrub-public-text and drift acknowledgement',
     }
     return dict(paths=sorted(paths), patterns=patterns, gate_readers=readers)
 

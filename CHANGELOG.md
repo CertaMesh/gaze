@@ -9,17 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The Nym safety net now runs with four ONNX Runtime intra-op threads by
-  default instead of one, which cuts its share of a warm daemon turn by about
-  a third. Piece scores are bit-identical across thread counts; the proof is in
-  `docs/reference/benchmarks/gates/nym-intra-threads/`. Lower the count with
-  `--nym-intra-threads` on `gaze clean`, `daemon` and `eval`, or with
-  `GAZE_NYM_INTRA_THREADS` for `NymConfig::from_env` in the library.
-- Daemon v2 keeps one NER and Nym inference cache across the stabilization
-  passes of a request, so a later pass reuses the model output for a block
-  whose input is unchanged instead of running the models again. A warm turn
-  runs each model window once instead of twice. Responses are byte-identical.
-  `perf-timers` builds now also report per-request timings for v2 requests.
 - A labelled JSON number now refuses, typed, instead of leaking or becoming an
   unquoted token: `Untransformable` with `json_number_no_text_only_path` (CLI
   exit 8, no output). A repeat of a bound ID that is or overlaps a JSON number
