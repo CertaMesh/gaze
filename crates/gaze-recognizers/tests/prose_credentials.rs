@@ -129,6 +129,25 @@ fn a_password_with_spaces_quotes_or_brackets_is_protected_whole() {
             "Note that my email password is now Quarry2'Kranich66 after the lockout.",
             "Quarry2'Kranich66",
         ),
+        (
+            "{\"messages\":[{\"role\":\"user\",\"content\":\"my new password is Qu1ll#Xy2026\"}]}",
+            "Qu1ll#Xy2026",
+        ),
+        (
+            "{\"arguments\":\"{\\\"note\\\":\\\"password is Qu1ll#Xy2026\\\"}\"}",
+            "Qu1ll#Xy2026",
+        ),
+        ("msg = \"the password is Fj0rd#Tal99\";", "Fj0rd#Tal99"),
+        (
+            "He said \"the password is Qu1ll#Xy2026\", then left.",
+            "Qu1ll#Xy2026",
+        ),
+        (
+            "{\"content\":\"the password is Fj0rd#Tal99\",\"b\":\"x y\"}",
+            "Fj0rd#Tal99",
+        ),
+        ("Mein Passwort lautet $Tal99abc.", "$Tal99abc"),
+        ("The password is \"$ecretPass9\" ok", "$ecretPass9"),
     ] {
         assert_credential(raw, "password", value);
     }
@@ -157,6 +176,13 @@ fn password_words_without_a_credential_value_stay_raw() {
         "The password is \"too short\".",
         "The password file is secrets2.txt in the repo.",
         "Migration 12 renamed the password column to pwd_hash_v2 last sprint.",
+        "The password is ${DB_PASS} at runtime.",
+        "Change the error for a wrong password to \"Incorrect password, try again\".",
+        "The password prompt is \"Please enter it again\".",
+        "Update the password reset email subject to \"Reset your account\".",
+        "tests assert the password error is \"Invalid credentials provided\".",
+        "The password is \"not stored in plain text\" anymore.",
+        "The password is 2fa-enabled for every admin.",
     ] {
         assert_no_credential(raw);
     }
@@ -219,6 +245,7 @@ fn short_numbers_and_words_behind_a_security_cue_stay_raw() {
         "The verification code was sent at 20261127 09:00.",
         "The security code CVE-2024-12345 was patched.",
         "The API key is gpt-4o-mini compatible.",
+        "Der Sicherheitscode ist SHA256-basiert.",
     ] {
         assert_no_credential(raw);
     }
@@ -286,6 +313,16 @@ fn a_base64_encoded_private_key_is_protected_whole_at_every_alignment() {
         "security_token",
         &blob.replace('/', "\\/"),
     );
+}
+
+#[test]
+fn a_wrapped_key_never_takes_the_next_yaml_key() {
+    let blob = base64(PRIVATE_PEM.as_bytes());
+    let first = &blob[..76];
+    for next in ["  databaseConnectionName: primary", "  tls_crt: none"] {
+        let raw = format!("key:\n  tls_key: {first}\n{next}\n");
+        assert_credential(&raw, "security_token", first);
+    }
 }
 
 #[test]

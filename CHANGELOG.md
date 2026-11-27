@@ -173,7 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   indented or JSON-escaped. Credential metadata (names, hints, policies,
   lengths), card verification digits, encoded public certificates, and code
   and agent text beside a credential word (model names, versions, file names,
-  identifiers, paths) stay raw.
+  identifiers, paths, quoted UI strings) stay raw.
 - `driver_license.cue_anchored` also protects licence numbers with a second
   letter group after the first, such as `B-XY123456` and `NZDL1234567`, behind
   a driver cue; the generic `license number` cue keeps one letter group.
