@@ -9,14 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Breaking: proxy restore is sink-scoped, like the MCP bridge. The assistant
-  text the client shows its user restores; a tool call's arguments restore only
-  for tools declared with `[proxy] restore_tools` or
-  `ProxyConfig::with_restore_tools`. Undeclared tools' arguments, tool results,
-  documents, reasoning and Gemini thought summaries keep their tokens, so a
-  placeholder the model writes there cannot pull an original into an undeclared
-  tool or service. `PiiSurface` gains a `sink` field (`RestoreSink`), and
-  `ProviderAdapter` gains `sse_event_tool_calls`.
 - A labelled JSON number now refuses, typed, instead of leaking or becoming an
   unquoted token: `Untransformable` with `json_number_no_text_only_path` (CLI
   exit 8, no output). A repeat of a bound ID that is or overlaps a JSON number
