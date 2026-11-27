@@ -41,6 +41,32 @@ fn legacy_regex_detectors_keep_glued_and_internal_source_boundaries() {
 }
 
 #[test]
+fn delimited_literals_still_match_across_source_gaps() {
+    for (delimiter, input) in [
+        (r"[\s(]", "@I\u{200b}D42\u{200b}tail"),
+        (r"[\s(]", "note (\u{200b}@I\u{200b}D42\u{200b}tail"),
+        // This delimiter can consume the provenance marker itself; no
+        // corresponding punctuation remains before the @ in the joined view.
+        (r"[^\w\s]", "note\u{200b}@I\u{200b}D42\u{200b}tail"),
+    ] {
+        let pattern = format!(r"(?:\A|{delimiter})@ID[0-9]+\b");
+        let pipeline = Pipeline::builder()
+            .detector(
+                RegexDetector::new(&pattern, gaze::PiiClass::custom("reference").unwrap()).unwrap(),
+            )
+            .rule(DefaultRule::new(Action::Tokenize))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let clean = support::clean(&pipeline, &session, input, &[LocaleTag::Global]);
+        let entries = session.snapshot_entries();
+        assert_eq!(entries.len(), 1, "{input:?}: {clean:?}");
+        assert!(entries[0].raw.ends_with("@I\u{200b}D42"));
+        assert_eq!(session.restore_strict_text(&clean).unwrap(), input);
+    }
+}
+
+#[test]
 fn adopter_ignorable_literals_and_class_members_keep_matching() {
     for sep in ['\u{200b}', '\u{ad}', '\u{fe0f}', '\u{e0067}'] {
         for pattern in [
