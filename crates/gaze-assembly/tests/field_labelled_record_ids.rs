@@ -146,6 +146,51 @@ fn prose_ids_protect_one_whole_token_and_restore_its_source_bytes() {
 }
 
 #[test]
+fn carrier_and_artifact_names_are_not_prose_record_ids() {
+    let (pipeline, active) = stock();
+    for text in [
+        "Release ACCT_57293 fixes a compiler warning.",
+        r#"{"comment":"＂","name":"ACCT_57293"}"#,
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert_eq!(clean(&pipeline, &active, &session, text).unwrap(), text);
+    }
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let fields = std::collections::BTreeMap::from([(
+        "name".to_owned(),
+        gaze::Value::String("ACCT_57293".to_owned()),
+    )]);
+    let out = pipeline
+        .pseudonymize_transaction_with_detect_context(
+            &mut session.begin_transaction(),
+            RawDocument::Structured(fields.clone()),
+            active.as_slice(),
+            &DictionaryBundle::default(),
+        )
+        .unwrap();
+    assert!(matches!(out, CleanDocument::Structured(actual) if actual == fields));
+}
+
+#[test]
+fn completed_record_cannot_restore_an_irreversibly_redacted_postal_suffix() {
+    let (pipeline, active) = pipeline(
+        "[[rule]]\nkind = \"class\"\nclass = \"custom:postal_code\"\naction = \"redact\"\n",
+        r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
+    );
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let cleaned = clean(&pipeline, &active, &session, "LLY-40718").unwrap();
+    assert_eq!(cleaned, "[REDACTED]");
+    assert_eq!(
+        pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+        cleaned
+    );
+    assert!(!session
+        .snapshot_entries()
+        .iter()
+        .any(|e| e.raw.contains("40718")));
+}
+
+#[test]
 fn prose_completion_preserves_the_policy_of_an_enclosed_card() {
     let (pipeline, active) = pipeline(
         "[[rule]]\nkind = \"class\"\nclass = \"custom:credit_card\"\naction = \"redact\"\n",

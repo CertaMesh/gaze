@@ -59,7 +59,7 @@ impl ProseRecordRecognizer {
             self.priority,
             None,
             self.family.clone(),
-            self.id.clone(),
+            "prose_record_id",
             ConflictTier::None,
             Vec::new(),
         )
@@ -92,13 +92,9 @@ impl Recognizer for ProseRecordRecognizer {
     fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Result<Vec<Candidate>, DetectError> {
         // A shape does not establish the meaning of a tool selector. Never infer a
         // namespace from a key name; leave structured carriers to their declared rules.
-        if matches!(ctx.fields, Some(FieldContext::WholeInput(f) | FieldContext::Fragment { field: f, .. }) if f.evidence == FieldEvidence::ValidatedParse)
-        {
-            return Ok(Vec::new());
-        }
-        // Preserve the enclosing key even for a strictly parsed object with no nonempty scalar fields.
-        if input.trim_start().starts_with(['{', '['])
-            && gaze_types::json_tree::parse(input.as_bytes(), Default::default()).is_ok()
+        if ctx.structured_carrier
+            || matches!(ctx.fields, Some(FieldContext::WholeInput(f) | FieldContext::Fragment { field: f, .. }) if f.evidence == FieldEvidence::ValidatedParse)
+            || matches!(ctx.fields, Some(FieldContext::Spans(fields)) if fields.iter().any(|(_, f)| f.evidence == FieldEvidence::ValidatedParse))
         {
             return Ok(Vec::new());
         }
@@ -111,7 +107,7 @@ impl Recognizer for ProseRecordRecognizer {
         }
         if self.complete_joined {
             static JOINED: LazyLock<Regex> = LazyLock::new(|| {
-                Regex::new(r"\b[\p{L}\p{N}]+(?:[-_/][\p{L}\p{N}]+)+\b")
+                Regex::new(r"\b[\p{L}\p{N}]+(?:[\p{Pd}_/][\p{L}\p{N}]+)+\b")
                     .expect("static compound token regex")
             });
             let mut seeds: Vec<_> = ctx
@@ -124,10 +120,10 @@ impl Recognizer for ProseRecordRecognizer {
                         && input
                             .get(c.span.clone())
                             .is_some_and(|s| s.bytes().any(|b| b.is_ascii_digit()))
-                        && (c.checksum_validated()
-                            || c.class
-                                .as_custom_name()
-                                .is_some_and(|name| name == "postal_code" || name.ends_with("_id")))
+                        && c.class.as_custom_name().is_some_and(|name| {
+                            matches!(name, "postal_code" | "iban" | "credit_card")
+                                || name.ends_with("_id")
+                        })
                 })
                 .map(|c| &c.span)
                 .collect();
@@ -135,6 +131,19 @@ impl Recognizer for ProseRecordRecognizer {
             for token in JOINED.find_iter(input) {
                 let value = token.as_str();
                 if !value.chars().any(char::is_alphabetic) {
+                    continue;
+                }
+                // An immediate artifact label owns the unqualified value, not a more
+                // distant mention of a person. Independent detectors still see the text.
+                let owner = input[..token.start()]
+                    .trim_end_matches([' ', '\t', ':', '#'])
+                    .rsplit(|c: char| !c.is_alphanumeric())
+                    .next()
+                    .unwrap_or_default();
+                if matches!(
+                    owner.to_ascii_lowercase().as_str(),
+                    "release" | "build" | "version" | "katalognummer"
+                ) {
                     continue;
                 }
                 let prefix = value.split(['-', '_', '/']).next().unwrap_or_default();

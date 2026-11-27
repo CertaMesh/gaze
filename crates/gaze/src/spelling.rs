@@ -83,6 +83,10 @@ impl<'a> JsonStringLiterals<'a> {
         Self { text, contents }
     }
 
+    pub(crate) fn is_document(&self) -> bool {
+        !self.text.is_empty()
+    }
+
     /// The spelling of `raw`, captured at `span` of the scanned text.
     pub(crate) fn spelling(&self, span: &Range<usize>, raw: &str) -> SourceSpelling {
         let after = self

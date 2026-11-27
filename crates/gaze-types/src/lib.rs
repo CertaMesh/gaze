@@ -4924,6 +4924,9 @@ pub struct DetectContext<'a> {
     pub dictionaries: &'a DictionaryBundle,
     /// Structured-field context. Hint alone can never yield Protected or NonSensitive.
     pub fields: Option<FieldContext<'a>>,
+    /// The caller is scanning a structured document or one of its typed leaves,
+    /// rather than free prose. Does not declare any field public or non-sensitive.
+    pub structured_carrier: bool,
     /// Whether a recognizer degraded due to unavailable optional capability.
     pub degraded: Cell<bool>,
     /// For each byte of the detection input, the byte range of the caller's source text it
@@ -4943,6 +4946,7 @@ impl<'a> DetectContext<'a> {
             locale_chain,
             dictionaries,
             fields: None,
+            structured_carrier: false,
             degraded: Cell::new(false),
             source_spans: None,
             prior_candidates: None,

@@ -1366,6 +1366,7 @@ impl RecognizerRegistry {
             DetectContext::new(ctx.locale_chain, ctx.dictionaries).with_prior_candidates(prior);
         prior_ctx.source_spans = ctx.source_spans;
         prior_ctx.fields = ctx.fields;
+        prior_ctx.structured_carrier = ctx.structured_carrier;
         prior_ctx.degraded.set(ctx.degraded.get());
         let mut added = Vec::new();
         for recognizer in self.entries.iter().filter(|recognizer| {
