@@ -1,21 +1,21 @@
 {
-  "id": "gaze-benchmark-v1:e7c068965709436a626368581da3e7626b85e1e3ddba4e2ab1eae6a00a160f87",
+  "id": "gaze-benchmark-v1:009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
     "generator": {
       "generator": "scripts/bench/agentic_layers.py",
-      "generator_version": 32,
+      "generator_version": 31,
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 42050,
+      "documents": 41750,
       "documents_by_layer": {
-        "A": 20047,
-        "D": 9202,
+        "A": 19917,
+        "D": 9032,
         "R": 12801
       },
-      "corpus_sha256": "f165ac784ac2fac2d57dd29a83cadb2cf41e085bca3550f496d9bdb502d6ad83",
+      "corpus_sha256": "8380d500b949265ef5e01f9a8b801819fd8d83373474f87abcdc535a4df33944",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,10 +24,10 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "71adfd82937b778df348e04df35fe9751e3f4a55f4dd267b9a2b080baad3e2b7"
+      "generated": "9480508e4ddeca0c4ce82e40acede4c18aca64f318dfdc75eeb04457ee7cd695"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "5da3705e757732d8ac4743927e9c0c2e46219176e6ab8055d75be58b999288dc",
+      "scripts/bench/agentic_layers.py": "f61047e00779a50e2b416e62e98a5240aad31a1015c10a43de47135b3ce32266",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -82,6 +82,7 @@
       "scripts/bench/invisible_separator_cells.py": "5d0e1d8beff7b01dac1971bd4c01e264ee5f9fc67795eb9e621ba071d4117324",
       "scripts/bench/ip_adjacent_gain.py": "5bd80284889be703cbbce018cbf35d74010a6eacc9b195c36398ebc41d8fd006",
       "scripts/bench/issuer_credential_cells.py": "869cb0809040c4b3d3d8d7fe797dc909ec5c252cf509b1516e11f4260e7af398",
+      "scripts/bench/json_structure_census.py": "3013fd90505ca9c8e9ad80d94f95716b3f31aacd5fdfe1aad59dab10eb011fe3",
       "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",
       "scripts/bench/known_record_arm.py": "3aa74c2e8993e02298b23f65e52d2a1e7bf441f6513381e463fb035c1f568ab0",
       "scripts/bench/known_record_attribution.py": "34e6f26aaab7378da4505306badb14cadd8c70932fd4460f0e0182f97d6d720f",
@@ -125,7 +126,7 @@
       "scripts/bench/probe_government_id_mutants.py": "8a94343e6af1af2a3e4730d09fdfb828fa1299f947141ab657673290c3b4771e",
       "scripts/bench/probe_postal_coverage.py": "f484620e3c7d2f4f100d0b99619a9c05754cb0a9813461cb1e757082a48af364",
       "scripts/bench/producer_build_binding.py": "db267264b37473f81f0cb6db610f48fd2941ad176ed72ba38c8354e7efbcf411",
-      "scripts/bench/prose_credential_cells.py": "2c55c8878e046afdad01fde6fdbbad6c62096cfd2c879912482d815413f9fb2b",
+      "scripts/bench/prose_credential_cells.py": "014163202ab7393252331f2a00d938a148e4e92f029e5303a007f85caf0858cf",
       "scripts/bench/prove_refusal_history.py": "7853d4ac0b21d124c7bc01bb4e5393fd7c76fe7d32b7ae974002fd1591c2c697",
       "scripts/bench/proxy_request_order.py": "4ee000a628bc3473b1d4e263bd43ac75d90ded20760c66ae0f5322509094baf8",
       "scripts/bench/publish_mcp_operation_evidence.py": "9c0a379c9283855f1527b63df9770a50151fd112c7b4e196c79cbc36837ad5cd",
@@ -258,7 +259,6 @@
       "password.code",
       "password.field",
       "password.hash",
-      "password.prose",
       "phone.e164.spaced",
       "phone.e164.spaced.cued",
       "phone.national.de",
@@ -279,8 +279,6 @@
       "security_token.bare",
       "security_token.code",
       "security_token.pem",
-      "security_token.pem_base64",
-      "security_token.prose",
       "ssn.de_cue",
       "ssn.us",
       "steuer_id.de",
@@ -352,14 +350,14 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 20047,
-        "document_ids_sha256": "52fb068c382d4d833fc001f8ce6f66bf65efc7facbdaa01cd4b21ce75695e22d",
-        "descriptors_sha256": "460b06fdb2993af3e7a8d56f39e46533a9eab802298c0222d9c8cc0ce18da881"
+        "documents": 19917,
+        "document_ids_sha256": "59e83287c06e5107027aa5426a7d40197377e66746f5ab4e1af99f150b4bd01f",
+        "descriptors_sha256": "50fb3b21d03bd612711512bd64cab58c8df677680cfd7f29b9cf01c94f690aa8"
       },
       "D": {
-        "documents": 9202,
-        "document_ids_sha256": "d2679402df2e7edc83d7891c0174403cf06c0e5765e7b3da18f4e9e648235aaf",
-        "descriptors_sha256": "8579e82f3a398fadf8a890bd8f3c1782e65236830d491e68729a679c647816d1"
+        "documents": 9032,
+        "document_ids_sha256": "b18bb8d9074196dd31c12cfd1a5ff7206d1bace3e4f6b23ddc07ff2efa44956b",
+        "descriptors_sha256": "1f4a0cdf30f7480ddc523370ef23efbc70f687ab2b4adcd9eb974a944259e562"
       },
       "R": {
         "documents": 12801,

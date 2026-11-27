@@ -490,6 +490,9 @@ jobs:
         run: env -u PYTHONDONTWRITEBYTECODE uv run --project scripts/bench --python 3.13 --group comparison-test python -c pass
       - name: Run benchmark scorer and comparator tests
         run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/bench --durations=30
+      # Outside scripts/bench so the latency harness is not a detection-benchmark input.
+      - name: Run F8 performance harness tests
+        run: uv run --project scripts/bench --python 3.13 --group comparison-test python -m pytest -q scripts/perf
       # Explicit, so losing the pytest wrapper cannot drop the guard's mutation proof.
       - name: Prove the typed-refusal guard kills every mutant
         run: uv run --project scripts/bench --python 3.13 --group comparison-test python scripts/bench/check_typed_refusal_guard_mutation.py
