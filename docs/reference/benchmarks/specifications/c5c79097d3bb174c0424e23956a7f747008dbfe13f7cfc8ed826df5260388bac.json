@@ -1,21 +1,21 @@
 {
-  "id": "gaze-benchmark-v1:76fdd5483aac2ee3817e1f6af92ec23a955efee7770be23f4c1eced1bae3ddf8",
+  "id": "gaze-benchmark-v1:c5c79097d3bb174c0424e23956a7f747008dbfe13f7cfc8ed826df5260388bac",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
     "generator": {
       "generator": "scripts/bench/agentic_layers.py",
-      "generator_version": 33,
+      "generator_version": 32,
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 47189,
+      "documents": 43115,
       "documents_by_layer": {
-        "A": 21987,
-        "D": 11111,
-        "R": 14091
+        "A": 20697,
+        "D": 9617,
+        "R": 12801
       },
-      "corpus_sha256": "2663ded191a96fc83b3861ef3cf8949e526c32d6dbdb41417abf0386a6bdb752",
+      "corpus_sha256": "b21073eca54d70bd53ba49aea7e924f6e028077a39e17a57cf8910dca8d95fb0",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,10 +24,10 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "3d149668f27afeec66fb7b3d5e7583a03572d12b66f5c08b72c04f9ffac524d5"
+      "generated": "a49ca4d597ec9666b16884214df0f9f8b9e9b0f30bcd3e227dabe93fe2e693c5"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "fd5ec2091169b918977831b3b1ae3f178a976f2bc687b6e57f59734549273f9e",
+      "scripts/bench/agentic_layers.py": "b353eeaa21e87352b4e02c54eded2f5c50b1c4d05348e1d5b91b3a6c8777f058",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -59,7 +59,6 @@
       "scripts/bench/dictionary_sequence_generators.py": "5b16b437dd4f08776ec0029da2759ce32e3774396662bbf76fba0c7144262a55",
       "scripts/bench/dictionary_sequence_history.py": "e2b49d720f676e1b14cd345417c228bb17a36a8436314328f2ca33f8e28e6e70",
       "scripts/bench/dictionary_sequences.py": "e1a3ad188410f2933c24a109b9712645a61da99ca90262e617b566f32f1bcbf3",
-      "scripts/bench/escaped_separator_cells.py": "b29cc8e29e3fc2cd68d796009a48c6eb381f99e0d9840fd7ad0fbfeadbb10c1d",
       "scripts/bench/evidence_bridge.py": "b3f737e35a0242daa579db8f9440d25dab097a4af0b5cf1c44849e99696cc5c0",
       "scripts/bench/evidence_eval.py": "2b9dc86fa742496b20014831b36c13ee65139a39a9f32a5099d42bce7a38c68b",
       "scripts/bench/evidence_home_paths.py": "f20dfe6593e3350d789b60799dad06fa3b135adf12940da12b03b846191b191d",
@@ -233,6 +232,7 @@
       "collision-family:phone-or-imei",
       "cpf.br",
       "customer_id.field",
+      "customer_id.prose",
       "davlan-mbert-ner-hrl-onnx",
       "driver_license.cue_anchored",
       "driver_license.labelled",
@@ -240,6 +240,7 @@
       "email.header.name",
       "email.header.name.paren",
       "employee_id.field",
+      "employee_id.prose",
       "eth.address",
       "iban.cued",
       "iban.structural",
@@ -277,6 +278,7 @@
       "postal.ie",
       "postal.us",
       "record_id.field",
+      "record_id.prose",
       "security_token.anchored",
       "security_token.bare",
       "security_token.code",
@@ -352,19 +354,19 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 21987,
-        "document_ids_sha256": "54013875c1b614a792d878fc1a60bdcf6ac1e3865fe2a485549595113213da0c",
-        "descriptors_sha256": "7d7def3ebcabd07753d66e02a6c740e6c1db53c6fc267a3231e4361e17b10118"
+        "documents": 20697,
+        "document_ids_sha256": "a18581af3b07a332f85a8598f6b58f357c424c6467a30c4101bc8cce73399f4c",
+        "descriptors_sha256": "366c1a192a06ca9732479aed8f2319a180175ae7d7e1ce44b4af0d1e6a5f9558"
       },
       "D": {
-        "documents": 11111,
-        "document_ids_sha256": "e4cfa169911d50f4686813023a4afec6056b5b8f2d7905681b07374da4b56572",
-        "descriptors_sha256": "94cb5a3e2b2e2d1564f053b47889ba64d03cacabf32a86bf96c56da4990d49ce"
+        "documents": 9617,
+        "document_ids_sha256": "ef584c3d2e33616d399497d301538665d00983112b8dcb0cc25ccf7af6beb6c2",
+        "descriptors_sha256": "afc242cc12319c2eef8f3d670980469d4548381f05ffeecdab2e97b31b9e1cf7"
       },
       "R": {
-        "documents": 14091,
-        "document_ids_sha256": "3857c2ff2ac59d8d20a811f1641315bcc0cfb865a60fe122e1e72f27530160ea",
-        "descriptors_sha256": "76985298fea17740c44b6bdcf8f8b2c9054bc10704f8288bcae422b76aa703b8"
+        "documents": 12801,
+        "document_ids_sha256": "028229919afd860f5dd7fee7d9e667af8c0292f289afb392654185ef4406ad81",
+        "descriptors_sha256": "13d4f7a50fca667558b710024653f43bd69c4a20fe3d7ab13de5e805d01861b8"
       }
     }
   }
