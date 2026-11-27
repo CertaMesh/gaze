@@ -117,9 +117,11 @@ impl InferenceRequest {
 #[cfg(feature = "test-support")]
 impl InferenceRequest {
     pub(super) fn verifying() -> Self {
-        let guard = Self::enter();
-        ACTIVE.with(|slot| slot.borrow_mut().as_mut().unwrap().verify = true);
-        guard
+        // Always its own cache, so verification never marks a spanning request's cache.
+        Self::replace(Cache {
+            verify: true,
+            ..Cache::default()
+        })
     }
 }
 
