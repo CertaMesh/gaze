@@ -358,6 +358,7 @@ fn german_clinical_markers_protect_only_the_value() {
         ("geb. {}", "12.03.1961", "birth_date"),
         // BNetzA Mitteilung 148/2021: reserved Berlin and Frankfurt landlines.
         ("Rückruf: {}.", "(030) 23125 - 167", "phone"),
+        ("Mobilnummer: {}", "(030) 23125 - 167", "phone"),
         ("{}", "(030) 23125.167", "phone"),
         ("{}", "(030) 23125/167", "phone"),
         ("{}", "069/90009-241", "phone"),
@@ -378,6 +379,7 @@ fn german_clinical_markers_protect_only_the_value() {
         "RR 120/80 mmHg",
         "Einnahme: 1-0-1",
         "Referenzbereich (030) 100 - 120 mg/dl",
+        "Referenzbereich:\n(030) 100 - 120 mg/dl",
     ] {
         assert_eq!(clean_and_restore(&pipeline, text), text);
     }

@@ -292,10 +292,11 @@ pattern = '''(?x)
 \b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}\b
 |(?:^|[^[:alnum:]_+])0[1-9]\d{2}[\s./-]*\d{5}\b
 |(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b
-|(?:(?m:^)|(?i:\b(?:rückruf|tel\.?|telefon|handy|mobil|fax|durchwahl|rufnummer|erreichbar[\p{Zs}\t]+unter))[:\p{Zs}\t]*)
+|(?i:\b(?:rückruf|tel\.?|telefon|handy|mobil(?:nummer)?|fax|durchwahl|rufnummer|erreichbar[\p{Zs}\t]+unter))[:\p{Zs}\t]*
   (\(0[1-9]\d{1,4}\)[\p{Zs}\t]*\d(?:[\p{Zs}\t./-]*\d){4,10})\b
+|(?m:^[\p{Zs}\t]*(\(0[1-9]\d{1,4}\)[\p{Zs}\t]*\d(?:[\p{Zs}\t./-]*\d){4,10})[\p{Zs}\t]*\r?$)
 '''
-capture_groups = [1, 2]
+capture_groups = [1, 2, 3]
 
 [recognizers.validator]
 kind = "e164_phone_national_de"
