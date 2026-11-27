@@ -133,6 +133,9 @@ impl View {
             // Every source spelling is ASCII, unchanged by primary normalization.
             start = end + edit.source.len();
             if let Some(ch) = edit.whitespace {
+                // Horizontal tabs separate groups just like spaces; phone validators
+                // accept the latter. Keep line breaks as boundaries, not group spaces.
+                let ch = if ch == '\t' { ' ' } else { ch };
                 let folded = normalize(ch.encode_utf8(&mut [0; 4])).text;
                 view.text.push_str(&folded);
                 view.raw_spans.extend(std::iter::repeat_n(

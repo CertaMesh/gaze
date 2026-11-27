@@ -133,6 +133,13 @@ fn encoded_json_whitespace_before_a_cue_is_a_boundary() {
         r"+1\u0020(312) 55\u200B5-0100",
         r#""}"#,
     );
+    for tab in [r"\t", r"\u0009"] {
+        assert_exact_token(
+            r#"{"copy":""#,
+            &format!(r"+1 (312){tab}5\u200b55-0190"),
+            r#""}"#,
+        );
+    }
 }
 
 #[test]
