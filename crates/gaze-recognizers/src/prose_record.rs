@@ -36,7 +36,7 @@ impl ProseRecordRecognizer {
     ) -> crate::Result<Self> {
         // A connector is mandatory (including the period in `Fall-Nr.123`).
         // The cue owns one value on its own line, not the next word containing a digit.
-        let cue = Regex::new(&format!(r#"(?i)\b(?:{cue})(?:[\p{{Zs}}\t]*[.:=#]+[\p{{Zs}}\t]*|[\p{{Zs}}\t]+(?:(?:is|as|ist|lautet)[\p{{Zs}}\t]+)?)["'„“]?(?P<value>[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*(?:[\p{{Pd}}_/:.][\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*)*)"#)).map_err(RecognizerError::InvalidRegex)?;
+        let cue = Regex::new(&format!(r#"(?i)\b(?:{cue})(?:[\p{{Zs}}\t]*[.:=#]+[\p{{Zs}}\t]*|[\p{{Zs}}\t]+)(?:(?:is|as|ist|lautet)[\p{{Zs}}\t]+)?["'„“]?(?P<value>[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*(?:[\p{{Pd}}_/:.][\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*)*)"#)).map_err(RecognizerError::InvalidRegex)?;
         Ok(Self {
             id,
             class,
@@ -51,7 +51,7 @@ impl ProseRecordRecognizer {
     }
 
     fn candidate(&self, span: Range<usize>) -> Candidate {
-        Candidate::new(
+        let mut candidate = Candidate::new(
             span,
             self.class.clone(),
             self.id.clone(),
@@ -62,7 +62,9 @@ impl ProseRecordRecognizer {
             "prose_record_id",
             ConflictTier::None,
             Vec::new(),
-        )
+        );
+        candidate.complete_record_id = true;
+        candidate
     }
 }
 
@@ -86,6 +88,9 @@ impl Recognizer for ProseRecordRecognizer {
         &self.family
     }
     fn requires_prior_candidates(&self) -> bool {
+        true
+    }
+    fn requires_validated_prior(&self) -> bool {
         true
     }
 
@@ -115,7 +120,8 @@ impl Recognizer for ProseRecordRecognizer {
                 .unwrap_or_default()
                 .iter()
                 .filter(|c| {
-                    !c.regex_guard_rejected
+                    c.evidence == EvidenceKind::Rule
+                        && !c.regex_guard_rejected
                         && c.validator_fail_reason.is_none()
                         && input
                             .get(c.span.clone())
@@ -135,18 +141,24 @@ impl Recognizer for ProseRecordRecognizer {
                 }
                 // An immediate artifact label owns the unqualified value, not a more
                 // distant mention of a person. Independent detectors still see the text.
-                let owner = input[..token.start()]
-                    .trim_end_matches([' ', '\t', ':', '#'])
-                    .rsplit(|c: char| !c.is_alphanumeric())
-                    .next()
-                    .unwrap_or_default();
+                let mut words = input[..token.start()]
+                    .trim_end_matches([' ', '\t', ':', '#', '`', '"', '\'', '„', '“'])
+                    .rsplit([' ', '\t', '\n']);
+                let mut owner = words.next().unwrap_or_default();
+                if matches!(
+                    owner.to_ascii_lowercase().as_str(),
+                    "tag" | "id" | "number" | "nr"
+                ) {
+                    owner = words.find(|w| !w.is_empty()).unwrap_or_default();
+                }
                 if matches!(
                     owner.to_ascii_lowercase().as_str(),
                     "release" | "build" | "version" | "katalognummer"
                 ) {
                     continue;
                 }
-                let prefix = value.split(['-', '_', '/']).next().unwrap_or_default();
+                let mut groups = value.split(|c: char| !c.is_alphanumeric());
+                let prefix = groups.next().unwrap_or_default();
                 if matches!(
                     prefix.to_ascii_uppercase().as_str(),
                     "ZIP" | "PLZ" | "POST" | "POSTAL" | "DE" | "US" | "D" | "SKU"
@@ -156,8 +168,8 @@ impl Recognizer for ProseRecordRecognizer {
                 // Underscores hide five-digit groups from the word-boundary ZIP regex.
                 // Other shapes need independent evidence; length alone must not admit
                 // unlabelled checksum-invalid card and bank account numbers.
-                let zip_group = value
-                    .split(['-', '_', '/'])
+                let zip_group = std::iter::once(prefix)
+                    .chain(groups)
                     .any(|g| g.len() == 5 && g.bytes().all(|b| b.is_ascii_digit()));
                 let first = seeds.partition_point(|r| r.start < token.start());
                 if zip_group
@@ -173,47 +185,13 @@ impl Recognizer for ProseRecordRecognizer {
         if matches.is_empty() {
             return Ok(Vec::new());
         }
-        // Leave validated subvalues to their own policies: e.g. a PAN configured for
-        // irreversible redaction cannot become a reversible generic record ID. Cover
-        // only the remaining bytes. Merge ranges once rather than scanning the pool per token.
-        let mut occupied: Vec<_> = ctx
-            .prior_candidates
-            .unwrap_or_default()
-            .iter()
-            .filter(|c| {
-                !c.regex_guard_rejected
-                    && ((c.checksum_validated() && c.class.as_custom_name() != Some("postal_code"))
-                        || c.field
-                            .as_ref()
-                            .is_some_and(|f| f.evidence == FieldEvidence::CallerDeclared))
-            })
-            .map(|c| c.span.clone())
-            .collect();
-        occupied.sort_unstable_by_key(|r| r.start);
-        let mut disjoint: Vec<Range<usize>> = Vec::new();
-        for r in occupied {
-            if let Some(last) = disjoint.last_mut().filter(|l| r.start <= l.end) {
-                last.end = last.end.max(r.end);
-            } else {
-                disjoint.push(r);
-            }
-        }
+        // Keep the whole claim even if a validated or caller-declared subvalue wins.
+        // Effective-action inheritance needs both spans and their original classes.
         matches.sort_unstable_by_key(|r| (r.start, r.end));
         matches.dedup();
-        let mut found = Vec::new();
-        for range in matches {
-            let mut cursor = range.start;
-            let i = disjoint.partition_point(|r| r.end <= cursor);
-            for r in disjoint[i..].iter().take_while(|r| r.start < range.end) {
-                if cursor < r.start {
-                    found.push(self.candidate(cursor..r.start));
-                }
-                cursor = cursor.max(r.end);
-            }
-            if cursor < range.end {
-                found.push(self.candidate(cursor..range.end));
-            }
-        }
-        Ok(found)
+        Ok(matches
+            .into_iter()
+            .map(|span| self.candidate(span))
+            .collect())
     }
 }

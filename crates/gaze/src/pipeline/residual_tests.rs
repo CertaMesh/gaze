@@ -251,6 +251,7 @@ fn all_twenty_five_action_pairs_admit_the_loser_under_its_own_action() {
                 RAW,
                 &RuleContext::default(),
                 &[crate::LocaleTag::Global],
+                &record_policy::RecordPolicy::default(),
             )
             .unwrap();
             let admitted = b.is_protective();
@@ -450,6 +451,37 @@ impl Rule for Wrapped {
         self.0.action(c, x)
     }
 }
+
+#[test]
+fn record_inheritance_does_not_probe_opaque_callbacks() {
+    for nested in [false, true] {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut record = candidate(0..8, field(), "synthetic.record");
+        record.complete_record_id = true;
+        let mut candidates = vec![record];
+        if nested {
+            candidates.push(candidate(3..8, PiiClass::Name, "synthetic.inner"));
+        }
+        let mut p = pipeline(candidates, true);
+        p.rules.insert(
+            0,
+            crate::rule::RuleEntry::new(Unknown {
+                calls: calls.clone(),
+            }),
+        );
+        let session = Session::new(crate::Scope::Ephemeral).unwrap();
+        let output = clean(&p, &session, "AX-52819");
+        if nested {
+            assert!(matches!(output, Err(Error::OpaqueRecordPolicy)));
+            assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+            assert!(session.snapshot_entries().is_empty());
+        } else {
+            assert!(output.is_ok());
+            assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        }
+    }
+}
+
 #[test]
 fn unknown_order_wrappers_nonmatches_and_clone_preserve_runtime_calls() {
     use crate::rule::{preview, ClassRule, ColumnRule, DefaultRule, RuleEntry};
@@ -1767,6 +1799,7 @@ fn planning_counts_real_preview_and_sweep_operations() {
         &raw,
         &RuleContext::default(),
         &locales,
+        &record_policy::RecordPolicy::default(),
     )
     .unwrap();
     assert_eq!(plan.work.preview_queries, 2);

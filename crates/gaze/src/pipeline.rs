@@ -3,6 +3,7 @@ mod occurrence;
 mod outcomes;
 mod protection;
 use occurrence::{Batch, Ledger, Occurrence, Origin, Relation};
+mod record_policy;
 mod recovery;
 mod residual;
 pub use lineage::{
@@ -118,6 +119,8 @@ pub enum Error {
     UnsupportedSafetyNetModeForStructured { mode: SafetyNetMode },
     #[error("unsupported policy action variant")]
     UnsupportedActionVariant,
+    #[error("cannot establish record identifier policy inheritance across an opaque rule")]
+    OpaqueRecordPolicy,
     #[error("manifest sweep failed closed: {0}")]
     ManifestSweep(#[from] crate::sweep::ManifestSweepError),
 }
@@ -1334,7 +1337,6 @@ impl Pipeline {
         // Refusals wait for the repeat sweep, so the one error names every refused field.
         let (pool, mut refusals) =
             self.enforce_outcomes(target, pool, field_name, document_kind)?;
-        let pool = self.record_completion_policy(pool, field_name);
         let mut whole = {
             let _perf = gaze_types::perf_span!("resolve1_ns");
             recovery::plan(pool, &self.registry, &normalized, text, locale_chain)?
@@ -1403,6 +1405,14 @@ impl Pipeline {
             family_emissions,
             ..
         } = whole;
+        let context = build_context(field_name);
+        let record_policy = record_policy::RecordPolicy::plan(
+            self,
+            &evidence,
+            &normalized,
+            &context,
+            locale_chain,
+        )?;
         let residual_plan = if self.residual_coverage {
             Some(residual::plan(
                 self,
@@ -1410,8 +1420,9 @@ impl Pipeline {
                 &order,
                 &normalized.text,
                 text,
-                &build_context(field_name),
+                &context,
                 locale_chain,
+                &record_policy,
             )?)
         } else {
             None
@@ -1506,9 +1517,8 @@ impl Pipeline {
                 let span = &detection.detection.span;
                 detection.sweep_link = sweep_links.get(&(span.start, span.end)).copied();
             }
-            let context = build_context(field_name);
             let resolved = self.resolve_action(&detection.detection.class, &context);
-            let action = resolved.action;
+            let action = record_policy.effective(&detection.detection.span, resolved.action);
             if let (Some(derived), Some(record)) =
                 (resolved.derived, detection.ambiguity_record.as_mut())
             {
@@ -1616,10 +1626,10 @@ impl Pipeline {
                 // of a family class derives its action from the members too.
                 // The cell was planned on a previewed action; the runtime
                 // verdict must be that action, and it must protect.
-                let actual = residual::fragment_action(
-                    self.resolve_action(&cell.class, &build_context(field_name))
-                        .action,
-                );
+                let actual = residual::fragment_action(record_policy.effective(
+                    &ledger.segment().original_raw[cell.representative],
+                    self.resolve_action(&cell.class, &context).action,
+                ));
                 if actual != cell.action || !actual.is_protective() {
                     return Err(clean_to_raw_mapping_error(
                         "residual policy preview mismatch",
@@ -3232,54 +3242,6 @@ impl Pipeline {
             }
         }
         Ok(())
-    }
-
-    /// A completed identifier cannot make bytes restorable when an enclosed class
-    /// requires redaction. Carry the stricter class before resolution so ordinary
-    /// repeat propagation and audit use the same policy as the completed span.
-    fn record_completion_policy(
-        &self,
-        mut pool: crate::resolver::CandidatePool,
-        field_name: Option<&str>,
-    ) -> crate::resolver::CandidatePool {
-        let context = build_context(field_name);
-        let candidates = pool.originals();
-        let mut replacements = Vec::new();
-        for (index, completion) in candidates
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| c.source == "prose_record_id")
-        {
-            let mut class = &completion.class;
-            let mut action = self.resolve_action(class, &context).action;
-            let i = pool
-                .order
-                .partition_point(|&id| candidates[id].span.start < completion.span.start);
-            for inner in pool.order[i..]
-                .iter()
-                .map(|&id| &candidates[id])
-                .take_while(|c| c.span.start < completion.span.end)
-            {
-                if inner.span.end <= completion.span.end && inner.class != *class {
-                    let next = self.resolve_action(&inner.class, &context).action;
-                    if next.strictness_rank() > action.strictness_rank() {
-                        action = next;
-                        class = &inner.class;
-                    }
-                }
-            }
-            if class != &completion.class {
-                replacements.push((index, class.clone()));
-            }
-        }
-        if replacements.is_empty() {
-            return pool;
-        }
-        let mut originals = pool.take_originals();
-        for (id, class) in replacements {
-            originals[id].class = class;
-        }
-        crate::resolver::CandidatePool::new(originals)
     }
 
     /// The one policy lookup for every span this pipeline acts on or logs;
