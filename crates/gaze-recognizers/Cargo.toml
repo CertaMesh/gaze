@@ -94,6 +94,10 @@ required-features = ["safety-net-nym", "test-support"]
 name = "verify_nym_reuse"
 required-features = ["safety-net-nym", "test-support"]
 
+[[example]]
+name = "verify_nym_threads"
+required-features = ["safety-net-nym", "test-support"]
+
 [[test]]
 name = "locale_aware_registry"
 

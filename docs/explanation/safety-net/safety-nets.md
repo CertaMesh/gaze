@@ -361,8 +361,12 @@ span's class, not its label and threshold, and the CLI refuses the combination.
 
 ### Runtime
 
-ONNX Runtime on CPU with deterministic compute, one inter-op thread and one
-intra-op thread by default (`--nym-intra-threads`, `GAZE_NYM_INTRA_THREADS`).
+ONNX Runtime on CPU with deterministic compute, one inter-op thread and four
+intra-op threads by default (`--nym-intra-threads` on the CLI, `GAZE_NYM_INTRA_THREADS`
+for the library's `NymConfig::from_env`).
+Piece scores are bit-identical across thread counts; the
+[thread-count proof](../../reference/benchmarks/gates/nym-intra-threads/README.md)
+records the evidence.
 The model weights are embedding-int8 with fp16 body weights and fp32 compute,
 so there is no int8-kernel speedup.
 
