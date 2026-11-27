@@ -401,6 +401,24 @@ fn driver_license_after_german_cue() {
 }
 
 #[test]
+fn driver_license_with_a_second_letter_group() {
+    for (text, value, context) in [
+        (
+            "Sein Führerschein mit der Nummer B-XY123456 wurde überprüft.",
+            "B-XY123456",
+            ["Sein Führerschein mit der Nummer ", " wurde überprüft."],
+        ),
+        (
+            "He must submit his driver license number NZDL1234567 today.",
+            "NZDL1234567",
+            ["He must submit his driver license number ", " today."],
+        ),
+    ] {
+        assert_id_removed(text, value, &context);
+    }
+}
+
+#[test]
 fn tighter_anchoring_did_not_cost_coverage() {
     // The looser `[A-Z0-9][A-Z0-9-]{5,19}` draft covered 68 spans with 105 holdout false
     // positives; the letter-led form covers 71 with zero. Tighter anchoring won on BOTH axes.

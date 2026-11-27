@@ -146,6 +146,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   base64-encoded private keys such as Kubernetes `tls.key` values. Credential
   metadata (names, hints, policies, lengths), card verification digits and
   encoded public certificates stay raw.
+- `driver_license.cue_anchored` also protects licence numbers with a second
+  letter group after the first, such as `B-XY123456` and `NZDL1234567`.
 - Benchmark generator v31 adds EN/DE prose credential and base64 private-key
   cells with benign counterweights; generator v30 rebuilds byte-for-byte.
 - Policies accept an `[outcomes]` table with `possibly_sensitive = "protect"`
