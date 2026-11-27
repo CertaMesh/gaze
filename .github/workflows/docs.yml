@@ -6,9 +6,10 @@ on:
     branches: [main]
 
 concurrency:
-  # A new push to a PR cancels its superseded run; merge-queue, main, tag,
-  # schedule and dispatch runs each keep their own group and always finish.
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A new push to a PR cancels its superseded run. Every other run (merge
+  # queue, main, tag, schedule, dispatch) gets a group of its own, so it is
+  # never cancelled or dropped as a pending run.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
