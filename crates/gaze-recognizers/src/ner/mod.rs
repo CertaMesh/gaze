@@ -1,6 +1,6 @@
 //! Transformer-based NER detector with pluggable backends.
 
-mod backend;
+pub(crate) mod backend;
 pub(crate) mod decode;
 mod detector;
 mod error;

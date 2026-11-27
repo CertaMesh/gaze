@@ -58,6 +58,7 @@ pub(super) fn model_generation() -> u64 {
 struct Cache {
     rows: HashMap<WindowKey, Rows>,
     bytes: usize,
+    spanning: bool,
     #[cfg(feature = "test-support")]
     verify: bool,
     #[cfg(feature = "test-support")]
@@ -68,19 +69,40 @@ thread_local! {
     static ACTIVE: RefCell<Option<Cache>> = const { RefCell::new(None) };
 }
 
-/// Synchronous inference scope. Nested pipelines get isolated caches; dropping the guard
-/// releases this request's input bytes and restores the caller's scope, including on unwind.
-/// The guard cannot move to another thread.
+/// Synchronous inference scope. Nested pipelines get isolated caches, except inside a
+/// spanning scope, where every pipeline call joins the one cache. Keys carry every execution
+/// input, so a joined call can only reuse a window it would have computed bit-identically.
+/// Dropping the scope that created a cache releases its input bytes and restores the caller's
+/// scope, including on unwind. The guard cannot move to another thread.
 #[doc(hidden)]
 pub struct InferenceRequest {
-    previous: Option<Cache>,
+    previous: Option<Option<Cache>>,
     _thread: PhantomData<Rc<()>>,
 }
 
 impl InferenceRequest {
     pub(crate) fn enter() -> Self {
+        if ACTIVE.with(|slot| slot.borrow().as_ref().is_some_and(|cache| cache.spanning)) {
+            return Self {
+                previous: None,
+                _thread: PhantomData,
+            };
+        }
+        Self::replace(Cache::default())
+    }
+
+    /// One cache for every pipeline call until the guard drops, such as all stabilization
+    /// passes of one daemon request.
+    pub(crate) fn spanning() -> Self {
+        Self::replace(Cache {
+            spanning: true,
+            ..Cache::default()
+        })
+    }
+
+    fn replace(cache: Cache) -> Self {
         Self {
-            previous: ACTIVE.with(|slot| slot.replace(Some(Cache::default()))),
+            previous: Some(ACTIVE.with(|slot| slot.replace(Some(cache)))),
             _thread: PhantomData,
         }
     }
@@ -118,7 +140,9 @@ pub(super) fn verified_windows() -> usize {
 
 impl Drop for InferenceRequest {
     fn drop(&mut self) {
-        ACTIVE.with(|slot| slot.replace(self.previous.take()));
+        if let Some(previous) = self.previous.take() {
+            ACTIVE.with(|slot| slot.replace(previous));
+        }
     }
 }
 
@@ -198,6 +222,20 @@ mod tests {
         }
         assert!(get(&key()).is_none());
         let _next = InferenceRequest::enter();
+        assert!(get(&key()).is_none());
+    }
+
+    #[test]
+    fn pipelines_inside_a_spanning_scope_share_one_cache() {
+        {
+            let _request = InferenceRequest::spanning();
+            {
+                let _first_pass = InferenceRequest::enter();
+                put(key());
+            }
+            let _second_pass = InferenceRequest::enter();
+            assert!(get(&key()).is_some());
+        }
         assert!(get(&key()).is_none());
     }
 
