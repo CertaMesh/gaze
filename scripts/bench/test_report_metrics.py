@@ -22,15 +22,15 @@ def item(text, gold, predictions=(), **kwargs):
 
 
 def test_exposure_counts_letters_and_digits_only():
-    text = "Anna Weber, Berlin, 0301234 and Kiel."
-    gold = [(0, 10, "FIRSTNAME"), (12, 18, "CITY"), (20, 27, "TELEPHONENUM"), (32, 36, "CITY")]
+    text = "Anna Weber, Berlin, +49 171 3920012 and Kiel."
+    gold = [(0, 10, "FIRSTNAME"), (12, 18, "CITY"), (20, 35, "TELEPHONENUM"), (40, 44, "CITY")]
     # "Anna" and "Weber" hidden by two spans with the space between visible: fully hidden.
     # "Berlin" loses only "Ber": partial with 3 residue. The phone and Kiel are missed.
     predictions = [(0, 4, "name"), (5, 10, "name"), (15, 18, "location")]
     exposure = scored(item(text, gold, predictions))["exposure"]
     assert (exposure["fully_hidden"], exposure["partially_exposed"], exposure["completely_missed"]) == (1, 1, 2)
     assert exposure["partial_residue_characters"] == 3
-    assert exposure["missed_residue_characters"] == 7 + 4
+    assert exposure["missed_residue_characters"] == 12 + 4
 
 
 def test_merged_exact_spans_join_only_one_type_across_spaces():
@@ -42,10 +42,17 @@ def test_merged_exact_spans_join_only_one_type_across_spaces():
     assert exact["merged"] == {"precision": 100.0, "recall": 100.0, "f1": 100.0}
 
 
+def test_a_dot_merges_only_after_an_initial():
+    text = "J. Weber lives in Kiel. Berlin is far."
+    gold = [(0, 1, "FIRSTNAME"), (3, 8, "SURNAME"), (18, 22, "CITY"), (24, 30, "CITY")]
+    merged = metrics.merge_adjacent(text, gold, TYPES)
+    assert [(s, e) for s, e, _ in merged] == [(0, 8), (18, 22), (24, 30)]
+
+
 def test_type_agreement_is_judged_on_typed_labels_only():
-    text = "Anna 0301234 R-1"
-    gold = [(0, 4, "FIRSTNAME"), (5, 12, "TELEPHONENUM"), (13, 16, "RECORD_ID")]
-    predictions = [(0, 4, "organization"), (5, 12, "custom:phone"), (13, 16, "custom:x")]
+    text = "Anna +49 171 3920012 R-1"
+    gold = [(0, 4, "FIRSTNAME"), (5, 20, "TELEPHONENUM"), (21, 24, "RECORD_ID")]
+    predictions = [(0, 4, "organization"), (5, 20, "custom:phone"), (21, 24, "custom:x")]
     types = scored(item(text, gold, predictions))["type_agreement"]
     assert (types["typed_fully_hidden"], types["agrees"], types["untyped_fully_hidden"]) == (2, 1, 1)
     assert types["top_disagreements"] == [{"label": "FIRSTNAME", "classes": "organization", "spans": 1}]

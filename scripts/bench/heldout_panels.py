@@ -7,7 +7,8 @@ measure real annotated text from outside the project, with the metrics of
 
 - PrivacyBench+ (English workplace email and documents), human-annotated
   split, held-out companies only: the two Tracer recommends for evaluation.
-  Spans Tracer marked unresolved and its indirect identifiers are neutral.
+  As the dataset's protocol says, records with unresolved spans are skipped;
+  indirect identifiers are neutral.
 - GraSCCo_PII v2 (German clinical case reports), the whole corpus. Labels
   Gaze does not target (generic dates, titles, professions, hospitals,
   countries, ages, organizations) are neutral; the rest are scored.
@@ -33,6 +34,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Mapping, Sequence
 import urllib.request
@@ -62,7 +64,7 @@ ATTRIBUTION = {
         "A modified copy of PrivacyBench v2.5 by TonicAI, CC BY 4.0, "
         "https://huggingface.co/datasets/TonicAI/Privacy-Bench. Used unmodified; scored here."),
     "grascco_pii_v2": (
-        "GraSCCo_PII v2, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), "
+        "GraSCCo_PII v2 by Lohr, C. et al., CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), "
         "https://doi.org/10.5281/zenodo.15747389. Used unmodified; scored here."),
 }
 
@@ -125,7 +127,7 @@ def _jsonl(data: bytes) -> list[dict]:
     return [json.loads(line) for line in data.decode("utf-8").splitlines() if line.strip()]
 
 
-def privacybench_items(cache: Path, *, download: bool) -> list[metrics.Item]:
+def privacybench_items(cache: Path, *, download: bool) -> tuple[list[metrics.Item], int]:
     manifest = json.loads(fetch(PRIVACYBENCH_URL + "MANIFEST.json", PRIVACYBENCH_MANIFEST_SHA256,
                                 cache, download=download))
 
@@ -139,20 +141,25 @@ def privacybench_items(cache: Path, *, download: bool) -> list[metrics.Item]:
         if row["file"].startswith("human_annotations/"):
             key = f"{Path(row['file']).name}:{row['line']}"
             indirect.setdefault(key, []).append((row["start"], row["end"]))
-    items = []
+    items, skipped = [], 0
     for company in PRIVACYBENCH_HELD_OUT:
         for name in (f"{company}.jsonl", f"{company}_documents.jsonl"):
-            for line, row in enumerate(_jsonl(member(f"data/human_annotations/{name}")), 1):
+            lines = member(f"data/human_annotations/{name}").decode("utf-8").split("\n")
+            for line, raw in enumerate(lines, 1):
+                if not raw.strip():
+                    continue
+                row = json.loads(raw)
+                if row.get("_tracer_review", {}).get("unknown_targets"):
+                    # An unresolved target does not certify the rest of the record as negative.
+                    skipped += 1
+                    continue
                 uid = f"{name}:{line}"
-                unresolved = [(u["annotation"]["start"], u["annotation"]["end"])
-                              for u in row.get("_tracer_review", {}).get("unknown_targets", [])]
                 gold = [(s["start"], s["end"], s["label"]) for s in row["ground_truth_spans"]]
-                items.append(metrics.Item(uid, company, row["text"], gold, (),
-                                          neutral=unresolved + indirect.get(uid, [])))
-    return items
+                items.append(metrics.Item(uid, company, row["text"], gold, (), neutral=indirect.get(uid, [])))
+    return items, skipped
 
 
-def grascco_items(cache: Path, *, download: bool) -> list[metrics.Item]:
+def grascco_items(cache: Path, *, download: bool) -> tuple[list[metrics.Item], int]:
     archive = zipfile.ZipFile(io.BytesIO(fetch(GRASCCO_URL, GRASCCO_SHA256, cache, download=download)))
     items = []
     for name in sorted(n for n in archive.namelist() if n.endswith(".json")):
@@ -172,7 +179,7 @@ def grascco_items(cache: Path, *, download: bool) -> list[metrics.Item]:
                 gold.append((x["begin"], x["end"], kind))
         uid = Path(name).name.split(".txt")[0]
         items.append(metrics.Item(uid, uid, text, gold, (), neutral=neutral))
-    return items
+    return items, 0
 
 
 def class_name(value: object) -> str:
@@ -186,8 +193,9 @@ def class_name(value: object) -> str:
 
 def predict(items: Sequence[metrics.Item], binary: Path, policy: Path) -> tuple[list[metrics.Item], list[float], int]:
     """Run each document through `gaze daemon` in its own session."""
+    log = tempfile.TemporaryFile()
     process = subprocess.Popen([str(binary), "daemon", "--policy", str(policy)], stdin=subprocess.PIPE,
-                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+                               stdout=subprocess.PIPE, stderr=log, text=True, bufsize=1)
     assert process.stdin is not None and process.stdout is not None
     scored, latencies, errors = [], [], 0
     try:
@@ -197,7 +205,10 @@ def predict(items: Sequence[metrics.Item], binary: Path, policy: Path) -> tuple[
             process.stdin.flush()
             line = process.stdout.readline()
             if not line:
-                raise PanelError("gaze daemon exited")
+                process.wait()
+                log.seek(0)
+                tail = log.read()[-2000:].decode("utf-8", "replace").strip()
+                raise PanelError(f"gaze daemon exited: {tail}")
             latencies.append((time.perf_counter() - started) * 1000)
             response = json.loads(line)
             if "error" in response:
@@ -205,6 +216,8 @@ def predict(items: Sequence[metrics.Item], binary: Path, policy: Path) -> tuple[
                 errors += 1
                 scored.append(item)
                 continue
+            if response.get("session_id") != f"panel-{item.uid}":
+                raise PanelError(f"daemon answered for {response.get('session_id')!r}, not panel-{item.uid}")
             chars = {offset: index for index, offset in enumerate(score.char_to_byte_offsets(item.text))}
             predictions = [(chars[e["raw_span"]["start"]], chars[e["raw_span"]["end"]], class_name(e["class"]))
                            for e in response["manifest"]]
@@ -212,7 +225,12 @@ def predict(items: Sequence[metrics.Item], binary: Path, policy: Path) -> tuple[
                                        neutral=item.neutral))
     finally:
         process.stdin.close()
-        process.wait()
+        try:
+            process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        log.close()
     return scored, latencies, errors
 
 
@@ -233,12 +251,13 @@ def run(binary: Path, policy: Path, *, panels: Sequence[str], cache: Path, downl
               "panels": {}}
     for name in panels:
         load, types, untyped = PANELS[name]
-        items = load(cache, download=download)
+        items, skipped = load(cache, download=download)
         metrics.check_labels((label for item in items for *_, label in item.gold), types, untyped)
         scored, latencies, errors = predict(items, binary, policy)
         result["panels"][name] = {
             "attribution": ATTRIBUTION[name],
             "untyped_labels": untyped,
+            "skipped_records": skipped,
             "daemon_errors": errors,
             "latency_ms": {"p50": _percentile(latencies, 0.5), "p95": _percentile(latencies, 0.95)},
             **metrics.score_items(scored, types, untyped),

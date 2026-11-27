@@ -86,7 +86,8 @@ UNTYPED: dict[str, str] = {
     "RECORD_ID": "tenant identifier; its class is whatever the integrator declares",
     "TITLE": "an honorific has no class of its own",
 }
-_MERGE_GAP = re.compile(r"[ \t.]*")
+_MERGE_GAP = re.compile(r"[ \t]*")
+_INITIAL_GAP = re.compile(r"\.[ \t]*")
 _WHITESPACE = " \t\n\r"
 
 
@@ -133,11 +134,15 @@ def _type_key(label: str, type_classes: Mapping[str, frozenset[str]]) -> object:
 
 def merge_adjacent(text: str, gold: Sequence[tuple[int, int, str]],
                    type_classes: Mapping[str, frozenset[str]]) -> list[tuple[int, int, str]]:
-    """Join gold parts of one type separated only by spaces, tabs or dots."""
+    """Join gold parts of one type separated only by spaces or tabs, or by the
+    dot after a one-letter initial ("J. Weber"), never across a sentence end."""
     merged: list[tuple[int, int, str]] = []
     for start, end, label in sorted(gold):
-        if (merged and _type_key(merged[-1][2], type_classes) == _type_key(label, type_classes)
-                and start >= merged[-1][1] and _MERGE_GAP.fullmatch(text, merged[-1][1], start)):
+        previous = merged[-1] if merged else None
+        if (previous and _type_key(previous[2], type_classes) == _type_key(label, type_classes)
+                and start >= previous[1]
+                and (_MERGE_GAP.fullmatch(text, previous[1], start)
+                     or (previous[1] - previous[0] == 1 and _INITIAL_GAP.fullmatch(text, previous[1], start)))):
             merged[-1] = (merged[-1][0], max(end, merged[-1][1]), merged[-1][2])
         else:
             merged.append((start, end, label))
@@ -282,7 +287,9 @@ def record_items(record_path: Path, *, config: str | None = None,
     skipped: Counter = Counter()
     for row in census._selected_rows(header, rows, config):
         uid, layer = row["document_id"], row["layer"]
-        document = documents[uid]
+        document = documents.get(uid)
+        if document is None or document["layer"] != layer:
+            raise MetricsError(f"observation disagrees with document inventory: {uid}")
         if row["response"].get("refused"):
             skipped[f"{layer}:refused"] += 1
             continue
@@ -301,7 +308,7 @@ def record_items(record_path: Path, *, config: str | None = None,
         except KeyError as error:
             raise MetricsError(f"{uid}: an offset is not on a character boundary") from error
         items.append(Item(uid, layer, text, gold, predictions, decoys=spans,
-                          benign=not gold and layer in ("C", "D")))
+                          benign=document["negative_category"] is not None))
     return header, items, skipped
 
 
