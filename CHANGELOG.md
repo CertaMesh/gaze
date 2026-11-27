@@ -14,8 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   30 minutes) and a live-conversation limit (default 64) that refuses new ids
   instead of evicting. `RmcpFrontend::into_conversation_handler` routes each
   call by `HostCallContext::conversation` and refuses calls without one.
-  The factory receives the `ConversationId` it opens. Two conversations never
-  share mappings, and each refuses the other's tokens on strict restore.
+  The factory receives the `ConversationId` and `Principal` it opens. A live
+  conversation answers only the principal that opened it; any other principal
+  gets `conversation-forbidden`. `ConversationLimits::new` refuses zero limits.
+  Two conversations never share mappings, and each refuses the other's tokens
+  on strict restore.
+- `RmcpFrontend::serve_conversations` serves the built-in stdio or HTTP
+  transport with one conversation per resolved principal id.
 - `gaze mcp doctor` reports the declared protection profile (bundled `core`
   rules, Resolve/Strict, no NER or Nym) and the session scope.
 - Release binaries are reproducible. `scripts/release/build-binary.sh` builds
@@ -27,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The built-in rmcp HTTP transport refuses `Frontend::serve` with a single host,
+  which every caller would share, and returns
+  `RmcpFrontendError::SharedHttpHost`. Use `RmcpFrontend::serve_conversations`.
 - Daemon v2 `clean_blocks` reuses the committed result of an unchanged block
   when nothing learned since the last commit can reach it, so a warm turn no
   longer re-cleans the whole conversation. Responses stay byte-identical to a

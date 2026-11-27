@@ -174,6 +174,19 @@ serve it with `RmcpFrontend::into_conversation_handler`. Middleware sets
 fail with `conversation-required`. Do not build hosts in the rmcp service factory
 for isolation: under protocol 2026-07-28 rmcp calls it once per request.
 
+The factory is `Fn(&ConversationId, &Principal)`. A live conversation answers
+only the principal id that opened it; another principal gets
+`conversation-forbidden`. `ConversationLimits::new(max, idle)` returns a
+`Result` and refuses zero for either value; its fields are now private, so read
+them with `max_conversations()` and `idle_timeout()`.
+
+The built-in HTTP transport no longer shares one host across callers.
+`Frontend::serve(host, ...)` on `RmcpFrontend::http(..)` now returns
+`RmcpFrontendError::SharedHttpHost`. Serve it with
+`RmcpFrontend::serve_conversations(registry, shutdown)` instead, which opens one
+conversation per resolved principal id. A `FixedPrincipalResolver` resolves
+every caller to the same principal, so give each HTTP caller its own principal.
+
 ### Action required: replace positional context arrays
 
 Context JSON now requires a top-level object. `gaze clean --context-json`
