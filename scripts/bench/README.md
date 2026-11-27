@@ -765,9 +765,12 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/ba775e34c3e2be867a8ed27ef07739f60dfc09dd85eae61b956fe8aec9fcd939.json)
+The [generator v32 credential specification](../../docs/reference/benchmarks/specifications/ba775e34c3e2be867a8ed27ef07739f60dfc09dd85eae61b956fe8aec9fcd939.json)
 adds generator v32's credential-form and agent-text cells to it and the prose
 credential recognizers to the validation vocabulary.
+The [current specification](../../docs/reference/benchmarks/specifications/a17698535158d824c3ef85909984f7c2e72207ff27e9dbf5df580df2ea769473.json)
+adds generator v33's chat mention cells to it and `username.chat_mention` to
+the validation vocabulary.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

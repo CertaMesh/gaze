@@ -759,6 +759,37 @@ priority = 80
 
 [recognizers.token]
 
+# Chat-platform user mentions as the platforms write them in message text: Slack
+# `<@U024BE7LH>` and `<@W…>` (enterprise users), optionally with the display name the
+# client renders (`<@U024BE7LH|jane.doe>`), and Discord `<@123…>` / `<@!123…>` with a
+# 17- to 20-digit snowflake. The value inside the brackets is the token, display name
+# included, so no part of a name-bearing ID stays raw. Channel (`<#C…>`), group
+# (`<!subteam^S…>`), broadcast (`<!here>`), Discord role (`<@&…>`), emoji and timestamp
+# markup carry no person and do not match. Residual: bare user IDs outside mention
+# markup and mentions written with JSON `\u003c` escapes stay raw.
+[[recognizers]]
+id = "username.chat_mention"
+safety_tier = "safe_default"
+class = "custom:username"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''<@(?:!?(\d{17,20})|([UW][A-Z0-9][A-Z0-9_]{5,30}(?:\|[^<>|\r\n]{1,80})?))>'''
+capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.90
+priority = 86
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
 [[recognizers]]
 id = "aadhaar.in"
 safety_tier = "safe_default"

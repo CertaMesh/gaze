@@ -1606,6 +1606,7 @@ window_chars = 48
                 PiiClass::custom("customer_id").expect("valid custom class"),
                 PiiClass::custom("employee_id").expect("valid custom class"),
                 PiiClass::custom("record_id").expect("valid custom class"),
+                PiiClass::custom("username").expect("valid custom class"),
             ])
         );
     }
