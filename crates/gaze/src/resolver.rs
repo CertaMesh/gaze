@@ -167,6 +167,9 @@ pub(crate) fn candidate_order(originals: &[Candidate]) -> Vec<usize> {
             .start
             .cmp(&b.span.start)
             .then_with(|| b.span.end.cmp(&a.span.end))
+            // Resolve independent owners before a same-class prose claim can
+            // merge into one and change its rank against the others.
+            .then_with(|| a.complete_record_id.cmp(&b.complete_record_id))
             .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
             .then_with(|| b.priority.cmp(&a.priority))
             .then_with(|| b.score.total_cmp(&a.score))
@@ -885,6 +888,28 @@ fn append_unique(existing: &mut String, next: &str) {
 /// span-length > recognizer-id. Returns the tier at which `candidate` beats
 /// `existing`, or `None` when it does not.
 fn compare_base_ladder(candidate: &Candidate, existing: &Candidate) -> Option<ConflictTier> {
+    // A prose cue supplies a fallback ID class. Keep an independently recognized
+    // ID class on the same bytes (e.g. an index's case_id); retain both original
+    // claims for policy inheritance even though only one class names the token.
+    if candidate.span == existing.span
+        && candidate.complete_record_id != existing.complete_record_id
+    {
+        let owner = if candidate.complete_record_id {
+            existing
+        } else {
+            candidate
+        };
+        if owner.evidence == EvidenceKind::Rule
+            && !owner.regex_guard_rejected
+            && owner.validator_fail_reason.is_none()
+            && owner
+                .class
+                .as_custom_name()
+                .is_some_and(|id| id.ends_with("_id"))
+        {
+            return (!candidate.complete_record_id).then_some(ConflictTier::ClassPriority);
+        }
+    }
     if class_priority(&candidate.class) != class_priority(&existing.class) {
         return (class_priority(&candidate.class) > class_priority(&existing.class))
             .then_some(ConflictTier::ClassPriority);

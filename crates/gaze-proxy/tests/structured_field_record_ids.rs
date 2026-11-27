@@ -3,9 +3,9 @@
 //! The bundled `field_labelled` rules protect labelled string leaves of structured carriers
 //! and refuse labelled JSON numbers, typed, before anything is forwarded. A string whose whole
 //! text strictly parses as one JSON object or array (OpenAI `arguments`, a JSON tool result)
-//! carries its own fields and binds the same way. Prose has no field context: there only the
-//! calibrated adopter rule acts. Every route runs with the stock `core` activation alone; the
-//! calibrated runs are kept as separate legacy evidence.
+//! carries its own fields and binds the same way. In prose, stock core recognizes generic
+//! cues, while the calibrated adopter rule also accepts field-key spellings. Each route
+//! runs with stock `core` alone and with the adopter rule.
 
 #[path = "support/structured_record_ids.rs"]
 mod record_ids;
@@ -136,8 +136,12 @@ fn refuses(carrier: &str, case: &record_ids::Case) -> bool {
     case.numeric && carrier != "prose"
 }
 
+fn known_prose_leak(stock: bool, carrier: &str, case: &record_ids::Case) -> bool {
+    stock && carrier == "prose" && !matches!(case.key, "customer-id" | "Kundennummer")
+}
+
 #[test]
-fn whole_json_fields_bind_and_prose_stays_with_the_calibrated_rule() {
+fn whole_json_fields_bind_and_prose_respects_its_own_cues() {
     for (core, stock) in [
         (assembled(), false),
         (CorePipelineConfig::new().build().unwrap(), true),
@@ -169,8 +173,12 @@ fn whole_json_fields_bind_and_prose_stays_with_the_calibrated_rule() {
                             !(kind == "whole-json" && case.numeric),
                             "{surface} {case:?}"
                         );
-                        // No free-text label guessing: stock prose keeps its known leak.
-                        record_ids::check(&case, &surface, &clean, stock && kind == "prose");
+                        record_ids::check(
+                            &case,
+                            &surface,
+                            &clean,
+                            known_prose_leak(stock, kind, &case),
+                        );
                         if kind == "whole-json" {
                             let parsed: Value = serde_json::from_str(&clean).unwrap();
                             assert_eq!(
@@ -256,12 +264,11 @@ async fn captures(provider: Provider, stock: bool) {
                 .await
                 .pop()
                 .expect("request must reach capture upstream");
-            // No free-text label guessing: stock prose keeps its known leak.
             record_ids::check(
                 &case,
                 &format!("{label} {provider:?}/{carrier}"),
                 &captured.to_string(),
-                stock && carrier == "prose",
+                known_prose_leak(stock, carrier, &case),
             );
             let encoded = match (provider, carrier) {
                 (Provider::Anthropic, "result-string") => Some("/messages/1/content/0/content"),
