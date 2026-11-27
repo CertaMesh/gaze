@@ -106,6 +106,14 @@ pub trait PrincipalResolver: Send + Sync {
         &self,
         context: &RequestContext<RoleServer>,
     ) -> Result<Principal, RmcpPrincipalError>;
+
+    /// Whether different callers resolve to different principal ids. Built-in
+    /// HTTP keys each caller's Session by principal id, so
+    /// [`RmcpFrontend::serve_conversations`] refuses HTTP when this is false.
+    /// Return false when the resolver gives several callers one principal.
+    fn distinguishes_callers(&self) -> bool {
+        true
+    }
 }
 
 /// Static resolver useful for local stdio servers and tests.
@@ -136,6 +144,11 @@ impl PrincipalResolver for FixedPrincipalResolver {
         _context: &RequestContext<RoleServer>,
     ) -> Result<Principal, RmcpPrincipalError> {
         Ok(self.principal.clone())
+    }
+
+    /// Every caller resolves to the same principal.
+    fn distinguishes_callers(&self) -> bool {
+        false
     }
 }
 
@@ -214,6 +227,54 @@ impl RmcpFrontend {
             self.config.principal_resolver,
         )
     }
+
+    /// Serve the configured transport with one conversation per caller: each
+    /// resolved principal id opens its own conversation in `conversations`, so
+    /// callers never share a Session. The conversation id equals the principal
+    /// id; pass that id to [`gaze_mcp_core::ConversationRegistry::close`] and key
+    /// snapshots by it. Give this registry to no other handler, because an id
+    /// that middleware sets could equal a principal id. The built-in HTTP
+    /// transport serves only this way, and only with a resolver whose
+    /// [`PrincipalResolver::distinguishes_callers`] is true; otherwise every
+    /// caller would share one Session, and this returns
+    /// [`crate::RmcpFrontendError::SharedHttpHost`].
+    #[cfg_attr(
+        not(any(feature = "transport-stdio", feature = "transport-http")),
+        allow(unused_variables)
+    )]
+    pub async fn serve_conversations(
+        self,
+        conversations: Arc<gaze_mcp_core::ConversationRegistry>,
+        shutdown: ShutdownToken,
+    ) -> Result<(), FrontendError> {
+        let transport = self.config.transport;
+        let server = self.into_per_caller_server(conversations)?;
+        match transport {
+            #[cfg(feature = "transport-stdio")]
+            RmcpTransport::Stdio => serve_stdio(server, shutdown).await,
+            #[cfg(feature = "transport-http")]
+            RmcpTransport::Http { bind } => serve_http(bind, server, shutdown).await,
+        }
+    }
+
+    /// The server [`Self::serve_conversations`] runs, after its HTTP refusal.
+    fn into_per_caller_server(
+        self,
+        conversations: Arc<gaze_mcp_core::ConversationRegistry>,
+    ) -> Result<RmcpServer, FrontendError> {
+        #[cfg(feature = "transport-http")]
+        if matches!(self.config.transport, RmcpTransport::Http { .. })
+            && !self.config.principal_resolver.distinguishes_callers()
+        {
+            return Err(FrontendError::backend(
+                crate::RmcpFrontendError::SharedHttpHost,
+            ));
+        }
+        Ok(RmcpServer::new(
+            HostSource::PerPrincipal(conversations),
+            self.config.principal_resolver,
+        ))
+    }
 }
 
 #[cfg(feature = "transport-stdio")]
@@ -225,12 +286,9 @@ impl Default for RmcpFrontend {
 
 #[async_trait]
 impl Frontend for RmcpFrontend {
-    // With no transport feature `RmcpTransport` is uninhabited and the match
-    // below has no arms, so the arguments are never read.
-    #[cfg_attr(
-        not(any(feature = "transport-stdio", feature = "transport-http")),
-        allow(unused_variables)
-    )]
+    // Only stdio reads `host`: with no transport feature `RmcpTransport` is
+    // uninhabited, and built-in HTTP refuses a shared host.
+    #[cfg_attr(not(feature = "transport-stdio"), allow(unused_variables))]
     async fn serve(
         self,
         host: Arc<dyn DispatchHost>,
@@ -239,12 +297,15 @@ impl Frontend for RmcpFrontend {
         match self.config.transport {
             #[cfg(feature = "transport-stdio")]
             RmcpTransport::Stdio => {
-                serve_stdio(host, self.config.principal_resolver, shutdown).await
+                let server =
+                    RmcpServer::new(HostSource::Fixed(host), self.config.principal_resolver);
+                serve_stdio(server, shutdown).await
             }
+            // Every HTTP caller would share this host and its Session.
             #[cfg(feature = "transport-http")]
-            RmcpTransport::Http { bind } => {
-                serve_http(bind, host, self.config.principal_resolver, shutdown).await
-            }
+            RmcpTransport::Http { .. } => Err(FrontendError::backend(
+                crate::RmcpFrontendError::SharedHttpHost,
+            )),
         }
     }
 }
@@ -253,6 +314,8 @@ impl Frontend for RmcpFrontend {
 enum HostSource {
     Fixed(Arc<dyn DispatchHost>),
     Conversations(Arc<gaze_mcp_core::ConversationRegistry>),
+    /// One conversation per resolved principal id, for the built-in transports.
+    PerPrincipal(Arc<gaze_mcp_core::ConversationRegistry>),
 }
 
 #[derive(Clone)]
@@ -269,17 +332,27 @@ impl RmcpServer {
         }
     }
 
-    fn host(&self, call: &HostCallContext) -> Result<Arc<dyn DispatchHost>, &'static str> {
-        match &self.hosts {
-            HostSource::Fixed(host) => Ok(host.clone()),
-            HostSource::Conversations(registry) => {
-                let id = call.conversation.as_ref().ok_or("conversation-required")?;
-                registry.host(id).map_err(|err| match err {
-                    gaze_mcp_core::ConversationError::Capacity => "conversation-limit",
-                    _ => "conversation-unavailable",
-                })
-            }
-        }
+    fn host(
+        &self,
+        principal: &Principal,
+        call: &HostCallContext,
+    ) -> Result<Arc<dyn DispatchHost>, &'static str> {
+        let (registry, id) = match &self.hosts {
+            HostSource::Fixed(host) => return Ok(host.clone()),
+            HostSource::Conversations(registry) => (
+                registry,
+                call.conversation.clone().ok_or("conversation-required")?,
+            ),
+            HostSource::PerPrincipal(registry) => (
+                registry,
+                gaze_mcp_core::ConversationId::new(principal.id.clone()),
+            ),
+        };
+        registry.host(principal, &id).map_err(|err| match err {
+            gaze_mcp_core::ConversationError::Capacity => "conversation-limit",
+            gaze_mcp_core::ConversationError::PrincipalMismatch => "conversation-forbidden",
+            _ => "conversation-unavailable",
+        })
     }
 
     async fn principal(
@@ -308,7 +381,7 @@ impl ServerHandler for RmcpServer {
         let principal = self.principal(&context).await?;
         let principal_tier = tier_for_principal(&principal);
         let tools = self
-            .tools(&host_call_context(&context.extensions))
+            .tools(&principal, &host_call_context(&context.extensions))
             .map_err(|class| ErrorData::invalid_request(class, None))?
             .into_iter()
             .filter(|descriptor| descriptor_visible_to(descriptor, principal_tier))
@@ -336,17 +409,20 @@ impl RmcpServer {
     /// registry already knows its catalog.
     fn tools(
         &self,
+        principal: &Principal,
         call: &HostCallContext,
     ) -> Result<Vec<gaze_mcp_core::ToolDescriptor>, &'static str> {
-        match &self.hosts {
-            HostSource::Fixed(host) => Ok(host.list_tools()),
+        let registry = match &self.hosts {
+            HostSource::Fixed(host) => return Ok(host.list_tools()),
             HostSource::Conversations(registry) => {
-                let id = call.conversation.as_ref().ok_or("conversation-required")?;
-                match registry.tools(Some(id)) {
-                    Some(tools) => Ok(tools),
-                    None => Ok(self.host(call)?.list_tools()),
-                }
+                call.conversation.as_ref().ok_or("conversation-required")?;
+                registry
             }
+            HostSource::PerPrincipal(registry) => registry,
+        };
+        match registry.tools() {
+            Some(tools) => Ok(tools),
+            None => Ok(self.host(principal, call)?.list_tools()),
         }
     }
 
@@ -358,7 +434,7 @@ impl RmcpServer {
         host: HostCallContext,
         request: CallToolRequestParams,
     ) -> Result<CallToolResult, ErrorData> {
-        let target = match self.host(&host) {
+        let target = match self.host(principal, &host) {
             Ok(target) => target,
             Err(class) => return Ok(CallToolResult::error(vec![ContentBlock::text(class)])),
         };
@@ -380,13 +456,8 @@ impl RmcpServer {
 }
 
 #[cfg(feature = "transport-stdio")]
-async fn serve_stdio(
-    host: Arc<dyn DispatchHost>,
-    principal_resolver: Arc<dyn PrincipalResolver>,
-    shutdown: ShutdownToken,
-) -> Result<(), FrontendError> {
+async fn serve_stdio(service: RmcpServer, shutdown: ShutdownToken) -> Result<(), FrontendError> {
     let ct = cancellation_token_from_shutdown(shutdown);
-    let service = RmcpServer::new(HostSource::Fixed(host), principal_resolver);
     let running = rmcp::service::serve_server_with_ct(service, rmcp::transport::stdio(), ct)
         .await
         .map_err(FrontendError::backend)?;
@@ -397,8 +468,7 @@ async fn serve_stdio(
 #[cfg(feature = "transport-http")]
 async fn serve_http(
     bind: SocketAddr,
-    host: Arc<dyn DispatchHost>,
-    principal_resolver: Arc<dyn PrincipalResolver>,
+    server: RmcpServer,
     shutdown: ShutdownToken,
 ) -> Result<(), FrontendError> {
     use axum::Router;
@@ -409,12 +479,7 @@ async fn serve_http(
         .await
         .map_err(FrontendError::Io)?;
     let service = StreamableHttpService::new(
-        move || {
-            Ok(RmcpServer::new(
-                HostSource::Fixed(host.clone()),
-                principal_resolver.clone(),
-            ))
-        },
+        move || Ok(server.clone()),
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     );
@@ -589,13 +654,13 @@ mod tests {
         let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
         let built = calls.clone();
         let registry = Arc::new(gaze_mcp_core::ConversationRegistry::new(
-            move |id: &gaze_mcp_core::ConversationId| {
+            move |id: &gaze_mcp_core::ConversationId, _: &Principal| {
                 Ok(Arc::new(Recording {
                     conversation: id.as_str().to_owned(),
                     calls: built.clone(),
                 }) as Arc<dyn DispatchHost>)
             },
-            gaze_mcp_core::ConversationLimits::new(2, std::time::Duration::from_secs(60)),
+            gaze_mcp_core::ConversationLimits::new(2, std::time::Duration::from_secs(60)).unwrap(),
         ));
         let server = RmcpServer::new(
             HostSource::Conversations(registry.clone()),
@@ -620,7 +685,7 @@ mod tests {
         assert_eq!(refused.is_error, Some(true));
         assert_eq!(text(refused), "conversation-required");
         assert_eq!(
-            server.tools(&context(None)).err(),
+            server.tools(&principal, &context(None)).err(),
             Some("conversation-required")
         );
 
@@ -641,14 +706,133 @@ mod tests {
             ]
         );
 
+        // Another principal holding conversation a's id never reaches its host.
+        let forged = server
+            .call(
+                &Principal::new("intruder"),
+                context(Some("a")),
+                request("a"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(text(forged), "conversation-forbidden");
+        assert_eq!(calls.lock().unwrap().len(), 2);
+
         // Listing tools for a new conversation spends no capacity.
-        assert_eq!(server.tools(&context(Some("c"))).unwrap().len(), 1);
+        assert_eq!(
+            server.tools(&principal, &context(Some("c"))).unwrap().len(),
+            1
+        );
         assert_eq!(registry.len(), 2);
         let full = server
             .call(&principal, context(Some("c")), request("c"))
             .await
             .unwrap();
         assert_eq!(text(full), "conversation-limit");
+    }
+
+    #[cfg(any(feature = "transport-stdio", feature = "transport-http"))]
+    #[tokio::test]
+    async fn built_in_transports_give_each_principal_its_own_conversation() {
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let built = calls.clone();
+        let registry = Arc::new(gaze_mcp_core::ConversationRegistry::new(
+            move |_: &gaze_mcp_core::ConversationId, principal: &Principal| {
+                Ok(Arc::new(Recording {
+                    conversation: principal.id.clone(),
+                    calls: built.clone(),
+                }) as Arc<dyn DispatchHost>)
+            },
+            gaze_mcp_core::ConversationLimits::default(),
+        ));
+        let server =
+            RmcpFrontend::new(RmcpFrontendConfig::new(any_transport(), Arc::new(Distinct)))
+                .into_per_caller_server(registry.clone())
+                .unwrap();
+        // Middleware cannot steer a built-in caller into another conversation.
+        let steered = HostCallContext {
+            conversation: Some(gaze_mcp_core::ConversationId::new("alice")),
+            ..HostCallContext::default()
+        };
+        for caller in ["alice", "bob", "alice"] {
+            server
+                .call(
+                    &Principal::new(caller),
+                    steered.clone(),
+                    CallToolRequestParams::new("lookup"),
+                )
+                .await
+                .unwrap();
+        }
+        assert_eq!(registry.len(), 2);
+        let hosts: Vec<_> = calls.lock().unwrap().iter().map(|c| c.0.clone()).collect();
+        assert_eq!(hosts, ["alice", "bob", "alice"]);
+    }
+
+    /// A resolver that tells callers apart; the tests pass principals directly.
+    #[cfg(any(feature = "transport-stdio", feature = "transport-http"))]
+    struct Distinct;
+
+    #[cfg(any(feature = "transport-stdio", feature = "transport-http"))]
+    #[async_trait]
+    impl PrincipalResolver for Distinct {
+        async fn resolve(
+            &self,
+            _: &RequestContext<RoleServer>,
+        ) -> Result<Principal, RmcpPrincipalError> {
+            unreachable!("tests pass the principal")
+        }
+    }
+
+    #[cfg(feature = "transport-http")]
+    fn any_transport() -> RmcpTransport {
+        RmcpTransport::Http {
+            bind: "127.0.0.1:0".parse().unwrap(),
+        }
+    }
+
+    #[cfg(all(feature = "transport-stdio", not(feature = "transport-http")))]
+    fn any_transport() -> RmcpTransport {
+        RmcpTransport::Stdio
+    }
+
+    #[cfg(feature = "transport-http")]
+    #[tokio::test]
+    async fn built_in_http_refuses_callers_it_cannot_tell_apart() {
+        let registry = Arc::new(gaze_mcp_core::ConversationRegistry::new(
+            |_: &gaze_mcp_core::ConversationId, _: &Principal| -> Result<
+                Arc<dyn DispatchHost>,
+                Box<dyn std::error::Error + Send + Sync>,
+            > { unreachable!("refused before any host is built") },
+            gaze_mcp_core::ConversationLimits::default(),
+        ));
+        let frontend = RmcpFrontend::http(
+            "127.0.0.1:0".parse().unwrap(),
+            Arc::new(FixedPrincipalResolver::agent("synthetic")),
+        );
+        let err = frontend
+            .serve_conversations(registry, ShutdownToken::new())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("tells callers apart"), "{err}");
+    }
+
+    #[cfg(feature = "transport-http")]
+    #[tokio::test]
+    async fn built_in_http_refuses_one_host_for_every_caller() {
+        let frontend = RmcpFrontend::http(
+            "127.0.0.1:0".parse().unwrap(),
+            Arc::new(FixedPrincipalResolver::agent("synthetic")),
+        );
+        let host = Arc::new(Recording {
+            conversation: String::new(),
+            calls: Arc::default(),
+        });
+        let err = frontend
+            .serve(host, ShutdownToken::new())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("serve_conversations"), "{err}");
     }
 
     #[test]
