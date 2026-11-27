@@ -34,14 +34,22 @@ def strings(value):
 def test_carriers_decode_once_and_raw_source_bytes_are_fully_annotated(partition):
     rows = cells.records(api, partition)
     assert len({r.uid for r in rows}) == len(rows)
-    assert Counter(r.layer for r in rows) == {"A": 640, "D": 832, "R": 640}
+    assert Counter(r.layer for r in rows) == {"A": 1280, "D": 1482, "R": 1280}
     by_surface = Counter((r.surface, r.layer) for r in rows)
-    assert len(by_surface) == 16 * 3
+    assert by_surface.pop((cells.SURFACE_PREFIX + "literal_zwsp_views", "D")) == 10
+    assert len(by_surface) == 32 * 3
     for (surface, layer), count in by_surface.items():
-        assert count == {"A": 40, "D": 52, "R": 40}[layer]
+        assert count == (52 if layer == "D" and not surface.endswith("_inside") else 40)
     for r in rows:
         assert r.surface.startswith(cells.SURFACE_PREFIX)
-        kind, syntax, codepoint = r.surface.removeprefix(cells.SURFACE_PREFIX).split("_")
+        if r.surface.endswith("literal_zwsp_views"):
+            assert r.layer == "D" and not r.gold
+            span, = r.decoys
+            assert re.fullmatch(r"[1-9]\d\u200b\d{3}\u200b\d{3}", span.value)
+            assert span.value + " views" in r.text
+            assert r.text.encode()[span.start:span.end].decode() == span.value
+            continue
+        kind, syntax, codepoint = r.surface.removeprefix(cells.SURFACE_PREFIX).removesuffix("_inside").split("_")
         glyph = chr(int(codepoint, 16))
         assert all(chr(cp) not in r.text for cp, _ in cells.CONTROLS)
         if kind == "json":
@@ -91,18 +99,55 @@ def test_identifiers_are_unassignable_or_reserved_and_twins_benign(partition):
             assert value[4:12] == "00000000" and api.iban_valid(value)
         elif r.family == "iban_twin":
             assert value.startswith("ZZ") and not api.iban_valid(value)
-        elif r.family in ("phone", "phone_twin"):
-            prefix = "1" if r.family == "phone" else "0"
-            assert re.fullmatch(r"\+" + prefix + r"(?:312|415)55501\d{2}", value)
+        elif r.family == "phone":
+            assert re.fullmatch(r"\+1 \((?:312|415)\) 555-01\d{2}", value)
+        elif r.family == "phone_twin":
+            assert re.fullmatch(r"\+0 \(000\) 555-01\d{2}", value)
         elif r.family == "views":
-            assert re.fullmatch(r"[1-9]\\u200[bB]\d{3}\\u200[bB]\d{3}", span.value)
+            assert re.fullmatch(r"[1-9]\d\\u200[bB]\d{3}\\u200[bB]\d{3}", span.value)
             assert "views" in r.text
+
+
+@pytest.mark.parametrize("partition", api.PARTITIONS)
+def test_interior_cut_and_group_boundaries_reconstruct_the_same_value(partition):
+    rows = cells.records(api, partition)
+    natural = {(r.group, r.surface, r.layer): r for r in rows if not r.surface.endswith("_inside")}
+    positions = {family: set() for family in ("ip", "ssn", "iban", "phone")}
+    for r in rows:
+        if not r.surface.endswith("_inside"):
+            continue
+        surface = r.surface.removesuffix("_inside")
+        counterpart = natural[r.group, surface, r.layer]
+        glyph = chr(int(surface.split("_")[-1], 16))
+        def decode(row):
+            raw = (row.gold or row.decoys)[0].value
+            return json.loads('"' + raw + '"') if "_json_" in surface else html.unescape(raw)
+        grouped = decode(counterpart)
+        assert grouped.count(glyph) >= 2
+        left, right = decode(r).split(glyph)
+        assert left[-1].isdigit() and right[0].isdigit()
+        assert grouped.replace(glyph, "") == left + right
+        family = r.family.removesuffix("_twin")
+        if family == "ip":
+            assert left.count(".") == 3 and right.isdigit()
+            offset = len(left.rsplit(".", 1)[1])
+        elif family == "ssn":
+            assert left.count("-") == 1 and right.count("-") == 1
+            offset = len(left.split("-")[1])
+        elif family == "phone":
+            assert left.split(") ")[1] + right.split("-")[0] == "555"
+            offset = len(left.split(") ")[1])
+        else:
+            assert family == "iban" and 12 < len(left) < 20 and len(left) % 4
+            offset = len(left) % 4
+        positions[family].add(offset)
+    assert positions == {"ip": {1, 2}, "ssn": {1}, "phone": {1, 2}, "iban": {1, 2, 3}}
 
 
 def test_partitions_are_disjoint_and_reproducible():
     sets = []
-    for partition, digest in (("dev", "9b8063ce07adcd89ef1236827e51255188c9e5ee422f358bf95eb2f48a26911c"),
-                              ("test", "1703c2cd0cdfd7e4cfa5623c2c50123b159a8301a54969a4ab788aaf95eff577")):
+    for partition, digest in (("dev", "5bffed3eaadb11d8d27661ae7b32ec724e2d1dc2b50528995d063c673ce380e2"),
+                              ("test", "86466ba68e96da242e7e15724d182eea8c44e1933e39e9c68ed5fc709c3ff9a6")):
         rows = cells.records(api, partition)
         assert hashlib.sha256(api.corpus_bytes(rows)).hexdigest() == digest
         values = {json.loads('"' + r.gold[0].value + '"').replace("\u200b", "")
