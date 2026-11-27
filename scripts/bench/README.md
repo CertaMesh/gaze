@@ -135,6 +135,57 @@ uv run --project scripts/bench python scripts/bench/json_structure_census.py gat
 document offset where the base had none. It is a diagnostic beside the gain
 gate, not a replacement for it.
 
+## Report-only metrics and held-out panels
+
+The gain gate scores protected bytes. `report_metrics.py` reads the same
+record and reports what byte totals hide, per layer:
+
+- Exact-span precision and recall, on raw gold and on gold whose adjacent
+  parts of one type are merged across spaces, tabs or dots.
+- Exposure: each gold span is fully hidden, partially exposed or completely
+  missed, judged on its letters and digits, with the residue characters left.
+- Type agreement: of the fully hidden spans whose label has a Gaze class, the
+  share an overlapping prediction types correctly. `TYPE_CLASSES` and
+  `UNTYPED` rule on every label; an unruled label stops the report.
+- Harmless masking: recorded decoys a prediction touches, and benign
+  documents (layer D and the hard negatives) with any masking.
+
+```bash
+uv run --project scripts/bench python scripts/bench/report_metrics.py \
+  target/bench-data/gate-candidate/full/observations-v1.jsonl.gz \
+  --dataset target/bench-data/dataiku-en-de/test.parquet --output target/gate/metrics.json
+```
+
+Without `--dataset` the metadata-only holdout documents are counted as unread.
+
+`heldout_panels.py` runs a `gaze` binary and policy over two public corpora
+the project never tunes on and scores them with the same metrics:
+
+- [PrivacyBench+](https://huggingface.co/datasets/Tracer-ML/PrivacyBench-Plus)
+  by Tracer, human-annotated English workplace text, CC BY 4.0. It is a
+  modified copy of [PrivacyBench](https://huggingface.co/datasets/TonicAI/Privacy-Bench)
+  v2.5 by TonicAI, CC BY 4.0. Only the two companies Tracer recommends for
+  evaluation are read. Spans Tracer marked unresolved and its indirect
+  identifiers are neutral.
+- [GraSCCo_PII v2](https://doi.org/10.5281/zenodo.15747389), German clinical
+  case reports, CC BY 4.0, the whole corpus. Labels Gaze does not target
+  (`GRASCCO_NEUTRAL`) are neutral.
+
+```bash
+uv run --project scripts/bench python scripts/bench/heldout_panels.py \
+  --binary target/release/gaze --policy target/gate/policy.toml --output target/gate/panels.json
+```
+
+Data is downloaded at run time from a pinned revision and SHA-256, verified
+before it is read and cached in `target/heldout-panels/`; nothing is
+committed. Each document runs in its own daemon session. The report carries
+both corpora's attribution.
+
+Neither script enters the gain gate, the capture or the benchmark
+specification: each writes only its own report, and no capture or gate module
+imports them. Do not tune a rule against a panel; a tuned panel is no longer
+held out.
+
 ## Scored-label contracts
 
 A scored-label contract says which corpus labels count as gold PII. Without
