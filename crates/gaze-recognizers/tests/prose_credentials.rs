@@ -147,6 +147,33 @@ fn a_password_with_spaces_quotes_or_brackets_is_protected_whole() {
             "Fj0rd#Tal99",
         ),
         ("Mein Passwort lautet $Tal99abc.", "$Tal99abc"),
+        ("The password for my email is Fj0rd#Tal99.", "Fj0rd#Tal99"),
+        (
+            "Das Passwort für die Seite lautet Fj0rd#Tal99.",
+            "Fj0rd#Tal99",
+        ),
+        (
+            "The password on the login screen is Fj0rd#Tal99.",
+            "Fj0rd#Tal99",
+        ),
+        ("The password is \"Passw0rd!\" ok", "Passw0rd!"),
+        ("Mein Kennwort ist \"Kennwort#2024\".", "Kennwort#2024"),
+        ("My passphrase is \"the moon is blue\".", "the moon is blue"),
+        (
+            "Das Passwort lautet \"der Hund bellt laut\".",
+            "der Hund bellt laut",
+        ),
+        ("The password is Summer2024-only ok", "Summer2024-only"),
+        ("Server=db;Password=Fj0rd#Tal99;User Id=sa;", "Fj0rd#Tal99"),
+        (
+            "Server=db;Database=app;Password=Fj0rd#Tal99;Trusted_Connection=False;",
+            "Fj0rd#Tal99",
+        ),
+        ("The password is Fj0rd#Tal99;then restart.", "Fj0rd#Tal99"),
+        ("The password is Tal99:x.", "Tal99:x"),
+        ("The password is Fj0rd:Tal99.", "Fj0rd:Tal99"),
+        ("The password is Fj0rd,Tal99 ok", "Fj0rd,Tal99"),
+        ("`the password is Fj0rd#Tal99`", "Fj0rd#Tal99"),
         ("The password is \"$ecretPass9\" ok", "$ecretPass9"),
     ] {
         assert_credential(raw, "password", value);
@@ -213,6 +240,11 @@ fn a_security_token_or_code_behind_a_security_cue_is_one_span() {
             "482913",
         ),
         ("Hier der Einmal-Sicherheitscode: 1432154", "1432154"),
+        (
+            "Der Bestätigungscode für Ihre E-Mail lautet 573920.",
+            "573920",
+        ),
+        ("The security code on the screen is 48213957.", "48213957"),
     ] {
         assert_credential(raw, "security_token", value);
     }

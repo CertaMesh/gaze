@@ -141,24 +141,32 @@ a digit or a symbol. An unquoted value always needs a digit or a symbol other
 than word punctuation, so `password to log in` and `password reset-link` are
 not credentials; `_` does not count, so identifiers such as `DB_PASSWORD` or
 `bcrypt_hash` are not values either. Quotes and brackets inside a value stay
-in it (`Fj0rd'Tal99`, `gr8-Pa55w0rd(old)`), but a quote, comma, colon or
-semicolon followed by anything other than another value character ends it,
-so a password at the end of a JSON or code string (`…Tal99"}`, `…Tal99";`)
-never takes the closing quote or the next key. JSON-escaped quotes
+in it (`Fj0rd'Tal99`, `gr8-Pa55w0rd(old)`), and so do a quote, colon or
+comma followed by another value character (`Tal99:x`, `Fj0rd,Tal99`). Any
+other quote, colon or comma ends the value, and a semicolon or backtick always
+does, so a password at the end of a JSON or code string (`…Tal99"}`,
+`…Tal99";`), in a connection string (`Password=…;User Id=sa`) or in a Markdown
+code span never takes the closing quote or the next key. JSON-escaped quotes
 (`\"…\"`) delimit a value like plain ones. A trailing `!` stays in the value;
 sentence punctuation does not. The context guard refuses values under six
 characters, one or two plain words, symbol-only placeholders such as
 `********`, URLs, email addresses, paths without digits, Windows paths,
 environment references (`${NAME}` or `$ALL_CAPS`; a `$`-led password such as
 `$Tal99abc` stays protected), ALL_CAPS identifiers, hyphenated adjectives
-(`2fa-enabled`), and quoted UI text: a quoted phrase with a function word and
-no digit (`"Please enter it again"`) or one that names the password itself
-(`"Incorrect password, try again"`). It also refuses matches whose
+behind a short technical stem (`2fa-enabled`; `Summer2024-only` stays
+protected), and quoted UI text: a quoted phrase with a UI marker (not, never,
+please, try, again, reset, enter, forgot, invalid, incorrect, wrong and their
+German equivalents) and no digit
+(`"Please enter it again"`), or one without a digit or symbol that names the
+password itself (`"Incorrect password, try again"`; `"Passw0rd!"` stays
+protected). Ordinary passphrases with articles or pronouns
+(`"the moon is blue"`) stay protected. It also refuses matches whose
 cue part names credential metadata (name, label, hint, policy, length,
 rotation, template, field, hash, file, path, model, version, region, endpoint,
 table, service, commit, column, and UI nouns such as error, message, prompt,
-subject, title, text, button, placeholder, banner and dialog, with their German
-equivalents): a password's hint or
+subject, title, button, placeholder, banner and dialog, with their German
+equivalents; where a credential is used, such as `for my email` or `für die
+Seite`, is not metadata): a password's hint or
 policy is not the password. Metadata words inside a quoted value do not count.
 
 `security_token.prose` starts at an explicit security cue: German
@@ -198,7 +206,10 @@ value that starts with a bracket or ends with an unpaired closing bracket, a
 value in a parenthesised aside, and a security value behind connector words
 without a copula (`Sicherheitscode für den Zugriff auf unser System …`).
 The older `security_token.anchored` rule still tokenizes a hyphenated adjective
-directly after `API key` (`base64-encoded`). Grouped one-time codes (`482 913`, `4829-13`) and spaced tokens
+directly after `API key` (`base64-encoded`). A password with a semicolon inside, a comma followed directly by the next key
+without a space (`Fj0rd#Tal99,next: 1`, which protects `next` with the value),
+and a lowercase environment reference (`$db_pass`, which is protected) are
+also residuals. Grouped one-time codes (`482 913`, `4829-13`) and spaced tokens
 (`"k3j9 ww2p x7a9"`) stay raw; a later change owns them together with card
 security codes.
 Generator v31 measures these phrasings with the rest; see the
