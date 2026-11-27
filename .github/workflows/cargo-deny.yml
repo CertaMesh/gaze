@@ -1,55 +1,111 @@
 name: cargo-deny
 
+# Two jobs with different failure modes:
+# - `cargo-deny policy` checks licences, bans and sources and regenerates the
+#   release licence file. Only a change in this repository can fail it, so it
+#   runs on every PR and in the merge queue and is a required check on main.
+# - `cargo-deny advisories` checks the RustSec database, which can turn red
+#   overnight without any change here. It runs on a daily schedule and opens
+#   (or comments on) an issue on failure instead of blocking merges.
 on:
   pull_request:
-    branches: [main]
-    paths:
-      - Cargo.lock
-      - deny.toml
-      - about.toml
-      - 'scripts/release/third-party-licenses.*'
-      - 'scripts/release/notices/**'
-      - 'crates/*/Cargo.toml'
-      - .github/workflows/release-build.yml
-      - .github/workflows/cargo-deny.yml
+  merge_group:
+    types: [checks_requested]
   schedule:
-    - cron: '0 9 * * 1'   # Mondays 09:00 UTC
+    - cron: '0 6 * * *'   # daily 06:00 UTC
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  CARGO_DENY_VERSION: 0.19.7
+  CARGO_ABOUT_VERSION: 0.8.2
+
 jobs:
-  cargo-deny:
+  policy:
+    # Required check on main: keep this name stable.
+    name: cargo-deny policy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
         with:
           toolchain: 1.96.0
-      - name: Cache cargo registry + cargo-deny install
+      - name: Cache cargo registry and tools
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin/cargo-deny
-          key: ${{ runner.os }}-cargo-deny-${{ hashFiles('**/Cargo.lock') }}
+            ~/.cargo/bin/cargo-about
+          key: ${{ runner.os }}-cargo-deny-${{ env.CARGO_DENY_VERSION }}-about-${{ env.CARGO_ABOUT_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-deny-
-      - name: Install cargo-deny
+            ${{ runner.os }}-cargo-deny-${{ env.CARGO_DENY_VERSION }}-about-${{ env.CARGO_ABOUT_VERSION }}-
+      - name: Install pinned tools
         run: |
-          if ! command -v cargo-deny >/dev/null 2>&1; then
-            cargo install cargo-deny --locked
-          fi
+          # Check versions, not presence, so a pin change is never masked by a cached binary.
+          cargo deny --version 2>/dev/null | grep -qx "cargo-deny $CARGO_DENY_VERSION" \
+            || cargo install cargo-deny --version "$CARGO_DENY_VERSION" --locked --force
+          cargo about --version 2>/dev/null | grep -qx "cargo-about $CARGO_ABOUT_VERSION" \
+            || cargo install cargo-about --version "$CARGO_ABOUT_VERSION" --locked --force
       # The release attaches this file to every binary; fail here, not at tag
       # time, when a dependency change leaves a licence cargo-about rejects or
       # an ort-sys bump outdates the vendored ONNX Runtime notices.
       - name: Generate third-party licences
+        run: scripts/release/third-party-licenses.sh "$RUNNER_TEMP/THIRD-PARTY-LICENSES.txt"
+      - name: cargo deny check bans licenses sources
+        run: cargo deny check bans licenses sources
+
+  advisories:
+    name: cargo-deny advisories
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.96.0
+        with:
+          toolchain: 1.96.0
+      # Restore and save separately: actions/cache saves only after a green
+      # job, and this job is red on every day an advisory is open.
+      - name: Restore cargo-deny
+        id: deny-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: ${{ runner.os }}-cargo-deny-bin-${{ env.CARGO_DENY_VERSION }}
+      - name: Install pinned cargo-deny
         run: |
-          if ! command -v cargo-about >/dev/null 2>&1; then
-            cargo install cargo-about --version 0.8.2 --locked
+          cargo deny --version 2>/dev/null | grep -qx "cargo-deny $CARGO_DENY_VERSION" \
+            || cargo install cargo-deny --version "$CARGO_DENY_VERSION" --locked --force
+      - name: Save cargo-deny
+        if: steps.deny-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: ${{ runner.os }}-cargo-deny-bin-${{ env.CARGO_DENY_VERSION }}
+      - name: cargo deny check advisories
+        id: advisories
+        run: cargo deny check advisories
+      # Only a failed RustSec check on main files the issue; setup failures and
+      # manual runs on other branches just fail the job.
+      - name: Open or update the advisory issue
+        if: failure() && steps.advisories.outcome == 'failure' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="cargo-deny advisories failing on main"
+          number="$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -1)"
+          body="The scheduled RustSec check failed: $RUN_URL. Bump the affected crate, or add a dated ignore with a written reason to deny.toml."
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --label dependencies --body "$body"
           fi
-          scripts/release/third-party-licenses.sh "$RUNNER_TEMP/THIRD-PARTY-LICENSES.txt"
-      - name: cargo deny check
-        run: cargo deny check

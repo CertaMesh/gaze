@@ -22,7 +22,7 @@ pub struct Args {
     /// Rewrite committed bundle tokenization snapshots.
     #[arg(long, alias = "write-baseline")]
     regenerate_baseline: bool,
-    /// Require a strict source + CHANGELOG acknowledgement for changed snapshots.
+    /// Require a strict source + changelog acknowledgement for changed snapshots.
     #[arg(long)]
     verify_ack: bool,
 }
@@ -560,7 +560,7 @@ fn verify_ack(root: &Path) -> Result<()> {
     let changelog_missing = changelog_missing_bundles(root, &bundles)?;
     if !changelog_missing.is_empty() {
         missing.push(format!(
-            "missing CHANGELOG.md [Unreleased] ### Changed `[bundle-tokenization-drift]` line for bundle(s): {}",
+            "missing `[bundle-tokenization-drift]` line in a changelog.d/*.changed.md fragment (or CHANGELOG.md [Unreleased] ### Changed) for bundle(s): {}",
             changelog_missing.into_iter().collect::<Vec<_>>().join(", ")
         ));
     }
@@ -665,7 +665,23 @@ fn changelog_missing_bundles(root: &Path, bundles: &BTreeSet<String>) -> Result<
         .context("failed to read CHANGELOG.md for --verify-ack")?;
     let unreleased = section_between(&changelog, "## [Unreleased]", "\n## ")
         .ok_or_else(|| anyhow!("CHANGELOG.md is missing [Unreleased] section"))?;
-    let changed = section_between(unreleased, "### Changed", "\n### ").unwrap_or("");
+    let mut changed = section_between(unreleased, "### Changed", "\n### ")
+        .unwrap_or("")
+        .to_string();
+    // Unreleased entries normally live in per-PR `changelog.d/<name>.changed.md` fragments.
+    let fragments = root.join("changelog.d");
+    if fragments.is_dir() {
+        for entry in fs::read_dir(&fragments).context("failed to list changelog.d")? {
+            let path = entry?.path();
+            if path.to_string_lossy().ends_with(".changed.md") {
+                changed.push('\n');
+                changed.push_str(
+                    &fs::read_to_string(&path)
+                        .with_context(|| format!("failed to read {}", path.display()))?,
+                );
+            }
+        }
+    }
     Ok(bundles
         .iter()
         .filter(|bundle| {
