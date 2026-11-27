@@ -122,7 +122,7 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 57);
+        assert_eq!(rulepack.recognizers.len(), 58);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -145,10 +145,10 @@ mod tests {
             .iter()
             .take(3)
             .all(|recognizer| matches!(recognizer.matcher, RawMatch::AnchoredMatch { .. })));
-        assert!(rulepack.recognizers[6..54]
+        assert!(rulepack.recognizers[6..55]
             .iter()
             .all(|recognizer| matches!(recognizer.matcher, RawMatch::Regex { .. })));
-        assert!(rulepack.recognizers[54..]
+        assert!(rulepack.recognizers[55..]
             .iter()
             .all(|recognizer| matches!(recognizer.matcher, RawMatch::FieldLabelled { .. })));
     }
@@ -160,7 +160,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 57);
+        assert_eq!(rulepack.recognizers.len(), 58);
         assert!(rulepack
             .recognizers
             .iter()

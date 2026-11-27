@@ -1,0 +1,1 @@
+- Protect listed given names and surnames after English and German chat introductions, recipient instructions and @-handles regardless of capitalization. Given names that double as ordinary words need an explicit self-introduction.

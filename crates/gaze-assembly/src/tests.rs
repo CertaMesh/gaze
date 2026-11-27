@@ -1197,6 +1197,69 @@ fn pattern_template_lowers_correctly_under_locale_chain_de() {
 }
 
 #[test]
+fn chat_cues_protect_the_name_not_the_handle_or_ordinary_word() {
+    let mut p = policy();
+    p.locale = Some(vec![LocaleTag::EnUs, LocaleTag::DeDe]);
+    p.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let packs = [
+        embedded_rulepack("core"),
+        embedded_rulepack("locale-en"),
+        embedded_rulepack("locale-de"),
+    ];
+    let active = LocaleChain::merge_policy_and_cli(p.locale.as_deref(), None);
+    let pipeline = build_pipeline(&p, &empty_context(), &packs, &active, None).unwrap();
+    for (input, value) in [
+        ("my name is wIlL.", Some("wIlL")),
+        ("my name is amber. the light is amber.", Some("amber")),
+        ("Ich heiße jonas.", Some("jonas")),
+        ("Please ask elena schmidt about it.", Some("elena schmidt")),
+        ("cc: jOnAs", Some("jOnAs")),
+        ("@shift_bot: elena", Some("elena")),
+        ("@shift_bot elena may attend.", Some("elena")),
+        ("@shift_bot elena schmidt may attend.", Some("elena schmidt")),
+        ("ask elena schmidt for help.", Some("elena schmidt")),
+        ("Ask elena schmidt: is it ready?", Some("elena schmidt")),
+        ("Ask elena’s manager", Some("elena")),
+        ("I'm German, not French.", None),
+        ("@shift_bot june sales report please.", None),
+        ("@shift_bot Will review shortly", None),
+        ("ask for help", None),
+        ("please cc the service desk", None),
+        ("my name is missing from the list", None),
+        ("@shift_bot\nelena", None),
+        ("@shift_bot elena_v2", None),
+        ("@shift_bot elena.invalid", None),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let cleaned = clean_text(
+            pipeline
+                .pseudonymize_with_detect_context(
+                    &session,
+                    RawDocument::Text(input.into()),
+                    active.as_slice(),
+                    &gaze::DictionaryBundle::default(),
+                )
+                .unwrap(),
+        );
+        if let Some(value) = value {
+            let expected =
+                regex::escape(input).replacen(&regex::escape(value), r"<[0-9a-f]{8}:Name_\d+>", 1);
+            assert!(
+                regex::Regex::new(&format!("^{expected}$"))
+                    .unwrap()
+                    .is_match(&cleaned),
+                "{input}: {cleaned}"
+            );
+        } else {
+            assert_eq!(cleaned, input);
+        }
+        assert_eq!(session.restore_strict_text(&cleaned).unwrap(), input);
+    }
+}
+
+#[test]
 fn merged_vocab_for_de_de_loads_only_locale_de_buckets() {
     let core = embedded_rulepack("core");
     let de = embedded_rulepack("locale-de");
