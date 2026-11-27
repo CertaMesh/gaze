@@ -58,9 +58,19 @@ NAME_MULTI_KINDS = (
 )
 
 
+COMMON_NAME_ASSETS = (
+    "crates/gaze-recognizers/assets/record-common-names-v1.txt",
+    "crates/gaze-recognizers/assets/record-common-name-words-en-v1.txt",
+)
+
+
 def common_name_words(repo: Path) -> frozenset[str]:
-    source = repo / "crates/gaze-recognizers/assets/record-common-names-v1.txt"
-    return frozenset(line.casefold() for line in source.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#"))
+    return frozenset(
+        line.casefold()
+        for asset in COMMON_NAME_ASSETS
+        for line in (repo / asset).read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    )
 
 
 def common_name_counts(documents: list[score.Document], contexts: dict[str, str | None], words: frozenset[str]) -> tuple[int, int]:

@@ -166,6 +166,10 @@ jobs:
           fi
 
           cargo run -p xtask -- scrub-public-text --published "$changelog_section" UPGRADE.md
+      - name: Install cargo-about
+        run: cargo install cargo-about --version 0.8.2 --locked
+      - name: Generate third-party licences
+        run: scripts/release/third-party-licenses.sh dist/THIRD-PARTY-LICENSES.txt
       - name: Generate NER checksums
         shell: bash
         run: |
