@@ -226,8 +226,9 @@ hardware and native libraries.
 Environment values are hashed rather than copied into evidence.
 
 The key deliberately omits the Git revision, source tree hashes, Cargo inputs
-and documentation. Producer builds are reproducible, so commits that change none
-of the keyed inputs build byte-identical executables and hit. Examples are
+and documentation. A commit that changes none of the keyed inputs hits when its
+producer build is byte-identical; release builds are meant to be reproducible
+(#926), and a non-reproducible build only misses. Examples are
 documentation, known-record tools and other harness files outside the capture
 closure. A Cargo or crate change that alters detection changes the executable's
 bytes and misses. The dirty-source check still bypasses reuse.
@@ -253,7 +254,8 @@ reproduces the fresh scorecard byte for byte. A hit from another commit runs
 sub-specifications and the same executable SHA-256. It then binds the record
 header to the executing full specification, the executing source and its
 producer build receipt. It records the captured specification ID, source, build
-receipt and record SHA-256 in `capture_reuse`. Observations and the capture
+receipt and record SHA-256 in `capture_reuse`; that block is informational and
+no admission step reads it. Observations and the capture
 timestamp stay unchanged. `rescore_past_release.py` rebinds the harness revision
 the same way and leaves the release subject unchanged. The original
 `cache_replay: false` describes the captured measurement; it does not describe
@@ -782,7 +784,7 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/6890588385c2b0eebf07158c8bfe8c85b1324ad905731a4e829011e2a434e2fc.json)
+The [current specification](../../docs/reference/benchmarks/specifications/9fe657514ce86c5c0208ec1508e916e729862d8515adf3a774cd4959a4e3dec8.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
@@ -806,8 +808,11 @@ headers bind its ID; re-scoring preserves it.
 the static import closure of the capture, replay, gate and certification entry
 points (`run_no_opf_benchmark.py`, `rescore.py`, `rescore_past_release.py`,
 `agentic_layers.py` and `benchmark_certification.py`), plus every benchmark JSON
-file, `pyproject.toml` and `uv.lock`. The resolver refuses a relative or dynamic
-local import, because the closure could not follow it.
+file, `pyproject.toml` and `uv.lock`. Imports inside functions count. The
+resolver refuses imports it cannot follow: relative imports, imports of a bench
+subpackage, and runtime loaders such as `importlib.import_module` or
+`spec_from_file_location`. The one `exec` in the closure,
+`dictionary_sequence_generators.py`, runs retained sources pinned by SHA-256.
 `benchmark_spec.layer_specs()` derives one `gaze-benchmark-layer-v1:<sha256>`
 sub-specification per layer from the manifest. Each one binds the shared
 measuring semantics: seed, record schemas, protocol, validation vocabulary,
@@ -819,7 +824,8 @@ Harness files outside the closure, such as the known-record K and B tools, chang
 the full ID but no sub-specification. The generator cell modules stay in the
 closure because the gate imports constants from them, so a cell change still
 changes every sub-specification. Manifests without `capture_closure` bind every
-harness file.
+harness file. Today every consumer compares the full per-layer map; the split
+lets reports say which layer an input change reaches.
 
 `agentic_layers.py gate` requires equal sub-specifications for every measured
 layer and refuses a difference with `benchmark_spec_mismatch`. Full IDs may

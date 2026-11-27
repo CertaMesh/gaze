@@ -178,11 +178,11 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
    - the declared environment, Python and native runtime, OS and hardware.
 
    The Git revision, tree hashes, documentation, Cargo inputs and harness files outside the
-   closure are not inputs. Releases build reproducibly, so they reach detection only through
-   executable bytes. A hit from another commit is rebound to that side's specification and
-   build and keeps its observation bytes
+   closure are not inputs: they reach detection only through executable bytes, so a commit
+   hits only when its producer build is byte-identical. A hit from another commit is rebound
+   to that side's specification and build and keeps its observation bytes
    ([capture reuse](scripts/bench/README.md#capture-reuse-and-timing)). Nothing that can
-   change detection output or record bytes may leave the key.
+   change detection output or observation bytes may leave the key.
    Skip the release-only copy and render steps:
 
    ```bash

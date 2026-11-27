@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:6890588385c2b0eebf07158c8bfe8c85b1324ad905731a4e829011e2a434e2fc",
+  "id": "gaze-benchmark-v1:9fe657514ce86c5c0208ec1508e916e729862d8515adf3a774cd4959a4e3dec8",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -35,7 +35,7 @@
       "scripts/bench/benchmark_certification.py": "93b41a4e6fca952bb1e47f52bccdab04efe55b8bdf5e186ddcc788a8c3ae8461",
       "scripts/bench/benchmark_charts.py": "3011d8716a335087e485fe21afbb9ed75cff52c9751bff17d7411a81f86c4524",
       "scripts/bench/benchmark_history.py": "cff003caacc9a8b4bd5e3f6514978c79e369e5a2e5eaf3c9c1c624bc82367959",
-      "scripts/bench/benchmark_spec.py": "61b8e888b990cab9a7da97cdf2c9babc0da95a097abaea2e06f30470109c3b2b",
+      "scripts/bench/benchmark_spec.py": "3a655253acae2146eae6e1556f02f2c1d5176dfa27c4ce1cae60b1cdb582b474",
       "scripts/bench/build_native_mcp_operation.py": "d05aee2a9ee6a10c8aea1e3ea52d03f353ec7c753c529219940ba9001c245b55",
       "scripts/bench/build_native_session_proxy.py": "5dac39c24a2d5a9fcd0e81d5008ac5063ab357d83c7aa3d2dda4c06a41293bf9",
       "scripts/bench/capture_identity.py": "bc2be1f6b41da3db4b33e85eb4143bf2cb527e24188a1ff538869148921db0d5",
@@ -144,7 +144,7 @@
       "scripts/bench/render_benchmark_doc.py": "a08ace21a122909b601a84ba8d4e912e960d88cade67dc0dab2164e95b587dce",
       "scripts/bench/replay_enumeration_proof.py": "103430afee59a9928a1968c5040aac3c1d4d7a452e86213cd98b41ae1211ab03",
       "scripts/bench/rescore.py": "4d268d104ab2abe816e891f132f1d165054ccd1e14f11499d7a05b07811945cf",
-      "scripts/bench/rescore_past_release.py": "933c6bc61ef9667149aac3e7994a0e9b1a00cd47d4e00e461b9c11307d84211b",
+      "scripts/bench/rescore_past_release.py": "81976c2b51b18784757cf386e16d7222525f191875a8dfc48718f2fb2f8b10a2",
       "scripts/bench/rescore_safety_net.py": "cf19c2a4962744cd2eceb73c7e2fedfc7b706137b11463e99e195df0477437aa",
       "scripts/bench/run_no_opf_benchmark.py": "1db7ca03a32f0a85625f28ccfc08130b573fac82bfbcd6b1829ea9ca8cd60792",
       "scripts/bench/safety_net_bench_lib.py": "7586e9e22542bfb543c79a172ee693767921929d4ebd3bf2eb7afbdee16f0566",
