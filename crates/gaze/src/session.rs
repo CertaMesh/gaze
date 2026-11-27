@@ -968,9 +968,9 @@ impl Session {
     /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
     /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
     /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
-    /// should use [`Session::export`]. Current snapshots emit v6, or v7 when the manifest holds a
-    /// JSON-escaped value, so older readers fail closed before restore while the signature binds
-    /// the emitted envelope bytes.
+    /// should use [`Session::export`]. Current snapshots emit v6, v7 when the manifest holds a
+    /// JSON-escaped value, or v8 when the session holds a private-identifier key, so older
+    /// readers fail closed before restore while the signature binds the emitted envelope bytes.
     ///
     /// ```rust
     /// use gaze::{
@@ -3185,6 +3185,65 @@ fn snapshot_signing_preimage(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Writes the checked-in v6, v7 and v8 snapshot fixtures that
+    /// `tests/session_snapshot_compat.rs` pins. Minting a JSON-escaped spelling
+    /// and recording evidence are crate-private, so the writer lives here.
+    /// Regenerate only when a fixture's intended content changes; never to make
+    /// a failing compatibility test pass:
+    /// `cargo test -p gaze-pii --lib -- --ignored write_snapshot_compat_fixtures`.
+    #[test]
+    #[ignore = "writes tests/fixtures/session_snapshot_v{6,7,8}.bin"]
+    fn write_snapshot_compat_fixtures() {
+        let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+        let base = |scope: &str| {
+            let session = Session::new(Scope::Conversation(scope.to_string())).unwrap();
+            session.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
+            session.record_evidence(
+                None,
+                &PiiClass::Name,
+                "Dr. Schmidt",
+                ManifestEvidence::Pattern,
+            );
+            session
+                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                .unwrap();
+            session
+                .tokenize(&PiiClass::custom("postal_code").unwrap(), "12345")
+                .unwrap();
+            session
+        };
+
+        let v6 = base("compat-v6").export().unwrap();
+        assert_eq!(v6.0[0], SNAPSHOT_VERSION_V6);
+
+        let session = base("compat-v7");
+        session
+            .tokenize_spelled(
+                DEFAULT_COUNTER_FAMILY,
+                &PiiClass::Name,
+                ESCAPED_NAME,
+                SourceSpelling::JsonEscaped,
+            )
+            .unwrap();
+        let v7 = session.export().unwrap();
+        assert_eq!(v7.0[0], SNAPSHOT_VERSION_V7);
+
+        let session = base("compat-v8");
+        session
+            .opaque_identifier("class", "synthetic_record_name")
+            .unwrap();
+        let v8 = session.export().unwrap();
+        assert_eq!(v8.0[0], SNAPSHOT_VERSION_V8);
+
+        for (version, snapshot) in [(6, v6), (7, v7), (8, v8)] {
+            std::fs::write(
+                format!("{fixtures}/session_snapshot_v{version}.bin"),
+                snapshot.0,
+            )
+            .unwrap();
+        }
+    }
 
     #[test]
     fn opaque_identifiers_are_private_scoped_and_persist_in_trusted_snapshots() {
