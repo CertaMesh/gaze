@@ -117,7 +117,7 @@ fn index_ingest_preserves_a_zero_width_label_boundary_but_does_not_split_compact
     fs::create_dir(&corpus).unwrap();
     fs::write(
         corpus.join("fields.md"),
-        "Notes: café\ncustomer\u{200b}id: QR8X7VT\ncustomerid: compact fixture\n",
+        "Notes: café\ncustomer\u{200b}id： QR8X7VT\ncustomerid: compact fixture\n",
     )
     .unwrap();
 
@@ -133,22 +133,20 @@ fn index_ingest_preserves_a_zero_width_label_boundary_but_does_not_split_compact
         .lines()
         .any(|line| line == "entities: 1"));
 
-    let search = gaze_index_command(&env)
-        .args([
-            "search",
-            "QR8X7VT",
-            "--class",
-            "custom:customer_id",
-            "--index-path",
-        ])
-        .arg(&index)
-        .output()
-        .unwrap();
-    assert!(search.status.success(), "{search:?}");
-    let stdout = String::from_utf8(search.stdout).unwrap();
-    assert!(stdout.contains(":Custom:customer_id_"));
-    assert!(!stdout.contains("QR8X7VT"));
-    assert!(stdout.contains("customerid: compact fixture"));
+    for class in [&[][..], &["--class", "custom:customer_id"]] {
+        let search = gaze_index_command(&env)
+            .args(["search", "QR8X7VT"])
+            .args(class)
+            .arg("--index-path")
+            .arg(&index)
+            .output()
+            .unwrap();
+        assert!(search.status.success(), "{search:?}");
+        let stdout = String::from_utf8(search.stdout).unwrap();
+        assert!(stdout.contains(":Custom:customer_id_"));
+        assert!(!stdout.contains("QR8X7VT"));
+        assert!(stdout.contains("customerid: compact fixture"));
+    }
 }
 
 #[test]

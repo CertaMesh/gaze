@@ -440,7 +440,8 @@ impl Detector for FieldEntityDetector {
 }
 
 fn field_classes(input: &str) -> Vec<PiiClass> {
-    field_detections(input, None)
+    let normalized = gaze_types::normalize::normalize(input);
+    field_detections(&normalized.text, Some(&normalized.spans))
         .into_iter()
         .map(|detection| detection.class)
         .collect::<BTreeSet<_>>()
