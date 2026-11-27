@@ -62,7 +62,7 @@ cannot be tied to one tool name: OpenAI Responses `*_arguments.done` events
 `response.completed`) and tool input streamed through the legacy Anthropic
 adapter. The direct Anthropic profile that `gaze proxy serve` uses restores
 streamed input for declared tools. A tool-call stream renamed by a later chunk,
-or one whose identity is ambiguous, keeps its tokens. `gaze proxy serve` rejects
+including a chunk whose call index cannot be read, keeps its tokens. `gaze proxy serve` rejects
 empty or padded `restore_tools` names at startup.
 
 ### Action required: stop depending on `gaze-model-setup`

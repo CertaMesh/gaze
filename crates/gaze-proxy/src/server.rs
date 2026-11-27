@@ -3843,8 +3843,13 @@ fn transform_sse(
     };
     let mut ambiguous = HashSet::new();
     for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
+        // A name whose call cannot be identified may rename any compatible stream.
         for (stream, tool) in adapter.sse_event_tool_calls(event) {
-            bind(stream, &tool);
+            if stream.is_ambiguous() {
+                ambiguous.insert(stream);
+            } else {
+                bind(stream, &tool);
+            }
         }
         for fragment in adapter.sse_event_stream_surfaces(event) {
             if let Some(stream) = fragment.stream {

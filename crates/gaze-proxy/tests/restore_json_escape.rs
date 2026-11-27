@@ -1643,6 +1643,9 @@ async fn openai_chat_stream_call_renamed_by_a_later_chunk_keeps_its_tokens() {
         "function": {"name": "save_contact"}});
     for rename in [
         json!({"tool_calls": [{"index": 0, "function": {"name": UNDECLARED_TOOL}}]}),
+        // An index the proxy cannot read may still rename the call in the client.
+        json!({"tool_calls": [{"index": 0.0, "function": {"name": UNDECLARED_TOOL}}]}),
+        json!({"tool_calls": [{"function": {"name": UNDECLARED_TOOL}}]}),
         json!({"tool_calls": [{"index": 0, "function": {"name": UNDECLARED_TOOL, "arguments": null}}]}),
     ] {
         let arguments = chat_stream_arguments(header.clone(), vec![rename], true).await;
