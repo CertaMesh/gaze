@@ -768,7 +768,7 @@ any change to it.
 The [generator v32 credential specification](../../docs/reference/benchmarks/specifications/ba775e34c3e2be867a8ed27ef07739f60dfc09dd85eae61b956fe8aec9fcd939.json)
 adds generator v32's credential-form and agent-text cells to it and the prose
 credential recognizers to the validation vocabulary.
-The [current specification](../../docs/reference/benchmarks/specifications/a17698535158d824c3ef85909984f7c2e72207ff27e9dbf5df580df2ea769473.json)
+The [current specification](../../docs/reference/benchmarks/specifications/4d7bd89ef042f9f620c1a289faefddc0593c2b7539066f506da041aa6a32b54d.json)
 adds generator v33's chat mention cells to it and `username.chat_mention` to
 the validation vocabulary.
 Previous manifests retain their original identities.

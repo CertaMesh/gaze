@@ -198,12 +198,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cells with benign counterweights; generator v30 rebuilds byte-for-byte.
   Generator v32 adds further credential forms and agent-text counterweights;
   generator v31 rebuilds byte-for-byte.
-- `username.chat_mention` (in `core`) protects Slack and Discord user mentions,
-  `<@U024BE7LH>`, `<@U024BE7LH|display.name>`, `<@…snowflake>` and `<@!…>`,
-  as `custom:username`; the value inside the markup becomes the token, display
-  name included. Channel, group, broadcast, role, emoji, slash-command and
-  timestamp markup stays raw. Benchmark generator v33 adds mention cells with
-  benign counterweights; generator v32 rebuilds byte-for-byte.
 - `gaze_mcp_core::ConversationRegistry` keeps one host, with its own Session,
   per host-authenticated `ConversationId`, with close, idle expiry (default
   30 minutes) and a live-conversation limit (default 64) that refuses new ids

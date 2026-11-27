@@ -21,7 +21,7 @@ class ChatMentionCellsTests(unittest.TestCase):
             records = cells.records(api, partition)
             self.assertEqual(
                 {layer: sum(r.layer == layer for r in records) for layer in "ADR"},
-                {"A": 90, "D": 100, "R": 90},
+                {"A": 90, "D": 140, "R": 90},
             )
             for record in records:
                 self.assertTrue(record.surface.startswith(cells.SURFACE_PREFIX))

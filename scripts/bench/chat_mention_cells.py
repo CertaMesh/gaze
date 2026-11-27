@@ -7,7 +7,8 @@ mentions (some with the client's `|display.name`) and Discord `<@…>` / `<@!…
 mentions; the value inside the mention markup is gold. Layer R repeats each
 mention. Layer D carries the same markup with no person in it: channel, user
 group and broadcast mentions, Discord role, channel, emoji and timestamp
-markup, slash-command markup, workspace IDs and Java type annotations inside generics.
+markup, slash-command markup, workspace IDs, Java type annotations inside generics,
+HTML tags, team `@` handles, decorators and Slack app IDs in angle brackets.
 """
 
 SURFACE_PREFIX = "chat_mentions_"
@@ -53,6 +54,10 @@ TEMPLATES = {
             ("Run {D} to redeploy.", "command"),
             ("Workspace {D} was migrated to the enterprise grid.", "team"),
             ("public Map<@NonNull String, Long> counts() { return {D}; }", "annotation"),
+            ("<div class=\"{D}\">Deploy finished</div>", "html"),
+            ("Ask {D} in the team channel.", "handle"),
+            ("Slack app IDs such as {D} are listed in the admin console.", "bare_id"),
+            ("@Override\npublic String {D}() { return name; }", "decorator"),
         ],
     },
     "test": {
@@ -84,6 +89,10 @@ TEMPLATES = {
             ("Use {D} to open a ticket.", "command"),
             ("Workspace {D} enabled SSO last week.", "team"),
             ("Callable<@UIThread Void> task = () -> {D};", "annotation"),
+            ("<span data-role=\"{D}\">Build passed</span>", "html"),
+            ("Route the question to {D} please.", "handle"),
+            ("The bot is installed as app {D} in every workspace.", "bare_id"),
+            ("@dataclass\nclass {D}:\n    retries: int = 3", "decorator"),
         ],
     },
 }
@@ -138,6 +147,14 @@ def records(api, partition):
             return f"</{rng.choice(['deploy', 'ticket', 'status'])}:{snowflake()}>"
         if kind == "team":
             return "T0" + chars(8)
+        if kind == "html":
+            return rng.choice(["status-ok", "toast", "badge-info"])
+        if kind == "handle":
+            return rng.choice(["@oncall", "@sre-team", "@release-bot", "@here"])
+        if kind == "bare_id":
+            return "<A0" + chars(8) + ">"
+        if kind == "decorator":
+            return rng.choice(["toString", "RetryPolicy", "describe"])
         return rng.choice(["null", "Long.valueOf(0)", "Void.TYPE.cast(null)"])
 
     for index in range(api.DOCS_PER_FAMILY):
