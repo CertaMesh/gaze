@@ -25,6 +25,14 @@ PR commit. It does not apply retroactively to pre-gate history. Agents follow
 [commit discipline](AGENTS.md#universal-rules-all-agents), including no amend
 or force-push.
 
+### Changelog fragments
+
+Do not edit `CHANGELOG.md` in a PR. Describe a user-visible change in a new file
+`changelog.d/<branch-or-topic>.<section>.md`, as one or more Markdown list
+items. See [`changelog.d/README.md`](changelog.d/README.md) for the sections and
+the release-time assembly. Run `python3 scripts/release/changelog.py check` to
+validate fragments.
+
 ### Code of Conduct
 
 Community interactions are governed by the [Contributor Covenant](CODE_OF_CONDUCT.md).
@@ -40,7 +48,10 @@ cargo build --workspace --all-features
 
 PR-triggered CI runs `cargo doc -D warnings`, `cargo test --doc`, workspace
 tests, MSRV checks, cargo-deny, and the active xtask gate roster on every
-relevant PR. Keep running the local [PR checks](#run-the-pr-checks) before opening or
+relevant PR. The required `cargo-deny policy` check covers licences, bans and
+sources on every PR and in the merge queue. RustSec advisories run daily
+instead and open an issue when they fail, so a new advisory never blocks
+merges. Keep running the local [PR checks](#run-the-pr-checks) before opening or
 pushing to a PR.
 
 ## Workspace shape
