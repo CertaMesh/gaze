@@ -855,17 +855,18 @@ fn response_rejects_provider_numbers_collisions_and_raw_signed_pii() {
     let collision = format!(
         r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"tool_use","id":"toolu_1","name":"lookup","input":{{"{key_token}":"a","alice@example.invalid":"b"}}}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":2}}}}"#
     );
+    // Keys collide only when they restore, which is only for a declared tool.
+    let declared = std::collections::BTreeSet::from(["lookup".to_owned()]);
     let mut allow_all = AllowAllResidualValidator;
+    let mut context = ResponseTransformContext::new(
+        &snapshot,
+        &mut allow_all,
+        WireFormat::Json,
+        CodecLimits::default(),
+    );
+    context.set_restore_tools(&declared);
     let error = codec
-        .restore_response(
-            collision.as_bytes(),
-            &mut ResponseTransformContext::new(
-                &snapshot,
-                &mut allow_all,
-                WireFormat::Json,
-                CodecLimits::default(),
-            ),
-        )
+        .restore_response(collision.as_bytes(), &mut context)
         .unwrap_err();
     assert_eq!(error.code(), CodecErrorCode::TransformedKeyCollision);
 

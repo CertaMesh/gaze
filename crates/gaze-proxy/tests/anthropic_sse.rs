@@ -118,20 +118,33 @@ fn sse_interleaved_indices_keep_text_and_partial_json_isolated() {
     ]
     .concat()
     .into_bytes();
-    let mut residual = SyntheticResidualValidator;
-    let proved = codec
-        .restore_sse_chunks(
-            [&stream[..]],
-            &mut ResponseTransformContext::new(
-                &snapshot,
-                &mut residual,
-                WireFormat::Sse,
-                CodecLimits::default(),
-            ),
-        )
-        .unwrap();
-    let output = std::str::from_utf8(proved.bytes()).unwrap();
-    assert!(output.matches(EMAIL).count() >= 2);
+    let declared = std::collections::BTreeSet::from(["lookup".to_owned()]);
+    let undeclared = std::collections::BTreeSet::from(["other_tool".to_owned()]);
+    let restore = |tools| {
+        let mut residual = SyntheticResidualValidator;
+        let mut context = ResponseTransformContext::new(
+            &snapshot,
+            &mut residual,
+            WireFormat::Sse,
+            CodecLimits::default(),
+        );
+        context.set_restore_tools(tools);
+        let proved = codec
+            .restore_sse_chunks([&stream[..]], &mut context)
+            .unwrap();
+        String::from_utf8(proved.bytes().to_vec()).unwrap()
+    };
+    // A declared tool's streamed input restores beside the text.
+    let output = restore(&declared);
+    assert_eq!(output.matches(EMAIL).count(), 2);
+    assert!(!output.contains(&token));
+    // Any other tool's input keeps the token; the text still restores.
+    let output = restore(&undeclared);
+    assert_eq!(output.matches(EMAIL).count(), 1);
+    assert!(
+        output.contains(&format!(r#"\"email\":\"{token}\"}}"#)),
+        "{output}"
+    );
 }
 
 #[test]

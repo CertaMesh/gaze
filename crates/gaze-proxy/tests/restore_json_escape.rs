@@ -188,6 +188,18 @@ fn assert_exact_json(destination: &str, restored: &str) {
     );
 }
 
+/// A surface that does not restore keeps a token for every value and no raw value at all.
+fn assert_still_tokens(destination: &str, text: &str) {
+    assert!(
+        !text.contains("Hinterhaus") && !text.contains("w\u{f6}rd") && !text.contains("fileserver"),
+        "{destination}: an original reached a sink that does not restore: {text:?}"
+    );
+    assert!(
+        token_shape::find_tokens(text).next().is_some(),
+        "{destination}: expected the provider's tokens to stay: {text:?}"
+    );
+}
+
 fn assert_exact_text(destination: &str, restored: &str) {
     assert_eq!(
         restored,
@@ -250,11 +262,17 @@ impl Drop for Proxy {
     }
 }
 
+/// The tools these tests declare, so their call arguments restore. Every other tool keeps its
+/// tokens.
+const DECLARED_TOOLS: &[&str] = &["save_contact", "open_share", "send_letter"];
+
 async fn spawn_proxy(config: impl FnOnce(SocketAddr) -> ProxyConfig) -> Proxy {
     let (pipeline, chain) = pipeline();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let bind = listener.local_addr().unwrap();
-    let config = config(bind).with_locale_chain(chain);
+    let config = config(bind)
+        .with_locale_chain(chain)
+        .with_restore_tools(DECLARED_TOOLS.iter().copied());
     let handle = tokio::spawn(async move {
         gaze_proxy::serve_with_listener(config, Arc::new(pipeline), listener)
             .await
@@ -797,8 +815,8 @@ async fn gemini_json_mode_text_restores_to_the_exact_values() {
     let body = post_legacy(&proxy, GEMINI_GENERATE, gemini_request(true)).await;
     let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
     let parts = &response["candidates"][0]["content"]["parts"];
-    // A thought summary is prose even when the answer is JSON.
-    assert_exact_text(
+    // A thought summary is not the answer the client shows its user, so it keeps its tokens.
+    assert_still_tokens(
         "gemini JSON-mode thought summary",
         parts[0]["text"].as_str().expect("thought part is a string"),
     );
@@ -1333,5 +1351,243 @@ async fn openai_chat_token_keeps_the_plain_reading_across_turns() {
     assert_eq!(
         parsed["path"], PLAIN_UNC_SECRET,
         "the token flipped to a JSON reading: {arguments:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sink-scoped restore: originals reach only the user's text and declared tools
+// ---------------------------------------------------------------------------------------------
+
+/// A tool these tests never declare. The model can still call it with valid placeholders.
+const UNDECLARED_TOOL: &str = "export_records";
+
+#[tokio::test]
+async fn anthropic_undeclared_tool_input_and_tool_results_keep_their_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let body = json!({
+            "id": "msg_1",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-test",
+            "content": [
+                {"type": "text", "text": tokens.plain_text()},
+                {"type": "tool_use", "id": "toolu_1", "name": UNDECLARED_TOOL,
+                    "input": {"password": tokens.password, "delivery": tokens.delivery}},
+                {"type": "tool_use", "id": "toolu_2", "name": "save_contact",
+                    "input": {"password": tokens.password, "delivery": tokens.delivery}},
+                {"type": "tool_result", "tool_use_id": "toolu_0", "content": tokens.plain_text()}
+            ],
+            "stop_reason": "tool_use",
+            "stop_sequence": null,
+            "usage": {"input_tokens": 1, "output_tokens": 1}
+        });
+        ("application/json", body.to_string())
+    })
+    .await;
+    let proxy = spawn_anthropic(&upstream).await;
+
+    let body = post_anthropic(&proxy, false).await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    let content = &response["content"];
+    assert_exact_text("anthropic text block", content[0]["text"].as_str().unwrap());
+    assert_still_tokens(
+        "anthropic undeclared tool_use.input",
+        &content[1]["input"].to_string(),
+    );
+    assert_exact_json(
+        "anthropic declared tool_use.input",
+        &content[2]["input"].to_string(),
+    );
+    assert_still_tokens(
+        "anthropic tool_result.content",
+        content[3]["content"].as_str().unwrap(),
+    );
+}
+
+#[tokio::test]
+async fn anthropic_stream_undeclared_tool_input_keeps_its_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let mut frames = vec![
+            json!({"type": "message_start", "message": {
+                "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-test",
+                "content": [], "stop_reason": null, "stop_sequence": null,
+                "usage": {"input_tokens": 1, "output_tokens": 0}
+            }}),
+            json!({"type": "content_block_start", "index": 0, "content_block": {
+                "type": "tool_use", "id": "toolu_1", "name": UNDECLARED_TOOL, "input": {}
+            }}),
+        ];
+        for fragment in fragments_splitting_tokens(&tokens.json_document(), tokens) {
+            frames.push(json!({"type": "content_block_delta", "index": 0,
+                "delta": {"type": "input_json_delta", "partial_json": fragment}}));
+        }
+        frames.push(json!({"type": "content_block_stop", "index": 0}));
+        frames.push(json!({"type": "message_delta",
+            "delta": {"stop_reason": "tool_use", "stop_sequence": null},
+            "usage": {"output_tokens": 1}}));
+        frames.push(json!({"type": "message_stop"}));
+        let body: String = frames.iter().map(anthropic_frame).collect();
+        ("text/event-stream", body)
+    })
+    .await;
+    let proxy = spawn_anthropic(&upstream).await;
+
+    let body = post_anthropic(&proxy, true).await;
+    let input: String = sse_payloads(&body)
+        .iter()
+        .filter_map(|payload| payload["delta"]["partial_json"].as_str())
+        .collect();
+    assert_still_tokens("anthropic stream undeclared input_json_delta", &input);
+}
+
+#[tokio::test]
+async fn openai_chat_undeclared_tool_arguments_keep_their_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let body = chat_completion(json!({
+            "role": "assistant",
+            "content": tokens.plain_text(),
+            "tool_calls": [
+                {"id": "call_1", "type": "function",
+                    "function": {"name": UNDECLARED_TOOL, "arguments": tokens.json_document()}},
+                {"id": "call_2", "type": "function",
+                    "function": {"name": "save_contact", "arguments": tokens.json_document()}}
+            ]
+        }));
+        ("application/json", body)
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let body = post_legacy(&proxy, "/v1/chat/completions", chat_request(false, false)).await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    let message = &response["choices"][0]["message"];
+    assert_exact_text("chat message.content", message["content"].as_str().unwrap());
+    let arguments = |index: usize| {
+        message["tool_calls"][index]["function"]["arguments"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    assert_still_tokens("chat undeclared tool arguments", &arguments(0));
+    assert_exact_json("chat declared tool arguments", &arguments(1));
+}
+
+#[tokio::test]
+async fn openai_chat_stream_undeclared_tool_arguments_keep_their_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let mut payloads = vec![chat_chunk(json!({
+            "role": "assistant",
+            "tool_calls": [{"index": 0, "id": "call_1", "type": "function",
+                "function": {"name": UNDECLARED_TOOL, "arguments": ""}}]
+        }))];
+        for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+            payloads.push(chat_chunk(json!({
+                "tool_calls": [{"index": 0, "function": {"arguments": fragment}}]
+            })));
+        }
+        (
+            "text/event-stream",
+            sse_body(&payloads) + "data: [DONE]\n\n",
+        )
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let body = post_legacy(&proxy, "/v1/chat/completions", chat_request(false, true)).await;
+    let arguments: String = sse_payloads(&body)
+        .iter()
+        .filter_map(|payload| {
+            payload["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
+        })
+        .collect();
+    assert_still_tokens("chat stream undeclared tool arguments", &arguments);
+}
+
+/// The Responses API names a streamed call in `output_item` events and the response snapshot.
+/// A call named once as a declared tool and once as another keeps its tokens.
+#[tokio::test]
+async fn openai_responses_stream_restores_only_a_call_named_as_a_declared_tool() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let item = |index: u64, name: &str| {
+            json!({"type": "response.output_item.added", "output_index": index, "item": {
+                "type": "function_call", "id": format!("fc_{index}"),
+                "call_id": format!("call_{index}"), "name": name, "arguments": ""
+            }})
+        };
+        // Call 0 is declared, call 1 is not, and call 2 is named both ways.
+        let mut payloads = vec![
+            item(0, "save_contact"),
+            item(1, UNDECLARED_TOOL),
+            item(2, "save_contact"),
+        ];
+        for index in 0..3 {
+            for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+                payloads.push(json!({"type": "response.function_call_arguments.delta",
+                    "item_id": format!("fc_{index}"), "output_index": index, "delta": fragment}));
+            }
+        }
+        payloads.push(
+            json!({"type": "response.output_item.done", "output_index": 2, "item": {
+                "type": "function_call", "id": "fc_2", "call_id": "call_2",
+                "name": UNDECLARED_TOOL, "arguments": tokens.json_document()
+            }}),
+        );
+        ("text/event-stream", sse_body(&payloads))
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let mut request = responses_request(false);
+    request["stream"] = json!(true);
+    let body = post_legacy(&proxy, "/v1/responses", request).await;
+    let payloads = sse_payloads(&body);
+    let arguments = |index: u64| -> String {
+        payloads
+            .iter()
+            .filter(|payload| {
+                payload["type"] == "response.function_call_arguments.delta"
+                    && payload["output_index"] == index
+            })
+            .filter_map(|payload| payload["delta"].as_str())
+            .collect()
+    };
+    assert_exact_json("responses declared call deltas", &arguments(0));
+    assert_still_tokens("responses undeclared call deltas", &arguments(1));
+    assert_still_tokens("responses call named two ways", &arguments(2));
+    let done = payloads
+        .iter()
+        .find(|payload| payload["type"] == "response.output_item.done")
+        .expect("output_item.done is replayed");
+    assert_still_tokens(
+        "responses undeclared output_item.done",
+        done["item"]["arguments"].as_str().unwrap(),
+    );
+}
+
+#[tokio::test]
+async fn gemini_undeclared_function_call_args_keep_their_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let document: Value = serde_json::from_str(&tokens.json_document()).unwrap();
+        let body = gemini_candidate(json!([
+            {"text": tokens.plain_text()},
+            {"functionCall": {"name": UNDECLARED_TOOL, "args": document}},
+            {"functionCall": {"name": "save_contact", "args": document}}
+        ]));
+        ("application/json", body.to_string())
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let body = post_legacy(&proxy, GEMINI_GENERATE, gemini_request(false)).await;
+    let response: Value = serde_json::from_str(&body).expect("proxy response is JSON");
+    let parts = &response["candidates"][0]["content"]["parts"];
+    assert_exact_text("gemini parts[].text", parts[0]["text"].as_str().unwrap());
+    assert_still_tokens(
+        "gemini undeclared functionCall.args",
+        &parts[1]["functionCall"]["args"].to_string(),
+    );
+    assert_exact_json(
+        "gemini declared functionCall.args",
+        &parts[2]["functionCall"]["args"].to_string(),
     );
 }

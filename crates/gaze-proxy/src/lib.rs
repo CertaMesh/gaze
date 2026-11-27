@@ -31,6 +31,7 @@ pub mod server;
 )]
 pub(crate) mod session_registry;
 
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -40,9 +41,9 @@ use gaze::{DictionaryBundle, LocaleChain, LocaleTag, Pipeline};
 
 pub use adapter::{
     AdapterContract, CoveragePath, CoveragePolicy, FormatPolicy, HeaderPolicy, PiiSurface,
-    ProtocolContract, ProviderAdapter, RedirectPolicy, RequestSurfaces, RoutePolicy, SessionPolicy,
-    SessionRegistryConfig, SessionRegistryConfigError, SseEvent, SseStreamKey, SseStreamSurface,
-    SurfaceSyntax,
+    ProtocolContract, ProviderAdapter, RedirectPolicy, RequestSurfaces, RestoreSink, RoutePolicy,
+    SessionPolicy, SessionRegistryConfig, SessionRegistryConfigError, SseEvent, SseStreamKey,
+    SseStreamSurface, SurfaceSyntax,
 };
 pub use codec::{
     BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, OpaqueCarrierLocation,
@@ -83,6 +84,7 @@ pub struct ProxyConfig {
     pub(crate) dictionaries: DictionaryBundle,
     pub(crate) direct_anthropic: Option<Arc<AnthropicAdapter>>,
     pub(crate) inspection: Option<Arc<ProxyInspectionProducerV1>>,
+    pub(crate) restore_tools: Arc<BTreeSet<String>>,
 }
 
 impl ProxyConfig {
@@ -97,6 +99,7 @@ impl ProxyConfig {
             dictionaries: DictionaryBundle::default(),
             direct_anthropic: None,
             inspection: None,
+            restore_tools: Arc::default(),
         }
     }
 
@@ -122,6 +125,7 @@ impl ProxyConfig {
             dictionaries: DictionaryBundle::default(),
             direct_anthropic: Some(adapter),
             inspection: None,
+            restore_tools: Arc::default(),
         }
     }
 
@@ -186,6 +190,29 @@ impl ProxyConfig {
     #[must_use]
     pub fn dictionaries(&self) -> &DictionaryBundle {
         &self.dictionaries
+    }
+
+    /// Declares the tools whose call arguments restore.
+    ///
+    /// Restore is sink-scoped. Assistant text the client shows its user restores; the arguments
+    /// of a model's tool call restore only when this set names the tool exactly, so the tool
+    /// receives originals. Every other tool's arguments, and every other response field, keep
+    /// their tokens, so originals never reach a tool or external service the integrator did not
+    /// declare. Omitting this call declares none. Each call replaces the previous set.
+    #[must_use]
+    pub fn with_restore_tools<I, S>(mut self, tools: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.restore_tools = Arc::new(tools.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Returns the tools whose call arguments restore.
+    #[must_use]
+    pub fn restore_tools(&self) -> &BTreeSet<String> {
+        &self.restore_tools
     }
 
     /// Installs the immutable provider-neutral inspection producer for this launch.
