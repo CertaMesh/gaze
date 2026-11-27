@@ -73,6 +73,42 @@ fn mcp_install_writes_project_config_and_agents_section_idempotently() {
         ])
         .assert()
         .success();
+
+    let output = Command::cargo_bin("gaze")
+        .expect("gaze bin")
+        .current_dir(temp.path())
+        .args([
+            "mcp",
+            "doctor",
+            "--json",
+            "--agents-md",
+            agents.to_str().expect("agents path"),
+        ])
+        .output()
+        .expect("doctor runs");
+    let checks: Value = serde_json::from_slice(&output.stdout).expect("doctor json");
+    let check = |name: &str| {
+        checks
+            .as_array()
+            .expect("checks")
+            .iter()
+            .find(|check| check["name"] == name)
+            .unwrap_or_else(|| panic!("doctor reports {name}"))
+            .clone()
+    };
+    let profile = check("protection profile");
+    assert_eq!(profile["state"], "pass");
+    assert!(profile["evidence"].as_str().unwrap().contains("[core]"));
+    assert!(profile["evidence"]
+        .as_str()
+        .unwrap()
+        .contains("no NER or Nym"));
+    let scope = check("session scope");
+    assert_eq!(scope["state"], "pass");
+    assert!(scope["evidence"]
+        .as_str()
+        .unwrap()
+        .contains("per stdio connection"));
 }
 
 #[test]
