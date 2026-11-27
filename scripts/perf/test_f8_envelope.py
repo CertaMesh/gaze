@@ -109,3 +109,23 @@ def test_exchange_reads_a_burst_of_replies_written_at_once(tmp_path, monkeypatch
     finally:
         daemon.close()
     assert daemon.proc.returncode == 0 and daemon.peak > 0
+
+
+def test_the_daemons_own_cores_do_not_count_as_foreign_load():
+    busy_self = {"load": [3.5, 2.0, 1.0], "own_cores": 2.0, "foreign": [], "quiet": True}
+    busy_other = {"load": [3.5, 2.0, 1.0], "own_cores": 1.0, "foreign": [], "quiet": True}
+    r = receipt([100.0] * 100)
+    r["host"]["probes"] = [QUIET, busy_self, QUIET]
+    assert f8.check(r, BUDGETS) == []
+    r["host"]["probes"] = [QUIET, busy_other, QUIET]
+    assert any("not quiet" in f for f in f8.check(r, BUDGETS))
+
+
+def test_cpu_seconds_reads_this_process():
+    import os
+    import time
+    start = f8.cpu_seconds(os.getpid())
+    deadline = time.process_time() + 0.3
+    while time.process_time() < deadline:
+        pass
+    assert f8.cpu_seconds(os.getpid()) - start >= 0.2
