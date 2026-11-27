@@ -16,7 +16,9 @@ minors ([UPGRADE.md](UPGRADE.md)).
 
 Gaze controls outbound PII. It does not defend against prompt injection or filter
 unsafe content. Tool-call JSON carries placeholders too; Gaze restores them
-before the tool runs ([integration](docs/explanation/how-gaze-works.md#how-it-fits-your-stack)).
+before the tool runs, but only for tools you declare
+([integration](docs/explanation/how-gaze-works.md#how-it-fits-your-stack),
+[`[proxy] restore_tools`](docs/reference/policy.md#proxy)).
 
 ## How good is it
 

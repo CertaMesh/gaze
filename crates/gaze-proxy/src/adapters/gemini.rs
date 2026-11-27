@@ -5,8 +5,8 @@ use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{
-    walk_all_scalars, AdapterContract, PiiSurface, ProviderAdapter, RequestSurfaces, SseEvent,
-    SseStreamKey, SseStreamSurface, SurfacePath, SurfaceSyntax,
+    walk_all_scalars, AdapterContract, PiiSurface, ProviderAdapter, RequestSurfaces, RestoreSink,
+    SseEvent, SseStreamKey, SseStreamSurface, SurfacePath, SurfaceSyntax,
 };
 
 /// Canonicalizes a protobuf-JSON field name to its lowerCamelCase spelling.
@@ -201,9 +201,22 @@ fn walk_complete<'a>(
     prefix: SurfacePath,
     value: &'a mut Value,
 ) {
+    walk_complete_into(surfaces, prefix, value, &RestoreSink::Withheld);
+}
+
+fn walk_complete_into<'a>(
+    surfaces: &mut Vec<SseStreamSurface<'a>>,
+    prefix: SurfacePath,
+    value: &'a mut Value,
+    sink: &RestoreSink,
+) {
     let mut complete = RequestSurfaces::default();
     walk_all_scalars(&mut complete, prefix, value);
-    surfaces.extend(complete.into_iter().map(SseStreamSurface::complete));
+    surfaces.extend(
+        complete
+            .into_iter()
+            .map(|surface| SseStreamSurface::complete(surface.with_sink(sink.clone()))),
+    );
 }
 
 /// Surfaces one `Content`. With a candidate `stream`, its text parts are fragments of that
@@ -228,12 +241,13 @@ fn collect_content<'a>(
         let Value::Object(part) = part else {
             continue;
         };
-        // A thought summary stays prose even when the answer is JSON.
-        let (text_syntax, text_stream) =
+        // A thought summary stays prose even when the answer is JSON, and keeps its tokens:
+        // it is not the answer the client shows its user.
+        let (text_syntax, text_stream, text_sink) =
             if part.get("thought").and_then(Value::as_bool) == Some(true) {
-                (SurfaceSyntax::Text, "thought")
+                (SurfaceSyntax::Text, "thought", RestoreSink::Withheld)
             } else {
-                (SurfaceSyntax::ModelOutput, "text")
+                (SurfaceSyntax::ModelOutput, "text", RestoreSink::Display)
             };
         for (key, value) in part {
             let part_prefix = parts_prefix.index(index).member(key);
@@ -244,16 +258,24 @@ fn collect_content<'a>(
                             stream: stream.map(|index| {
                                 SseStreamKey::new(format!("candidates.{text_stream}"), [index])
                             }),
-                            surface: part_prefix.surface(text, text_syntax),
+                            surface: part_prefix
+                                .surface(text, text_syntax)
+                                .with_sink(text_sink.clone()),
                         });
                     }
                 }
                 "functionCall" => {
+                    let tool = value.get("name").and_then(Value::as_str).map(str::to_owned);
                     if let Some((args_key, args)) = value
                         .as_object_mut()
                         .and_then(|call| call.iter_mut().find(|(key, _)| *key == "args"))
                     {
-                        walk_complete(surfaces, part_prefix.member(args_key), args);
+                        walk_complete_into(
+                            surfaces,
+                            part_prefix.member(args_key),
+                            args,
+                            &RestoreSink::ToolInput(tool),
+                        );
                     }
                 }
                 "functionResponse" => {

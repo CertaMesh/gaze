@@ -197,7 +197,9 @@ async fn spawn_proxy(upstream: &Upstream) -> Proxy {
             Arc::new(GeminiAdapter::new(base)) as Arc<dyn ProviderAdapter>,
         ],
     )
-    .with_locale_chain(chain);
+    .with_locale_chain(chain)
+    // Tool arguments restore only for declared tools.
+    .with_restore_tools(["send_mail", "set_alias"]);
     let handle = tokio::spawn(async move {
         gaze_proxy::serve_with_listener(config, Arc::new(pipeline), listener)
             .await
@@ -599,6 +601,7 @@ async fn openai_responses_stream_deltas_split_across_events_restore() {
                     "type": "response.function_call_arguments.done",
                     "item_id": "fc_1",
                     "output_index": 1,
+                    "name": "set_alias",
                     "arguments": arguments,
                 }),
             ));
@@ -656,11 +659,12 @@ async fn openai_responses_stream_deltas_split_across_events_restore() {
     let parsed: Value = serde_json::from_str(&arguments)
         .unwrap_or_else(|error| panic!("restored arguments do not parse ({error}): {arguments:?}"));
     assert_eq!(parsed, json!({"alias": RAW_ALIAS}));
+    // The done event repeats the arguments outside the stream's name binding, so it keeps
+    // its token; the call item in `response.completed` names itself and restores.
     let done = by_type("response.function_call_arguments.done");
-    let parsed: Value =
-        serde_json::from_str(done[0]["arguments"].as_str().expect("arguments string"))
-            .expect("done arguments parse");
-    assert_eq!(parsed, json!({"alias": RAW_ALIAS}));
+    let done_arguments = done[0]["arguments"].as_str().expect("arguments string");
+    assert_eq!(token_shape::find_tokens(done_arguments).count(), 1);
+    assert!(!done_arguments.contains("Doktor"));
 
     let completed = by_type("response.completed");
     let output = &completed[0]["response"]["output"];
@@ -816,7 +820,10 @@ async fn review_gemini_candidates_and_thoughts_do_not_merge() {
         serde_json::from_str::<Value>(&streams[&(1, false)]).unwrap(),
         json!({"to":RAW_PERSON})
     );
-    assert_eq!(streams[&(0, true)], format!("Thinking {RAW_ALIAS}"));
+    // A thought summary is not the answer the client shows its user, so it keeps its token.
+    let thought = &streams[&(0, true)];
+    assert_eq!(token_shape::find_tokens(thought).count(), 1, "{thought}");
+    assert!(!thought.contains(RAW_ALIAS));
 }
 
 #[tokio::test]
@@ -832,14 +839,18 @@ async fn review_responses_parallel_items_parts_and_summaries() {
             ("function_call_arguments",2,0,json!({"alias":tokens.alias}).to_string()),
             ("mcp_call_arguments",3,0,json!({"to":tokens.person}).to_string())];
         let parts: Vec<_> = cases.iter().map(|(_,_,_,s)|fragments(s)).collect();
-        let mut events = Vec::new();
+        // The `output_item.added` events name the calls whose argument deltas follow.
+        let mut events = vec![
+            (None,json!({"type":"response.output_item.added","output_index":2,"item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"set_alias","arguments":""}})),
+            (None,json!({"type":"response.output_item.added","output_index":3,"item":{"type":"mcp_call","id":"mcp_3","server_label":"mail","name":"send_mail","arguments":""}})),
+        ];
         for i in 0..parts.iter().map(Vec::len).max().unwrap() { for (case,pieces) in cases.iter().zip(&parts) { if let Some(piece)=pieces.get(i) {
             events.push((None,json!({"type":format!("response.{}.delta",case.0),"output_index":case.1,"content_index":case.2,"summary_index":case.2,"delta":piece})));
         }}}
         sse_body(events)
     },"/v1/responses",json!({"model":"gpt-test","input":user_text(),"stream":true})).await;
     let mut streams = BTreeMap::<(String, u64, u64), String>::new();
-    for p in payloads {
+    for p in payloads.iter().filter(|p| p["delta"].is_string()) {
         streams
             .entry((
                 p["type"].as_str().unwrap().to_string(),
@@ -854,15 +865,20 @@ async fn review_responses_parallel_items_parts_and_summaries() {
     assert_eq!(get("output_text", 0, 0), &format!("Text {RAW_PERSON}"));
     assert_eq!(get("output_text", 0, 1), &format!("Other {RAW_PERSON}"));
     assert_eq!(get("refusal", 0, 0), &format!("Refuse {RAW_ALIAS}"));
-    assert_eq!(get("reasoning_text", 1, 0), &format!("Reason {RAW_ALIAS}"));
-    assert_eq!(
-        get("reasoning_summary_text", 1, 0),
-        &format!("Summary {RAW_ALIAS}")
-    );
-    assert_eq!(
-        get("reasoning_summary_text", 1, 1),
-        &format!("Second {RAW_PERSON}")
-    );
+    // Reasoning is not the answer the client shows its user, so each stream keeps its token.
+    for (kind, summary) in [
+        ("reasoning_text", 0),
+        ("reasoning_summary_text", 0),
+        ("reasoning_summary_text", 1),
+    ] {
+        let reasoning = get(kind, 1, summary);
+        assert_eq!(
+            token_shape::find_tokens(reasoning).count(),
+            1,
+            "{kind} {reasoning}"
+        );
+        assert!(!reasoning.contains(RAW_ALIAS) && !reasoning.contains(RAW_PERSON));
+    }
     assert_eq!(
         serde_json::from_str::<Value>(get("function_call_arguments", 2, 0)).unwrap(),
         json!({"alias":RAW_ALIAS})
@@ -904,10 +920,11 @@ async fn openai_missing_tool_identity_preserves_independent_streams() {
         let payloads = stream_through_proxy(
             move |tokens| {
                 let (a, b) = tokens.person.split_at(tokens.person.len() / 2);
+                // Every fragment names its declared tool, so only identity decides joining.
                 let call = |choice, index, text| {
                     chunk(
                         choice,
-                        json!({"tool_calls": [{"index": index, "function": {"arguments": text}}]}),
+                        json!({"tool_calls": [{"index": index, "function": {"name": "send_mail", "arguments": text}}]}),
                     )
                 };
                 let mut unknown = call(0, 0, "X");
@@ -988,7 +1005,10 @@ async fn gemini_invalid_candidate_identity_does_not_bridge_text_fragments() {
         let affected = format!("{}{}", part(0), part(3));
         assert_eq!(token_shape::find_tokens(&affected).count(), 1);
         assert!(!affected.contains(RAW_PERSON));
-        assert_eq!(format!("{}{}", part(1), part(4)), RAW_PERSON);
+        // The thought stream is joined but keeps its token: thoughts never restore.
+        let thought = format!("{}{}", part(1), part(4));
+        assert_eq!(token_shape::find_tokens(&thought).count(), 1);
+        assert!(!thought.contains(RAW_PERSON));
     }
 }
 
@@ -1017,7 +1037,13 @@ async fn responses_missing_identity_only_disables_compatible_streams() {
                 let trusted_kind = if kind.ends_with("arguments") { "output_text" } else { kind };
                 let trusted_output = u64::from(missing != "output_index");
                 let trusted_part = u64::from(missing == "output_index");
+                // Name the calls at outputs 0 and 1, as the API does before their deltas.
+                let added = |output: u64| {
+                    json!({"type": "response.output_item.added", "output_index": output, "item": {"type": "function_call", "id": format!("fc_{output}"), "call_id": format!("call_{output}"), "name": "send_mail", "arguments": ""}})
+                };
                 sse_body(vec![
+                    (None, added(0)),
+                    (None, added(1)),
                     (None, event(kind, 0, 0, a)),
                     (None, event(trusted_kind, trusted_output, trusted_part, a)),
                     (None, unknown),
@@ -1028,18 +1054,26 @@ async fn responses_missing_identity_only_disables_compatible_streams() {
             "/v1/responses",
             json!({"model": "gpt-test", "input": user_text(), "stream": true}),
         ).await;
-        let delta = |position: usize| payloads[position]["delta"].as_str().unwrap();
+        // Skip the two `output_item.added` events.
+        let delta = |position: usize| payloads[position + 2]["delta"].as_str().unwrap();
         assert!(!delta(0).is_empty(), "{kind}, {missing}");
         assert_eq!(delta(2), "X");
         assert!(!delta(3).is_empty(), "{kind}, {missing}");
         let affected = format!("{}{}", delta(0), delta(3));
         assert_eq!(token_shape::find_tokens(&affected).count(), 1);
         assert!(!affected.contains(RAW_PERSON));
-        assert_eq!(
-            format!("{}{}", delta(1), delta(4)),
-            RAW_PERSON,
-            "{kind}, {missing}"
-        );
+        let trusted = format!("{}{}", delta(1), delta(4));
+        if kind.starts_with("reasoning") {
+            // The joined reasoning stream keeps its token: reasoning never restores.
+            assert_eq!(
+                token_shape::find_tokens(&trusted).count(),
+                1,
+                "{kind}, {missing}"
+            );
+            assert!(!trusted.contains(RAW_PERSON), "{kind}, {missing}");
+        } else {
+            assert_eq!(trusted, RAW_PERSON, "{kind}, {missing}");
+        }
     }
 }
 
