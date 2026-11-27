@@ -166,7 +166,7 @@ Support summary mentions Dr. Schmidt after triage.
 
 #[test]
 #[file_serial(gaze_subprocess)]
-fn index_ingest_tokenizes_residual_suspects_by_default_without_raw_persistence() {
+fn index_ingest_accepts_resolvable_residual_suspects_by_default_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");

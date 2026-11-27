@@ -113,9 +113,10 @@ Each action writes one audit row per suspect, never the suspect's bytes. The
 | `fallback` | the fallback decides a residual suspect | `Redact` under the `redact` fallback; `Preserve` under `refuse`, `strict` or `tolerant` |
 
 Fallback rows are loser rows (`conflict_loser = true`) and carry the reason in
-`fallback_triggered`. Under the `strict` and `refuse` fallbacks the row is written before the
-document is rejected, so it survives for forensic replay even though stdout is
-empty. Suspect metadata also goes to the
+`fallback_triggered`. When the `strict` or `refuse` fallback itself refuses the
+residuals, the row is written before the document is rejected, so it survives
+for forensic replay even though stdout is empty. A `refuse` rejection by the
+terminal re-scan, or of a lone sub-word, writes no fallback row. Suspect metadata also goes to the
 [`safety_net_log` table](safety-nets.md#safety_net_log-audit-table) when an audit
 database is configured.
 

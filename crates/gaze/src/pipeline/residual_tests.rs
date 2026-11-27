@@ -882,9 +882,31 @@ struct ScriptNet {
     /// Adds a plain-text class mismatch to the final residual, which the follow-up planner
     /// declines: the whole set then goes to deletion instead of being tokenized.
     declined: bool,
-    /// Has the terminal scan, and the settled pass after it, report a plain-text sub-word that
-    /// no earlier pass saw.
-    terminal_subword: bool,
+    /// What the later sweeps report beyond the base script.
+    late: Late,
+}
+#[derive(Clone, Copy)]
+enum Late {
+    Nothing,
+    /// The terminal scan and the settled pass report a plain-text sub-word no earlier pass saw.
+    TerminalSubword,
+    /// The terminal scan reports the plain word `rk`, which its round tokenizes; the settled pass
+    /// then reports a fresh non-sub-word finding.
+    SettledFinding,
+    /// The last re-run reports a sub-word beside its tokenizable residual; the terminal scan
+    /// reports nothing.
+    RerunSubword,
+}
+fn name_at(span: std::ops::Range<usize>) -> LeakSuspect {
+    LeakSuspect::new(
+        span,
+        PiiClass::Name,
+        "synthetic.net",
+        Some(0.99),
+        LeakKind::Uncovered,
+        "synthetic",
+        None,
+    )
 }
 impl SafetyNet for ScriptNet {
     fn id(&self) -> &str {
@@ -963,20 +985,24 @@ impl SafetyNet for ScriptNet {
                         let start = output.rfind("rk").unwrap();
                         found.push(mismatch(start..start + 2));
                     }
+                    if matches!(self.late, Late::RerunSubword) {
+                        let start = output.rfind("rk<").unwrap();
+                        found.push(name_at(start..start + 1));
+                    }
                     found
                 }
-                3 | 4 if self.terminal_subword => {
-                    // `r` of the plain `rk` between two tokens: inside a word, outside tokens.
+                // `r` of the plain `rk` between two tokens: inside a word, outside tokens.
+                3 | 4 if matches!(self.late, Late::TerminalSubword) => {
                     let start = output.rfind("rk<").unwrap();
-                    vec![LeakSuspect::new(
-                        start..start + 1,
-                        PiiClass::Name,
-                        self.id(),
-                        Some(0.99),
-                        LeakKind::Uncovered,
-                        "synthetic",
-                        None,
-                    )]
+                    vec![name_at(start..start + 1)]
+                }
+                3 if matches!(self.late, Late::SettledFinding) => {
+                    let start = output.rfind("rk<").unwrap();
+                    vec![name_at(start..start + 2)]
+                }
+                4 if matches!(self.late, Late::SettledFinding) => {
+                    let start = output.find('\n').unwrap();
+                    vec![name_at(start..start + 1)]
                 }
                 3 => vec![],
                 _ => panic!("unexpected extra sweep"),
@@ -988,7 +1014,7 @@ impl SafetyNet for ScriptNet {
 }
 fn run_script(
     declined: bool,
-    terminal_subword: bool,
+    late: Late,
     fallback: SafetyNetFallback,
 ) -> (Result<String>, Session) {
     let mut p = pipeline(pair(), true);
@@ -999,7 +1025,7 @@ fn run_script(
             step: std::sync::Mutex::new(0),
             calls: calls.clone(),
             declined,
-            terminal_subword,
+            late,
         }));
     }
     let session = Session::new(crate::Scope::Ephemeral).unwrap();
@@ -1020,7 +1046,8 @@ fn run_script(
 /// delete the declined mismatch, `Refuse` rejects the document with a typed reason instead.
 #[test]
 fn default_refuse_fallback_tokenizes_what_redact_tokenizes_and_refuses_what_it_deletes() {
-    let run = |declined: bool, fallback: SafetyNetFallback| run_script(declined, false, fallback);
+    let run =
+        |declined: bool, fallback: SafetyNetFallback| run_script(declined, Late::Nothing, fallback);
     assert_eq!(
         SafetyNetPolicy::default(),
         SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Refuse)
@@ -1042,17 +1069,49 @@ fn default_refuse_fallback_tokenizes_what_redact_tokenizes_and_refuses_what_it_d
     );
 }
 
-/// A finding first seen by the terminal scan, which no stage may tokenize, ships in the report
-/// under `Redact` but rejects the document under `Refuse`: the default never ships a residual raw.
+/// The routing probe discards its output, so a residual the default would refuse must still
+/// read as a mutation (the proxy's unsurfaced-PII answer), not as a pipeline error.
 #[test]
-fn refuse_fallback_rejects_a_residual_the_terminal_scan_cannot_tokenize() {
-    let (admitted, _) = run_script(false, true, SafetyNetFallback::Redact);
-    assert!(admitted.is_ok(), "Redact admits the sub-word: {admitted:?}");
-    let (refused, _) = run_script(false, true, SafetyNetFallback::Refuse);
-    assert!(
-        matches!(refused, Err(Error::SafetyNetFallback(_))),
-        "Refuse must reject a residual it cannot tokenize: {refused:?}"
+fn control_probe_reports_a_refusable_residual_as_a_mutation() {
+    let mut p = pipeline(pair(), true);
+    let calls = NetCalls::default();
+    for net in 0..2 {
+        p.safety_nets.push(Arc::new(ScriptNet {
+            net,
+            step: std::sync::Mutex::new(0),
+            calls: calls.clone(),
+            declined: true,
+            late: Late::Nothing,
+        }));
+    }
+    let session = Session::new(crate::Scope::Ephemeral).unwrap();
+    let transaction = session.begin_transaction();
+    let mutates = p.control_would_mutate(
+        &transaction,
+        RAW,
+        &[crate::LocaleTag::Global],
+        &DictionaryBundle::default(),
     );
+    assert!(matches!(mutates, Ok(true)), "{mutates:?}");
+}
+
+/// A residual no stage may tokenize ships in the report under `Redact` but rejects the document
+/// under `Refuse`, whichever pass finds it: the default never ships a residual raw.
+#[test]
+fn refuse_fallback_rejects_a_residual_no_stage_can_tokenize() {
+    for late in [
+        Late::TerminalSubword,
+        Late::SettledFinding,
+        Late::RerunSubword,
+    ] {
+        let (admitted, _) = run_script(false, late, SafetyNetFallback::Redact);
+        assert!(admitted.is_ok(), "Redact admits the residual: {admitted:?}");
+        let (refused, _) = run_script(false, late, SafetyNetFallback::Refuse);
+        assert!(
+            matches!(refused, Err(Error::SafetyNetFallback(_))),
+            "Refuse must reject a residual it cannot tokenize: {refused:?}"
+        );
+    }
 }
 
 /// The straddling mismatch reaches the fallback as its exposed one-byte gap, which the planner can
@@ -1069,7 +1128,7 @@ fn actual_two_net_sequence_sees_residual_output_and_deletes_its_final_authority(
                 step: std::sync::Mutex::new(0),
                 calls: calls.clone(),
                 declined,
-                terminal_subword: false,
+                late: Late::Nothing,
             }));
         }
         let session = Session::new(crate::Scope::Ephemeral).unwrap();

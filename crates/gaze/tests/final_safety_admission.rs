@@ -330,7 +330,7 @@ fn final_admission_rejects_terminal_errors_and_malformed_or_mismatched_spans() {
 }
 
 #[test]
-fn final_admission_clear_output_retains_default_one_way_fallback_and_trace() {
+fn final_admission_clear_output_retains_redact_one_way_fallback_and_trace() {
     for route in [Route::Live, Route::Staged, Route::Trace] {
         let (pipeline, seen) = pipeline(Terminal::Clear);
         let session = Session::new(Scope::Ephemeral).unwrap();
@@ -477,7 +477,7 @@ fn final_admission_reversible_success_preserves_trace_and_staged_restore() {
             RawDocument::Text(raw.into()),
             &[LocaleTag::Global],
             &dictionaries,
-            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+            SafetyNetPolicy::default(),
         )
         .unwrap();
     let CleanDocument::Text(staged_text) = staged_doc else {
@@ -491,7 +491,7 @@ fn final_admission_reversible_success_preserves_trace_and_staged_restore() {
             raw,
             &[LocaleTag::Global],
             &dictionaries,
-            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+            SafetyNetPolicy::default(),
         )
         .unwrap();
     let CleanDocument::Text(live_text) = live_doc else {

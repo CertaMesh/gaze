@@ -35,7 +35,7 @@ The default safety-net fallback changed from `redact` to `refuse`. Output is
 now either fully restorable or refused: where Gaze used to write a one-way
 `[REDACTED:<class>]` marker, `gaze clean`, `gaze daemon` and `gaze eval` exit
 `3` with `SafetyNetFallback`, and Rust callers of `SafetyNetPolicy::default()`
-or `clean_with_safety_net*` (including the `gaze-document` bundle) get
+or `clean_with_safety_net*` get
 `Error::SafetyNetFallback(reason)`. A residual that used to ship raw in the leak
 report, such as a sub-word, is now refused too. Suspects the resolve pass can
 tokenize are unaffected.

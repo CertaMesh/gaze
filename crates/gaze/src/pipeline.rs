@@ -2314,7 +2314,8 @@ impl Pipeline {
                                 .suspects
                                 .iter()
                                 .find(|suspect| {
-                                    suspect_is_unactionable_subword(&clean.text, suspect)
+                                    !suspect_is_already_protected(target, clean, suspect)
+                                        && suspect_is_unactionable_subword(&clean.text, suspect)
                                 })
                                 .map(fallback_reason_for);
                         }
@@ -2344,7 +2345,8 @@ impl Pipeline {
                         let refused_subword = matches!(on_residual, SafetyNetFallback::Refuse)
                             && residual_report.as_ref().is_some_and(|residual| {
                                 residual.suspects.iter().any(|suspect| {
-                                    suspect_is_unactionable_subword(&clean.text, suspect)
+                                    !suspect_is_already_protected(target, clean, suspect)
+                                        && suspect_is_unactionable_subword(&clean.text, suspect)
                                 })
                             });
                         // A residual set the planner can resolve completely is tokenized rather
