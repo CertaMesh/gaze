@@ -14,6 +14,10 @@ Resolves #
 - [ ] Run every `cargo run -p xtask -- <gate>` in CONTRIBUTING.md’s "PR-checks ritual".
 - [ ] (If touching audit-sink boundaries) ran `dylint`: `gh workflow run dylint.yml`
 
+## Changelog
+
+- [ ] User-visible changes have a `changelog.d/<name>.<section>.md` fragment; `CHANGELOG.md` is not edited.
+
 ## Fixtures & PII hygiene
 
 - [ ] No real PII anywhere (code, tests, fixtures, docs): synthetic only (reserved email domains and generated tokens).
