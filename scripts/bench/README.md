@@ -759,12 +759,14 @@ The [generator v31 specification](../../docs/reference/benchmarks/specifications
 adds generator v31's prose credential cells.
 The [JSON structure census specification](../../docs/reference/benchmarks/specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json)
 differs from it only by adding `json_structure_census.py` to the measuring closure.
-The [current specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
+The [known-record v7 specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
 differs from the JSON structure census one only in the `known_record_cells.py` and
 `known_record_arm.py` digests: known-record cell generator v7, which reads
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
+The [current specification](../../docs/reference/benchmarks/specifications/8a9917c12b565fd176ab0d5ec3606c2341b6b90dd3a6d3bd32558c2a213ccf53.json)
+adds generator v32's EN/DE prose record IDs and benign public references and selectors.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

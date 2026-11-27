@@ -2005,7 +2005,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; and the [current specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7).
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7); and the [current specification](specifications/8a9917c12b565fd176ab0d5ec3606c2341b6b90dd3a6d3bd32558c2a213ccf53.json) adds generator v32's prose record IDs and benign counterweights.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2562,6 +2562,20 @@ byte-for-byte; its contract is frozen as
 No release has been measured on generator v31 yet. The v30 history rows above
 stay bound to the v30 specification; the v31 backfill runs outside the PR
 critical path.
+
+### Prose record IDs (generator v32)
+
+The [record-ID cells](../../../scripts/bench/prose_record_id_cells.py) add 770 A
+and 535 D documents per partition. Layer A scores the whole identifier, not
+just the first digit run. It covers personal case, claim, member, medical,
+customer and employee records in English and German, including a numeric case
+and `Fall-Nr.` immediately followed by digits. Employee and account keys also
+appear in running text without a field cue. Dev and test use different wording
+and value pools. Layer D reuses the exact uncued keys as public release or
+reference codes and tool selectors. Dotted tool names, public paths and field
+cues with no value carry no gold. Layer R is unchanged. The v31 corpus
+rebuilds byte-for-byte under its [frozen contract](scored-labels-agentic-generator-v31.json).
+No detector or release has been measured as part of this addition.
 
 ### Measured adjacency layer history
 
