@@ -463,6 +463,7 @@ mod tests {
         gaze::Error::Protection(gaze::ProtectionError::Untransformable {
             reason,
             field_path: gaze_types::FieldPath::new(["synthetic-key@example.invalid".into()]),
+            others: Vec::new(),
         })
     }
 

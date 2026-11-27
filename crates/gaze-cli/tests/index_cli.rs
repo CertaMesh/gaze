@@ -562,6 +562,27 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
             raw: "72",
             token: ":Custom:age_",
         },
+        // Field-labelled rules bind only structured fields, so these lines are JSON
+        // members and their case document is one JSON object. `*_no` labels are ones the
+        // index's own `label: value` line detector ignores, so only the core rule protects them.
+        CoreCase {
+            class: "customer_id",
+            line: r#""customer_no": "C-731284""#,
+            raw: "731284",
+            token: ":Custom:customer_id_",
+        },
+        CoreCase {
+            class: "employee_id",
+            line: r#""employee_no": "E-552018""#,
+            raw: "552018",
+            token: ":Custom:employee_id_",
+        },
+        CoreCase {
+            class: "record_id",
+            line: r#""member_no": "M-904417""#,
+            raw: "904417",
+            token: ":Custom:record_id_",
+        },
     ];
 
     let core = Rulepack::parse_bundled(gaze_recognizers::embedded("core").expect("core bundle"))
@@ -595,7 +616,14 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
     for (number, case) in cases.iter().enumerate() {
         fs::write(
             corpus.join(format!("case-{number:02}.md")),
-            format!("Case ID: CASE-{number:02}\n{}\n", case.line),
+            if case.line.starts_with('"') {
+                format!(
+                    "{{\n\"case_id\": \"CASE-{number:02}\",\n{}\n}}\n",
+                    case.line
+                )
+            } else {
+                format!("Case ID: CASE-{number:02}\n{}\n", case.line)
+            },
         )
         .expect("write core case");
     }
@@ -612,7 +640,7 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
     let mut failures = Vec::new();
     for (number, case) in cases.iter().enumerate() {
         let search = gaze_index_command(&index_env)
-            .args(["search", &format!("CASE-{number:02}")])
+            .args(["search", &case_entity(case.line, number)])
             .args([
                 "--class",
                 "custom:case_id",
@@ -1008,6 +1036,15 @@ struct IndexEnv {
     ner_dir: PathBuf,
     opf: PathBuf,
     checkpoint: PathBuf,
+}
+
+/// The index's line detector keeps a JSON string's quotes in the case entity it records.
+fn case_entity(line: &str, number: usize) -> String {
+    if line.starts_with('"') {
+        format!("\"CASE-{number:02}\"")
+    } else {
+        format!("CASE-{number:02}")
+    }
 }
 
 fn gaze_index_command(env: &IndexEnv) -> Command {

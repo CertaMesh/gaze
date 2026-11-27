@@ -12,6 +12,13 @@ use token_assertions::without_tokens;
 
 // Validator-passing synthetic values are shared with the core CLI fixture
 // inventory in index_cli.rs. The class set below is checked against the packs.
+/// Field-labelled classes: (class, JSON member, raw value).
+const FIELD_CASES: &[(&str, &str, &str)] = &[
+    ("customer_id", r#""customer_id":"C-731284""#, "731284"),
+    ("employee_id", r#""employee_id":"E-552018""#, "552018"),
+    ("record_id", r#""member_id":"M-904417""#, "904417"),
+];
+
 const CASES: &[(&str, &str, &str)] = &[
     (
         "email",
@@ -120,6 +127,7 @@ fn setup_cli_clean_tokenizes_every_bundled_class() {
         .collect::<BTreeSet<_>>();
     let covered = CASES
         .iter()
+        .chain(FIELD_CASES)
         .map(|case| {
             if matches!(case.0, "email" | "name") {
                 case.0.to_string()
@@ -147,6 +155,32 @@ fn setup_cli_clean_tokenizes_every_bundled_class() {
     let clean = without_tokens(value["clean_text"].as_str().unwrap());
     for (class, _, raw) in CASES {
         assert!(!clean.contains(raw), "raw fixture survived for {class}");
+    }
+
+    // Field-labelled rules bind only structured fields, so their cases form one JSON
+    // document cleaned on its own.
+    let members = FIELD_CASES
+        .iter()
+        .map(|case| case.1)
+        .collect::<Vec<_>>()
+        .join(",");
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", "--policy"])
+        .arg(&policy_path)
+        .write_stdin(format!("{{{members}}}").into_bytes())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "field clean failed");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let field_text = value["clean_text"].as_str().unwrap();
+    let clean = without_tokens(field_text);
+    for (class, _, raw) in FIELD_CASES {
+        assert!(!clean.contains(raw), "raw fixture survived for {class}");
+        assert!(
+            field_text.contains(&format!(":Custom:{class}_")),
+            "no {class} token"
+        );
     }
 }
 

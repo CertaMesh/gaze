@@ -821,6 +821,7 @@ impl DispatchHost for UntransformableHost {
         Err(gaze::ProtectionError::Untransformable {
             reason: self.0,
             field_path: gaze::FieldPath::default().child(EMAIL.to_owned()),
+            others: Vec::new(),
         }
         .into())
     }

@@ -1963,11 +1963,15 @@ identity. A model-free guard enforces this in CI: the bench example test
 fails any response that carries the identity without naming every refused
 span. Its committed fixture feeds `scripts/bench/test_typed_refusal_producer.py`,
 which round-trips those responses through this contract: all-gold refusals
-block, and a benign untransformable sibling keeps the refusal ordinary. Until a
-detection change emits the identity, no live refusal is blocked. All four
-current guard cases complete on the `core` floor, so today's proof is the
-fabricated path: the same checking functions reject fabricated first-path-only,
-unflagged, renamed and case-variant outputs, and
+block, and a benign untransformable sibling keeps the refusal ordinary. The
+field-labelled record-ID rules make all four guard cases refuse on the `core`
+floor, and the live test requires every one to carry the identity with complete
+evidence. The same checking functions also reject fabricated first-path-only,
+unflagged, renamed and case-variant outputs.
+`scripts/ci/field_label_mutation_probe.py` runs two producer mutants end to end:
+an emitter that lists only the first refused field must fail the live Rust
+guard, and, with the Rust check removed and the fixture re-blessed from that
+emitter, the Python guard must fail on the committed fixture.
 `scripts/bench/check_typed_refusal_guard_mutation.py`, its own CI step, requires
 the intended test to fail when the live check is disconnected, the live response
 is discarded, the checker compares only the first span or the completeness

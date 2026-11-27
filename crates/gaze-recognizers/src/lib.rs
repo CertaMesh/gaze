@@ -33,6 +33,7 @@ mod bundle;
 mod dictionary;
 mod dob_judge;
 mod error;
+mod field_label;
 mod locale_aware;
 mod ner;
 pub mod normalize;
@@ -54,6 +55,7 @@ pub use dob_judge::{
     GLINER_DOB_UPSTREAM_FILES, REQUIRED_GLINER_DOB_ARTIFACTS,
 };
 pub use error::{RecognizerError, Result};
+pub use field_label::{normalize_label as normalize_field_label, FieldLabelRecognizer};
 #[cfg(feature = "phone-parser")]
 pub use gaze_types::Region;
 pub use gaze_types::{SafetyTier, ValidatorFailReason, ValidatorKind, ValidatorOnFail};
@@ -120,7 +122,7 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 54);
+        assert_eq!(rulepack.recognizers.len(), 57);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -143,9 +145,12 @@ mod tests {
             .iter()
             .take(3)
             .all(|recognizer| matches!(recognizer.matcher, RawMatch::AnchoredMatch { .. })));
-        assert!(rulepack.recognizers[6..]
+        assert!(rulepack.recognizers[6..54]
             .iter()
             .all(|recognizer| matches!(recognizer.matcher, RawMatch::Regex { .. })));
+        assert!(rulepack.recognizers[54..]
+            .iter()
+            .all(|recognizer| matches!(recognizer.matcher, RawMatch::FieldLabelled { .. })));
     }
 
     #[test]
@@ -155,7 +160,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 54);
+        assert_eq!(rulepack.recognizers.len(), 57);
         assert!(rulepack
             .recognizers
             .iter()
