@@ -49,6 +49,21 @@ crate, bundle `nym-small-int8`, inputs sha256
 
 Every piece matched the one-thread session bit for bit at 2, 4 and 8 threads.
 
+2026-11-27, Amp orb a1.medium (x86-64 Linux 6.1, 4 vCPU), `ort` 2.0.0-rc.12, same
+bundle and the same inputs sha256:
+
+```json
+{"documents":1300,"pieces":765150,"threads":[2,4,8]}
+```
+
+Every piece matched bit for bit here too.
+
+End to end on the same orb, the F8 server workload (`measure --envelope server
+--samples 8 --turns 3 --cold-runs 1 --allow-noisy`, 24 warm turns per side) gave the
+same output digest for main 9ff7ad9 (one thread) and for four threads,
+`5ae433300216b067916e21f5196b67cb0ffd893a5d1a542f4d65998027a9c49e`, and `compare`
+reported byte-identical outputs.
+
 ## Limits
 
 The proof covers the CPU execution provider and the machines it ran on. A new ONNX
