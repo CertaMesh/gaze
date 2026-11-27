@@ -570,7 +570,9 @@ impl Pipeline {
             RawDocument::Text(input.to_owned()),
             locale_chain,
             dictionaries,
-            SafetyNetPolicy::default(),
+            // The probe's output is discarded, so a residual only has to show as a mutation:
+            // `Redact` marks it, where the default `Refuse` would turn it into an error.
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )?;
         Ok(!matches!(clean, CleanDocument::Text(text) if text == input)
             || !spans.is_empty()
@@ -843,7 +845,7 @@ impl Pipeline {
         }
     }
 
-    /// Cleans `raw` under [`SafetyNetPolicy::default()`] (`Resolve` + `Redact`).
+    /// Cleans `raw` under [`SafetyNetPolicy::default()`] (`Resolve` + `Refuse`).
     ///
     /// Observer-only behaviour (report suspects, mutate nothing) is an explicit policy: pass
     /// `SafetyNetPolicy::new(SafetyNetMode::Strict, ..)` to
@@ -2337,6 +2339,14 @@ impl Pipeline {
                             .iter()
                             .map(|suspect| (*suspect).clone())
                             .collect::<Vec<_>>();
+                        // A sub-word the re-run still reports is never tokenized or cut, so
+                        // `Refuse` cannot ship the document even when the rest tokenizes.
+                        let refused_subword = matches!(on_residual, SafetyNetFallback::Refuse)
+                            && residual_report.as_ref().is_some_and(|residual| {
+                                residual.suspects.iter().any(|suspect| {
+                                    suspect_is_unactionable_subword(&clean.text, suspect)
+                                })
+                            });
                         // A residual set the planner can resolve completely is tokenized rather
                         // than deleted: the bytes are protected either way, and only the token
                         // keeps the document restorable. A cascade of plannable suspects (each
@@ -2350,6 +2360,7 @@ impl Pipeline {
                             on_residual,
                             SafetyNetFallback::Redact | SafetyNetFallback::Refuse
                         ) && residual_report.is_some()
+                            && !refused_subword
                             && !actionable.is_empty()
                             && self.tokenize_fallback_residuals(
                                 target,
@@ -2415,6 +2426,7 @@ impl Pipeline {
                             locale_chain,
                             field_path,
                             decision,
+                            on_residual,
                             provenance,
                             promise,
                             protection_trace,
@@ -2489,6 +2501,7 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         field_path: Option<&str>,
         decision: SafetyNetDecision,
+        on_residual: SafetyNetFallback,
         provenance: TerminalManifestProvenance,
         mut promise: FallbackPromise,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
@@ -2513,6 +2526,10 @@ impl Pipeline {
         // Every judgement below is made against the ACTUAL current text. `CleanLayout::of` also
         // reconciles the manifest against the deletion ledger, so a document whose own record of
         // itself is wrong fails closed before anything acts on it.
+        // `Refuse` keeps the reversible round but nothing else: a finding this pass may not
+        // tokenize, a seam deletion, or a settled finding rejects the document instead of
+        // shipping in the report.
+        let refuse = matches!(on_residual, SafetyNetFallback::Refuse);
         let layout = CleanLayout::of(clean)?;
         let survivors = promise.survivors(clean, &layout);
         let mut manufactured = None;
@@ -2531,12 +2548,17 @@ impl Pipeline {
                 // A sub-word is neither tokenized nor deleted, seam or not; it ships in the
                 // report. Bytes the fallback promised to remove still deny above.
                 TerminalAdmission::SeamManufactured { .. } | TerminalAdmission::Admit
-                    if suspect_is_unactionable_subword(&clean.text, suspect) => {}
+                    if suspect_is_unactionable_subword(&clean.text, suspect) =>
+                {
+                    if refuse {
+                        return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
+                    }
+                }
                 // Bound: one deletion. A second manufactured shape in one report means the
                 // deletion is producing them at least as fast as it removes them, and unbounded
                 // byte deletion is worse than a denial.
                 TerminalAdmission::SeamManufactured { .. } => {
-                    if manufactured.replace(suspect.clone()).is_some() {
+                    if refuse || manufactured.replace(suspect.clone()).is_some() {
                         return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
                     }
                 }
@@ -2654,7 +2676,7 @@ impl Pipeline {
                 }
                 _ => false,
             };
-            if !admitted {
+            if refuse || !admitted {
                 return Err(Error::SafetyNetFallback(fallback_reason_for(suspect)));
             }
         }

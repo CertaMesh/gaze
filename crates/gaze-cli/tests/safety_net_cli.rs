@@ -189,7 +189,7 @@ fn uncovered_suspect_exits_three_in_strict_mode_without_stdout() {
 
 #[test]
 #[file_serial(gaze_subprocess)]
-fn default_safety_net_mode_resolves_with_redact_fallback() {
+fn default_safety_net_mode_resolves_a_tokenizable_suspect() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
     let checkpoint = checkpoint_dir();
     let out = clean(&safety_args(&opf, checkpoint.path()), "Plain text");
@@ -205,6 +205,37 @@ fn default_safety_net_mode_resolves_with_redact_fallback() {
     assert!(!clean_text.starts_with("Plain"));
     assert!(clean_text.ends_with(" text"));
     assert_eq!(body["leak_report"]["stats"]["uncovered_count"], 1);
+}
+
+/// A sub-word suspect is never tokenized or cut. The default `refuse` fallback rejects the
+/// document with exit `3` and empty stdout; `redact` ships the residual bytes raw.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn default_safety_net_fallback_refuses_a_residual_it_cannot_tokenize() {
+    // `la` inside `Plain`: a name-class sub-word.
+    let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_person","start":1,"end":3}]"#);
+    let checkpoint = checkpoint_dir();
+    let out = clean(&safety_args(&opf, checkpoint.path()), "Plain text");
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("Plain"));
+
+    let mut redact = safety_args(&opf, checkpoint.path());
+    redact.extend(["--safety-net-fallback".to_string(), "redact".to_string()]);
+    let out = clean(&redact, "Plain text");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let body: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(body["clean_text"], "Plain text");
 }
 
 #[test]
