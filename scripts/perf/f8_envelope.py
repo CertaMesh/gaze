@@ -35,7 +35,9 @@ no other daemon flags, so a receipt always describes the decided profile.
 
 A timing claim needs the Solo `bench-machine` lease and a quiet host: load1
 below 2.0 and no foreign build or benchmark process at every probe (start, every
-few seconds during the run, end). `check` recomputes quietness from the probes
+few seconds during the run, end). Probes taken while the daemon runs subtract the
+cores the daemon itself used over the last minute, so its own intra-op threads do
+not count as foreign load. `check` recomputes quietness from the probes
 and fails a receipt that is not quiet, that was measured against other budgets,
 another platform or extra daemon flags, that misses any budgeted measurement,
 or that exceeds any budget. Budgets are fixed before measuring; never edit them to fit
@@ -82,6 +84,7 @@ FOREIGN = re.compile(
 TOKEN_PREFIX = re.compile(r"(?<![0-9A-Za-z])([0-9a-f]{8})(?=:|@gaze-fake\.invalid)")
 PLATFORMS = {"laptop": ("Darwin", "arm64"), "server": ("Linux", "x86_64")}
 PROBE_SECONDS = 5.0
+LOAD_TIME_CONSTANT = 60.0
 EXCHANGE_TIMEOUT = 600.0
 COLD_RUNS_MIN = 5
 HISTORY_TURNS = 12
@@ -231,11 +234,35 @@ def foreign_processes() -> list[str]:
     return sorted(found)
 
 
-def host_probe() -> dict:
+def cpu_seconds(pid: int) -> float | None:
+    """Cumulative user and system CPU time of one process."""
+    stat = Path(f"/proc/{pid}/stat")
+    if stat.exists():
+        try:
+            fields = stat.read_text().rsplit(")", 1)[1].split()
+        except OSError:
+            return None
+        return (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+    out = subprocess.run(["ps", "-o", "time=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    if not out:
+        return None
+    days, _, clock = out.rpartition("-")
+    seconds = 0.0
+    for part in clock.split(":"):
+        seconds = seconds * 60 + float(part)
+    return seconds + (int(days) * 86400 if days else 0)
+
+
+def own_load(load_1m: float, own_cores: float) -> float:
+    """load1 without the measured daemon's own share."""
+    return load_1m - own_cores
+
+
+def host_probe(own_cores: float = 0.0) -> dict:
     load = os.getloadavg()
     foreign = foreign_processes()
-    return {"load": [round(x, 2) for x in load], "foreign": foreign,
-            "quiet": load[0] < QUIET_LOAD_1M and not foreign}
+    return {"load": [round(x, 2) for x in load], "own_cores": round(own_cores, 2), "foreign": foreign,
+            "quiet": own_load(load[0], own_cores) < QUIET_LOAD_1M and not foreign}
 
 
 class Daemon:
@@ -249,6 +276,9 @@ class Daemon:
         self.peak = 0
         self.samples: list[int] = []
         self.probes = probes
+        # The daemon's share of load1, damped like load1 itself and starting at 0.
+        self._last_cpu: tuple[float, float] | None = None
+        self.own_cores = 0.0
         # A reader thread owns stdout, so buffered replies are never stranded
         # behind a select() on an already drained descriptor.
         self._lines: queue.Queue[bytes] = queue.Queue()
@@ -271,8 +301,36 @@ class Daemon:
             if rss:
                 self.peak = max(self.peak, rss)
             if self.probes is not None:
-                self.probes.append(host_probe())
+                self.probes.append(host_probe(self._own_cores()))
             self._stop.wait(PROBE_SECONDS)
+
+    def _own_cores(self) -> float:
+        self.observe_cpu(time.monotonic(), cpu_seconds(self.proc.pid))
+        return self.own_cores
+
+    def observe_cpu(self, now: float, used: float | None) -> None:
+        """Fold one CPU-time sample into the damped share.
+
+        load1 is an exponentially damped average with a 60 s time constant. Each
+        increment is damped by one extra step, so the estimate stays below the
+        daemon's true share and never hides foreign load.
+        """
+        if used is None:
+            return
+        if self._last_cpu is not None:
+            then, before = self._last_cpu
+            dt = now - then
+            if dt > 0:
+                a = math.exp(-dt / LOAD_TIME_CONSTANT)
+                cores = max(0.0, used - before) / dt
+                self.own_cores = self.own_cores * a + cores * (1 - a) * a
+        self._last_cpu = (now, used)
+
+    def own_cores_at(self, now: float) -> float:
+        """The share after the daemon stopped: load1 keeps decaying it."""
+        if self._last_cpu is None:
+            return 0.0
+        return self.own_cores * math.exp(-max(0.0, now - self._last_cpu[0]) / LOAD_TIME_CONSTANT)
 
     def rss(self) -> int | None:
         rss = rss_bytes(self.proc.pid)
@@ -484,7 +542,8 @@ def measure(args) -> dict:
         peak = daemon.peak or None
         policy_sha = sha256_file(policy)
         shutil.rmtree(work, ignore_errors=True)
-    end_probe = host_probe()
+    # load1 still carries the daemon's last minute right after it exits.
+    end_probe = host_probe(daemon.own_cores_at(time.monotonic()))
     probes.append(end_probe)
 
     pipeline_ids = {pid for _, pid in cold}
@@ -533,8 +592,13 @@ def check(receipt: dict, budgets: dict) -> list[str]:
     if envelope is None:
         return [f"unknown envelope {receipt['envelope']!r}"]
     probes = receipt.get("host", {}).get("probes") or []
-    if len(probes) < 2 or not all(p.get("load", [99])[0] < QUIET_LOAD_1M and not p.get("foreign") for p in probes):
+    if len(probes) < 2 or not all(own_load(p.get("load", [99])[0], p.get("own_cores", 0.0)) < QUIET_LOAD_1M
+                                  and not p.get("foreign") for p in probes):
         failures.append("host was not quiet at every probe; the receipt is diagnostic only")
+    cpus = receipt.get("host", {}).get("cpu_count") or 0
+    if probes and (probes[0].get("own_cores", 0.0) != 0.0
+                   or not all(0.0 <= p.get("own_cores", 0.0) <= cpus for p in probes)):
+        failures.append("probe own_cores out of range; the receipt is diagnostic only")
     if receipt.get("budgets_sha256") != sha256_file(BUDGETS):
         failures.append("receipt was measured against a different budgets file")
     if receipt.get("workload", {}).get("daemon_args"):
