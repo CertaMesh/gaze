@@ -115,6 +115,18 @@ class ChangelogFragmentsTest(unittest.TestCase):
         self.assertEqual((self.root / 'CHANGELOG.md').read_text(), broken)
         self.assertTrue((self.root / 'changelog.d/pr.fixed.md').exists())
 
+    def test_empty_unreleased_directly_before_a_version_heading(self):
+        tight = '# Changelog\n\n## [Unreleased]\n## [0.17.0] - 2026-10-19\n\n- Old.\n\n' \
+            '[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.17.0...HEAD\n'
+        (self.root / 'CHANGELOG.md').write_text(tight)
+        self.fragment('pr.fixed.md', '- Fix.\n')
+        changelog.assemble(self.root, '1.0.0', '2026-12-01')
+        self.assertEqual((self.root / 'CHANGELOG.md').read_text(),
+                         '# Changelog\n\n## [Unreleased]\n\n## [1.0.0] - 2026-12-01\n\n'
+                         '### Fixed\n\n- Fix.\n\n## [0.17.0] - 2026-10-19\n\n- Old.\n\n'
+                         '[Unreleased]: https://github.com/CertaMesh/gaze/compare/v1.0.0...HEAD\n'
+                         '[1.0.0]: https://github.com/CertaMesh/gaze/compare/v0.17.0...v1.0.0\n')
+
     def test_wrapped_issue_reference_is_not_a_heading(self):
         self.fragment('pr.fixed.md', '- Fix the queue drop reported in\n#934.\n')
         changelog.fragments(self.root)

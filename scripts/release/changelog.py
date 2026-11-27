@@ -66,7 +66,8 @@ def unreleased_bounds(changelog):
     if start < 0:
         raise ValueError(f'CHANGELOG.md has no "{UNRELEASED}" heading')
     body = start + len(UNRELEASED) + 1
-    end = changelog.find('\n## [', body)
+    # Start at the heading's own newline, so a version heading right after it is found.
+    end = changelog.find('\n## [', body - 1)
     return start, body, len(changelog) if end < 0 else end + 1
 
 
