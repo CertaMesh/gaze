@@ -37,7 +37,7 @@ import agentic_layers as agentic
 import gaze_bench_score as score
 from known_record_attribution import normalized_match_text
 
-GENERATOR_VERSION = 6
+GENERATOR_VERSION = 7
 SEED = 2026092901
 LAYER = "K"
 SOURCE_POSITIVE = "known-record-kind-cells"
@@ -49,10 +49,25 @@ NBSP = "\u00a0"
 NARROW_NBSP = "\u202f"
 # Mirrors the record matcher's bound on one whitespace run.
 MAX_WHITESPACE_RUN = 32
-# Subset of crates/gaze-recognizers/assets/record-common-names-v1.txt the cells
-# use. Unlisted names match every occurrence; listed ones need corroboration.
+# The record matcher's common-name dictionaries. Listed single names need
+# corroboration in every letter case; unlisted ones match every spelling.
+COMMON_NAME_ASSETS = (
+    "crates/gaze-recognizers/assets/record-common-names-v1.txt",
+    "crates/gaze-recognizers/assets/record-common-name-words-en-v1.txt",
+)
+COMMON_NAMES = frozenset(
+    line.casefold()
+    for asset in COMMON_NAME_ASSETS
+    for line in (Path(__file__).resolve().parents[2] / asset).read_text(encoding="utf-8").splitlines()
+    if line and not line.startswith("#")
+)
 LISTED_COMMON_NAMES = ("Mark", "Will", "Rose", "Grace", "Hope")
-UNLISTED_WORD_NAMES = ("Summer", "Dawn", "Ivy", "Autumn")
+# Rare names, not ordinary words: the declared spelling must be protected.
+UNLISTED_NAMES = ("Maren", "Tamsin", "Odalys", "Brynja")
+# Benign superstring twins: same shape, never the record value.
+UNLISTED_NAME_TWINS = {"Maren": "Marenhaus", "Tamsin": "Tamsinware", "Odalys": "Odalysite", "Brynja": "Brynjavik"}
+# Given names that are also ordinary English words; generated list, see above.
+WORD_NAMES = ("Summer", "Dawn", "Ivy", "Autumn")
 GREETINGS = ("Hi", "Hello", "Dear", "Hallo", "Bonjour", "Olá")
 # Record JSON keys the context parser infers; other classes need a field_map.
 INFERRED_KEYS = {"Name": "name", "Location": "address", "custom:phone": "phone", "custom:iban": "iban"}
@@ -71,13 +86,16 @@ class ControlKind(str, Enum):
     UNMATCHED_COMPACT_RECORD = "control_unmatched_compact_record"
     # Irregular record spacing is canonicalized, so the text match is exact.
     EXACT_CANONICAL_RECORD = "control_exact_canonical_record"
-    # An unlisted word-name matches every occurrence; its twin prices that.
+    # An unlisted rare name matches in its declared spelling; a superstring twin stays raw.
     EXACT_UNLISTED_NAME = "control_exact_unlisted_name"
     # Gaze folds NBSP-class separators to a space before detection, so these
     # are exact or case-folded matches, not whitespace-flexible ones.
     EXACT_AFTER_TERM_FOLDING = "control_exact_after_term_folding"
     EXACT_AFTER_SPACE_FOLDING = "control_exact_after_space_folding"
     CASE_FOLDED_AFTER_SPACE_FOLDING = "control_case_folded_after_space_folding"
+    # A declared name that is also an ordinary word needs corroboration; alone it
+    # stays raw, and so does its ordinary-word use. Prices both sides of that rule.
+    UNCORROBORATED_WORD_NAME = "control_uncorroborated_word_name"
 
 
 Bucket = MatchKind | ControlKind
@@ -89,6 +107,7 @@ CONTROL_MEASURED_KIND = {
     ControlKind.EXACT_AFTER_TERM_FOLDING: "exact",
     ControlKind.EXACT_AFTER_SPACE_FOLDING: "exact",
     ControlKind.CASE_FOLDED_AFTER_SPACE_FOLDING: "case_folded",
+    ControlKind.UNCORROBORATED_WORD_NAME: MatchKind.CORROBORATED_SINGLE.value,
 }
 
 
@@ -454,7 +473,7 @@ WORD_USES = {
     "Grace": ("Grace period ends on Friday.", "The Grace Notes playlist is shared.", "Quick note: Grace period applies to invoices.", "Grace notes add colour to the tune."),
     "Hope": ("Hope the upload works this time.", "The Hope Valley line is delayed.", "Quick note: Hope the fix lands today.", "Hope springs eternal, says the poster."),
 }
-UNLISTED_WORD_USES = {
+WORD_USES_UNCORROBORATED = {
     "Summer": "Summer schedule starts on Monday.",
     "Dawn": "Dawn deliveries arrive before six.",
     "Ivy": "Ivy covers the north wall of the depot.",
@@ -574,7 +593,7 @@ def _street_variant(language: str, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[
 def _corroborated_variant(variant: str, index: int, rng: agentic.Rng) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
     surname = SURNAMES[rng.below(len(SURNAMES))]
     if variant == "unlisted_alone":
-        given = UNLISTED_WORD_NAMES[index % len(UNLISTED_WORD_NAMES)]
+        given = UNLISTED_NAMES[index % len(UNLISTED_NAMES)]
         record = (RecordField("Name", given), RecordField("Name", surname))
 
         def positive(b: Builder) -> list[Target]:
@@ -583,11 +602,28 @@ def _corroborated_variant(variant: str, index: int, rng: agentic.Rng) -> tuple[F
             return [_target(span, 0, ("name_single", "exact"))]
 
         def counterweight(b: Builder) -> list[Target]:
-            sentence = UNLISTED_WORD_USES[given]
+            span = b.add(UNLISTED_NAME_TWINS[given])
+            b.add(" ships the invoice batch.")
+            return [_target(span, 0, ("name_single", "exact"), False)]
+
+        return positive, counterweight, record
+
+    if variant == "word_name_alone":
+        given = WORD_NAMES[index % len(WORD_NAMES)]
+        record = (RecordField("Name", given), RecordField("Name", surname))
+        kind = ("name_single", MatchKind.CORROBORATED_SINGLE.value)
+
+        def positive(b: Builder) -> list[Target]:
+            span = b.gold_span(given, "FIRSTNAME")
+            b.add(" called back about the invoice.")
+            # Without corroboration the listed name is not matched: a residual, priced here.
+            return [_target(span, 0, kind, False)]
+
+        def counterweight(b: Builder) -> list[Target]:
+            sentence = WORD_USES_UNCORROBORATED[given]
             span = b.add(given)
             b.add(sentence[len(given) :])
-            # Unlisted names match every occurrence: this lure prices that.
-            return [_target(span, 0, ("name_single", "exact"), True)]
+            return [_target(span, 0, kind, False)]
 
         return positive, counterweight, record
 
@@ -669,6 +705,7 @@ VARIANTS: dict[Bucket, tuple[str, ...]] = {
         "term_fullwidth_source", "term_zwsp_source",
         "term_nonbreaking_hyphen_source", "term_unicode_space_source",
     ),
+    ControlKind.UNCORROBORATED_WORD_NAME: ("word_name_alone",),
 }
 
 
@@ -679,7 +716,7 @@ def surfaces_for(variant: str) -> tuple[str, ...]:
 
 
 def _english_only(variant: str) -> bool:
-    return variant in CORROBORATED_VARIANTS or variant == "unlisted_alone"
+    return variant in CORROBORATED_VARIANTS or variant in {"unlisted_alone", "word_name_alone"}
 
 
 def _term_variant(variant: str) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
@@ -773,8 +810,7 @@ def matcher_kind(text: str, record_class: str, raw: str) -> str:
     fold = record_class == "Name"
     if collapsed != term and not (fold and collapsed.casefold() == term.casefold()):
         return "unmatched_term"
-    listed = {name.casefold() for name in LISTED_COMMON_NAMES}
-    if fold and len(term.split()) == 1 and term.casefold() in listed:
+    if fold and len(term.split()) == 1 and term.casefold() in COMMON_NAMES:
         return MatchKind.CORROBORATED_SINGLE.value
     if text == term:
         return "exact"
@@ -879,11 +915,10 @@ def _corroborated(text: str, start: int, end: int, slot: int, record: Sequence[R
 
 def model_matches(text: str, record: Sequence[RecordField]) -> list[tuple[int, int, int]]:
     """(slot, byte start, byte end) the record matcher is expected to emit."""
-    listed = {name.casefold() for name in LISTED_COMMON_NAMES}
     matches = []
     for slot, field in enumerate(record):
         fold = field.class_name == "Name"
-        single_listed = fold and len(field.raw.split()) == 1 and field.raw.casefold() in listed
+        single_listed = fold and len(field.raw.split()) == 1 and field.raw.casefold() in COMMON_NAMES
         for start, end in _occurrences(text, field.raw, fold):
             if single_listed and not _corroborated(text, start, end, slot, record):
                 continue
@@ -1066,18 +1101,18 @@ class VariantTally:
 # --------------------------------------------------------------------------
 # Score-only proof: three arms over layer K alone.
 
-# #718's default allowed kinds per record group (fa2aa8d9,
-# `Context::record_allowed_match_kinds`); the OFF arm states them explicitly.
+# The product's default allowed kinds per record group
+# (`Context::record_allowed_match_kinds`); the OFF arm states them explicitly.
 DEFAULT_MATCH_KINDS: dict[str, tuple[str, ...]] = {
-    "name_single": ("exact", "case_folded"),
-    "name_multi": (),
-    "address_part": ("exact",),
-    "custom:credit_card": ("exact",),
-    "custom:iban": ("exact",),
-    "custom:national_id": ("exact",),
+    "name_single": ("case_folded", "corroborated_single"),
+    "name_multi": ("exact", "case_folded", "whitespace_case_folded"),
+    "address_part": (),
+    "custom:credit_card": ("exact", "whitespace_flexible"),
+    "custom:iban": ("exact", "whitespace_flexible"),
+    "custom:national_id": ("exact", "whitespace_flexible"),
     "custom:passport": ("exact",),
     "custom:phone": ("exact",),
-    "custom:steuer_id": ("exact",),
+    "custom:steuer_id": ("exact", "whitespace_flexible"),
 }
 # The probe kinds each group may enable (the parser refuses the others).
 PROBE_KINDS_BY_GROUP: dict[str, tuple[str, ...]] = {
@@ -1100,7 +1135,8 @@ def arm_context(cell: Cell, probes_on: bool) -> str:
         group = record_group(field)
         allowed = list(DEFAULT_MATCH_KINDS[group])
         if probes_on:
-            allowed += PROBE_KINDS_BY_GROUP.get(group, (MatchKind.WHITESPACE_FLEXIBLE.value,))
+            probes = PROBE_KINDS_BY_GROUP.get(group, (MatchKind.WHITESPACE_FLEXIBLE.value,))
+            allowed += [kind for kind in probes if kind not in allowed]
         kinds[group] = allowed
     context["record_match_kinds"] = kinds
     return json.dumps(context, ensure_ascii=False)

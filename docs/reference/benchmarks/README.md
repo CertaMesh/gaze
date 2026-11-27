@@ -1963,11 +1963,15 @@ identity. A model-free guard enforces this in CI: the bench example test
 fails any response that carries the identity without naming every refused
 span. Its committed fixture feeds `scripts/bench/test_typed_refusal_producer.py`,
 which round-trips those responses through this contract: all-gold refusals
-block, and a benign untransformable sibling keeps the refusal ordinary. Until a
-detection change emits the identity, no live refusal is blocked. All four
-current guard cases complete on the `core` floor, so today's proof is the
-fabricated path: the same checking functions reject fabricated first-path-only,
-unflagged, renamed and case-variant outputs, and
+block, and a benign untransformable sibling keeps the refusal ordinary. The
+field-labelled record-ID rules make all four guard cases refuse on the `core`
+floor, and the live test requires every one to carry the identity with complete
+evidence. The same checking functions also reject fabricated first-path-only,
+unflagged, renamed and case-variant outputs.
+`scripts/ci/field_label_mutation_probe.py` runs two producer mutants end to end:
+an emitter that lists only the first refused field must fail the live Rust
+guard, and, with the Rust check removed and the fixture re-blessed from that
+emitter, the Python guard must fail on the committed fixture.
 `scripts/bench/check_typed_refusal_guard_mutation.py`, its own CI step, requires
 the intended test to fail when the live check is disconnected, the live response
 is discarded, the checker compares only the first span or the completeness
@@ -2001,7 +2005,7 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary, and the [current specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; and the [current specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7).
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts

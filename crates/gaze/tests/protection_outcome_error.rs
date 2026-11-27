@@ -18,6 +18,7 @@ fn untransformable_error_reports_only_closed_reason_in_diagnostics() {
         let error = ProtectionError::Untransformable {
             reason,
             field_path: FieldPath::new(["synthetic-key@example.invalid".into()]),
+            others: Vec::new(),
         };
         assert_eq!(error.as_str(), "Untransformable");
         assert_eq!(
