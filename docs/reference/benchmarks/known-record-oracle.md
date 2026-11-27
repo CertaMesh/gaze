@@ -50,6 +50,23 @@ that retain the original non-ASCII source bytes. The v5 attribution JSON below
 remains a historical snapshot under its original specification. It is not a v6
 measurement; any new v6 comparison requires fresh captures on both sides.
 
+Generator v7 rebuilds the unlisted-name control and adds one. Rare declared
+names that are not ordinary words (`Maren`, `Tamsin`) now appear in their
+declared spelling, each paired with a superstring twin (`Marenhaus`) that must
+stay raw. A new `control_uncorroborated_word_name` control declares given names
+that are also ordinary English words (`Summer`, `Dawn`); both the uncorroborated
+name and its ordinary-word twin are expected raw. That word list is generated
+from external sources, not from these cells: SSA given names that ranked in any
+year's top 1,000, intersected with lowercase SCOWL en_US words
+([generator](../../../scripts/fetch/build_record_common_name_words.py)). The
+other 80 v5 pairs and all term-normalization pairs keep their bytes.
+
+The K gate treats `control_uncorroborated_word_name` as a benign counterweight
+with a veto: any false-positive rise in that bucket fails the K gate, whatever
+the net bytes elsewhere. A matcher that protected every declared word-name would
+otherwise trade its new false positives against leaks removed on the rare-name
+cells.
+
 ## v5 all-on attribution
 
 The full v5 producer and layer K measured each class and match kind at source

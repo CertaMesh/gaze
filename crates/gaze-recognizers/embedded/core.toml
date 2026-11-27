@@ -2156,3 +2156,96 @@ priority = 100
 [recognizers.source]
 origin = "project-authored"
 license = "Apache-2.0"
+
+# Person-linked record identifiers bound by their structured field label. These read
+# only parsed JSON fields and caller-declared context fields, never prose, so they are
+# format-basis and run in every locale. A bare generic `id`, `record_id` or `uuid` is
+# deliberately absent: it also names public objects. `{"customer": {"id": …}}` binds
+# through its parent. A labelled JSON number refuses (no reversible text rendering); a
+# labelled value that is not identifier-shaped is possibly sensitive (`[outcomes]`).
+
+[[recognizers]]
+id = "customer_id.field"
+safety_tier = "safe_default"
+class = "custom:customer_id"
+enabled = true
+locales = ["global"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "field_labelled"
+value_shape = "identifier"
+field_labels = [
+  "customer_id", "customer_number", "customer_no", "customer_nr",
+  "customer_record_id", "customer_record_number", "customer_record_no",
+  "kunden_id", "kundennummer", "kunden_nr",
+]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "employee_id.field"
+safety_tier = "safe_default"
+class = "custom:employee_id"
+enabled = true
+locales = ["global"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "field_labelled"
+value_shape = "identifier"
+field_labels = [
+  "employee_id", "employee_number", "employee_no",
+  "employee_record_id", "employee_record_number", "employee_record_no",
+  "personnel_id", "personnel_number", "personnel_no",
+  "staff_id", "staff_number", "staff_no",
+  "personalnummer", "personal_nr",
+  "mitarbeiter_id", "mitarbeiternummer", "mitarbeiter_nr",
+]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+[[recognizers]]
+id = "record_id.field"
+safety_tier = "safe_default"
+class = "custom:record_id"
+enabled = true
+locales = ["global"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "field_labelled"
+value_shape = "identifier"
+field_labels = [
+  "person_id", "person_number", "person_no", "person_record_id",
+  "contact_id", "contact_number", "contact_no", "contact_record_id",
+  "member_id", "member_number", "member_no", "membership_number",
+  "personen_id", "kontakt_id", "mitgliedsnummer", "mitglieds_nr",
+  "personen_datensatz_id", "kontakt_datensatz_id",
+]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
