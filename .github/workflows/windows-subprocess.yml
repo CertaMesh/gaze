@@ -2,6 +2,23 @@ name: Windows subprocess ownership
 on:
   pull_request:
     branches: [main]
+    # Not a required check. It builds and tests gaze-recognizers only, so PRs
+    # that change no Rust source, manifest or toolchain input skip it.
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - '.github/workflows/windows-subprocess.yml'
+      - '.github/actions/**'
+
+concurrency:
+  # A new push to a PR cancels its superseded run; merge-queue, main, tag,
+  # schedule and dispatch runs each keep their own group and always finish.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 jobs:

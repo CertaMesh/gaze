@@ -5,6 +5,26 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # Not a required check, and every push to main still runs it. PRs that
+    # cannot change a tutorial's outcome skip it.
+    paths:
+      - 'docs/tutorials/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'scripts/ci/tutorial_gate.py'
+      - 'scripts/ci/tutorial_manual_steps.json'
+      - 'scripts/ci/test_tutorial_gate.py'
+      - '.github/workflows/tutorials.yml'
+      - '.github/actions/**'
+
+concurrency:
+  # A new push to a PR cancels its superseded run; merge-queue, main, tag,
+  # schedule and dispatch runs each keep their own group and always finish.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
