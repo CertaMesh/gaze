@@ -784,7 +784,7 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/9fe657514ce86c5c0208ec1508e916e729862d8515adf3a774cd4959a4e3dec8.json)
+The [current specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
@@ -826,6 +826,14 @@ closure because the gate imports constants from them, so a cell change still
 changes every sub-specification. Manifests without `capture_closure` bind every
 harness file. Today every consumer compares the full per-layer map; the split
 lets reports say which layer an input change reaches.
+
+New captures record `runner_provenance.machine`: digests of the OS build and the
+CPU identity (`sw_vers` and `sysctl` on macOS, `lscpu` without clock speeds on
+Linux). The gate treats it as part of the comparison identity, so base and
+candidate captured on different machines, or a new capture against one that
+predates the field, report `not_comparable` with `capture_machine`. Any single
+machine qualifies, including an orb that captures both sides; the shared bench
+Mac lease only reserves that Mac.
 
 `agentic_layers.py gate` requires equal sub-specifications for every measured
 layer and refuses a difference with `benchmark_spec_mismatch`. Full IDs may

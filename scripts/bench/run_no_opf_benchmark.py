@@ -1606,6 +1606,7 @@ def _run(args: argparse.Namespace) -> int:
         "policy": {"path": portable_repo_path(repo_root, policy_path), "sha256": policy_sha}
         if policy_path else None,
         "hardware": platform.platform() + "; " + platform.processor(),
+        "machine": capture_identity.machine_identity(),
         "warmup_count": args.warmups,
         "measured_repetitions": args.measured_repetitions,
         "repetitions": repetition_provenance,

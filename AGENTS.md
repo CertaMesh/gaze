@@ -167,7 +167,11 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
 
 1. Capture each side once. Base is the `main` commit the branch starts from. Candidate is the
    exact integrated branch head. Each side uses its own worktree and the policy its own
-   `gaze setup` writes, with the same corpus, seed and machine. Re-score that one observation
+   `gaze setup` writes, with the same corpus, seed and machine. The machine need not be the
+   shared bench Mac: any one quiet machine with the models works, such as a single orb that
+   captures both sides. The gate refuses sides whose `runner_provenance.machine` (OS build and
+   CPU identity) differs. The gate scores bytes, not latency; keep the machine otherwise idle so
+   no per-document deadline fails closed. Re-score that one observation
    record for v2, v1 and every later contract. Never launch a capture per contract. Verified
    cache reuse requires an exact match of every effective execution input and record integrity.
    The effective execution inputs are:

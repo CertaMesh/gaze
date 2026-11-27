@@ -53,6 +53,7 @@ import gaze_bench_score as score  # noqa: E402
 import scorecard_record as records  # noqa: E402
 import subject_build
 import benchmark_cache
+import capture_identity
 import past_capture
 import stage_timing as stages
 import benchmark_spec  # noqa: E402
@@ -381,6 +382,7 @@ def _run(args: argparse.Namespace) -> Path:
         "model_bundles": bundles,
         "policy_dependencies": dependency_provenance,
         "hardware": platform.platform() + "; " + platform.processor(),
+        "machine": capture_identity.machine_identity(),
         "warmup_count": args.warmups,
         "measured_repetitions": 1,
     }

@@ -288,6 +288,7 @@ def test_release_driver_fresh_then_hit_executes_no_subject_or_validator(key_inpu
     monkeypatch.setattr(past.runner, 'build_no_opf_environment', lambda env: dict(inputs['environment']))
     monkeypatch.setattr(past.subprocess, 'run', lambda cmd, **kw: SimpleNamespace(
         stdout='b' * 40 if cmd[1] == 'rev-parse' else ''))
+    monkeypatch.setattr(past.capture_identity, 'machine_identity', lambda: {'system': 'synthetic'})
     monkeypatch.setattr(past.subject_build, 'build', lambda *a, **kw: (paths['binary'], inputs['receipt']))
     monkeypatch.setattr(past.runner, 'build_validator_probe', lambda *a, **kw: paths['probe'])
     monkeypatch.setattr(past.runner, 'validate_required_models', lambda *a: [])

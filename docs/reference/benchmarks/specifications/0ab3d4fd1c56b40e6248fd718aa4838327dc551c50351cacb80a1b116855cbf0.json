@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:9fe657514ce86c5c0208ec1508e916e729862d8515adf3a774cd4959a4e3dec8",
+  "id": "gaze-benchmark-v1:0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -27,7 +27,7 @@
       "generated": "9480508e4ddeca0c4ce82e40acede4c18aca64f318dfdc75eeb04457ee7cd695"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "c5cc7009593253a86c0a1a396a448fa043eb84039fdc3c750e665e8fb1c0aeea",
+      "scripts/bench/agentic_layers.py": "3e94cfa0a61b773c17ff1c676b1d1704cb27c212bf48b987ae3a0095d621ad49",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -38,7 +38,7 @@
       "scripts/bench/benchmark_spec.py": "3a655253acae2146eae6e1556f02f2c1d5176dfa27c4ce1cae60b1cdb582b474",
       "scripts/bench/build_native_mcp_operation.py": "d05aee2a9ee6a10c8aea1e3ea52d03f353ec7c753c529219940ba9001c245b55",
       "scripts/bench/build_native_session_proxy.py": "5dac39c24a2d5a9fcd0e81d5008ac5063ab357d83c7aa3d2dda4c06a41293bf9",
-      "scripts/bench/capture_identity.py": "bc2be1f6b41da3db4b33e85eb4143bf2cb527e24188a1ff538869148921db0d5",
+      "scripts/bench/capture_identity.py": "35a866c9a5b24e7cc523afad12092deddb3d7e61486f813951489d04bfe25fae",
       "scripts/bench/check_detection_identity.py": "d3048e9a1f47842c9ce8b580adb2da0cb4b78f6f7e1c1beff603d003f3ceb34d",
       "scripts/bench/check_nym_session_stability.py": "43e822ebfd0a5fd15040e626c2d904e8590b0bad20a4529d782929cc1d0c419e",
       "scripts/bench/check_personal_id_checksum_identity.py": "cdcdfabf3dcdf68e42d3a9f1bfcf2dfc662367b388a70373b1d42e0d42ae7a1b",
@@ -144,9 +144,9 @@
       "scripts/bench/render_benchmark_doc.py": "a08ace21a122909b601a84ba8d4e912e960d88cade67dc0dab2164e95b587dce",
       "scripts/bench/replay_enumeration_proof.py": "103430afee59a9928a1968c5040aac3c1d4d7a452e86213cd98b41ae1211ab03",
       "scripts/bench/rescore.py": "4d268d104ab2abe816e891f132f1d165054ccd1e14f11499d7a05b07811945cf",
-      "scripts/bench/rescore_past_release.py": "81976c2b51b18784757cf386e16d7222525f191875a8dfc48718f2fb2f8b10a2",
+      "scripts/bench/rescore_past_release.py": "8f4c4602d7f0fda5ce36374119e10d534ebbad38a15ff24f218164a98ce8cf42",
       "scripts/bench/rescore_safety_net.py": "cf19c2a4962744cd2eceb73c7e2fedfc7b706137b11463e99e195df0477437aa",
-      "scripts/bench/run_no_opf_benchmark.py": "1db7ca03a32f0a85625f28ccfc08130b573fac82bfbcd6b1829ea9ca8cd60792",
+      "scripts/bench/run_no_opf_benchmark.py": "9791e0158558095738936d6fb1f1bc0cb6789e2ef74eba8e237e26b5c328190b",
       "scripts/bench/safety_net_bench_lib.py": "7586e9e22542bfb543c79a172ee693767921929d4ebd3bf2eb7afbdee16f0566",
       "scripts/bench/scorecard_record.py": "da72df6ad4df6c611bf23d358d95c4768fb4de55bece1597a4fc65a70461e25e",
       "scripts/bench/stage_timing.py": "1dcf159e2e7f125087a3d1393e6a266733b971da9aad81433239701a84821ac0",

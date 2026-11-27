@@ -5265,10 +5265,13 @@ def _layer_identity(scorecard: Mapping[str, object]) -> dict[str, object]:
         "configs": parameters.get("configs"),
         "policy_sha256": parameters.get("policy_sha256"),
         "ner_threshold": parameters.get("ner_threshold"),
+        # Both sides must be captured on one machine. Scorecards that predate
+        # this binding carry none and compare only with each other.
+        "capture_machine": scorecard.get("runner_provenance", {}).get("machine"),
     }
     missing = [
         key for key, value in identity.items()
-        if (value is None and key != "ner_threshold") or (
+        if (value is None and key not in ("ner_threshold", "capture_machine")) or (
             key == "kiji_contract"
             and None in value
             and value != (score.SCORED_LABEL_CONTRACT_V1_ID, 1, None)
