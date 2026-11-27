@@ -47,7 +47,7 @@
         }
       },
       "unchanged": "laptop turn p95 500 ms and p99 1000 ms, reclean, restore, cold start and RSS budgets; every server budget",
-      "reason": "No byte-identical path reaches a 150 ms single-session p50 with the Nym safety net on (F6). Per-request inference reuse halves model work, and more Nym intra-op threads keep output identical but make Nym only 1.3-1.5x faster; concurrency does not move a single session's p50. 250 ms stays within the budget's own basis: Gaze adds at most about 10% to a 4.2 s model call, about 420 ms. Dropping the neutral Nym view, a smaller or int8 or CoreML Nym model, and dropping NER from the warm turn were ruled out for 1.0 because each weakens detection or the Trust axis.",
+      "reason": "No byte-identical path reaches a 150 ms single-session p50 with the Nym safety net on, as the setup profile keeps it. Per-request inference reuse halves model work, and more Nym intra-op threads keep output identical but make Nym only 1.3-1.5x faster; concurrency does not move a single session's p50. 250 ms stays within the budget's own basis: Gaze adds at most about 10% to a 4.2 s model call, about 420 ms. Dropping the neutral Nym view, a smaller or int8 or CoreML Nym model, and dropping NER from the warm turn were ruled out for 1.0 because each weakens detection or the Trust axis.",
       "measurements": {
         "main_9ff7ad9_laptop_indicative": "31 quiet samples, not a gate receipt: turn p50 1117 ms, p90 1745 ms, max 3131 ms",
         "main_9ff7ad9_server_receipt": "a1.medium orb, quiet, F8 FAIL: turn p50 11383 ms, p95 21346 ms, p99 27493 ms, reclean p95 97785 ms, restore p95 9.6 ms, cold start max 3467 ms, peak RSS 829820928 bytes",
