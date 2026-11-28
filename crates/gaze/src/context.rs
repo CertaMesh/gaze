@@ -532,9 +532,7 @@ fn collect_record_leaves<'a>(
 }
 
 fn safe_record_value(value: &str, class: &PiiClass) -> bool {
-    if matches!(class, PiiClass::Custom(name) if name == "iban")
-        && ValidatorKind::IbanMod97.validates(value)
-    {
+    if class.to_canonical_str() == "custom:iban" && ValidatorKind::IbanMod97.validates(value) {
         return true;
     }
     let letters = value.chars().filter(|ch| ch.is_alphabetic()).count();
@@ -909,6 +907,16 @@ mod tests {
             Context::from_json_str(r#"{"record":{"iban":"DE00000000000000000000"}}"#).unwrap();
         assert!(invalid.dictionaries.is_empty());
         assert_eq!(invalid.record_value_rejections.len(), 1);
+    }
+
+    #[test]
+    fn caller_mapped_iban_record_passes_short_value_floor() {
+        // Two letters fall below the generic floor, so only the IBAN arm admits this value.
+        let iban = "DE36000000000000000000";
+        let raw = serde_json::json!({"record":{"konto":iban},"field_map":{"/konto":"custom:iban"}});
+        let context = Context::from_json_str(&raw.to_string()).unwrap();
+        assert!(context.record_value_rejections.is_empty());
+        assert_eq!(context.dictionaries.values().next().unwrap().terms, [iban]);
     }
 
     #[test]
