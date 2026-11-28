@@ -5830,7 +5830,9 @@ fn street_corroborated_house_numbers(
             continue;
         };
         if ner.class == crate::PiiClass::Organization
-            && !lexicon.organization_street(&text[street.clone()], locale_chain)
+            && lexicon
+                .unambiguous_street_order(&text[street.clone()], locale_chain)
+                .is_none()
         {
             continue;
         }
@@ -5902,7 +5904,7 @@ fn address_block_pieces(
         .iter()
         .filter_map(selection_span)
         .collect::<Vec<_>>();
-    let anchors = evidence
+    let mut anchors = evidence
         .selections
         .iter()
         .filter(|selection| is_address_anchor(&selection.class))
@@ -5911,12 +5913,18 @@ fn address_block_pieces(
             Some((selection_span(selection)?, member, &selection.class))
         })
         .collect::<Vec<_>>();
+    anchors.sort_by_key(|(span, _, _)| span.start);
     let spans = anchors
         .iter()
         .map(|(span, _, class)| crate::address_block::Anchor {
             span: span.clone(),
             kind: if matches!(class, crate::PiiClass::PostalCode) {
                 crate::address_block::AnchorKind::Postcode
+            } else if let Some(order) = registry
+                .street_lexicon()
+                .unambiguous_street_order(&text[span.clone()], locale_chain)
+            {
+                crate::address_block::AnchorKind::Street(order)
             } else {
                 crate::address_block::AnchorKind::Place
             },

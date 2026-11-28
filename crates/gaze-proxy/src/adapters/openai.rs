@@ -3,8 +3,9 @@ use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{
-    push_string, push_text_blocks, walk_all_scalars, AdapterContract, PiiSurface, ProviderAdapter,
-    RequestSurfaces, SseEvent, SseStreamKey, SseStreamSurface, SurfacePath, SurfaceSyntax,
+    push_string, push_text_blocks, sink_from, walk_all_scalars, AdapterContract, PiiSurface,
+    ProviderAdapter, RequestSurfaces, RestoreSink, SseEvent, SseStreamKey, SseStreamSurface,
+    SurfacePath, SurfaceSyntax,
 };
 
 #[derive(Clone, Debug)]
@@ -161,14 +162,22 @@ impl ProviderAdapter for OpenAiAdapter {
                                                     .member("delta"),
                                                 choice_value,
                                             ),
-                                            "text" => push_string(
-                                                &mut surfaces,
-                                                SurfacePath::root("choices")
-                                                    .index(index)
-                                                    .member("text"),
-                                                choice_value,
-                                                SurfaceSyntax::ModelOutput,
-                                            ),
+                                            "text" => {
+                                                let start = surfaces.strings.len();
+                                                push_string(
+                                                    &mut surfaces,
+                                                    SurfacePath::root("choices")
+                                                        .index(index)
+                                                        .member("text"),
+                                                    choice_value,
+                                                    SurfaceSyntax::ModelOutput,
+                                                );
+                                                sink_from(
+                                                    &mut surfaces,
+                                                    start,
+                                                    &RestoreSink::Display,
+                                                );
+                                            }
                                             _ => {}
                                         }
                                     }
@@ -225,6 +234,75 @@ impl ProviderAdapter for OpenAiAdapter {
         surfaces
     }
 
+    /// A Chat Completions chunk names a streamed tool call in any `delta.tool_calls[]` entry,
+    /// with or without `arguments`, so a later chunk that renames the call is seen. A Responses
+    /// API stream names a function or MCP call in its `output_item` events, its
+    /// `*_arguments.done` events and the `response` snapshots, and sends the call's arguments
+    /// in `*_arguments.delta` events keyed by the item's `output_index`, which is its position
+    /// in `response.output`.
+    fn sse_event_tool_calls(&self, event: &SseEvent) -> Vec<(SseStreamKey, String)> {
+        let data = &event.data;
+        let Some(kind) = data
+            .get("type")
+            .and_then(Value::as_str)
+            .and_then(|kind| kind.strip_prefix("response."))
+        else {
+            return chat_tool_call_names(data);
+        };
+        if matches!(
+            kind,
+            "function_call_arguments.done" | "mcp_call_arguments.done"
+        ) {
+            return data
+                .get("name")
+                .and_then(Value::as_str)
+                .map(|name| {
+                    let output_index = data.get("output_index").and_then(Value::as_u64);
+                    (
+                        SseStreamKey::new("responses.arguments", [output_index]),
+                        name.to_owned(),
+                    )
+                })
+                .into_iter()
+                .collect();
+        }
+        let items: Vec<(Option<u64>, &Value)> = match kind {
+            "output_item.added" | "output_item.done" => data
+                .get("item")
+                .map(|item| (data.get("output_index").and_then(Value::as_u64), item))
+                .into_iter()
+                .collect(),
+            "created" | "in_progress" | "queued" | "completed" | "incomplete" | "failed" => data
+                .get("response")
+                .and_then(|response| response.get("output"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .enumerate()
+                .map(|(position, item)| (u64::try_from(position).ok(), item))
+                .collect(),
+            _ => Vec::new(),
+        };
+        items
+            .into_iter()
+            .filter(|(_, item)| {
+                matches!(
+                    item.get("type").and_then(Value::as_str),
+                    Some("function_call" | "mcp_call")
+                )
+            })
+            .filter_map(|(output_index, item)| {
+                let name = item.get("name").and_then(Value::as_str)?;
+                // An unreadable index stays `None`, which makes every compatible stream
+                // ambiguous rather than dropping the name.
+                Some((
+                    SseStreamKey::new("responses.arguments", [output_index]),
+                    name.to_owned(),
+                ))
+            })
+            .collect()
+    }
+
     /// Chat Completions selects JSON output with `response_format`, the Responses API with
     /// `text.format`; both take `json_object` or `json_schema`.
     fn requests_json_output(&self, request: &Value) -> bool {
@@ -264,6 +342,7 @@ fn collect_output_item<'a>(
     let kind = item.get("type").and_then(Value::as_str);
     let is_call = matches!(kind, Some("function_call" | "mcp_call"));
     let is_message = kind == Some("message");
+    let tool = item.get("name").and_then(Value::as_str).map(str::to_owned);
     let Value::Object(fields) = item else {
         walk_all_scalars(surfaces, prefix, item);
         return;
@@ -272,7 +351,9 @@ fn collect_output_item<'a>(
         let path = prefix.member(key);
         match key.as_str() {
             "arguments" if is_call && value.is_string() => {
+                let start = surfaces.strings.len();
                 push_string(surfaces, path, value, SurfaceSyntax::Json);
+                sink_from(surfaces, start, &RestoreSink::ToolInput(tool.clone()));
             }
             "content" if is_message => collect_output_content(surfaces, path, value),
             _ => walk_all_scalars(surfaces, path, value),
@@ -300,15 +381,22 @@ fn collect_output_part<'a>(
     prefix: SurfacePath,
     part: &'a mut Value,
 ) {
-    let is_output_text = part.get("type").and_then(Value::as_str) == Some("output_text");
+    let kind = part.get("type").and_then(Value::as_str);
+    let is_output_text = kind == Some("output_text");
+    let is_refusal = kind == Some("refusal");
     let Value::Object(fields) = part else {
         walk_all_scalars(surfaces, prefix, part);
         return;
     };
     for (key, value) in fields {
         let path = prefix.member(key);
+        let start = surfaces.strings.len();
         if is_output_text && key == "text" && value.is_string() {
             push_string(surfaces, path, value, SurfaceSyntax::ModelOutput);
+            sink_from(surfaces, start, &RestoreSink::Display);
+        } else if is_refusal && key == "refusal" && value.is_string() {
+            push_string(surfaces, path, value, SurfaceSyntax::Text);
+            sink_from(surfaces, start, &RestoreSink::Display);
         } else {
             walk_all_scalars(surfaces, path, value);
         }
@@ -348,14 +436,37 @@ fn collect_responses_event_surfaces<'a>(
             [output_index, content_index],
         ))
     };
-    let (field, syntax, stream) = match kind {
-        "output_text.delta" => ("delta", SurfaceSyntax::ModelOutput, content_stream("text")),
-        "output_text.done" => ("text", SurfaceSyntax::ModelOutput, None),
-        "refusal.delta" => ("delta", SurfaceSyntax::Text, content_stream("refusal")),
-        "refusal.done" => ("refusal", SurfaceSyntax::Text, None),
-        "reasoning_text.delta" => ("delta", SurfaceSyntax::Text, content_stream("reasoning")),
+    // Reasoning keeps its tokens: it is not the answer the client shows its user.
+    let named_tool =
+        || RestoreSink::ToolInput(data.get("name").and_then(Value::as_str).map(str::to_owned));
+    let (field, syntax, stream, sink) = match kind {
+        "output_text.delta" => (
+            "delta",
+            SurfaceSyntax::ModelOutput,
+            content_stream("text"),
+            RestoreSink::Display,
+        ),
+        "output_text.done" => (
+            "text",
+            SurfaceSyntax::ModelOutput,
+            None,
+            RestoreSink::Display,
+        ),
+        "refusal.delta" => (
+            "delta",
+            SurfaceSyntax::Text,
+            content_stream("refusal"),
+            RestoreSink::Display,
+        ),
+        "refusal.done" => ("refusal", SurfaceSyntax::Text, None, RestoreSink::Display),
+        "reasoning_text.delta" => (
+            "delta",
+            SurfaceSyntax::Text,
+            content_stream("reasoning"),
+            RestoreSink::Withheld,
+        ),
         "reasoning_text.done" | "reasoning_summary_text.done" => {
-            ("text", SurfaceSyntax::Text, None)
+            ("text", SurfaceSyntax::Text, None, RestoreSink::Withheld)
         }
         "reasoning_summary_text.delta" => (
             "delta",
@@ -364,15 +475,24 @@ fn collect_responses_event_surfaces<'a>(
                 "responses.summary.text",
                 [output_index, summary_index],
             )),
+            RestoreSink::Withheld,
         ),
+        // The delta names no tool; its stream takes the name its `output_item` events bind.
         "function_call_arguments.delta" | "mcp_call_arguments.delta" => (
             "delta",
             SurfaceSyntax::Json,
             Some(SseStreamKey::new("responses.arguments", [output_index])),
+            named_tool(),
         ),
-        "function_call_arguments.done" | "mcp_call_arguments.done" => {
-            ("arguments", SurfaceSyntax::Json, None)
-        }
+        // The final arguments repeat the deltas outside their stream binding, so a name on
+        // this event could disagree with the call's item. They keep their tokens; clients read
+        // restored arguments from the deltas or from the call item, which names itself.
+        "function_call_arguments.done" | "mcp_call_arguments.done" => (
+            "arguments",
+            SurfaceSyntax::Json,
+            None,
+            RestoreSink::Withheld,
+        ),
         _ => {
             collect_responses_snapshot_surfaces(surfaces, kind, data);
             return;
@@ -382,6 +502,7 @@ fn collect_responses_event_surfaces<'a>(
     if let Some(value) = data.get_mut(field) {
         push_string(&mut complete, SurfacePath::root(field), value, syntax);
     }
+    sink_from(&mut complete, 0, &sink);
     extend_stream(surfaces, stream, complete);
 }
 
@@ -449,6 +570,7 @@ fn collect_choice_stream_surfaces<'a>(
                 "text" => {
                     let mut fragment = RequestSurfaces::default();
                     push_string(&mut fragment, prefix, value, SurfaceSyntax::ModelOutput);
+                    sink_from(&mut fragment, 0, &RestoreSink::Display);
                     let stream = Some(SseStreamKey::new("choices.text", [choice_index]));
                     extend_stream(surfaces, stream, fragment);
                 }
@@ -456,6 +578,40 @@ fn collect_choice_stream_surfaces<'a>(
             }
         }
     }
+}
+
+/// The tool names a Chat Completions chunk gives its streamed tool calls, keyed like their
+/// argument fragments.
+fn chat_tool_call_names(data: &Value) -> Vec<(SseStreamKey, String)> {
+    let mut names = Vec::new();
+    for choice in data
+        .get("choices")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let choice_index = choice.get("index").and_then(Value::as_u64);
+        for call in choice
+            .get("delta")
+            .and_then(|delta| delta.get("tool_calls"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(name) = call
+                .get("function")
+                .and_then(|function| function.get("name"))
+                .and_then(Value::as_str)
+            {
+                let call_index = call.get("index").and_then(Value::as_u64);
+                names.push((
+                    SseStreamKey::new("choices.tool_calls.arguments", [choice_index, call_index]),
+                    name.to_owned(),
+                ));
+            }
+        }
+    }
+    names
 }
 
 /// Surfaces one chunk's `delta`, keying its `content` and tool-call `arguments` fragments.
@@ -478,6 +634,7 @@ fn collect_delta_stream_surfaces<'a>(
                     value,
                     SurfaceSyntax::ModelOutput,
                 );
+                sink_from(&mut fragment, 0, &RestoreSink::Display);
                 let stream = Some(SseStreamKey::new("choices.content", [choice_index]));
                 extend_stream(surfaces, stream, fragment);
             }
@@ -528,12 +685,16 @@ fn collect_message_field<'a>(
     value: &'a mut Value,
 ) {
     match key {
-        "content" => push_text_blocks(
-            surfaces,
-            &prefix.member("content"),
-            value,
-            SurfaceSyntax::ModelOutput,
-        ),
+        "content" => {
+            let start = surfaces.strings.len();
+            push_text_blocks(
+                surfaces,
+                &prefix.member("content"),
+                value,
+                SurfaceSyntax::ModelOutput,
+            );
+            sink_from(surfaces, start, &RestoreSink::Display);
+        }
         "tool_results" => push_text_blocks(
             surfaces,
             &prefix.member("tool_results"),
@@ -565,15 +726,20 @@ fn collect_tool_call_arguments<'a>(
     prefix: &SurfacePath,
     tool_call: &'a mut Value,
 ) {
-    if let Some(args) = tool_call
-        .get_mut("function")
-        .and_then(|function| function.get_mut("arguments"))
-    {
+    let function = tool_call.get_mut("function");
+    let tool = function
+        .as_ref()
+        .and_then(|function| function.get("name"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    if let Some(args) = function.and_then(|function| function.get_mut("arguments")) {
+        let start = surfaces.strings.len();
         push_string(
             surfaces,
             prefix.member("function").member("arguments"),
             args,
             SurfaceSyntax::Json,
         );
+        sink_from(surfaces, start, &RestoreSink::ToolInput(tool));
     }
 }

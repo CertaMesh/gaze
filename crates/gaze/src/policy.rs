@@ -101,6 +101,10 @@ impl Default for Policy {
 pub struct ProxyPolicy {
     #[serde(default)]
     pub anthropic_betas: Vec<String>,
+    /// Tools whose call arguments the proxy restores. Every other tool's arguments keep
+    /// their tokens.
+    #[serde(default)]
+    pub restore_tools: Vec<String>,
 }
 
 /// `[outcomes]`: what happens to typed protection outcomes.
@@ -1036,6 +1040,7 @@ mod tests {
 scope = "ephemeral"
 [proxy]
 anthropic_betas = ["claude-code-20250219", "effort-2025-11-24"]
+restore_tools = ["save_contact"]
 [[rule]]
 kind = "default"
 action = "tokenize"
@@ -1047,6 +1052,7 @@ action = "tokenize"
             policy.proxy.anthropic_betas,
             ["claude-code-20250219", "effort-2025-11-24"]
         );
+        assert_eq!(policy.proxy.restore_tools, ["save_contact"]);
         assert!(toml::from_str::<super::RawPolicy>(
             r#"
 [session]
