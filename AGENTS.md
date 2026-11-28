@@ -167,9 +167,30 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
 
 1. Capture each side once. Base is the `main` commit the branch starts from. Candidate is the
    exact integrated branch head. Each side uses its own worktree and the policy its own
-   `gaze setup` writes, with the same corpus, seed and machine. Re-score that one observation
+   `gaze setup` writes, with the same corpus, seed and machine. The machine need not be the
+   shared bench Mac: any one quiet machine with the models works, such as a single orb that
+   captures both sides. The gate refuses sides whose `runner_provenance.machine` (OS build and
+   CPU identity) differs. The gate scores bytes, not latency; keep the machine otherwise idle so
+   no per-document deadline fails closed. Re-score that one observation
    record for v2, v1 and every later contract. Never launch a capture per contract. Verified
    cache reuse requires an exact match of every effective execution input and record integrity.
+   The effective execution inputs are:
+   - the bytes of the detector and validator executables, built from that side's clean
+     checkout;
+   - the policy, its dependency files and every model tree it loads;
+   - the corpus files, generated-layer manifest, seed and sampled document IDs;
+   - the scored-label contracts;
+   - the per-layer sub-specifications, which bind every harness file in the capture closure;
+   - the record schema, capture protocol and response validation;
+   - the build features, profile, threshold, warmups and repetitions;
+   - the declared environment, Python and native runtime, OS and hardware.
+
+   The Git revision, tree hashes, documentation, Cargo inputs and harness files outside the
+   closure are not inputs: they reach detection only through executable bytes, so a commit
+   hits only when its producer build is byte-identical. A hit from another commit is rebound
+   to that side's specification and build and keeps its observation bytes
+   ([capture reuse](scripts/bench/README.md#capture-reuse-and-timing)). Nothing that can
+   change detection output or observation bytes may leave the key.
    Skip the release-only copy and render steps:
 
    ```bash
