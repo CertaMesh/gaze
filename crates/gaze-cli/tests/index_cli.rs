@@ -109,6 +109,48 @@ Second support note for search isolation.
 
 #[test]
 #[file_serial(gaze_subprocess)]
+fn index_ingest_preserves_a_zero_width_label_boundary_but_does_not_split_compact_labels() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let env = index_ner(&temp);
+    fs::create_dir(&corpus).unwrap();
+    fs::write(
+        corpus.join("fields.md"),
+        "Notes: café\ncustomer\u{200b}id： QR8X7VT\ncustomerid: compact fixture\n",
+    )
+    .unwrap();
+
+    let ingest = gaze_index_command(&env)
+        .arg("ingest")
+        .arg(&corpus)
+        .arg("--index-path")
+        .arg(&index)
+        .output()
+        .unwrap();
+    assert!(ingest.status.success(), "{ingest:?}");
+    assert!(String::from_utf8_lossy(&ingest.stdout)
+        .lines()
+        .any(|line| line == "entities: 1"));
+
+    for class in [&[][..], &["--class", "custom:customer_id"]] {
+        let search = gaze_index_command(&env)
+            .args(["search", "QR8X7VT"])
+            .args(class)
+            .arg("--index-path")
+            .arg(&index)
+            .output()
+            .unwrap();
+        assert!(search.status.success(), "{search:?}");
+        let stdout = String::from_utf8(search.stdout).unwrap();
+        assert!(stdout.contains(":Custom:customer_id_"));
+        assert!(!stdout.contains("QR8X7VT"));
+        assert!(stdout.contains("customerid: compact fixture"));
+    }
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_tokenizes_ner_only_prose_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");

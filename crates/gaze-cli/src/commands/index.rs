@@ -427,12 +427,21 @@ impl Detector for FieldEntityDetector {
     }
 
     fn detect(&self, input: &str) -> Vec<Detection> {
-        field_detections(input)
+        field_detections(input, None)
+    }
+
+    fn try_detect_with_context(
+        &self,
+        input: &str,
+        ctx: &gaze::DetectContext<'_>,
+    ) -> Result<Vec<Detection>, gaze_types::RecognizerRuntimeError> {
+        Ok(field_detections(input, ctx.source_spans))
     }
 }
 
 fn field_classes(input: &str) -> Vec<PiiClass> {
-    field_detections(input)
+    let normalized = gaze_types::normalize::normalize(input);
+    field_detections(&normalized.text, Some(&normalized.spans))
         .into_iter()
         .map(|detection| detection.class)
         .collect::<BTreeSet<_>>()
@@ -440,13 +449,13 @@ fn field_classes(input: &str) -> Vec<PiiClass> {
         .collect()
 }
 
-fn field_detections(input: &str) -> Vec<Detection> {
+fn field_detections(input: &str, source_spans: Option<&[(usize, usize)]>) -> Vec<Detection> {
     let mut detections = Vec::new();
     let mut offset = 0_usize;
 
     for segment in input.split_inclusive('\n') {
         let line = segment.trim_end_matches(['\r', '\n']);
-        if let Some(detection) = field_detection_for_line(line, offset) {
+        if let Some(detection) = field_detection_for_line(line, offset, source_spans) {
             detections.push(detection);
         }
         offset += segment.len();
@@ -455,10 +464,22 @@ fn field_detections(input: &str) -> Vec<Detection> {
     detections
 }
 
-fn field_detection_for_line(line: &str, line_offset: usize) -> Option<Detection> {
+fn field_detection_for_line(
+    line: &str,
+    line_offset: usize,
+    source_spans: Option<&[(usize, usize)]>,
+) -> Option<Detection> {
     let colon = line.find(':')?;
-    let label = normalize_label(&line[..colon]);
-    let class = class_for_label(&label)?;
+    let label = &line[..colon];
+    let class = class_for_label(&normalize_label(label, None)).or_else(|| {
+        // The pipeline drops U+200B, but its source span map distinguishes a lost
+        // word boundary from a genuinely compact label. Never rewrite the value.
+        let spans = source_spans?.get(line_offset..line_offset + colon)?;
+        if !spans.windows(2).any(|pair| pair[0].1 < pair[1].0) {
+            return None;
+        }
+        class_for_label(&normalize_label(label, Some(spans)))
+    })?;
     let value_part = &line[colon + 1..];
     let trimmed_start = value_part.trim_start();
     let leading = value_part.len() - trimmed_start.len();
@@ -473,17 +494,12 @@ fn field_detection_for_line(line: &str, line_offset: usize) -> Option<Detection>
     Some(Detection::new(start..end, class, "gaze.index.field"))
 }
 
-fn normalize_label(label: &str) -> String {
-    let label = label
-        .trim()
-        .trim_start_matches(['-', '*', '#', '>', '|'])
-        .trim()
-        .trim_matches('*')
-        .trim();
+fn normalize_label(label: &str, source_spans: Option<&[(usize, usize)]>) -> String {
     let mut out = String::new();
     let mut pending_underscore = false;
-    for ch in label.chars() {
+    for (at, ch) in label.char_indices() {
         if ch.is_ascii_alphanumeric() {
+            pending_underscore |= at > 0 && source_spans.is_some_and(|s| s[at - 1].1 < s[at].0);
             if pending_underscore && !out.is_empty() {
                 out.push('_');
             }

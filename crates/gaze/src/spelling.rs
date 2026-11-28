@@ -83,6 +83,14 @@ impl<'a> JsonStringLiterals<'a> {
         Self { text, contents }
     }
 
+    /// String values, never object keys. The closing quote is followed by a colon only for keys.
+    pub(crate) fn values(&self) -> impl Iterator<Item = Range<usize>> + '_ {
+        self.contents
+            .iter()
+            .filter(|range| !self.text[range.end + 1..].trim_start().starts_with(':'))
+            .cloned()
+    }
+
     /// The spelling of `raw`, captured at `span` of the scanned text.
     pub(crate) fn spelling(&self, span: &Range<usize>, raw: &str) -> SourceSpelling {
         let after = self

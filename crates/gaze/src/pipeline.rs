@@ -1,3 +1,4 @@
+mod encoded;
 mod lineage;
 mod occurrence;
 mod outcomes;
@@ -1326,9 +1327,19 @@ impl Pipeline {
             }
             _ => None,
         };
-        let (pool, vetoed) = self
+        let (mut pool, mut vetoed) = self
             .registry
             .detect_candidate_pool(&normalized.text, &ctx)?;
+        if document_kind == DocumentKind::Text {
+            self.add_encoded_identifiers(
+                text,
+                &normalized,
+                &json_literals,
+                &ctx,
+                &mut pool,
+                &mut vetoed,
+            )?;
+        }
         // Refusals wait for the repeat sweep, so the one error names every refused field.
         let (pool, mut refusals) =
             self.enforce_outcomes(target, pool, field_name, document_kind)?;
