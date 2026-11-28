@@ -110,13 +110,13 @@ def test_partitions_have_disjoint_values_and_wording():
     assert wording(dev, values[0]).isdisjoint(wording(test, values[1]))
 
 
-def test_v31_contract_and_both_corpora_rebuild_byte_for_byte():
+def test_v32_contract_and_both_corpora_rebuild_byte_for_byte():
     root = Path(__file__).resolve().parents[2]
-    assert hashlib.sha256((root / api.HISTORICAL_CONTRACTS[31]).read_bytes()).hexdigest() == (
-        "9480508e4ddeca0c4ce82e40acede4c18aca64f318dfdc75eeb04457ee7cd695")
+    assert hashlib.sha256((root / api.HISTORICAL_CONTRACTS[32]).read_bytes()).hexdigest() == (
+        "8c3ac7f6c8a62ac5c11af9897cfadbcccdfd8b1a9a7a784d36336958ceb1b3c1")
     for partition, expected in (
-        ("dev", "1a4d44deff1a09c5020ee80db548698de292bc7ca25524206fe66a846feaf27b"),
-        ("test", "8380d500b949265ef5e01f9a8b801819fd8d83373474f87abcdc535a4df33944"),
+        ("dev", "58333493d84c3753eb2163a14002670a95d010260c1bca495579d30034afacc6"),
+        ("test", "5c259f8e24cbf4f691cddafbb4ac61f90d4b5112d0bfdc40cf90d73517b873cc"),
     ):
-        old = api.records_as_of(31, api.generate(partition))
+        old = api.records_as_of(32, api.generate(partition))
         assert hashlib.sha256(api.corpus_bytes(old)).hexdigest() == expected
