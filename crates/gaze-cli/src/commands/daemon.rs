@@ -976,7 +976,7 @@ enum DaemonResponse {
         session_id: Option<String>,
         error: &'static str,
         detail: String,
-        /// Closed refusal reason; only `Untransformable` sets it.
+        /// Closed refusal reason; only `Untransformable` and `SafetyNetFallback` set it.
         #[serde(skip_serializing_if = "Option::is_none")]
         reason: Option<&'static str>,
     },
@@ -1062,6 +1062,7 @@ impl DaemonError {
                 CliError::Pipeline => "Pipeline",
                 CliError::Io => "Io",
                 CliError::Untransformable { .. } => "Untransformable",
+                CliError::SafetyNetFallback { .. } => "SafetyNetFallback",
                 _ => "CliError",
             },
             Self::Invariant => "PipelineInvariant",
@@ -1077,6 +1078,9 @@ impl DaemonError {
     fn reason(&self) -> Option<&'static str> {
         match self {
             Self::Cli(CliError::Untransformable { reason }) => Some(reason.as_str()),
+            Self::Cli(CliError::SafetyNetFallback { reason }) => {
+                Some(crate::error::safety_net_fallback_code(*reason))
+            }
             _ => None,
         }
     }
@@ -1088,6 +1092,9 @@ impl DaemonError {
             | Self::Cli(CliError::PolicyOpenDetail(detail)) => Some(detail.as_str()),
             Self::Cli(CliError::Untransformable { .. }) => {
                 Some("confirmed sensitive field cannot be transformed")
+            }
+            Self::Cli(CliError::SafetyNetFallback { .. }) => {
+                Some("safety net flagged a residual that cannot be tokenized")
             }
             Self::Cli(_) => Some("gaze daemon request failed closed"),
             Self::Invariant => Some("unexpected non-text clean document"),

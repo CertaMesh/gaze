@@ -153,7 +153,7 @@ impl From<ProtectionError> for BoundaryRefusal {
 }
 
 /// The boundary's safety-net step: `gaze clean --safety-net-fallback strict`. A boundary never
-/// deletes one-way, so whatever Resolve cannot tokenize is refused. Clean's default `Redact`
+/// deletes one-way, so whatever Resolve cannot tokenize is refused. Clean's default `Refuse`
 /// fallback also runs a second reversible tokenize batch for what the re-run flags; this one
 /// refuses that text instead.
 const BOUNDARY_DECISION: SafetyNetDecision = SafetyNetDecision::Resolve {

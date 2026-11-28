@@ -147,8 +147,9 @@ IDs, hashes, token mappings, or partial output.
 New error variants are `BlockMissing`, `HashMismatch`, `CacheConflict`,
 `RequestConflict`, `CacheCapacity`, and `CacheConvergence`. `Untransformable`
 adds a closed `reason`, such as `json_number_no_text_only_path`, and never the
-value or its field path. Validation and
-capacity failures consume no sequence and publish no staged manifest or inventory.
+value or its field path. `SafetyNetFallback` adds a closed
+`safety_net_fallback_*` `reason`, such as
+`safety_net_fallback_residual_suspect`. Validation and capacity failures consume no sequence and publish no staged manifest or inventory.
 After refusal, correct the request using a new request ID at the unconsumed
 sequence. After an uncertain clean, retry the exact frame first. If its receipt
 is unavailable, resync all original bodies at `current.next_request_seq` without

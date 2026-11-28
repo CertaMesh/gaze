@@ -166,7 +166,7 @@ Support summary mentions Dr. Schmidt after triage.
 
 #[test]
 #[file_serial(gaze_subprocess)]
-fn index_ingest_redacts_residual_suspects_by_default_without_raw_persistence() {
+fn index_ingest_accepts_resolvable_residual_suspects_by_default_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
@@ -275,6 +275,51 @@ Support summary mentions Dr. Schmidt marker after triage.
     assert!(
         !stderr.contains("Dr. Schmidt"),
         "stderr leaked raw fixture value: {stderr}"
+    );
+}
+
+/// A name-class sub-word is never tokenized. Default ingest refuses it; an explicit
+/// `--on-residual redact` keeps the old behavior and ingests.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_ingest_refuses_an_untokenizable_residual_by_default_and_redact_ingests() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index_env = index_env(
+        &temp,
+        r#"spans = []
+start = text.find("ummary")
+if start >= 0:
+    spans.append({"label": "private_person", "start": start, "end": start + 3, "score": 0.99})
+print(json.dumps({"text": text, "detected_spans": spans}))
+"#,
+    );
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    fs::write(corpus.join("subword.md"), "Support summary after triage.\n").expect("write");
+
+    let ingest = |extra: &[&str], index: &std::path::Path| {
+        gaze_index_command(&index_env)
+            .arg("ingest")
+            .arg(&corpus)
+            .args(extra)
+            .args(["--domain", DOMAIN, "--index-path"])
+            .arg(index)
+            .output()
+            .expect("run index ingest")
+    };
+    let refused = ingest(&[], &temp.path().join("default-index"));
+    assert!(!refused.status.success(), "default ingest must refuse");
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("ResidualSuspect"), "stderr={stderr}");
+
+    let redacted = ingest(
+        &["--on-residual", "redact"],
+        &temp.path().join("redact-index"),
+    );
+    assert!(
+        redacted.status.success(),
+        "redact ingest failed: stderr={}",
+        String::from_utf8_lossy(&redacted.stderr)
     );
 }
 

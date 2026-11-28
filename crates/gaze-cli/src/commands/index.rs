@@ -76,6 +76,7 @@ pub(crate) struct SearchArgs {
 pub(crate) enum OnResidual {
     Redact,
     Strict,
+    Refuse,
 }
 
 impl OnResidual {
@@ -83,6 +84,7 @@ impl OnResidual {
         match self {
             Self::Redact => SafetyNetFallback::Redact,
             Self::Strict => SafetyNetFallback::Strict,
+            Self::Refuse => SafetyNetFallback::Refuse,
         }
     }
 }

@@ -81,8 +81,9 @@ and pinned Davlan mBERT NER. OPF remains opt-in.
 | `strict` | Refuse uncovered/partial-bleed suspects, exit `3`, empty stdout | Nothing sent |
 | `tolerant` | Warn and keep flagged bytes | Development only; raw bytes may leave |
 
-`--safety-net-fallback` applies only to `resolve`; choices are `redact`
-(default), `strict`, and `tolerant`. Both tolerant flags require
+`--safety-net-fallback` applies only to `resolve`; choices are `refuse`
+(default: refuse instead of a one-way marker), `redact`, `strict`, and
+`tolerant`. Both tolerant flags require
 `GAZE_ALLOW_TOLERANT=1`. Verified-token findings are dropped; sub-word and
 terminal-admission exceptions are documented in
 [safety nets](safety-net/safety-nets.md#sub-word-suspects-are-never-acted-on).
@@ -230,7 +231,8 @@ jq --rawfile text reply.txt '{session_blob, text: $text}' clean.json \
 | NER | Model detecting names, places, organizations |
 | Safety net | Backend scanning clean output for missed PII |
 | Resolve | Core directly tokenizes a suspect into a restorable token |
-| Redact fallback | One-way marker when reversible handling fails |
+| Refuse fallback | Typed refusal when reversible handling fails (default) |
+| Redact fallback | Opt-in one-way marker when reversible handling fails |
 | Fail closed | Refuse rather than silently continue on failure |
 | Format/document basis | Format recognizers run across locales; document recognizers use locale eligibility |
 | Residual | Exposed suspect bytes left after resolution |

@@ -88,14 +88,14 @@ fn prove_ordering(route: Route) {
                 RawDocument::Text(raw.into()),
                 &[LocaleTag::Global],
                 &dictionaries,
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             ),
             Route::Staged => pipeline.clean_transaction_with_safety_net_policy_detect_context(
                 &mut transaction,
                 RawDocument::Text(raw.into()),
                 &[LocaleTag::Global],
                 &dictionaries,
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             ),
             Route::Trace => pipeline
                 .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
@@ -103,7 +103,7 @@ fn prove_ordering(route: Route) {
                     raw,
                     &[LocaleTag::Global],
                     &dictionaries,
-                    SafetyNetPolicy::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
                 )
                 .map(|(doc, spans, report, trace)| {
                     let mut expected: Vec<_> = raw
@@ -304,14 +304,14 @@ fn deletion_authorizes_one_reversible_round_over_a_raw_gap() {
                 RawDocument::Text(raw.clone()),
                 &[LocaleTag::Global],
                 &dictionaries,
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             ),
             Route::Staged => pipeline.clean_transaction_with_safety_net_policy_detect_context(
                 &mut transaction,
                 RawDocument::Text(raw.clone()),
                 &[LocaleTag::Global],
                 &dictionaries,
-                SafetyNetPolicy::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             ),
             Route::Trace => pipeline
                 .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
@@ -319,7 +319,7 @@ fn deletion_authorizes_one_reversible_round_over_a_raw_gap() {
                     &raw,
                     &[LocaleTag::Global],
                     &dictionaries,
-                    SafetyNetPolicy::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
                 )
                 .map(|(doc, spans, report, _)| (doc, spans, report)),
         };
@@ -388,14 +388,14 @@ fn deletion_does_not_authorize_foreign_tokens_or_malformed_reports() {
                     RawDocument::Text(raw.clone()),
                     &[LocaleTag::Global],
                     &dictionaries,
-                    SafetyNetPolicy::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
                 ),
                 Route::Staged => pipeline.clean_transaction_with_safety_net_policy_detect_context(
                     &mut transaction,
                     RawDocument::Text(raw.clone()),
                     &[LocaleTag::Global],
                     &dictionaries,
-                    SafetyNetPolicy::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
                 ),
                 Route::Trace => pipeline
                     .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
@@ -403,7 +403,7 @@ fn deletion_does_not_authorize_foreign_tokens_or_malformed_reports() {
                         &raw,
                         &[LocaleTag::Global],
                         &dictionaries,
-                        SafetyNetPolicy::default(),
+                        SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
                     )
                     .map(|(doc, spans, report, _)| (doc, spans, report)),
             };

@@ -107,7 +107,7 @@ text, manifests, or restore; the pipeline applies the selected mode to suspects.
 See the [contract](../explanation/safety-net/safety-nets.md).
 
 No `[safety_net]` table means no net. `gaze setup` enables in-process `nym`;
-`openai-filter` uses an OPF subprocess. Both default to `resolve` with `redact`
+`openai-filter` uses an OPF subprocess. Both default to `resolve` with `refuse`
 fallback.
 
 ### OpenAI Privacy Filter
@@ -165,8 +165,9 @@ Select with `--safety-net-mode {resolve|strict|redact|tolerant}`.
 | `tolerant` | Warn on stderr and emit suspected leaks; local development only |
 
 If resolution overlaps an existing token or leaves suspects after the re-run,
-`--safety-net-fallback {strict|tolerant|redact}` applies (default `redact`).
-Resolved tokens remain restorable; fallback markers do not. Redactions are
+`--safety-net-fallback {refuse|strict|tolerant|redact}` applies (default
+`refuse`, which refuses with exit `3` instead of writing a marker). Resolved
+tokens remain restorable; markers from an explicit `redact` fallback do not. Redactions are
 recorded in the manifest and audit trail; each action emits a typed audit row.
 Never use `tolerant` in production.
 

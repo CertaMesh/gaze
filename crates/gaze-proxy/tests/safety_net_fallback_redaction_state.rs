@@ -23,7 +23,8 @@ use std::sync::Arc;
 
 use gaze::{
     is_redaction_marker, Action, ClassRule, CleanDocument, DefaultRule, DictionaryBundle,
-    LocaleTag, PiiClass, Pipeline, RawDocument, Scope, Session,
+    LocaleTag, PiiClass, Pipeline, RawDocument, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session,
 };
 use gaze_recognizers::RegexDetector;
 
@@ -43,11 +44,12 @@ fn control_successful_fallback_redaction_records_a_manifest_entry_over_the_origi
     let candidate = format!("lead {MARKER} tail");
 
     let (clean, spans, report) = pipeline
-        .clean_with_safety_net_detect_context(
+        .clean_with_safety_net_policy_detect_context(
             &session,
             RawDocument::Text(candidate.clone()),
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
         .expect("the fallback redaction path returns Ok");
 
@@ -107,11 +109,12 @@ fn control_fallback_redaction_between_two_entries_is_its_own_entry() {
     let candidate = format!("alice@example.invalid {MARKER} bob@example.invalid");
 
     let (clean, spans, _report) = pipeline
-        .clean_with_safety_net_detect_context(
+        .clean_with_safety_net_policy_detect_context(
             &session,
             RawDocument::Text(candidate.clone()),
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
         .expect("the fallback redaction path returns Ok");
     let CleanDocument::Text(clean_text) = clean else {

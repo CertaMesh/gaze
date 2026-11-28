@@ -566,9 +566,14 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
     Ok(())
 }
 
-/// Clean-path failures: the exit-8 refusal always surfaces, safety-net variants only with an
-/// installed net, and every other failure stays the value-free `Pipeline` error.
+/// Clean-path failures: the exit-8 refusal and a safety-net fallback refusal always surface,
+/// other safety-net variants only with an installed net, and every other failure stays the
+/// value-free `Pipeline` error.
 pub(crate) fn map_clean_error(pipeline: &gaze::Pipeline, err: gaze::Error) -> CliError {
+    // A fallback refusal carries only a closed reason, so it is typed on every route.
+    if let gaze::Error::SafetyNetFallback(reason) = err {
+        return CliError::SafetyNetFallback { reason };
+    }
     if pipeline.safety_net_count() > 0 {
         map_safety_net_pipeline_error(err)
     } else {
@@ -582,6 +587,7 @@ pub(crate) fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
     }
     match err {
         gaze::Error::SafetyNet(err) => map_safety_net_error(err),
+        gaze::Error::SafetyNetFallback(reason) => CliError::SafetyNetFallback { reason },
         _ => CliError::Pipeline,
     }
 }
@@ -1057,6 +1063,7 @@ pub(crate) fn safety_net_policy(
             SafetyNetFallback::Strict => gaze::SafetyNetFallback::Strict,
             SafetyNetFallback::Tolerant => gaze::SafetyNetFallback::Tolerant,
             SafetyNetFallback::Redact => gaze::SafetyNetFallback::Redact,
+            SafetyNetFallback::Refuse => gaze::SafetyNetFallback::Refuse,
         },
     )
 }

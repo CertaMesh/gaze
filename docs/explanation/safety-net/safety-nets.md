@@ -36,7 +36,7 @@ Manifest correlation distinguishes `Uncovered`, `PartialBleed`, and
 `SafetyNet` has no replacement-text return value or mutable manifest access.
 The core's `SafetyNetPolicy` decides whether to observe (`Strict`, `Tolerant`),
 replace spans (`Redact`), or tokenize and scan again (`Resolve`). Policy-less
-entry points use `SafetyNetPolicy::default()`: `Resolve` + `Redact`.
+entry points use `SafetyNetPolicy::default()`: `Resolve` + `Refuse`.
 
 `Pipeline::clean_with_safety_net_detect_context` cleans, records token spans,
 checks the successful output with registered nets, and returns
