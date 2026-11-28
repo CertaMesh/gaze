@@ -1,1 +1,1 @@
-- Generator v33 scores the complete source spelling of identifiers split by JSON Unicode escapes and HTML character references, including repeats. Format-matched benign values and grouped view counts measure false positives.
+- Generator v34 scores the complete source spelling of identifiers split by JSON Unicode escapes and HTML character references, including repeats. Format-matched benign values and grouped view counts measure false positives.

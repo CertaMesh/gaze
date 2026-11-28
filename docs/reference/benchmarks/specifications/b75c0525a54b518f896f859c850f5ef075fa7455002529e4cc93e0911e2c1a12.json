@@ -1,21 +1,21 @@
 {
-  "id": "gaze-benchmark-v1:930a22d55ca1f1acab5b035c3971b47f2ebcd601d0e901d37eef70f059ae6c03",
+  "id": "gaze-benchmark-v1:b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
     "generator": {
       "generator": "scripts/bench/agentic_layers.py",
-      "generator_version": 32,
+      "generator_version": 33,
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 43155,
+      "documents": 43189,
       "documents_by_layer": {
-        "A": 20717,
-        "D": 9637,
+        "A": 20735,
+        "D": 9653,
         "R": 12801
       },
-      "corpus_sha256": "f672c5e398a06c4717b03836479268caf9c75a746f5367f77072d40d4d60bc8e",
+      "corpus_sha256": "30c18e267516f1203e9592285a83d5a1563c0f7365618024fb101e6840e95ee2",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,10 +24,10 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "a49ca4d597ec9666b16884214df0f9f8b9e9b0f30bcd3e227dabe93fe2e693c5"
+      "generated": "1f181417b92b4ecdc3b9e7730d086a7e9a3b322cd34e76a2dbdd867256f70182"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "47f26e3691511e1ab9cdcf09c2fd0580afdbd59964bd130158f8c5a4f2c63f25",
+      "scripts/bench/agentic_layers.py": "f8820088f95a95c8107a1a407afb88e2effdb3732ed4fec57defef4c58aac3ca",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -395,14 +395,14 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 20717,
-        "document_ids_sha256": "aee33f1fe63c13c1a6083d3104316c9d95c3d488a25b39e879536d08b2ccf572",
-        "descriptors_sha256": "63134c302a96ea3e94c50981df007c042989f86c3ff6afc7947afd9f0c93f1b0"
+        "documents": 20735,
+        "document_ids_sha256": "7062c6c6c8a548a030e7994be0a70c67dcf1d70fe5bd9ddfeb31f9e4cf2057ee",
+        "descriptors_sha256": "153a8c713606fb15f8337b3ee0facd69fcd6c13eea1666eba5b07cabb3950b64"
       },
       "D": {
-        "documents": 9637,
-        "document_ids_sha256": "87b1d87f1ea501d3c2754aa6a3953dd59a0763dd1a51037433af615eb1204bab",
-        "descriptors_sha256": "d989fa55de640044258a3f4dc59c7e1d16d29af1ab2f9aedef05855c0c342d07"
+        "documents": 9653,
+        "document_ids_sha256": "37b0264d4688e22d59cd46fc840529fbfb613a4fa1dc645b1132f7a96b38998f",
+        "descriptors_sha256": "80dea227b6e7460cd51842993298b0011e6b55de50aa0fe058320e6b6d08f8db"
       },
       "R": {
         "documents": 12801,

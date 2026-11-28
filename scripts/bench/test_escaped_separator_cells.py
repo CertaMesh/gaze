@@ -222,13 +222,13 @@ def test_partitions_are_disjoint_and_reproducible():
     assert all(a.isdisjoint(b) for a, b in zip(*sets))
 
 
-def test_integrated_generator_includes_source_rows_and_rebuilds_v32():
+def test_integrated_generator_includes_source_rows_and_rebuilds_v33():
     root = Path(__file__).resolve().parents[2]
-    assert api.load_contract(root, version=32).sha256 == "a49ca4d597ec9666b16884214df0f9f8b9e9b0f30bcd3e227dabe93fe2e693c5"
-    for partition, digest in (("dev", "41d665cda385c1683fb9c69abbda8adb298d79c8c8e1412c95f2367fc9320e60"),
-                              ("test", "f672c5e398a06c4717b03836479268caf9c75a746f5367f77072d40d4d60bc8e")):
+    assert api.load_contract(root, version=33).sha256 == "1f181417b92b4ecdc3b9e7730d086a7e9a3b322cd34e76a2dbdd867256f70182"
+    for partition, digest in (("dev", "01f148c88b6f438f66cea88e98ef5d160480b7c2fcb23250473ee16badbc2b6a"),
+                              ("test", "30c18e267516f1203e9592285a83d5a1563c0f7365618024fb101e6840e95ee2")):
         rows = api.generate(partition)
         added = [r for r in rows if r.surface.startswith(cells.SURFACE_PREFIX)]
         assert added == cells.records(api, partition)
-        frozen = api.records_as_of(32, rows)
+        frozen = api.records_as_of(33, rows)
         assert hashlib.sha256(api.corpus_bytes(frozen)).hexdigest() == digest
