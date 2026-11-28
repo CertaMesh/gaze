@@ -886,3 +886,42 @@ def test_reused_capture_rebinds_to_executing_spec_and_build(tmp_path):
     cert.full_record(record, executing, REVISION)
     # Replaying the same specification and build again is a no-op.
     assert not records.rebind_reuse(record, executing, binary, current)
+
+
+@pytest.mark.parametrize('changed, claim, code', [
+    (['crates/gaze-recognizers/embedded/core.toml', 'crates/gaze-recognizers/tests/birth_date_cues.rs'],
+     None, None),
+    (['crates/gaze-recognizers/embedded/core.toml', 'crates/gaze-recognizers/src/lib.rs'],
+     None, 'builtin_rule_scope'),
+    (['crates/gaze-recognizers/tests/birth_date_cues.rs'], None, 'builtin_rule_scope'),
+    (['crates/gaze-recognizers/embedded/core.toml'], {'changed_build_paths': []}, 'builtin_rule_scope'),
+    (['crates/gaze-recognizers/embedded/core.toml'], {'reviewer_confirmation': None},
+     'unconfirmed_builtin_rule_mechanism'),
+    (['crates/gaze-recognizers/embedded/core.toml'], {'base': 'c' * 40}, 'builtin_rule_base_mismatch'),
+])
+def test_builtin_rule_change_certifies_on_its_gain_pair_only_within_scope(
+        tmp_path, evidence, changed, claim, code):
+    mechanisms = evidence.pop('mechanisms')
+    evidence[cert.BUILTIN_RULES] = {'base': 'b' * 40, 'changed_build_paths': sorted(changed),
+                                    'reviewer_confirmation': {'reviewer': 'independent-review', 'pair': 'gain'},
+                                    **(claim or {})}
+    diff = mock.Mock(return_value=SimpleNamespace(stdout='\n'.join(changed)))
+    with mock.patch.object(cert.subprocess, 'run', diff):
+        if code is None:
+            result = cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
+                                required_mechanisms=(cert.BUILTIN_RULES,))
+            assert result['verdict'] == 'pass'
+            assert result['mechanisms'][cert.BUILTIN_RULES]['scope']['changed_build_paths'] == sorted(changed)
+            assert diff.call_args.args[0][3:5] == ['b' * 40, REVISION]
+        else:
+            with pytest.raises(cert.CertificationError, match=f'^{code}$'):
+                cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
+                           required_mechanisms=(cert.BUILTIN_RULES,))
+    # The kind is exclusive: it never combines with declared arms or stands in for them.
+    evidence['mechanisms'] = mechanisms
+    with pytest.raises(cert.CertificationError, match='^absent_mechanism$'):
+        cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
+                   required_mechanisms=(cert.BUILTIN_RULES,))
+    with pytest.raises(cert.CertificationError, match='^absent_mechanism$'):
+        cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
+                   required_mechanisms=('synthetic',))

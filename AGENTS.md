@@ -244,6 +244,17 @@ for the exact integrated candidate. Certification requires a full evaluation, a 
 incremental evaluation with a sound affected-unit selector validated in shadow first, or a
 full-gated combined merge train. A targeted subset can inform a PR, but never certifies main.
 Both gated contracts, mechanism policy deltas and the full release benchmark remain required.
+A gate's mechanism pair must isolate the mechanism the PR changes. For a new or changed rule,
+use a same-binary rulepack ablation without that rule. For a Nym or NER change, switch that model
+off and on. The reviewer confirms the declared pair before anyone measures it; a pair for another
+mechanism, such as Nym off/on for a rule-only change, cannot certify the PR.
+A change to built-in rule definitions has no policy or rulepack delta to ablate. Its gain pair is
+its mechanism pair (mechanism kind `builtin-rules`) when the build inputs that differ between base
+and candidate are only `crates/gaze-recognizers/embedded/*.toml` files and crate test files. The
+manifest names the base, the changed paths and the independent reviewer who confirmed that scope
+before measurement; the certifier recomputes the diff and refuses any other build change. Every
+other guard still applies: the gain gate under both contracts, provenance, full population and
+no new exposure.
 
 Benchmark specifications have immutable version IDs. Never compare results across specifications.
 Integrity checks remain mandatory. Historical remeasurement is off the PR critical path:

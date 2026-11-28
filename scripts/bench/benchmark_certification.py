@@ -7,6 +7,7 @@ import argparse
 from dataclasses import replace
 import json
 import re
+import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -206,6 +207,36 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
     return results
 
 
+# A built-in rule change has no policy or rulepack delta to ablate. Its gain pair
+# isolates it when the detector build differs only in these paths.
+BUILTIN_RULES = "builtin-rules"
+BUILD_INPUTS = ("crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo")
+BUILTIN_RULE_PATH = re.compile(r"crates/gaze-recognizers/embedded/[^/]+\.toml|crates/[^/]+/tests/.+")
+
+
+def check_builtin_rules(value: dict, *, root: Path, harness: Path, candidate: str) -> dict:
+    """Admit the gain pair as the mechanism pair for an embedded-rule-only change."""
+    claim = value[BUILTIN_RULES]
+    confirmation = claim.get("reviewer_confirmation")
+    if (not isinstance(confirmation, dict) or not isinstance(confirmation.get("reviewer"), str)
+            or not confirmation["reviewer"] or confirmation.get("pair") != "gain"):
+        raise CertificationError("unconfirmed_builtin_rule_mechanism")
+    header, _ = records._read(pin(root, value["gain"]["base"]["record"]))
+    base = header["scorecard"].get("gaze", {}).get("revision")
+    if not isinstance(base, str) or not re.fullmatch("[0-9a-f]{40}", base) or claim.get("base") != base:
+        raise CertificationError("builtin_rule_base_mismatch")
+    try:
+        changed = subprocess.run(["git", "diff", "--name-only", base, candidate, "--", *BUILD_INPUTS],
+                                 cwd=harness, check=True, capture_output=True, text=True).stdout.split()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise CertificationError("builtin_rule_diff_unavailable") from error
+    rules = [path for path in changed if path.startswith("crates/gaze-recognizers/embedded/")]
+    if (not rules or sorted(changed) != sorted(claim.get("changed_build_paths", []))
+            or not all(BUILTIN_RULE_PATH.fullmatch(path) for path in changed)):
+        raise CertificationError("builtin_rule_scope")
+    return {"base": base, "changed_build_paths": sorted(changed), "reviewer": confirmation["reviewer"]}
+
+
 def check(value: dict, *, root: Path, harness: Path, candidate: str,
           required_mechanisms: tuple[str, ...], dataset: Path | None = None) -> dict:
     try:
@@ -218,9 +249,17 @@ def check(value: dict, *, root: Path, harness: Path, candidate: str,
             specs.require_current(spec, harness, dataset=dataset)
         except specs.SpecError as error:
             raise CertificationError('harness_spec_mismatch') from error
-        if not required_mechanisms or set(value['mechanisms']) != set(required_mechanisms):
+        builtin = required_mechanisms == (BUILTIN_RULES,)
+        if builtin != (BUILTIN_RULES in value) or (builtin and value.get('mechanisms')):
+            raise CertificationError('absent_mechanism')
+        if not builtin and (not required_mechanisms or set(value['mechanisms']) != set(required_mechanisms)):
             raise CertificationError('absent_mechanism')
         gates = check_pair(value['gain'], root=root, harness=harness, spec=spec, candidate=candidate)
+        if builtin:
+            scope = check_builtin_rules(value, root=root, harness=harness, candidate=candidate)
+            return {'verdict': 'pass', 'candidate': candidate, 'benchmark_spec_id': spec['id'],
+                    'manifest_sha256': digest(value), 'contracts': gates,
+                    'mechanisms': {BUILTIN_RULES: {**gates, 'scope': scope}}}
         integrated_binary = records.binary_sha256(pin(root, value['gain']['candidate']['record']), required=True)
         for pair in value['mechanisms'].values():
             if records.binary_sha256(pin(root, pair['candidate']['record']), required=True) != integrated_binary:
