@@ -1110,39 +1110,11 @@ fn class_priority(class: &PiiClass) -> u8 {
         PiiClass::Name => 80,
         PiiClass::Organization => 70,
         PiiClass::Location => 60,
-        // First-class shipped classes, families and adopter classes share the
-        // historical `Custom` priority.
-        PiiClass::PostalCode
-        | PiiClass::Phone
-        | PiiClass::SecurityToken
-        | PiiClass::Password
-        | PiiClass::CreditCard
-        | PiiClass::VatId
-        | PiiClass::TaxNumber
-        | PiiClass::Ssn
-        | PiiClass::NationalId
-        | PiiClass::IpAddress
-        | PiiClass::Iban
-        | PiiClass::DriverLicense
-        | PiiClass::BirthDate
-        | PiiClass::Age
-        | PiiClass::Url
-        | PiiClass::SteuerId
-        | PiiClass::Passport
-        | PiiClass::Pan
-        | PiiClass::Nir
-        | PiiClass::Nino
-        | PiiClass::NhsNumber
-        | PiiClass::EthAddress
-        | PiiClass::Cpf
-        | PiiClass::Cnpj
-        | PiiClass::Bsn
-        | PiiClass::Aadhaar
-        | PiiClass::CustomerId
-        | PiiClass::EmployeeId
-        | PiiClass::RecordId
-        | PiiClass::Ambiguous(_)
-        | PiiClass::Custom(_) => 50,
+        // Every other class is custom-like (`PiiClass::is_custom_like`):
+        // first-class shipped classes, families and adopter classes share the
+        // historical `Custom` priority. `PiiClass` is non-exhaustive, so a new
+        // shipped class lands here too.
+        _ => 50,
     }
 }
 

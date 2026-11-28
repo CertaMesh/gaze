@@ -322,6 +322,7 @@ fn class_priorities() -> BTreeMap<String, String> {
         .expect("class_priority must contain a match expression");
 
     let mut priorities = BTreeMap::new();
+    let mut wildcard = None::<String>;
     for arm in &match_expression.arms {
         let priority = match arm.body.as_ref() {
             Expr::Lit(literal) => match &literal.lit {
@@ -332,6 +333,13 @@ fn class_priorities() -> BTreeMap<String, String> {
         };
         let patterns = match &arm.pat {
             Pat::Or(or) => or.cases.iter().collect::<Vec<_>>(),
+            Pat::Wild(_) => {
+                assert!(
+                    wildcard.replace(priority.clone()).is_none(),
+                    "class_priority has two wildcard arms"
+                );
+                continue;
+            }
             pattern => vec![pattern],
         };
         for pattern in patterns {
@@ -351,6 +359,15 @@ fn class_priorities() -> BTreeMap<String, String> {
                     .is_none(),
                 "class_priority lists {variant} twice"
             );
+        }
+    }
+    // A wildcard arm covers every `PiiClass` variant without an explicit arm.
+    if let Some(priority) = wildcard {
+        let variants = enum_variants("crates/gaze-types/src/lib.rs", "PiiClass");
+        for variant in variants.keys() {
+            priorities
+                .entry(variant.clone())
+                .or_insert_with(|| priority.clone());
         }
     }
     priorities

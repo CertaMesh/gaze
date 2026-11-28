@@ -124,8 +124,9 @@ impl std::error::Error for RecognizerRuntimeError {}
 /// and hashing compare by that spelling, so `PiiClass::Custom("phone".into())`
 /// equals `PiiClass::Phone`.
 ///
-/// `PiiClass` is exhaustive. Match every variant explicitly, or use a wildcard for
-/// the `custom:` classes, so new classes force call sites to review their handling:
+/// `PiiClass` is `#[non_exhaustive]`: a minor release may add a variant for each
+/// newly shipped class. Match the classes you handle and end with a wildcard arm
+/// for the remaining `custom:` classes:
 ///
 /// ```rust
 /// use gaze_types::PiiClass;
@@ -146,6 +147,7 @@ impl std::error::Error for RecognizerRuntimeError {}
 /// and every other class is spelled like `custom:phone` or `custom:case_ref`
 /// (lowercase, snake_case). Families are spelled `custom:family:<name>`.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum PiiClass {
     /// Email address class.
     Email,
@@ -563,6 +565,20 @@ impl PiiClass {
         }
     }
 
+    /// Returns the `Debug` spelling this class had before shipped classes became
+    /// first-class variants, for example `Custom("phone")` for
+    /// [`PiiClass::Phone`] and `Custom("family:x")` for a family.
+    ///
+    /// Stored and compared labels, such as safety-net `raw_label` audit values,
+    /// use this spelling so they keep their bytes. [`Debug`] itself prints the
+    /// variant name.
+    pub fn legacy_debug_label(&self) -> String {
+        match self.legacy_custom_name() {
+            Some(name) => format!("Custom({name:?})"),
+            None => format!("{self:?}"),
+        }
+    }
+
     fn builtin_rank(&self) -> u8 {
         match self {
             Self::Email => 0,
@@ -608,13 +624,34 @@ impl PiiClass {
     }
 }
 
+impl PiiClass {
+    /// The comparison key: built-in rank, then the legacy `custom:` name split
+    /// into an optional `family:` prefix and the rest. The split is canonical,
+    /// so a hand-built `Custom("family:x")` and `Ambiguous("x")` share a key, and
+    /// building it never allocates.
+    fn comparison_key(&self) -> (u8, &'static str, &str) {
+        const FAMILY: &str = "family:";
+        match self {
+            Self::Ambiguous(family) => (4, FAMILY, family.as_str()),
+            Self::Custom(name) => match name.strip_prefix(FAMILY) {
+                Some(family) => (4, FAMILY, family),
+                None => (4, "", name.as_str()),
+            },
+            other => (
+                other.builtin_rank(),
+                "",
+                other.first_class_name().unwrap_or_default(),
+            ),
+        }
+    }
+}
+
 // Equality, ordering and hashing compare the wire spelling, so a hand-built
 // `Custom("phone")` equals `Phone` and the order matches the historical derived
 // order: the four built-ins first, then every custom-like class by legacy name.
 impl PartialEq for PiiClass {
     fn eq(&self, other: &Self) -> bool {
-        self.builtin_rank() == other.builtin_rank()
-            && self.legacy_custom_name() == other.legacy_custom_name()
+        self.comparison_key() == other.comparison_key()
     }
 }
 
@@ -622,8 +659,7 @@ impl Eq for PiiClass {}
 
 impl std::hash::Hash for PiiClass {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.builtin_rank().hash(state);
-        self.legacy_custom_name().hash(state);
+        self.comparison_key().hash(state);
     }
 }
 
@@ -635,9 +671,15 @@ impl PartialOrd for PiiClass {
 
 impl Ord for PiiClass {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.builtin_rank()
-            .cmp(&other.builtin_rank())
-            .then_with(|| self.legacy_custom_name().cmp(&other.legacy_custom_name()))
+        let (rank, prefix, name) = self.comparison_key();
+        let (other_rank, other_prefix, other_name) = other.comparison_key();
+        // Byte order of the joined legacy name, as `String` ordering compared it.
+        rank.cmp(&other_rank).then_with(|| {
+            prefix
+                .bytes()
+                .chain(name.bytes())
+                .cmp(other_prefix.bytes().chain(other_name.bytes()))
+        })
     }
 }
 
@@ -812,6 +854,74 @@ mod pii_class_tests {
                 PiiClass::from_policy_name(&class.to_canonical_str()).as_ref(),
                 Some(class)
             );
+        }
+    }
+
+    #[test]
+    fn legacy_debug_label_keeps_the_pre_variant_debug_spelling() {
+        assert_eq!(PiiClass::Phone.legacy_debug_label(), r#"Custom("phone")"#);
+        assert_eq!(
+            PiiClass::custom("phone").unwrap().legacy_debug_label(),
+            r#"Custom("phone")"#
+        );
+        assert_eq!(
+            PiiClass::family("payment-card-or-iban").legacy_debug_label(),
+            r#"Custom("family:payment-card-or-iban")"#
+        );
+        assert_eq!(
+            PiiClass::Custom("a\"b".into()).legacy_debug_label(),
+            r#"Custom("a\"b")"#
+        );
+        assert_eq!(PiiClass::Email.legacy_debug_label(), "Email");
+        assert_eq!(PiiClass::Organization.legacy_debug_label(), "Organization");
+    }
+
+    #[test]
+    fn comparison_keys_match_the_joined_legacy_name() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        fn hash(class: &PiiClass) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            class.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        let pairs = [
+            (PiiClass::Custom("family:x".into()), PiiClass::family("x")),
+            (PiiClass::Custom("phone".into()), PiiClass::Phone),
+            (
+                PiiClass::Custom("family:".into()),
+                PiiClass::Ambiguous(String::new()),
+            ),
+        ];
+        for (left, right) in &pairs {
+            assert_eq!(left, right);
+            assert_eq!(hash(left), hash(right));
+            assert_eq!(left.cmp(right), std::cmp::Ordering::Equal);
+        }
+
+        let classes = [
+            PiiClass::Custom("famil".into()),
+            PiiClass::Custom("family".into()),
+            PiiClass::family("a"),
+            PiiClass::Custom("family:b".into()),
+            PiiClass::Custom("family;".into()),
+            PiiClass::Custom("familz".into()),
+            PiiClass::family("zz"),
+            PiiClass::Phone,
+            PiiClass::Custom("fa".into()),
+            PiiClass::Email,
+        ];
+        for left in &classes {
+            for right in &classes {
+                let expected = left
+                    .builtin_rank()
+                    .cmp(&right.builtin_rank())
+                    .then_with(|| left.legacy_custom_name().cmp(&right.legacy_custom_name()));
+                assert_eq!(left.cmp(right), expected, "{left:?} vs {right:?}");
+                assert_eq!(left == right, expected.is_eq(), "{left:?} vs {right:?}");
+            }
         }
     }
 
