@@ -284,11 +284,15 @@ def _run(args: argparse.Namespace) -> Path:
                 binary=binary, probe=probe, receipt=build_receipt, spec=spec,
                 parameters=parameters, bundles=bundles, environment=environment,
                 document_ids=[document.uid for document in documents]), None
-        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, agentic.LayerError):
-            return None, "unresolved_release_inputs"
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, agentic.LayerError) as error:
+            return None, f"unresolved_release_inputs ({type(error).__name__}: {error})"
 
     cache_key, reason = ((None, "explicit_no_cache") if args.no_cache else
                         (None, "external_binary") if not args.build else read_key())
+    if cache_key is None:
+        requested = reason in ("explicit_no_cache", "external_binary")
+        print(f"{'observation cache bypassed' if requested else 'WARNING observation cache DISABLED'}: "
+              f"{reason}; every document is captured live", file=sys.stderr)
     evidence.cache = {"status": "disabled" if cache_key is None else "miss",
                       "key_sha256": benchmark_cache.key_digest(cache_key) if cache_key else None,
                       "reason": reason}

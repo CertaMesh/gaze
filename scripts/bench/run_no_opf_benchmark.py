@@ -1503,8 +1503,9 @@ def _run(args: argparse.Namespace) -> int:
         cache_key, bypass = read_key()
     if cache_key is None:
         # Never silent: a disabled cache turns a reusable gate into a full capture.
-        print(f"WARNING observation cache DISABLED: {bypass}; every document is captured live",
-              file=sys.stderr)
+        requested = bypass in ("explicit_no_cache", "fresh_performance_required", "unbound_skip_build")
+        print(f"{'observation cache bypassed' if requested else 'WARNING observation cache DISABLED'}: "
+              f"{bypass}; every document is captured live", file=sys.stderr)
     if evidence is not None:
         evidence.cache = {"status": "disabled" if cache_key is None else "miss",
                           "key_sha256": benchmark_cache.key_digest(cache_key) if cache_key else None,

@@ -148,7 +148,8 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
                 else:
                     raise ValueError("missing dynamic library")
     else:
-        pending = [(path, path in unimported) for path in native_roots]
+        # Sorted, so the walk order (and which side reaches a shared library first) is fixed.
+        pending = [(path, path in unimported) for path in sorted(native_roots)]
         seen = set()
         while pending:
             binary, optional = pending.pop()

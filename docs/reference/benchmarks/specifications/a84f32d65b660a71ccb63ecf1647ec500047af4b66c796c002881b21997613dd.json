@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:cf12ccfff04f35325b0d10f943b96e40afb46ac80ea132c20ccdb05bc5586728",
+  "id": "gaze-benchmark-v1:a84f32d65b660a71ccb63ecf1647ec500047af4b66c796c002881b21997613dd",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -38,7 +38,7 @@
       "scripts/bench/benchmark_spec.py": "3a655253acae2146eae6e1556f02f2c1d5176dfa27c4ce1cae60b1cdb582b474",
       "scripts/bench/build_native_mcp_operation.py": "d05aee2a9ee6a10c8aea1e3ea52d03f353ec7c753c529219940ba9001c245b55",
       "scripts/bench/build_native_session_proxy.py": "5dac39c24a2d5a9fcd0e81d5008ac5063ab357d83c7aa3d2dda4c06a41293bf9",
-      "scripts/bench/capture_identity.py": "f47c0199df3553b040841c7c0f5dfdfd91d24c9a942947bcdd4a98d12c066b41",
+      "scripts/bench/capture_identity.py": "a8ef04ff980935fb7ee5265d8c24793709e62e728b10de44f4f311036ae09350",
       "scripts/bench/check_detection_identity.py": "d3048e9a1f47842c9ce8b580adb2da0cb4b78f6f7e1c1beff603d003f3ceb34d",
       "scripts/bench/check_nym_session_stability.py": "43e822ebfd0a5fd15040e626c2d904e8590b0bad20a4529d782929cc1d0c419e",
       "scripts/bench/check_personal_id_checksum_identity.py": "cdcdfabf3dcdf68e42d3a9f1bfcf2dfc662367b388a70373b1d42e0d42ae7a1b",
@@ -144,9 +144,9 @@
       "scripts/bench/render_benchmark_doc.py": "a08ace21a122909b601a84ba8d4e912e960d88cade67dc0dab2164e95b587dce",
       "scripts/bench/replay_enumeration_proof.py": "103430afee59a9928a1968c5040aac3c1d4d7a452e86213cd98b41ae1211ab03",
       "scripts/bench/rescore.py": "4d268d104ab2abe816e891f132f1d165054ccd1e14f11499d7a05b07811945cf",
-      "scripts/bench/rescore_past_release.py": "8f4c4602d7f0fda5ce36374119e10d534ebbad38a15ff24f218164a98ce8cf42",
+      "scripts/bench/rescore_past_release.py": "a0573272ad83f5aa3ba6c745ddee95470992fe702f2722f82f897310a6fd9ca3",
       "scripts/bench/rescore_safety_net.py": "cf19c2a4962744cd2eceb73c7e2fedfc7b706137b11463e99e195df0477437aa",
-      "scripts/bench/run_no_opf_benchmark.py": "ab0de1879b4f69cb17fb2a62a1d77bf9fe4036f47e393454f7ff66bcb1418f31",
+      "scripts/bench/run_no_opf_benchmark.py": "8578649d85d612d37f623dd7bf23537bcfd1a5635e89723a7f6a99de3254efc8",
       "scripts/bench/safety_net_bench_lib.py": "7586e9e22542bfb543c79a172ee693767921929d4ebd3bf2eb7afbdee16f0566",
       "scripts/bench/scorecard_record.py": "da72df6ad4df6c611bf23d358d95c4768fb4de55bece1597a4fc65a70461e25e",
       "scripts/bench/stage_timing.py": "1dcf159e2e7f125087a3d1393e6a266733b971da9aad81433239701a84821ac0",

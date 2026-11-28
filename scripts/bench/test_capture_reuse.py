@@ -140,11 +140,41 @@ class CaptureIdentityTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "unresolved dynamic library"):
                         identity.native_runtime({"detector": detector})
 
+    def test_a_library_reached_optionally_and_required_must_resolve(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stdlib = root / "stdlib"
+            (stdlib / "lib-dynload").mkdir(parents=True)
+            python, detector, shared = (root / name for name in ("python", "detector", "libshared.so"))
+            tkinter = stdlib / "lib-dynload/_tkinter.cpython-313-x86_64-linux-gnu.so"
+            for path in (python, detector, shared, tkinter):
+                path.write_bytes(b"synthetic")
+
+            def command(*args):
+                if args[0] == "lscpu":
+                    return "Architecture: synthetic"
+                if args[1] == str(shared):
+                    return "libmissing.so => not found"
+                if args[1] in (str(tkinter), str(detector)):
+                    return f"libshared.so => {shared} (0x0)"
+                return "statically linked"
+            # Sorted roots pop _tkinter (optional) before the detector, so libshared.so is
+            # first reached optionally; the later required walk must still refuse.
+            with mock.patch.object(identity.platform, "system", return_value="Linux"), \
+                    mock.patch.object(identity, "_command", side_effect=command), \
+                    mock.patch.object(identity.importlib.metadata, "distributions", return_value=[]), \
+                    mock.patch.object(identity.sysconfig, "get_path", return_value=str(stdlib)), \
+                    mock.patch.object(identity.sys, "executable", str(python)), \
+                    mock.patch.dict(identity.sys.modules, {}):
+                with self.assertRaisesRegex(ValueError, "unresolved dynamic library"):
+                    identity.native_runtime({"detector": detector})
+
     @unittest.skipUnless(identity.platform.system() == "Linux", "needs a real Linux loader")
-    def test_this_linux_host_resolves_a_cache_enabled_identity(self):
+    def test_this_linux_host_runtime_resolves_with_its_loader_bound(self):
         runtime = identity.native_runtime({"detector": Path(sys.executable)})
         self.assertEqual(runtime["system"], "Linux")
-        self.assertTrue(any(entry.get("sha256") for entry in runtime["libraries"].values()))
+        self.assertTrue(any("ld-linux" in name and entry.get("sha256")
+                            for name, entry in runtime["libraries"].items()))
 
     def test_unresolved_python_loader_disables_runtime_inventory(self):
         def command(*args):
