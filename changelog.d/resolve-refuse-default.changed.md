@@ -12,8 +12,8 @@
   keeps `redact`, so a residual there is still reported as unsurfaced PII
   (HTTP 422). This is the 1.0 standard profile: output is restorable or
   refused, never one-way, unless a caller chooses `redact`.
-- **Breaking:** any safety-net fallback refusal is now a typed error instead of the generic `Pipeline` error:
-  `gaze clean` and `gaze eval` print
+- **Breaking:** any safety-net fallback refusal is now a typed error instead of
+  the generic `Pipeline` error: `gaze clean` and `gaze eval` print
   `{"error":"SafetyNetFallback","exit":3,"reason":"safety_net_fallback_<reason>"}`,
   and `gaze daemon` (JSONL v1 and v2) answers `"error":"SafetyNetFallback"` with
   the same closed `reason`. Exit code 3 is unchanged.

@@ -566,8 +566,9 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
     Ok(())
 }
 
-/// Clean-path failures: the exit-8 refusal always surfaces, safety-net variants only with an
-/// installed net, and every other failure stays the value-free `Pipeline` error.
+/// Clean-path failures: the exit-8 refusal and a safety-net fallback refusal always surface,
+/// other safety-net variants only with an installed net, and every other failure stays the
+/// value-free `Pipeline` error.
 pub(crate) fn map_clean_error(pipeline: &gaze::Pipeline, err: gaze::Error) -> CliError {
     // A fallback refusal carries only a closed reason, so it is typed on every route.
     if let gaze::Error::SafetyNetFallback(reason) = err {
