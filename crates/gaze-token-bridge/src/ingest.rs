@@ -68,7 +68,7 @@ impl<'a> CorpusIngestor<'a> {
     }
 
     pub fn with_safety_net_resolution(self) -> Self {
-        self.with_safety_net_resolution_fallback(SafetyNetFallback::Redact)
+        self.with_safety_net_resolution_fallback(SafetyNetFallback::Refuse)
     }
 
     pub fn with_safety_net_resolution_fallback(mut self, fallback: SafetyNetFallback) -> Self {

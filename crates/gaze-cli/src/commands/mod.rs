@@ -199,7 +199,7 @@ enum IndexCmd {
         #[arg(long)]
         index_path: Option<PathBuf>,
         /// Safety-net fallback for residual suspects after resolver pass.
-        #[arg(long, value_enum, default_value_t = index::OnResidual::Redact)]
+        #[arg(long, value_enum, default_value_t = index::OnResidual::Refuse)]
         on_residual: index::OnResidual,
         /// Pinned NER bundle from `gaze setup` (default: GAZE_NER_MODEL_DIR). Required.
         #[arg(long)]
@@ -599,6 +599,7 @@ pub(crate) enum SafetyNetFallback {
     Strict,
     Tolerant,
     Redact,
+    Refuse,
 }
 
 pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {

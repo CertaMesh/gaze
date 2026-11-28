@@ -151,7 +151,7 @@ fn clean(
 }
 
 fn resolve() -> SafetyNetPolicy {
-    SafetyNetPolicy::default()
+    SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact)
 }
 
 fn subword_rows(report: &LeakReport) -> Vec<(Range<usize>, PiiClass)> {

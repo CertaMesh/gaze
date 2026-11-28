@@ -68,10 +68,16 @@ fn prove_primary_action(action: Action, staged: bool) {
             raw,
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
-            SafetyNetPolicy::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
     } else {
-        pipeline.clean_with_safety_net(&session, raw, &[LocaleTag::Global])
+        pipeline.clean_with_safety_net_policy_detect_context(
+            &session,
+            raw,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        )
     };
     let (CleanDocument::Text(text), manifest, _) =
         result.unwrap_or_else(|error| panic!("action={action:?} staged={staged}: {error:?}"))
@@ -173,10 +179,16 @@ fn reflag_primary(action: Action, staged: bool) {
             raw,
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
-            SafetyNetPolicy::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
         )
     } else {
-        pipeline.clean_with_safety_net(&session, raw, &[LocaleTag::Global])
+        pipeline.clean_with_safety_net_policy_detect_context(
+            &session,
+            raw,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+        )
     };
     if action == Action::FormatPreserve {
         let (CleanDocument::Text(text), manifest, _) = result.unwrap() else {

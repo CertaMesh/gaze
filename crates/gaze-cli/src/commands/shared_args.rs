@@ -145,8 +145,9 @@ pub(crate) struct SafetyNetLimitArgs {
     /// Safety-net handling mode for suspected leaks.
     #[arg(long, value_enum, default_value_t = SafetyNetMode::Resolve)]
     pub(crate) safety_net_mode: SafetyNetMode,
-    /// Fallback when safety-net resolve or redact cannot complete.
-    #[arg(long, value_enum, default_value_t = SafetyNetFallback::Redact)]
+    /// Fallback when safety-net resolve cannot complete. `refuse` keeps output restorable or
+    /// refuses it; `redact` writes one-way markers.
+    #[arg(long, value_enum, default_value_t = SafetyNetFallback::Refuse)]
     pub(crate) safety_net_fallback: SafetyNetFallback,
 }
 

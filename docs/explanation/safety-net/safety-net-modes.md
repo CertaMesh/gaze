@@ -1,7 +1,11 @@
 # Safety-net modes
 
 A safety net reports suspect PII in clean output; only the core acts on it.
-The default is `resolve` with `redact` fallback.
+The default is `resolve` with `refuse` fallback: output is fully restorable or
+refused, never one-way.
+This default is a project decision for 1.0, the standard profile: no default
+path writes one-way output, and `[REDACTED:<class>]` markers appear only when a
+caller explicitly chooses the `redact` fallback or mode.
 `gaze clean` and `gaze daemon` use `--safety-net-mode` /
 `--safety-net-fallback`. Rust callers pass `SafetyNetPolicy` to
 `Pipeline::clean_with_safety_net_policy_detect_context`; its default is the
@@ -17,8 +21,8 @@ same pair. See the [observer contract](safety-nets.md#observer-only-contract).
 | `tolerant` | Warn and ship unchanged suspect bytes. | Yes | Never. Development only |
 
 Findings inside issued placeholders are dropped before any action. Under
-`Resolve` and `Redact`, name/location/organization sub-word findings remain raw
-with `Preserve` audit rows; strict fallback instead refuses them as residuals.
+`Redact`, and `Resolve` with the `redact` fallback, name/location/organization
+sub-word findings remain raw with `Preserve` audit rows; the `strict` and `refuse` fallbacks instead refuse them as residuals.
 See [sub-word suspects](safety-nets.md#sub-word-suspects-are-never-acted-on).
 
 ## The fallback applies only under resolve
@@ -52,12 +56,13 @@ never runs a validator or an anchor check on a suspect. The CLI also prints a
 post-resolve positions, not on the first report, whose spans may already be
 tokenized.
 
-The three fallbacks:
+The four fallbacks:
 
 | `--safety-net-fallback` | What happens to a residual suspect |
 |---|---|
-| `redact` (default) | Tokenized when every residual the post-resolve re-run found can be tokenized reversibly; otherwise all of them are replaced with a one-way `[REDACTED:<class>]` marker. A first-pass refusal is always replaced with the marker. |
-| `strict` | The document is rejected with `Error::SafetyNetFallback(reason)`; the CLI exits `3`. |
+| `refuse` (default) | Runs the same reversible steps as `redact`: a second resolve round, then tokenization when every residual the post-resolve re-run found can be tokenized. Where `redact` would write a marker, the document is rejected with `Error::SafetyNetFallback(reason)`; the CLI exits `3`. |
+| `redact` | Same reversible steps; otherwise all residuals are replaced with a one-way `[REDACTED:<class>]` marker. A first-pass refusal is always replaced with the marker. Explicit opt-in. |
+| `strict` | The document is rejected with `Error::SafetyNetFallback(reason)` without a second resolve round; the CLI exits `3`. The proxy and MCP boundaries use it. |
 | `tolerant` | The residual bytes ship. Development only. |
 
 The cascade is one hop: there is no `resolve` → `redact` → `strict` chain.
@@ -73,7 +78,8 @@ the document.
 
 | Need | Choice |
 |---|---|
-| Try reversible handling first | Default `resolve` + `redact` |
+| Restorable output or a typed refusal | Default `resolve` + `refuse` |
+| Accept one-way markers when reversible handling fails | `resolve` + `redact` |
 | Skip the extra resolve scan | `redact`, accepting one-way loss |
 | Stop on uncovered suspects | `strict`, or `resolve` + `strict` fallback |
 | Measure false positives on known-clean input | Development-only `tolerant` |
@@ -107,12 +113,13 @@ Each action writes one audit row per suspect, never the suspect's bytes. The
 |---|---|---|
 | `resolve` | a suspect is tokenized by the resolve pass | `Tokenize` |
 | `redact` | `redact` mode replaces a suspect | `Redact` |
-| `fallback` | the fallback decides a residual suspect | `Redact` under the `redact` fallback; `Preserve` under `strict` or `tolerant` |
+| `fallback` | the fallback decides a residual suspect | `Redact` under the `redact` fallback; `Preserve` under `refuse`, `strict` or `tolerant` |
 
 Fallback rows are loser rows (`conflict_loser = true`) and carry the reason in
-`fallback_triggered`. Under the `strict` fallback the row is written before the
-document is rejected, so it survives for forensic replay even though stdout is
-empty. Suspect metadata also goes to the
+`fallback_triggered`. When the `strict` or `refuse` fallback itself refuses the
+residuals, the row is written before the document is rejected, so it survives
+for forensic replay even though stdout is empty. A `refuse` rejection by the
+terminal re-scan, or of a lone sub-word, writes no fallback row. Suspect metadata also goes to the
 [`safety_net_log` table](safety-nets.md#safety_net_log-audit-table) when an audit
 database is configured.
 

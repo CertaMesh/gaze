@@ -1233,6 +1233,44 @@ fn opf_checkpoint(dir: &Path) -> PathBuf {
     path
 }
 
+/// The default `refuse` fallback answers a residual it cannot tokenize (here a name-class
+/// sub-word) with a typed `SafetyNetFallback` error and no text. An explicit `redact` fallback
+/// keeps its old behavior and answers.
+#[cfg(feature = "safety-net-openai")]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_default_fallback_refuses_a_residual_it_cannot_tokenize() {
+    let dir = tempdir().unwrap();
+    let opf = dir.path().join("subword-opf");
+    write_executable(
+        &opf,
+        &echoing_opf_script(r#"[{"label":"private_person","start":1,"end":3}]"#),
+    );
+    let checkpoint = opf_checkpoint(dir.path());
+    let (_policy_dir, policy) = write_preserve_default_policy();
+    let args = vec![
+        "--safety-net=openai-filter".to_string(),
+        format!("--safety-net-timeout-ms={}", safety_net_timeout_ms()),
+        format!("--openai-filter-command={}", opf.display()),
+        format!("--openai-filter-checkpoint={}", checkpoint.display()),
+    ];
+    let (refused, output) = daemon_request(&policy, &args, "Plain text");
+    assert_eq!(
+        refused["error"],
+        "SafetyNetFallback",
+        "response={refused}, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(refused["reason"], "safety_net_fallback_residual_suspect");
+    assert!(refused.get("clean_text").is_none(), "{refused}");
+    assert!(!refused.to_string().contains("Plain"), "{refused}");
+
+    let mut redact = args;
+    redact.push("--safety-net-fallback=redact".to_string());
+    let (answered, _output) = daemon_request(&policy, &redact, "Plain text");
+    assert_eq!(answered["clean_text"], "Plain text", "{answered}");
+}
+
 /// The axis-1 contrast: same daemon, same policy, same document, same `opf`
 /// binary — the only difference is the capability #3004 adds.
 ///
