@@ -74,7 +74,9 @@ Adapters implement `ProviderAdapter`:
 - `sse_event_tool_calls(event)` names the tool calls an event announces, keyed
   by the stream their argument fragments use. The OpenAI Responses API names a
   call in `output_item` events and sends its arguments in separate delta events.
-  It defaults to no bindings.
+  A key also carries the provider's call id when the event has one
+  (`SseStreamKey::with_call_id`): the Responses `item_id` or item `id`, or the
+  Chat Completions tool call `id`. It defaults to no bindings.
 - `requests_json_output(request)` reports whether the request asked the model
   for JSON output. It defaults to `false`.
 
@@ -97,7 +99,10 @@ now matches it. A token the model writes into a sink that does not restore stays
 a token, so a valid placeholder cannot pull an original into an undeclared tool
 or an external service. A streamed tool call takes its name from the fragment
 or from its stream's binding. A stream without a name, or bound to two different
-names, keeps its tokens. The Anthropic codec applies the same rule: `text`
+names, keeps its tokens. A client may join a fragment to its call by index or by
+id, so every field that names a call must agree: a stream whose fragments carry
+two different call ids, or an id bound to no name or to another tool, keeps its
+tokens. An Anthropic stream names a block only by its `index`. The Anthropic codec applies the same rule: `text`
 restores, `tool_use.input` and its `input_json_delta` restore only for a
 declared tool, and `tool_result`, `search_result` and `document` fields are
 checked for provider-origin PII but keep their tokens.

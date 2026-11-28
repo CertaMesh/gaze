@@ -3796,6 +3796,23 @@ fn merge_stream_sink(current: Option<RestoreSink>, next: &RestoreSink) -> Restor
     }
 }
 
+/// Binds `key` to `value` the first time, and to nothing once a second, different value
+/// arrives.
+fn bind_once<K: std::hash::Hash + Eq>(
+    bindings: &mut HashMap<K, Option<String>>,
+    key: K,
+    value: &str,
+) {
+    bindings
+        .entry(key)
+        .and_modify(|bound| {
+            if bound.as_deref() != Some(value) {
+                *bound = None;
+            }
+        })
+        .or_insert_with(|| Some(value.to_owned()));
+}
+
 /// Whether a surface of `syntax` holds serialized JSON, given the request's
 /// [`ProviderAdapter::requests_json_output`] answer.
 fn restores_into_json_string(syntax: SurfaceSyntax, json_output: bool) -> bool {
@@ -3916,37 +3933,44 @@ fn transform_sse(
     }
 
     // Pass 1: the logical text and sink of every stream, in event order, and the tool name
-    // each stream is bound to. A stream bound to two names is bound to none.
+    // each stream and each provider call id is bound to. A stream or id bound to two names is
+    // bound to none. A client may join a fragment to its call by either field, so a stream
+    // also records the one call id its fragments carry; two different ids record none.
     let mut streams = HashMap::<SseStreamKey, String>::new();
     let mut stream_sinks = HashMap::<SseStreamKey, RestoreSink>::new();
     let mut tool_names = HashMap::<SseStreamKey, Option<String>>::new();
-    let mut bind = |stream: SseStreamKey, tool: &str| {
-        tool_names
-            .entry(stream)
-            .and_modify(|bound| {
-                if bound.as_deref() != Some(tool) {
-                    *bound = None;
-                }
-            })
-            .or_insert_with(|| Some(tool.to_owned()));
-    };
+    let mut call_names = HashMap::<String, Option<String>>::new();
+    let mut stream_calls = HashMap::<SseStreamKey, Option<String>>::new();
     let mut ambiguous = HashSet::new();
     for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
         // A name whose call cannot be identified may rename any compatible stream.
-        for (stream, tool) in adapter.sse_event_tool_calls(event) {
+        for (key, tool) in adapter.sse_event_tool_calls(event) {
+            if let Some(call) = key.call_id() {
+                bind_once(&mut call_names, call.to_owned(), &tool);
+            }
+            let stream = key.joined();
             if stream.is_ambiguous() {
                 ambiguous.insert(stream);
             } else {
-                bind(stream, &tool);
+                bind_once(&mut tool_names, stream, &tool);
             }
         }
         for fragment in adapter.sse_event_stream_surfaces(event) {
-            if let Some(stream) = fragment.stream {
+            if let Some(key) = fragment.stream {
+                let stream = key.joined();
+                if let RestoreSink::ToolInput(Some(tool)) = &fragment.surface.sink {
+                    if let Some(call) = key.call_id() {
+                        bind_once(&mut call_names, call.to_owned(), tool);
+                    }
+                }
                 if stream.is_ambiguous() {
                     ambiguous.insert(stream);
                 } else {
                     if let RestoreSink::ToolInput(Some(tool)) = &fragment.surface.sink {
-                        bind(stream.clone(), tool);
+                        bind_once(&mut tool_names, stream.clone(), tool);
+                    }
+                    if let Some(call) = key.call_id() {
+                        bind_once(&mut stream_calls, stream.clone(), call);
                     }
                     let sink =
                         merge_stream_sink(stream_sinks.remove(&stream), &fragment.surface.sink);
@@ -3959,13 +3983,23 @@ fn transform_sse(
             }
         }
     }
-    // A joined stream restores when its sink does, with a tool call named by its binding.
+    // A joined stream restores when its sink does, with a tool call named by its binding. A
+    // call id its fragments carry must be bound to that same name, or the stream keeps its
+    // tokens: a client joining by the id could hand the input to another tool.
     let restoring_streams: HashSet<SseStreamKey> = stream_sinks
         .into_iter()
         .filter_map(|(stream, sink)| {
             let sink = match sink {
                 RestoreSink::ToolInput(_) => {
-                    RestoreSink::ToolInput(tool_names.get(&stream).cloned().flatten())
+                    let tool = tool_names.get(&stream).cloned().flatten();
+                    let agrees = match stream_calls.get(&stream) {
+                        None => true,
+                        Some(call) => call
+                            .as_ref()
+                            .and_then(|call| call_names.get(call).cloned().flatten())
+                            .is_some_and(|named| tool.as_deref() == Some(named.as_str())),
+                    };
+                    RestoreSink::ToolInput(tool.filter(|_| agrees))
                 }
                 sink => sink,
             };
@@ -3995,7 +4029,7 @@ fn transform_sse(
             let surface = fragment.surface;
             let into_json_string = restores_into_json_string(surface.syntax, json_output);
             let streamed = fragment.stream.is_some();
-            let logical = match fragment.stream {
+            let logical = match fragment.stream.as_ref().map(SseStreamKey::joined) {
                 Some(stream) if !stream.is_ambiguous() && !ambiguous_streams.contains(&stream) => {
                     if !restoring_streams.contains(&stream) {
                         continue;
