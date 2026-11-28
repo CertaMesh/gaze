@@ -230,6 +230,9 @@ def produced_capture(tmp_path, monkeypatch, evidence, producer, flags, response_
         monkeypatch.setattr(score, 'BenchSubprocess', lambda *a, **k: process)
     monkeypatch.setattr(score, 'collect_validator_measurements', measurements)
     monkeypatch.setattr(score, 'git_metadata', lambda root: {'revision': REVISION, 'dirty': False})
+    # Both sides of the gate ran on this machine; read it before stubbing subprocesses.
+    machine = runner.capture_identity.machine_identity()
+    monkeypatch.setattr(runner.capture_identity, 'machine_identity', lambda: machine)
     monkeypatch.setattr(past.subprocess, 'run', lambda *a, **k: SimpleNamespace(stdout=''))
     monkeypatch.setattr(runner.dataiku, 'verify_dataset', lambda p: None)
     monkeypatch.setattr(runner.dataiku, 'load_documents', lambda p: (documents['C'], {}))
