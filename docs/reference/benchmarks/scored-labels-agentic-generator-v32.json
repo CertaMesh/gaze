@@ -238,14 +238,14 @@
       "scored": true,
       "category": "direct_identifier",
       "ruling": "settled",
-      "reason": "An employee's HR identifier, labelled or given in running text without a field cue. Numeric keys, UUIDs, grouped and long opaque values are whole-value gold. The same codes used as public release references or tool selectors are benign, as are generic keys without person linkage and prose placeholders. All repeats are gold."
+      "reason": "Explicitly labelled identifier of a employee in HR. Numeric keys, UUIDs, grouped and long opaque values are whole-value gold. Public resource IDs, generic keys without person linkage and prose placeholders are benign. All repeats are gold."
     },
     {
       "label": "RECORD_ID",
       "scored": true,
       "category": "direct_identifier",
       "ruling": "settled",
-      "reason": "Identifier of a person or contact record, including a person's case, claim, membership, insurance or medical record in EN/DE prose and account keys given without a field cue. Numeric keys, UUIDs, grouped and long opaque values are whole-value gold, including internal hyphens, underscores and slashes but not sentence punctuation. Public release and reference codes, generic keys without person linkage, selectors and cues without a value are benign. All repeats are gold."
+      "reason": "Explicitly labelled identifier of a person or contact record. Numeric keys, UUIDs, grouped and long opaque values are whole-value gold. Public resource IDs, generic keys without person linkage and prose placeholders are benign. All repeats are gold."
     }
   ]
 }

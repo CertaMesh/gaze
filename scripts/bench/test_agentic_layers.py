@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "5541fb3adc394bf93c30fe700c901f05290a8604f4a93740f1b88385a470c41b",
-    "test": "f82e1611f95cd6e18121a8b92d253696712adfc1078b8ffffd3f94de67aeb4d2",
+    "dev": "c957986e73229ad76a4c7603d215669fd500aaa9ef5253299e82d7902258d2db",
+    "test": "f44525cc22a5737121f1662b0424d8835f068e1ee07d37917438f26b8c9462ab",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -475,7 +475,11 @@ class RepeatSliceTests(unittest.TestCase):
                 self.assertFalse(record.gold)
                 self.assertEqual(record.text.encode()[decoy.start:decoy.end], decoy.value.encode())
                 continue
-            if record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_")):
+            if record.surface == "inventory_count_csv":
+                (count,) = record.decoys
+                self.assertEqual(record.gold, ())
+                self.assertEqual(count.value, record.text.splitlines()[1].split(",")[1].strip())
+            elif record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
