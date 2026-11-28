@@ -210,8 +210,8 @@ def check_pair(pair: dict, *, root: Path, harness: Path, spec: dict,
 # A built-in rule change has no policy or rulepack delta to ablate. Its gain pair
 # isolates it when the detector build differs only in these paths.
 BUILTIN_RULES = "builtin-rules"
-BUILD_INPUTS = ("crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo")
-BUILTIN_RULE_PATH = re.compile(r"crates/gaze-recognizers/embedded/[^/]+\.toml|crates/[^/]+/tests/.+")
+BUILD_INPUTS = ("crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "rust-toolchain", ".cargo")
+BUILTIN_RULE_PATH = re.compile(r"crates/gaze-recognizers/(embedded/[^/]+\.toml|tests/.+)")
 
 
 def check_builtin_rules(value: dict, *, root: Path, harness: Path, candidate: str) -> dict:
@@ -226,10 +226,19 @@ def check_builtin_rules(value: dict, *, root: Path, harness: Path, candidate: st
     if not isinstance(base, str) or not re.fullmatch("[0-9a-f]{40}", base) or claim.get("base") != base:
         raise CertificationError("builtin_rule_base_mismatch")
     try:
-        changed = subprocess.run(["git", "diff", "--name-only", base, candidate, "--", *BUILD_INPUTS],
-                                 cwd=harness, check=True, capture_output=True, text=True).stdout.split()
+        # The base must be on main, so no unmeasured commit hides between it and main.
+        subprocess.run(["git", "merge-base", "--is-ancestor", base, "refs/remotes/origin/main"],
+                       cwd=harness, check=True, capture_output=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise CertificationError("builtin_rule_base_not_on_main") from error
+    try:
+        # --no-renames lists both sides of a move; -z keeps unusual paths whole.
+        output = subprocess.run(["git", "diff", "--no-renames", "--name-only", "-z", base, candidate,
+                                 "--", *BUILD_INPUTS],
+                                cwd=harness, check=True, capture_output=True, text=True).stdout
     except (OSError, subprocess.CalledProcessError) as error:
         raise CertificationError("builtin_rule_diff_unavailable") from error
+    changed = [path for path in output.split("\0") if path]
     rules = [path for path in changed if path.startswith("crates/gaze-recognizers/embedded/")]
     if (not rules or sorted(changed) != sorted(claim.get("changed_build_paths", []))
             or not all(BUILTIN_RULE_PATH.fullmatch(path) for path in changed)):
@@ -259,7 +268,7 @@ def check(value: dict, *, root: Path, harness: Path, candidate: str,
             scope = check_builtin_rules(value, root=root, harness=harness, candidate=candidate)
             return {'verdict': 'pass', 'candidate': candidate, 'benchmark_spec_id': spec['id'],
                     'manifest_sha256': digest(value), 'contracts': gates,
-                    'mechanisms': {BUILTIN_RULES: {**gates, 'scope': scope}}}
+                    'mechanisms': {BUILTIN_RULES: {'contracts': gates, 'scope': scope}}}
         integrated_binary = records.binary_sha256(pin(root, value['gain']['candidate']['record']), required=True)
         for pair in value['mechanisms'].values():
             if records.binary_sha256(pin(root, pair['candidate']['record']), required=True) != integrated_binary:

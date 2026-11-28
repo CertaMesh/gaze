@@ -250,7 +250,7 @@ off and on. The reviewer confirms the declared pair before anyone measures it; a
 mechanism, such as Nym off/on for a rule-only change, cannot certify the PR.
 A change to built-in rule definitions has no policy or rulepack delta to ablate. Its gain pair is
 its mechanism pair (mechanism kind `builtin-rules`) when the build inputs that differ between base
-and candidate are only `crates/gaze-recognizers/embedded/*.toml` files and crate test files. The
+and candidate are only `crates/gaze-recognizers/embedded/*.toml` and `crates/gaze-recognizers/tests/` files, and the base is on `main`. The
 manifest names the base, the changed paths and the independent reviewer who confirmed that scope
 before measurement; the certifier recomputes the diff and refuses any other build change. Every
 other guard still applies: the gain gate under both contracts, provenance, full population and

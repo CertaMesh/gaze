@@ -894,6 +894,8 @@ def test_reused_capture_rebinds_to_executing_spec_and_build(tmp_path):
     (['crates/gaze-recognizers/embedded/core.toml', 'crates/gaze-recognizers/src/lib.rs'],
      None, 'builtin_rule_scope'),
     (['crates/gaze-recognizers/tests/birth_date_cues.rs'], None, 'builtin_rule_scope'),
+    (['crates/gaze-recognizers/embedded/core.toml', 'crates/gaze-cli/tests/cli_pipe.rs'],
+     None, 'builtin_rule_scope'),
     (['crates/gaze-recognizers/embedded/core.toml'], {'changed_build_paths': []}, 'builtin_rule_scope'),
     (['crates/gaze-recognizers/embedded/core.toml'], {'reviewer_confirmation': None},
      'unconfirmed_builtin_rule_mechanism'),
@@ -905,14 +907,15 @@ def test_builtin_rule_change_certifies_on_its_gain_pair_only_within_scope(
     evidence[cert.BUILTIN_RULES] = {'base': 'b' * 40, 'changed_build_paths': sorted(changed),
                                     'reviewer_confirmation': {'reviewer': 'independent-review', 'pair': 'gain'},
                                     **(claim or {})}
-    diff = mock.Mock(return_value=SimpleNamespace(stdout='\n'.join(changed)))
+    diff = mock.Mock(return_value=SimpleNamespace(stdout='\0'.join(changed) + '\0'))
     with mock.patch.object(cert.subprocess, 'run', diff):
         if code is None:
             result = cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
                                 required_mechanisms=(cert.BUILTIN_RULES,))
             assert result['verdict'] == 'pass'
             assert result['mechanisms'][cert.BUILTIN_RULES]['scope']['changed_build_paths'] == sorted(changed)
-            assert diff.call_args.args[0][3:5] == ['b' * 40, REVISION]
+            assert diff.call_args_list[0].args[0][:3] == ['git', 'merge-base', '--is-ancestor']
+            assert diff.call_args.args[0][5:7] == ['b' * 40, REVISION]
         else:
             with pytest.raises(cert.CertificationError, match=f'^{code}$'):
                 cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
@@ -925,3 +928,42 @@ def test_builtin_rule_change_certifies_on_its_gain_pair_only_within_scope(
     with pytest.raises(cert.CertificationError, match='^absent_mechanism$'):
         cert.check(evidence, root=tmp_path, harness=ROOT, candidate=REVISION,
                    required_mechanisms=('synthetic',))
+
+
+def test_builtin_rule_scope_sees_both_sides_of_a_rename_and_requires_a_base_on_main(tmp_path, evidence):
+    repo = tmp_path / 'repo'
+    (repo / '.cargo').mkdir(parents=True)
+    (repo / 'crates/gaze-recognizers/embedded').mkdir(parents=True)
+    (repo / '.cargo/config.toml').write_text('[env]\nsynthetic = "1"\n')
+    (repo / 'crates/gaze-recognizers/embedded/core.toml').write_text('# base\n')
+
+    def git(*args):
+        return subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
+                               '-c', 'commit.gpgsign=false', *args], cwd=repo, check=True,
+                              capture_output=True, text=True).stdout.strip()
+    git('init', '-q', '-b', 'main')
+    git('add', '.')
+    git('commit', '-qm', 'base')
+    base = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', base)
+    (repo / 'crates/gaze-recognizers/tests').mkdir()
+    git('mv', '.cargo/config.toml', 'crates/gaze-recognizers/tests/config.toml')
+    (repo / 'crates/gaze-recognizers/embedded/core.toml').write_text('# candidate\n')
+    git('commit', '-qam', 'rename')
+    candidate = git('rev-parse', 'HEAD')
+    header, observations = records._read(tmp_path / evidence['gain']['base']['record']['file'])
+    record = tmp_path / 'base-record.jsonl.gz'
+
+    def claim(revision, paths):
+        header['scorecard']['gaze']['revision'] = revision
+        records._write_rows(record, [header, *observations])
+        return {'gain': {'base': {'record': {'file': record.name, 'sha256': capture_identity.file_digest(record)}}},
+                cert.BUILTIN_RULES: {'base': revision, 'changed_build_paths': paths,
+                                     'reviewer_confirmation': {'reviewer': 'r', 'pair': 'gain'}}}
+    # Without --no-renames git would hide .cargo/config.toml and this would pass.
+    renamed = ['crates/gaze-recognizers/embedded/core.toml', 'crates/gaze-recognizers/tests/config.toml']
+    with pytest.raises(cert.CertificationError, match='^builtin_rule_scope$'):
+        cert.check_builtin_rules(claim(base, renamed), root=tmp_path, harness=repo, candidate=candidate)
+    off_main = git('commit-tree', '-m', 'off main', git('rev-parse', 'HEAD^{tree}'))
+    with pytest.raises(cert.CertificationError, match='^builtin_rule_base_not_on_main$'):
+        cert.check_builtin_rules(claim(off_main, []), root=tmp_path, harness=repo, candidate=candidate)
