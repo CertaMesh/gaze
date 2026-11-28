@@ -498,7 +498,10 @@ pub trait ProviderAdapter: Send + Sync + 'static {
     /// so an argument fragment cannot carry the name itself. A fragment whose sink is
     /// [`RestoreSink::ToolInput`] without a name takes the name bound to its stream here or by
     /// another fragment of the same stream. A stream bound to two different names keeps its
-    /// tokens. The default binds nothing.
+    /// tokens. When the event also names the call by an id, set it with
+    /// [`SseStreamKey::with_call_id`]: the id is bound to the name too, and a stream restores
+    /// only when every id its fragments carry is bound to the stream's own name. The default
+    /// binds nothing.
     fn sse_event_tool_calls(&self, _event: &SseEvent) -> Vec<(SseStreamKey, String)> {
         Vec::new()
     }
@@ -778,6 +781,7 @@ impl SurfacePath {
 pub struct SseStreamKey {
     kind: String,
     indices: Vec<Option<u64>>,
+    call_id: Option<String>,
 }
 
 impl SseStreamKey {
@@ -788,6 +792,32 @@ impl SseStreamKey {
         Self {
             kind: kind.into(),
             indices: indices.into_iter().collect(),
+            call_id: None,
+        }
+    }
+
+    /// Also names the tool call this key's fragment or name belongs to by the provider's own
+    /// id, such as a Responses `item_id` or a Chat Completions tool call `id`, when the event
+    /// carries one. A client may join fragments to calls by either field, so a call's input
+    /// restores only when its indices and every id its fragments carry name one declared tool.
+    /// The id never splits a stream: fragments still join by kind and indices.
+    #[must_use]
+    pub fn with_call_id(mut self, call_id: Option<&str>) -> Self {
+        self.call_id = call_id.map(str::to_owned);
+        self
+    }
+
+    /// The provider id that names this key's call, if its event carried one.
+    pub(crate) fn call_id(&self) -> Option<&str> {
+        self.call_id.as_deref()
+    }
+
+    /// This key without its call id: the identity fragments join by.
+    pub(crate) fn joined(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            indices: self.indices.clone(),
+            call_id: None,
         }
     }
 
