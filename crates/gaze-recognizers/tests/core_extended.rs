@@ -268,11 +268,12 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 57);
+    assert_eq!(core.recognizers.len(), 58);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
         "name.auto_footer",
+        "name.chat_cue",
         "phone.national.de",
         "postal.de",
         "postal.us",

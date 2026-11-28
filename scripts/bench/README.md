@@ -778,16 +778,27 @@ The [generator v31 specification](../../docs/reference/benchmarks/specifications
 adds generator v31's prose credential cells.
 The [JSON structure census specification](../../docs/reference/benchmarks/specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json)
 differs from it only by adding `json_structure_census.py` to the measuring closure.
-The [known-record specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
+The [known-record v7 specification](../../docs/reference/benchmarks/specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json)
 differs from the JSON structure census one only in the `known_record_cells.py` and
 `known_record_arm.py` digests: known-record cell generator v7, which reads
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [capture-closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
-adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
-The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
-The [current specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+On `chat-name-cues`, the [chat corpus specification](../../docs/reference/benchmarks/specifications/75331b401559d44ee4aeb1530f625b1231df256be989028b21293250d2cbdffd.json)
+adds the prerelease v32 [EN/DE chat name cells](../../docs/reference/benchmarks/README.md#names-in-chat-chat-branch-v32).
+The [chat rule vocabulary specification](../../docs/reference/benchmarks/specifications/a1573ead260cc4e07852bc92a4514bc7c3e09d1697f0218a0b7904f8a5eb5d62.json)
+adds `name.chat_cue` to the validation vocabulary for the same corpus.
+The [first v33 specification](../../docs/reference/benchmarks/specifications/b12892ef5bd7ae7fcec863583fc3943b9e2e0717222c5f0ada3811ae02a92875.json)
+keeps that vocabulary and adds the prerelease v33 [name boundaries](../../docs/reference/benchmarks/README.md#chat-name-boundaries-chat-branch-v33).
+The [corrected chat specification](../../docs/reference/benchmarks/specifications/6344230f48555654e039e7a401e3eef72768eae3a1da32a06128e87b2700fb4d.json)
+changes one published English counterweight to a demonym that is also a listed given name.
+The [last chat prerelease specification](../../docs/reference/benchmarks/specifications/e89688e904336bc3a4e8de8e90c5c199a1a295f13f9cc5d1d50cc9f2f10ed9ce.json)
+binds those cells using the [per-layer capture closure](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json).
+Main's [canonical v32 specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells.
+The [chat v34 specification](../../docs/reference/benchmarks/specifications/19722b334c63c29d707352bd4955e71101c71a0f7480d6bda62e4231dbdd6417.json)
+adds both chat cell families to main's corpus as [generator v34](../../docs/reference/benchmarks/README.md#integrated-addresses-and-chat-names-generator-v34).
+Main's [v33 specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds prose record IDs and their benign counterweights.
+The [current specification](../../docs/reference/benchmarks/specifications/f2680df580d999cb7363c3f4f245bf7acbc5a4a4a0e92517a8cb51c69ba75bd2.json) combines chat and prose-ID cells in generator v35.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

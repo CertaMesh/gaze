@@ -9,6 +9,299 @@ names = ["phone", "mobile", "tel", "telephone", "msisdn"]
 [locale.email_headers]
 names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
 
+# BEGIN generated chat name vocabulary (scripts/fetch/build_chat_name_vocab.py)
+# Common-word source and redistribution notice: assets/record-common-name-words-en-v1.txt.
+[locale.chat_distinct_given]
+names = [
+  "aaden", "aaliyah", "aarav", "aaron", "abagail", "abbie", "abbigail", "abby", "abdiel", "abdullah",
+  "abel", "abigail", "abigayle", "abraham", "abram", "abril", "ada", "adalyn", "adalynn", "adam",
+  "adan", "addison", "addisyn", "addyson", "adelaide", "adeline", "adelyn", "aden", "adison", "aditya",
+  "adolfo", "adonis", "adrian", "adriana", "adrianna", "adriel", "adrien", "adrienne", "adyson", "aedan",
+  "agustin", "ahmad", "ahmed", "aidan", "aiden", "aidyn", "aileen", "aimee", "ainsley", "aisha",
+  "aiyana", "akira", "alaina", "alan", "alana", "alani", "alanna", "alannah", "alayna", "albert",
+  "alberto", "alden", "aldo", "aleah", "alec", "aleena", "alejandra", "alejandro", "alena", "alessandra",
+  "alessandro", "alex", "alexa", "alexander", "alexandra", "alexandria", "alexia", "alexis", "alexus", "alexzander",
+  "alfonso", "alfred", "alfredo", "ali", "alia", "aliana", "alice", "alicia", "alijah", "alina",
+  "alisa", "alisha", "alison", "alissa", "alisson", "alivia", "aliya", "aliza", "allan", "allen",
+  "allie", "allison", "allisson", "allyson", "alma", "alondra", "alonso", "alonzo", "alvaro", "alvin",
+  "alyson", "alyssa", "alyvia", "amanda", "amani", "amara", "amare", "amari", "amaris", "amaya",
+  "amelia", "amelie", "america", "amiah", "amina", "amir", "amira", "amirah", "amiya", "amiyah",
+  "amy", "amya", "ana", "anabel", "anabella", "anabelle", "anahi", "anastasia", "anaya", "anderson",
+  "andre", "andrea", "andreas", "andres", "andrew", "andy", "angela", "angelina", "angeline", "angelique",
+  "angelo", "angie", "anika", "aniya", "aniyah", "ann", "anna", "annabel", "annabella", "annabelle",
+  "annalise", "anne", "annie", "annika", "ansley", "anthony", "antoine", "anton", "antonio", "antony",
+  "antwan", "anya", "arabella", "araceli", "aracely", "areli", "arely", "ari", "ariana", "arianna",
+  "ariel", "ariella", "arielle", "arjun", "armando", "armani", "arnav", "aron", "arthur", "arturo",
+  "aryan", "aryana", "aryanna", "asa", "ashanti", "asher", "ashlee", "ashleigh", "ashley", "ashly",
+  "ashlyn", "ashlynn", "ashton", "ashtyn", "asia", "athena", "atticus", "aubree", "aubrey", "aubrie",
+  "audrey", "audrina", "augustus", "austin", "ava", "avah", "averi", "averie", "avery", "axel",
+  "ayaan", "ayana", "ayanna", "aydan", "ayden", "aydin", "ayla", "aylin", "azaria", "azul",
+  "bailee", "barbara", "barrett", "baylee", "beatrice", "beckett", "beckham", "belen", "belinda", "bella",
+  "benjamin", "bennett", "bentley", "bernard", "bethany", "bianca", "blaine", "blake", "bo", "boston",
+  "braden", "bradley", "brady", "bradyn", "braeden", "braedon", "braelyn", "braiden", "branden", "brandon",
+  "branson", "braxton", "brayan", "brayden", "braydon", "braylen", "braylon", "breanna", "brenda", "brendan",
+  "brenden", "brendon", "brenna", "brennan", "brennen", "brent", "brenton", "brett", "bria", "brian",
+  "briana", "brianna", "brice", "bridger", "bridget", "brielle", "briley", "brisa", "britney", "brittany",
+  "brock", "broderick", "brodie", "brody", "bronson", "brooke", "brooklyn", "brooklynn", "bruce", "bruno",
+  "bryan", "bryanna", "bryant", "bryce", "brycen", "brylee", "brynlee", "brynn", "bryson", "byron",
+  "cade", "caden", "cael", "caiden", "cailyn", "caitlin", "caitlyn", "cale", "caleb", "cali",
+  "callie", "callum", "calvin", "camden", "cameron", "camila", "camilla", "camille", "campbell", "camren",
+  "camron", "camryn", "cara", "carina", "carissa", "carl", "carla", "carlee", "carleigh", "carley",
+  "carlie", "carlo", "carlos", "carly", "carmelo", "carmen", "carolina", "caroline", "carolyn", "carsen",
+  "carson", "casey", "cason", "cassandra", "cassidy", "cassie", "cassius", "catalina", "catherine", "cayden",
+  "caylee", "cecelia", "cecilia", "cedric", "celeste", "celia", "cesar", "chace", "chaim", "chana",
+  "chanel", "charlee", "charles", "charlize", "charlotte", "chasity", "chaya", "chaz", "chelsea", "cheyanne",
+  "chloe", "chris", "christina", "christine", "christopher", "ciara", "cierra", "cindy", "claire", "clare",
+  "clarence", "clarissa", "clark", "claudia", "clayton", "clinton", "cloe", "coby", "cody", "cohen",
+  "colby", "cole", "coleman", "colin", "collin", "colten", "colton", "conner", "connor", "conor",
+  "conrad", "cora", "corbin", "cordell", "corey", "corinne", "cornelius", "cortez", "cory", "courtney",
+  "craig", "cristal", "cristian", "cristina", "cristofer", "cristopher", "cruz", "cullen", "curtis", "cynthia",
+  "cyrus", "dalia", "dallas", "dalton", "damari", "damarion", "damaris", "damian", "damien", "damion",
+  "damon", "dana", "dane", "dangelo", "dania", "danica", "daniel", "daniela", "daniella", "danielle",
+  "danika", "danna", "danny", "dante", "daphne", "darian", "darien", "dario", "darion", "darius",
+  "darnell", "darrell", "darren", "darryl", "darwin", "dashawn", "davian", "david", "davin", "davion",
+  "davis", "davon", "dawson", "dax", "dayami", "dayana", "dayanara", "dayton", "deandre", "deangelo",
+  "deanna", "deborah", "declan", "deegan", "deja", "delaney", "delilah", "demarcus", "demarion", "demetrius",
+  "denise", "denisse", "dennis", "denzel", "deon", "derek", "dereon", "derick", "deshawn", "desirae",
+  "desiree", "desmond", "destinee", "destiney", "devan", "deven", "devin", "devon", "devyn", "dexter",
+  "diana", "diego", "dillan", "dillon", "dixie", "diya", "dominic", "dominick", "dominik", "dominique",
+  "donald", "donavan", "donna", "donovan", "donte", "dorian", "douglas", "draven", "dulce", "duncan",
+  "dustin", "dwayne", "dylan", "ean", "easton", "eddie", "eden", "edgar", "edith", "eduardo",
+  "edward", "edwin", "efrain", "eileen", "elaina", "elaine", "eleanor", "elena", "eli", "elian",
+  "eliana", "elianna", "elias", "eliezer", "elijah", "elisa", "elisabeth", "elise", "elisha", "eliza",
+  "elizabeth", "ella", "ellen", "elliana", "ellie", "elliot", "elliott", "ellis", "elsa", "elsie",
+  "elvis", "elyse", "emanuel", "emelia", "emely", "emerson", "emilee", "emilia", "emiliano", "emilie",
+  "emilio", "emily", "emma", "emmalee", "emmanuel", "emmett", "emmy", "enrique", "enzo", "eric",
+  "erica", "erick", "erik", "erika", "erin", "ernest", "ernesto", "esmeralda", "esperanza", "esteban",
+  "esther", "estrella", "ethan", "ethen", "eugene", "eva", "evan", "evangeline", "evelin", "evelyn",
+  "everett", "evie", "ezekiel", "ezequiel", "ezra", "fabian", "fatima", "felipe", "felix", "fernanda",
+  "fernando", "finley", "finn", "finnegan", "fiona", "fletcher", "frances", "francesca", "francis", "francisco",
+  "franco", "frankie", "franklin", "freddy", "frederick", "frida", "gabriel", "gabriela", "gabriella", "gabrielle",
+  "gael", "gage", "gaige", "garrett", "gary", "gaven", "gavin", "gavyn", "gemma", "genevieve",
+  "george", "georgia", "geovanni", "gerald", "gerardo", "gia", "giada", "giana", "giancarlo", "gianna",
+  "gianni", "gideon", "gilbert", "gilberto", "gillian", "gina", "giovani", "giovanna", "giovanni", "giovanny",
+  "giselle", "gisselle", "giuliana", "glenn", "gloria", "gordon", "gracelyn", "gracie", "grady", "grayson",
+  "gregory", "greta", "gretchen", "greyson", "guadalupe", "guillermo", "gunnar", "gustavo", "gwendolyn", "hadassah",
+  "hadley", "haiden", "hailee", "hailey", "hailie", "haleigh", "haley", "halle", "hallie", "hamza",
+  "hana", "hanna", "hannah", "harley", "harold", "harper", "harrison", "hassan", "hayden", "haylee",
+  "hayley", "haylie", "heather", "heidi", "heidy", "helen", "helena", "henry", "hezekiah", "hillary",
+  "holden", "houston", "howard", "hudson", "hugh", "hugo", "humberto", "ian", "ibrahim", "ignacio",
+  "iliana", "imani", "immanuel", "india", "ingrid", "ireland", "irene", "irvin", "isaac", "isabel",
+  "isabela", "isabell", "isabella", "isabelle", "isai", "isaiah", "isaias", "ishaan", "isiah", "isis",
+  "isla", "ismael", "israel", "issac", "itzel", "ivan", "iyana", "izabella", "izabelle", "izaiah",
+  "izayah", "jabari", "jace", "jacey", "jackson", "jacob", "jacoby", "jacqueline", "jacquelyn", "jada",
+  "jaden", "jadiel", "jadon", "jadyn", "jaeden", "jaelyn", "jaelynn", "jagger", "jaida", "jaiden",
+  "jaidyn", "jaime", "jair", "jairo", "jakayla", "jake", "jakob", "jakobe", "jalen", "jaliyah",
+  "jamal", "jamar", "jamarcus", "jamari", "jamarion", "james", "jameson", "jamie", "jamir", "jamison",
+  "jamiya", "jamya", "janae", "jane", "janelle", "janessa", "janet", "janiah", "janiya", "janiyah",
+  "jaquan", "jaqueline", "jared", "jaron", "jarrett", "jase", "jasiah", "jaslene", "jaslyn", "jasmin",
+  "jason", "javier", "javion", "javon", "jax", "jaxon", "jaxson", "jayce", "jaycee", "jayda",
+  "jaydan", "jayden", "jaydin", "jaydon", "jayla", "jaylah", "jaylan", "jaylee", "jayleen", "jaylen",
+  "jaylene", "jaylin", "jaylon", "jaylyn", "jaylynn", "jayson", "jayvion", "jayvon", "jazlene", "jazlyn",
+  "jazlynn", "jazmin", "jazmine", "jazmyn", "jefferson", "jeffery", "jeffrey", "jenna", "jennifer", "jensen",
+  "jeramiah", "jeremiah", "jeremy", "jerimiah", "jermaine", "jerome", "jerry", "jesse", "jessica", "jessie",
+  "jesus", "jett", "jillian", "jimena", "joanna", "joaquin", "jocelyn", "jocelynn", "joe", "joel",
+  "johan", "johanna", "johnathan", "johnathon", "jolie", "jon", "jonah", "jonas", "jonathan", "jonathon",
+  "jordan", "jorden", "jordin", "jordon", "jordyn", "jorge", "jose", "joselyn", "joseph", "josephine",
+  "joshua", "josiah", "josie", "joslyn", "josue", "jovan", "jovani", "jovanni", "jovanny", "jovany",
+  "joyce", "juan", "judah", "jude", "judith", "julia", "julian", "juliana", "julianna", "julianne",
+  "julie", "julien", "juliet", "juliette", "julio", "julissa", "julius", "justin", "justine", "justus",
+  "kade", "kaden", "kadence", "kadin", "kadyn", "kaeden", "kael", "kaelyn", "kai", "kaia",
+  "kaiden", "kaila", "kailee", "kailey", "kailyn", "kaitlin", "kaitlyn", "kaitlynn", "kaiya", "kaleb",
+  "kaleigh", "kaley", "kali", "kaliyah", "kallie", "kamari", "kamden", "kameron", "kamila", "kamora",
+  "kamren", "kamron", "kamryn", "kane", "kara", "kareem", "karen", "karina", "karissa", "karla",
+  "karlee", "karley", "karli", "karlie", "karly", "karson", "karsyn", "karter", "kasen", "kasey",
+  "kash", "kason", "kassandra", "kassidy", "kate", "katelyn", "katelynn", "katherine", "kathleen", "kathryn",
+  "kathy", "katie", "katrina", "kaya", "kayden", "kaydence", "kayla", "kaylah", "kaylee", "kayleigh",
+  "kaylen", "kayley", "kaylie", "kaylin", "kaylyn", "kaylynn", "keagan", "keaton", "keegan", "keely",
+  "keenan", "keira", "keith", "kellen", "kelly", "kelsey", "kelsie", "kelton", "kendal", "kendall",
+  "kendra", "kendrick", "kenley", "kenna", "kennedi", "kennedy", "kenneth", "kenny", "kenya", "kenyon",
+  "kenzie", "keon", "keshawn", "kevin", "keyla", "keyon", "khalil", "khloe", "kian", "kiana",
+  "kianna", "kiara", "kiera", "kieran", "kierra", "kiersten", "kiley", "killian", "kimberly", "kimora",
+  "kingston", "kinley", "kinsley", "kira", "kirsten", "kobe", "kody", "koen", "kolby", "kole",
+  "kolten", "kolton", "konner", "konnor", "korbin", "krish", "krista", "kristen", "kristian", "kristin",
+  "kristina", "kristopher", "krystal", "kyan", "kyla", "kylan", "kyle", "kylee", "kyleigh", "kyler",
+  "kylie", "kymani", "kyra", "kyson", "lacey", "laci", "laila", "lailah", "lainey", "lamar",
+  "lamont", "lana", "landen", "landin", "landon", "landyn", "laney", "lara", "larissa", "larry",
+  "laura", "lauren", "lauryn", "lawrence", "lawson", "layla", "laylah", "layne", "layton", "leah",
+  "leandro", "leanna", "leia", "leila", "leilani", "leland", "lena", "lennon", "leo", "leon",
+  "leonard", "leonardo", "leonel", "leonidas", "leroy", "leslie", "lesly", "leticia", "levi", "lewis",
+  "lexi", "lexie", "leyla", "lia", "liam", "libby", "lila", "lilah", "lilia", "lilian",
+  "liliana", "lilianna", "lillian", "lilliana", "lillianna", "lillie", "lilly", "lilyana", "lina", "lincoln",
+  "linda", "lindsay", "lindsey", "lisa", "litzy", "livia", "lizbeth", "lizeth", "logan", "lola",
+  "london", "londyn", "lorelai", "lorelei", "lorena", "lorenzo", "louis", "luca", "lucas", "lucia",
+  "lucian", "luciana", "luciano", "lucille", "lucy", "luis", "luka", "lukas", "luke", "luna",
+  "lydia", "lyla", "macey", "maci", "macie", "mackenzie", "macy", "madalyn", "madalynn", "maddison",
+  "maddox", "madeleine", "madeline", "madelyn", "madelynn", "madilyn", "madilynn", "madison", "madisyn", "madyson",
+  "maeve", "magdalena", "maggie", "maia", "makai", "makaila", "makayla", "makena", "makenna", "makenzie",
+  "makhi", "malachi", "malakai", "malaki", "malcolm", "maleah", "malia", "malik", "maliyah", "mallory",
+  "manuel", "mara", "marc", "marcel", "marcelo", "marco", "marcos", "marcus", "mareli", "marely",
+  "maren", "margaret", "mariah", "mariam", "mariana", "marianna", "maribel", "mariela", "marilyn", "marin",
+  "mario", "marisa", "marisol", "marissa", "maritza", "mariyah", "markus", "marlee", "marlene", "marley",
+  "marlie", "marlon", "marques", "martha", "marvin", "mary", "maryjane", "mateo", "mathew", "mathias",
+  "matias", "matilda", "matteo", "matthew", "matthias", "mattie", "maurice", "mauricio", "maximilian", "maximillian",
+  "maximo", "maximus", "maxwell", "maya", "mayra", "mckayla", "mckenna", "mckenzie", "mckinley", "megan",
+  "meghan", "mekhi", "melanie", "melany", "melina", "melissa", "melvin", "memphis", "mercedes", "meredith",
+  "mia", "miah", "micaela", "micah", "michael", "michaela", "micheal", "michelle", "miguel", "mikaela",
+  "mikayla", "mila", "milagros", "miles", "miley", "milo", "milton", "mina", "mira", "miranda",
+  "mireya", "miriam", "misael", "mitchell", "miya", "mohamed", "mohammad", "mohammed", "moises", "mollie",
+  "monica", "monique", "monserrat", "morgan", "moriah", "moses", "moshe", "muhammad", "mya", "myah",
+  "myla", "mylee", "myles", "mylie", "nadia", "naima", "nancy", "naomi", "nash", "nasir",
+  "natalee", "natalia", "natalie", "nataly", "natalya", "natasha", "nathalia", "nathalie", "nathaly", "nathan",
+  "nathanael", "nathanial", "nathaniel", "nathen", "nayeli", "nehemiah", "neil", "nevaeh", "neveah", "nia",
+  "nicholas", "nickolas", "nico", "nicolas", "nicole", "nigel", "nikhil", "niko", "nikolai", "nikolas",
+  "nina", "noah", "noe", "noelle", "noemi", "nola", "nolan", "nora", "norah", "nyasia",
+  "nyla", "nylah", "octavio", "odin", "oliver", "olivia", "omar", "omari", "orion", "orlando",
+  "oscar", "osvaldo", "oswaldo", "owen", "pablo", "paige", "paityn", "paloma", "pamela", "paola",
+  "paris", "parker", "patricia", "patrick", "paul", "paula", "paulina", "paxton", "payten", "payton",
+  "pedro", "penelope", "perla", "peyton", "philip", "phillip", "pierre", "pranav", "presley", "preston",
+  "priscilla", "quentin", "quincy", "quinn", "quinten", "quintin", "quinton", "rachael", "rachel", "raegan",
+  "raelynn", "rafael", "raiden", "raina", "ralph", "ramiro", "ramon", "randall", "raphael", "raquel",
+  "rashad", "raul", "rayan", "raymond", "rayna", "rayne", "reagan", "rebecca", "rebekah", "reece",
+  "reese", "regan", "regina", "reginald", "reid", "reilly", "reina", "remington", "rene", "renee",
+  "reuben", "rex", "rey", "reyna", "reynaldo", "rhett", "rhianna", "rhys", "ricardo", "richard",
+  "ricky", "rigoberto", "rihanna", "riley", "rishi", "riya", "robert", "roberto", "rocco", "roderick",
+  "rodney", "rodolfo", "rodrigo", "rogelio", "rohan", "roland", "rolando", "ronald", "ronan", "ronin",
+  "ronnie", "rory", "roselyn", "ross", "roy", "royce", "ruben", "rubi", "rudy", "russell",
+  "ruth", "ryan", "ryann", "ryder", "ryker", "rylan", "ryland", "rylee", "ryleigh", "rylie",
+  "sabrina", "sadie", "saige", "salma", "salvador", "salvatore", "sam", "samantha", "samara", "samir",
+  "sammy", "samson", "samuel", "sanaa", "sanai", "sandra", "saniya", "saniyah", "santiago", "santino",
+  "santos", "sara", "sarah", "sarahi", "sarai", "sariah", "sasha", "saul", "savanah", "savannah",
+  "savion", "scarlett", "scott", "seamus", "sean", "sebastian", "selah", "selena", "selina", "semaj",
+  "serena", "sergio", "seth", "shamar", "shane", "shania", "shaniya", "shannon", "sharon", "shaun",
+  "shawn", "shayla", "shaylee", "shayna", "shea", "shelby", "sheldon", "sherlyn", "shiloh", "shirley",
+  "shyann", "shyanne", "shyla", "sidney", "siena", "silas", "simeon", "simon", "simone", "skye",
+  "skyla", "skylar", "skyler", "slade", "sloane", "sofia", "solomon", "sonia", "sophia", "sophie",
+  "soren", "spencer", "stacy", "stanley", "stella", "stephanie", "stephany", "stephen", "steve", "steven",
+  "sullivan", "susan", "sydnee", "sydney", "sylvia", "tabitha", "talan", "talia", "taliyah", "tamara",
+  "tamia", "tania", "taniya", "taniyah", "tanya", "tara", "taryn", "tate", "tatiana", "tatum",
+  "taylor", "teagan", "teresa", "terrance", "terrell", "terrence", "tess", "tessa", "thaddeus", "thalia",
+  "theodore", "theresa", "thomas", "tia", "tiana", "tianna", "tiffany", "titus", "tobias", "toby",
+  "todd", "tomas", "tommy", "tori", "travis", "trent", "trenton", "trevin", "trevon", "trevor",
+  "tripp", "tristan", "tristen", "tristian", "tristin", "triston", "trystan", "ty", "tyler", "tyree",
+  "tyrell", "tyrese", "tyrone", "tyshawn", "tyson", "ulises", "uriah", "uriel", "urijah", "valentin",
+  "valentina", "valentino", "valeria", "valerie", "valery", "vance", "vanessa", "vaughn", "vicente", "victoria",
+  "vincent", "virginia", "vivian", "viviana", "walter", "waylon", "wayne", "wendy", "wesley", "weston",
+  "whitney", "william", "willie", "wilson", "winston", "wyatt", "xander", "xavier", "ximena", "xiomara",
+  "xzavier", "yadiel", "yadira", "yael", "yahir", "yair", "yamilet", "yandel", "yareli", "yaretzi",
+  "yaritza", "yasmin", "yasmine", "yazmin", "yesenia", "yosef", "yoselin", "yuliana", "yurem", "yusuf",
+  "zachariah", "zachary", "zachery", "zack", "zackary", "zackery", "zaid", "zaiden", "zain", "zaire",
+  "zander", "zane", "zaniyah", "zara", "zaria", "zariah", "zavier", "zayden", "zayne", "zechariah",
+  "zion", "zoe", "zoey", "zoie",
+]
+[locale.chat_ambiguous_given]
+names = [
+  "amber", "april", "august", "autumn", "brooks", "carter", "case", "chase", "crystal", "daisy",
+  "dean", "eve", "faith", "fisher", "frank", "grace", "grant", "holly", "hope", "hunter",
+  "iris", "ivy", "jack", "joy", "june", "king", "lane", "lily", "mark", "marshall",
+  "mason", "porter", "ray", "reed", "river", "rose", "ruby", "sterling", "summer", "turner",
+  "walker", "will",
+]
+[locale.chat_surnames]
+names = [
+  "abbott", "acevedo", "acosta", "adams", "adkins", "aguilar", "aguirre", "ahmed", "alexander", "alfaro",
+  "ali", "allen", "allison", "alvarado", "alvarez", "andersen", "anderson", "andrade", "andrews", "anthony",
+  "archer", "arellano", "arias", "armstrong", "arnold", "arroyo", "ashley", "atkins", "atkinson", "austin",
+  "avalos", "avery", "avila", "ayala", "ayers", "bailey", "baker", "baldwin", "ball", "ballard",
+  "banks", "barajas", "barber", "barker", "barnes", "barnett", "barr", "barrera", "barrett", "barron",
+  "barry", "bartlett", "barton", "bass", "bates", "bauer", "bautista", "baxter", "bean", "beard",
+  "beasley", "beck", "becker", "beil", "bell", "beltran", "bender", "benitez", "benjamin", "bennett",
+  "benson", "bentley", "benton", "berg", "berger", "bernal", "bernard", "berry", "best", "bishop",
+  "black", "blackburn", "blackwell", "blair", "blake", "blanchard", "blankenship", "blevins", "bond", "bonilla",
+  "booker", "boone", "booth", "bowen", "bowers", "bowman", "boyd", "boyer", "boyle", "bradford",
+  "bradley", "bradshaw", "brady", "branch", "brandt", "bravo", "brennan", "brewer", "bridges", "briggs",
+  "brock", "brooks", "brown", "browning", "bruce", "bryan", "bryant", "buchanan", "buck", "buckley",
+  "bullock", "burch", "burgess", "burke", "burnett", "burns", "burton", "bush", "butler", "byrd",
+  "cabrera", "cain", "calderon", "caldwell", "calhoun", "callahan", "camacho", "cameron", "campbell", "campos",
+  "cannon", "cano", "cantrell", "cantu", "cardenas", "carey", "carlson", "carpenter", "carr", "carrillo",
+  "carroll", "carson", "carter", "case", "casey", "castaneda", "castillo", "castro", "cervantes", "chambers",
+  "chan", "chandler", "chang", "chapman", "charles", "chase", "chavez", "chen", "cherry", "choi",
+  "christensen", "christian", "chung", "church", "cisneros", "clark", "clarke", "clay", "clayton", "clements",
+  "cline", "cobb", "cochran", "coffey", "cohen", "cole", "coleman", "collier", "collins", "colon",
+  "combs", "compton", "conley", "conner", "conrad", "contreras", "conway", "cook", "cooper", "copeland",
+  "cordova", "corona", "correa", "cortes", "cortez", "costa", "cox", "craig", "crane", "crawford",
+  "crosby", "cross", "cruz", "cuevas", "cummings", "cunningham", "curry", "curtis", "dalton", "daniel",
+  "daniels", "daugherty", "davenport", "david", "davidson", "davila", "davis", "dawson", "day", "dean",
+  "decker", "dejesus", "delacruz", "delarosa", "deleon", "delgado", "dennis", "diaz", "dickerson", "dickson",
+  "dillon", "dixon", "dodson", "dominguez", "donaldson", "donovan", "dorsey", "dougherty", "douglas", "doyle",
+  "drake", "duarte", "dudley", "duffy", "duke", "duncan", "dunlap", "dunn", "duran", "durham",
+  "dyer", "eaton", "edwards", "elliott", "ellis", "ellison", "english", "enriquez", "erickson", "escobar",
+  "esparza", "espinosa", "espinoza", "esquivel", "estes", "estrada", "evans", "everett", "farley", "farmer",
+  "farrell", "faulkner", "felix", "ferguson", "fernandez", "fields", "figueroa", "finley", "fischer", "fisher",
+  "fitzgerald", "fitzpatrick", "fleming", "fletcher", "flores", "flowers", "floyd", "flynn", "foley", "ford",
+  "foster", "fowler", "fox", "francis", "franco", "frank", "franklin", "frazier", "frederick", "freeman",
+  "french", "friedman", "frost", "fry", "frye", "fuentes", "fuller", "gaines", "galindo", "gallagher",
+  "gallegos", "galvan", "garcia", "gardner", "garner", "garrett", "garrison", "garza", "gates", "gentry",
+  "george", "gibbs", "gibson", "gilbert", "giles", "gill", "gillespie", "gilmore", "glass", "glenn",
+  "glover", "golden", "gomez", "gonzales", "gonzalez", "good", "goodman", "goodwin", "gordon", "gould",
+  "graham", "grant", "graves", "gray", "green", "greene", "greer", "gregory", "griffin", "griffith",
+  "grimes", "gross", "guerra", "guerrero", "guevara", "gutierrez", "guzman", "hahn", "hail", "hale",
+  "haley", "hall", "hamilton", "hammond", "hampton", "hancock", "hanna", "hansen", "hanson", "hardin",
+  "harding", "hardy", "harmon", "harper", "harrell", "harrington", "harris", "harrison", "hart", "hartman",
+  "harvey", "hawkins", "hayden", "hayes", "haynes", "heath", "hebert", "henderson", "hendricks", "hendrix",
+  "henry", "hensley", "henson", "herman", "hernandez", "herrera", "herring", "hess", "hester", "hickman",
+  "hicks", "higgins", "hill", "hines", "hinton", "ho", "hobbs", "hodge", "hodges", "hoffman",
+  "hogan", "holland", "holloway", "holmes", "holt", "hood", "hoover", "hopkins", "horn", "horne",
+  "horton", "house", "houston", "howard", "howe", "howell", "huang", "hubbard", "huber", "hudson",
+  "huerta", "huff", "huffman", "hughes", "hull", "humphrey", "hunt", "hunter", "hurley", "hurst",
+  "hutchinson", "huynh", "ibarra", "ingram", "jackson", "jacobs", "jacobson", "james", "jaramillo", "jarvis",
+  "jefferson", "jenkins", "jennings", "jensen", "jimenez", "johns", "johnson", "johnston", "jones", "jordan",
+  "joseph", "juarez", "kane", "kaur", "keith", "keller", "kelley", "kelly", "kemp", "kennedy",
+  "kent", "kerr", "khan", "kim", "king", "kirby", "kirk", "klein", "kline", "knapp",
+  "knight", "knox", "koch", "kramer", "krueger", "lam", "lamb", "lambert", "landry", "lane",
+  "lang", "lara", "larsen", "larson", "lawrence", "lawson", "le", "leach", "leal", "leblanc",
+  "lee", "leon", "leonard", "lester", "levy", "lewis", "li", "lim", "lin", "lindsey",
+  "little", "liu", "livingston", "lloyd", "logan", "long", "lopez", "love", "lowe", "lowery",
+  "lozano", "lu", "lucas", "lucero", "lugo", "luna", "lynch", "lynn", "lyons", "macdonald",
+  "macias", "mack", "madden", "maddox", "magana", "mahoney", "maldonado", "malone", "mann", "manning",
+  "marin", "marks", "marquez", "marsh", "marshall", "martin", "martinez", "mason", "massey", "mata",
+  "mathews", "mathis", "matthews", "maxwell", "may", "mayer", "maynard", "mayo", "mays", "mcbride",
+  "mccall", "mccann", "mccarthy", "mccarty", "mcclain", "mcclure", "mcconnell", "mccormick", "mccoy", "mccullough",
+  "mcdaniel", "mcdonald", "mcdowell", "mcfarland", "mcgee", "mcguire", "mcintosh", "mcintyre", "mckay", "mckee",
+  "mckenzie", "mckinney", "mclaughlin", "mclean", "mcmahon", "mcmillan", "mcpherson", "meadows", "medina", "medrano",
+  "mejia", "melendez", "melton", "mendez", "mendoza", "mercado", "merritt", "meyer", "meyers", "meza",
+  "michael", "middleton", "miles", "miller", "mills", "miranda", "mitchell", "molina", "monroe", "montes",
+  "montgomery", "montoya", "moody", "moon", "moore", "mora", "morales", "moran", "moreno", "morgan",
+  "morris", "morrison", "morrow", "morse", "morton", "moses", "mosley", "moss", "moyer", "mueller",
+  "mullen", "mullins", "munoz", "murillo", "murphy", "murray", "myers", "nash", "nava", "navarro",
+  "neal", "nelson", "newman", "newton", "nguyen", "nichols", "nicholson", "nielsen", "nixon", "noble",
+  "nolan", "norman", "norris", "norton", "novak", "nunez", "obrien", "ochoa", "oconnell", "oconnor",
+  "odom", "odonnell", "oliver", "olsen", "olson", "oneal", "oneill", "orozco", "orr", "ortega",
+  "ortiz", "osborne", "owen", "owens", "pace", "pacheco", "padilla", "page", "palacios", "palmer",
+  "park", "parker", "parks", "parra", "parrish", "parsons", "patel", "patrick", "patterson", "patton",
+  "paul", "payne", "pearson", "peck", "pena", "pennington", "peralta", "perez", "perkins", "perry",
+  "person", "peters", "petersen", "peterson", "pham", "phan", "phelps", "phillips", "pierce", "pineda",
+  "pittman", "pitts", "pollard", "ponce", "poole", "pope", "porter", "portillo", "potter", "potts",
+  "powell", "powers", "pratt", "preston", "price", "prince", "proctor", "pruitt", "pugh", "quinn",
+  "quintana", "quintero", "ramirez", "ramos", "ramsey", "randall", "randolph", "rangel", "rasmussen", "ray",
+  "raymond", "reed", "reese", "reeves", "reid", "reilly", "reyes", "reyna", "reynolds", "rhodes",
+  "rice", "rich", "richard", "richards", "richardson", "richmond", "riley", "rios", "rivas", "rivera",
+  "rivers", "roach", "robbins", "roberson", "roberts", "robertson", "robinson", "robles", "rocha", "rodgers",
+  "rodriguez", "rogers", "rojas", "rollins", "roman", "romero", "rosales", "rosario", "rosas", "rose",
+  "ross", "roth", "rowe", "rowland", "roy", "rubio", "ruiz", "rush", "russell", "russo",
+  "ryan", "salas", "salazar", "salgado", "salinas", "sampson", "sanchez", "sanders", "sandoval", "sanford",
+  "santana", "santiago", "santos", "saunders", "savage", "sawyer", "schaefer", "schmidt", "schmitt", "schneider",
+  "schroeder", "schultz", "schwartz", "scott", "sellers", "serrano", "sexton", "shaffer", "shah", "shannon",
+  "sharp", "shaw", "shelton", "shepard", "shepherd", "sheppard", "sherman", "shields", "short", "sierra",
+  "silva", "simmons", "simon", "simpson", "sims", "singh", "singleton", "skinner", "sloan", "small",
+  "smith", "snow", "snyder", "solis", "solomon", "sosa", "soto", "sparks", "spears", "spence",
+  "spencer", "stafford", "stanley", "stanton", "stark", "steele", "stein", "stephens", "stephenson", "stevens",
+  "stevenson", "stewart", "stokes", "stone", "stout", "strickland", "strong", "stuart", "suarez", "sullivan",
+  "summers", "sutton", "swanson", "sweeney", "tang", "tanner", "tapia", "tate", "taylor", "terrell",
+  "terry", "thomas", "thompson", "thornton", "todd", "torres", "townsend", "tran", "travis", "trejo",
+  "trevino", "trujillo", "truong", "tucker", "turner", "tyler", "underwood", "valdez", "valencia", "valentine",
+  "valenzuela", "vance", "vang", "vargas", "vasquez", "vaughan", "vaughn", "vazquez", "vega", "velasquez",
+  "velazquez", "velez", "ventura", "villa", "villalobos", "villanueva", "villarreal", "villegas", "vincent", "vo",
+  "vu", "wade", "wagner", "walker", "wall", "wallace", "waller", "walls", "walsh", "walter",
+  "walters", "walton", "wang", "ward", "ware", "warner", "warren", "washington", "waters", "watkins",
+  "watson", "watts", "weaver", "webb", "weber", "webster", "weeks", "weiss", "welch", "wells",
+  "west", "wheeler", "whitaker", "white", "whitehead", "whitney", "wiggins", "wilcox", "wiley", "wilkerson",
+  "wilkins", "wilkinson", "williams", "williamson", "willis", "wilson", "winters", "wise", "wolf", "wolfe",
+  "wong", "wood", "woodard", "woods", "woodward", "wright", "wu", "wyatt", "xiong", "yang",
+  "yates", "yoder", "york", "young", "yu", "zamora", "zavala", "zhang", "zimmerman", "zuniga",
+]
+# END generated chat name vocabulary
+
 [[recognizers]]
 id = "email.global"
 safety_tier = "safe_default"
@@ -56,7 +349,7 @@ license = "Apache-2.0"
 id = "email.header.name"
 safety_tier = "safe_default"
 class = "Name"
-cooperates_with = ["email.header.name.paren", "name.forward_marker", "name.agent_recipient", "name.auto_footer"]
+cooperates_with = ["email.header.name.paren", "name.forward_marker", "name.agent_recipient", "name.auto_footer", "name.chat_cue"]
 enabled = true
 locales = ["global"]
 locale_basis = "document"
@@ -78,7 +371,7 @@ priority = 100
 id = "email.header.name.paren"
 safety_tier = "safe_default"
 class = "Name"
-cooperates_with = ["email.header.name", "name.forward_marker", "name.agent_recipient", "name.auto_footer"]
+cooperates_with = ["email.header.name", "name.forward_marker", "name.agent_recipient", "name.auto_footer", "name.chat_cue"]
 enabled = true
 locales = ["global"]
 locale_basis = "document"
@@ -99,7 +392,7 @@ family = "name.counter"
 id = "name.forward_marker"
 safety_tier = "safe_default"
 class = "Name"
-cooperates_with = ["email.header.name", "email.header.name.paren", "name.agent_recipient", "name.auto_footer"]
+cooperates_with = ["email.header.name", "email.header.name.paren", "name.agent_recipient", "name.auto_footer", "name.chat_cue"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 locale_basis = "document"
@@ -123,7 +416,7 @@ family = "name.counter"
 id = "name.agent_recipient"
 safety_tier = "safe_default"
 class = "Name"
-cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.auto_footer"]
+cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.auto_footer", "name.chat_cue"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 locale_basis = "document"
@@ -147,7 +440,7 @@ family = "name.counter"
 id = "name.auto_footer"
 safety_tier = "safe_default"
 class = "Name"
-cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.agent_recipient"]
+cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.agent_recipient", "name.chat_cue"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 locale_basis = "document"
@@ -159,6 +452,40 @@ boundary = "whitespace"
 right_window_chars = 64
 name_shape = "person_name"
 cue_position = "before"
+
+[recognizers.scoring]
+base = 0.88
+priority = 110
+
+[recognizers.token]
+family = "name.counter"
+
+[[recognizers]]
+id = "name.chat_cue"
+safety_tier = "safe_default"
+class = "Name"
+cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.agent_recipient", "name.auto_footer"]
+enabled = true
+locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+# A name-word requires an explicit self-identification and the end of the name phrase.
+# A recipient instruction or handle only licenses a distinct given name. Require a
+# token boundary on both sides; neither the handle nor the cue is part of the name.
+# Require the same phrase ending for one or two parts. Otherwise a given-name
+# token can hide the beginning of a full name from the downstream safety net.
+pattern_template = '''(?ix)
+(?: \b(?:my[\p{Zs}\t]+name[\p{Zs}\t]+is|mein[\p{Zs}\t]+name[\p{Zs}\t]+ist|ich[\p{Zs}\t]+hei(?:ß|ss)e)
+    [\p{Zs}\t]+({locale.chat_ambiguous_given}(?:[\p{Zs}\t]+{locale.chat_surnames})?)
+    (?:\z|[,;!?)\]"\r\n]|[.:](?:\s|\z))
+  | (?:\b(?:my[\p{Zs}\t]+name[\p{Zs}\t]+is|mein[\p{Zs}\t]+name[\p{Zs}\t]+ist|ich[\p{Zs}\t]+hei(?:ß|ss)e|ask|frage?|cc:?)
+      |(?:\A|[\s(])@[a-z0-9_]+(?:[.-][a-z0-9_]+)*[:,]?)
+    [\p{Zs}\t]+({locale.chat_distinct_given}(?:[\p{Zs}\t]+{locale.chat_surnames})?)
+    (?:\z|[,;!?)\]"\r\n]|[.:](?:\s|\z)|['’]s\b|[\p{Zs}\t]+(?:about|to|for|whether|if|on|nach|ob|wegen|zu|für|is|was|can|could|may|might|must|shall|should|will|would|ist|war|wird|kann|darf|mag|muss|soll)\b)
+)'''
+capture_groups = [1, 2]
 
 [recognizers.scoring]
 base = 0.88

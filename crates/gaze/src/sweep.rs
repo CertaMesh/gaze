@@ -68,45 +68,13 @@ const MAX_PATTERN_BYTES: usize = 16 * 1024 * 1024;
 
 /// Closed list of words that are also common first names or surnames. A
 /// single-word value or name part on this list is never swept.
-#[rustfmt::skip]
-const COMMON_WORDS: &[&str] = &[
-    // Months and weekdays, English and German.
-    "january", "february", "march", "april", "may", "june", "july", "august",
-    "september", "october", "november", "december", "januar", "februar", "maerz",
-    "märz", "mai", "juni", "juli", "oktober", "dezember", "monday", "tuesday",
-    "wednesday", "thursday", "friday", "saturday", "sunday", "montag", "dienstag",
-    "mittwoch", "donnerstag", "freitag", "samstag", "sonntag",
-    // Names that are everyday English words.
-    "will", "mark", "rose", "grace", "hope", "joy", "faith", "summer", "autumn",
-    "dawn", "eve", "iris", "lily", "daisy", "ivy", "holly", "ruby", "amber",
-    "pearl", "crystal", "sky", "rain", "river", "stone", "wood", "hill", "field",
-    "bill", "frank", "art", "sue", "pat", "rob", "jack", "guy", "ray", "bob",
-    "don", "earl", "king", "page", "chase", "rich", "sterling", "young", "long",
-    "little", "white", "black", "brown", "green", "gray", "grey", "cook", "baker",
-    "miller", "smith", "hunter", "fisher", "carter", "mason", "porter", "turner",
-    // Names that are everyday German words.
-    "sonne", "winter", "sommer", "herbst", "lange", "klein", "gross", "groß",
-    "weiss", "weiß", "schwarz", "braun", "roth", "jung", "alt", "berg", "wald",
-    "stein", "bach", "graf", "koch", "fuchs", "wolf", "vogel", "haas", "kaiser",
-    "koenig", "könig", "herr", "frau",
-    // German surnames that are everyday nouns. German capitalises every noun,
-    // so title case does not tell `Der Richter hat entschieden` from a name.
-    "richter", "bauer", "fischer", "müller", "mueller", "schneider", "weber",
-    "meyer", "meier", "maier", "mayer", "wagner", "becker", "bäcker", "baecker",
-    "schäfer", "schaefer", "jäger", "jaeger", "zimmermann", "hoffmann", "hofmann",
-    "keller", "engel", "hahn", "busch", "brandt", "schmidt", "schmid", "schulz",
-    "schulze", "krüger", "krueger", "neumann", "lehmann", "kaufmann", "schuster",
-    "kramer", "krämer", "metzger", "maurer", "wirth", "vogt", "förster", "gärtner",
-    "pfarrer", "schreiber", "meister", "berger", "hartmann", "bergmann",
-    // English surnames that are everyday verbs or nouns, sentence-initial in
-    // title case (`Grant access to the repo.`).
-    "grant", "price", "rice", "bush", "banks", "wells", "cross", "lane", "west",
-    "dean", "case", "bond", "burns", "marsh", "moss", "ford", "fox", "lamb",
-    "park", "parks", "reed", "ward", "bell", "bird", "brook", "brooks", "hall",
-    "hart", "house", "hunt", "knight", "lord", "love", "low", "marshall", "mills",
-    "noble", "north", "south", "east", "pike", "pool", "pope", "power", "sharp",
-    "short", "spring", "steel", "swift", "walker", "street", "gates", "means",
-];
+static COMMON_WORDS: std::sync::LazyLock<HashSet<&'static str>> = std::sync::LazyLock::new(|| {
+    include_str!("sweep_common_words.txt")
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .flat_map(str::split_ascii_whitespace)
+        .collect()
+});
 
 /// Name particles and articles. They sit inside names but are everyday words
 /// on their own, so a part or a run made only of them is never a name:

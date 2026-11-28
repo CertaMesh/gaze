@@ -1623,7 +1623,7 @@ window_chars = 48
             .filter(|recognizer| recognizer.class == PiiClass::Name)
             .collect::<Vec<_>>();
 
-        assert_eq!(name_recognizers.len(), 5);
+        assert_eq!(name_recognizers.len(), 6);
         for recognizer in &name_recognizers {
             for peer in &name_recognizers {
                 if recognizer.id == peer.id {

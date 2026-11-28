@@ -4,6 +4,7 @@ use regex_syntax::hir::{literal::Extractor, Hir, HirKind};
 pub(super) enum Necessary {
     Unknown,
     Prefixes(Vec<Vec<u8>>),
+    Delimited(regex::Regex),
     All(Vec<Self>),
     Any(Vec<Self>),
 }
@@ -73,7 +74,13 @@ impl Necessary {
             return prefix;
         }
         let inner = match hir.kind() {
-            HirKind::Concat(parts) => Self::all(parts.iter().map(Self::from_hir)),
+            HirKind::Concat(parts) => Self::all(
+                parts.iter().map(Self::from_hir).chain(
+                    parts
+                        .windows(2)
+                        .filter_map(|pair| Self::delimited_literal(&pair[0], &pair[1])),
+                ),
+            ),
             HirKind::Alternation(parts) => {
                 let plans = parts.iter().map(Self::from_hir).collect::<Vec<_>>();
                 if plans.iter().any(|plan| matches!(plan, Self::Unknown)) {
@@ -91,9 +98,40 @@ impl Necessary {
         Self::all([prefix, inner])
     }
 
+    // Keep the adjacency in e.g. (?:\A|[\s(])@. An email's interior @ is
+    // not evidence for a handle. Absolute start survives joining, as does an
+    // adjacent source character unless the separator class can eat the marker.
+    fn delimited_literal(left: &Hir, right: &Hir) -> Option<Self> {
+        use regex_syntax::hir::{Class, Look};
+        let HirKind::Alternation(branches) = left.kind() else {
+            return None;
+        };
+        let HirKind::Literal(literal) = right.kind() else {
+            return None;
+        };
+        if !Self::marker_free(&literal.0)
+            || !branches
+                .iter()
+                .any(|b| matches!(b.kind(), HirKind::Look(Look::Start)))
+            || !branches.iter().all(|b| match b.kind() {
+                HirKind::Look(Look::Start) => true,
+                HirKind::Class(Class::Unicode(c)) => !c
+                    .iter()
+                    .any(|r| (r.start()..=r.end()).contains(&crate::source_regex::MARKER)),
+                _ => false,
+            })
+        {
+            return None;
+        }
+        regex::Regex::new(&format!("(?:{left}){right}"))
+            .ok()
+            .map(Self::Delimited)
+    }
+
     pub(super) fn could_match(&self, joined: &str) -> bool {
         match self {
             Self::Unknown => true,
+            Self::Delimited(regex) => regex.is_match(joined),
             Self::Prefixes(prefixes) => prefixes.iter().any(|prefix| {
                 joined
                     .as_bytes()

@@ -2005,9 +2005,11 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [known-record specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7); and the [capture-closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure, which let the gate and the capture cache ignore harness files that cannot reach C, A, D or R.
-The [comma-address specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
-Following that, the [current specification](specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds the complete prose ID cells and their counterweights.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) adds the JSON structure census to the measuring closure; the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) updates the known-record cell and arm harness digests; the [chat corpus specification](specifications/75331b401559d44ee4aeb1530f625b1231df256be989028b21293250d2cbdffd.json) adds generator v32's chat name cells; the [chat rule vocabulary specification](specifications/a1573ead260cc4e07852bc92a4514bc7c3e09d1697f0218a0b7904f8a5eb5d62.json) adds the chat-name rule to the validation vocabulary;
+the [first chat v33 specification](specifications/b12892ef5bd7ae7fcec863583fc3943b9e2e0717222c5f0ada3811ae02a92875.json) adds name boundaries; the [corrected chat specification](specifications/6344230f48555654e039e7a401e3eef72768eae3a1da32a06128e87b2700fb4d.json) corrects one demonym counterweight; and the [last chat prerelease](specifications/e89688e904336bc3a4e8de8e90c5c199a1a295f13f9cc5d1d50cc9f2f10ed9ce.json) binds those cells using the [per-layer capture closure](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json).
+Those chat v32/v33 specifications came from `chat-name-cues`, not main.
+Main's [canonical v32 specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) measures comma-separated addresses and benign table/list counts;
+the [chat v34 specification](specifications/19722b334c63c29d707352bd4955e71101c71a0f7480d6bda62e4231dbdd6417.json) integrates both sets of cells. Main's [v33 specification](specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds prose record IDs to v32. For generator v35, the [current specification](specifications/f2680df580d999cb7363c3f4f245bf7acbc5a4a4a0e92517a8cb51c69ba75bd2.json) includes chat names and prose record IDs.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2565,6 +2567,59 @@ No release has been measured on generator v31 yet. The v30 history rows above
 stay bound to the v30 specification; the v31 backfill runs outside the PR
 critical path.
 
+### Names in chat (chat branch v32)
+
+The [chat name generator](../../../scripts/bench/chat_name_cells.py) adds 126 A and
+18 D documents per partition. Each message stands alone. A includes single and
+two-part names in EN/DE introductions, after `ask`, `cc` or `frag`, and in
+messages to automated accounts. It pairs established given names and surnames
+from the partition's synthetic people with invented, uncommon names. Given
+names and surnames are separately gold even in lowercase or mixed case;
+intervening spaces are not. Handles refer only to bots, not people: these
+cells measure the name following a mention, not personal handle detection.
+
+D prices ordinary prose under those cues, including requests to service queues
+and commands to bots. Some names are also dictionary words: for example, the
+English cells give the same word a personal reading in an introduction and a
+non-personal reading as a season or colour. The English examples occur in the
+generated name-word asset. D also places name-words immediately after weak cues
+(`ask amber suppliers`) and bot mentions (`@guestlistbot mark completed items`).
+None of the labels depend on a dictionary lookup
+or recognizer output. Dev and test use distinct names, handles and messages.
+
+Each v32 partition has **41,894 documents**: 20,043 A, 9,050 D and 12,801 R.
+Both v31 partitions rebuild byte-for-byte with the [frozen v31 contract](scored-labels-agentic-generator-v31.json).
+No release has been measured here under v32; existing results retain their original specification.
+
+### Chat name boundaries (chat branch v33)
+
+The `chat_boundaries_` cells add 14 A and 6 D messages per partition. A
+separates a person's name from the following ordinary word: a bot may be told
+who *will* attend, for example, without `will` being that person's surname.
+Other A messages introduce a name such as `amber` and later use the same
+spelling for a colour. Only the first occurrence is gold. Colons, English
+possessive `'s` or `’s`, and German genitive `s` or `’` after a name ending in
+`s` are outside the single or paired name. D puts month names, demonyms, and
+ordinary name-words after weak cues; no person is identified by those words.
+In `Please ask German galleries whether they lend paintings.`, `German`
+describes the galleries even though it occurs in the pinned SSA given-name list.
+
+The v33 partition totals are 20,057 A, 9,056 D and 12,801 R (41,914 documents).
+The [chat v32](scored-labels-agentic-chat-prerelease-v32.json) and
+[chat v33](scored-labels-agentic-chat-prerelease-v33.json) contracts are archived
+under their branch names. Rebuild the original chat v32 at `dd5b9ab1`, the
+first v33 at `3167f01b` and the corrected v33 at `afd56bea`. Use `6c1f20eb`
+for the corrected corpus with the per-layer capture closure. None of these
+specifications denotes main's v32; compare only identical specifications.
+
+### Integrated addresses and chat names (generator v34)
+
+Generator v34 extends main's `59891a50` v32 corpus without modifying its
+address or inventory cells. It adds all 140 A and 24 D chat cells described
+above, for **41,948 documents per partition**: 20,075 A, 9,072 D and 12,801 R.
+Reconstructing version 32 selects the original address/inventory corpus and
+its [canonical contract](scored-labels-agentic-generator-v32.json).
+
 ### Prose record IDs (generator v33)
 
 The [record-ID cells](../../../scripts/bench/prose_record_id_cells.py) add 800 A
@@ -2584,6 +2639,13 @@ Dotted tool names, public paths and field
 cues with no value carry no gold. Layer R is unchanged. The v32 corpus
 rebuilds byte-for-byte under its [frozen contract](scored-labels-agentic-generator-v32.json).
 No detector or release has been measured as part of this addition.
+
+### Chat names on the prose record-ID corpus (generator v35)
+
+Generator v35 adds 140 A and 24 D chat messages to main's v33, for **43,353
+documents per partition**: 20,875 A, 9,677 D and 12,801 R. Both parent
+corpora rebuild byte-for-byte: v33 selects [main's prose-ID contract](scored-labels-agentic-generator-v33.json),
+and v34 selects the [chat branch contract](scored-labels-agentic-chat-prerelease-v34.json).
 
 ### Measured adjacency layer history
 

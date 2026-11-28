@@ -8,7 +8,7 @@ Marked tables are compared against loaded rulepacks and Rust enums by:
 rustup run 1.96.0 cargo test -p xtask --test redaction_classes_doc
 ```
 
-`core` contains exactly 57 recognizer specs. `core-extended` loads the same bytes but widens
+`core` contains exactly 58 recognizer specs. `core-extended` loads the same bytes but widens
 [activation](#shipped-default-activation). `secrets` protects password records, hashes, and credential
 code fields. Setup includes it, while library callers and hand-written policies
 must select it: `bundled = ["core", "secrets"]` or
@@ -63,6 +63,7 @@ Definitions: `crates/gaze-recognizers/embedded/core.toml` and `secrets.toml`.
 | `core, core-extended` | `name.forward_marker` | `anchored_match` | Person-name-shaped text after locale-provided forwarded-message cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `name.agent_recipient` | `anchored_match` | Person-name-shaped text after locale-provided agent-recipient cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `name.auto_footer` | `anchored_match` | Person-name-shaped text after locale-provided footer or sign-off cues | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
+| `core, core-extended` | `name.chat_cue` | `regex` | Listed given name with optional listed surname after an EN/DE introduction, recipient cue or @-handle. Case-insensitive; name-words need an explicit, delimited self-introduction. The SSA/Census vocabulary does not cover all names. | `Name` | `de-DE, de-AT, de-CH, en-US, en-GB, en-IE, en-AU, en-CA` | `none` | `none` | `safe_default` | yes | 0.88 | 110 |
 | `core, core-extended` | `phone.structural` | `regex` | Compact international phone candidates beginning with plus and 6 to 15 digits | `custom:phone` | `global` | `e164_phone` | `none` | `safe_default` | yes | 0.70 | 80 |
 | `core, core-extended` | `phone.e164.spaced` | `regex` | Spaced or punctuated international phones, 00 dialing prefixes, optional trunk zeroes and French dotted forms | `custom:phone` | `global` | `phone_number` | `none` | `safe_default` | yes | 0.70 | 79 |
 | `core, core-extended` | `phone.e164.spaced.cued` | `regex` | Labelled international or supported national phone forms; validated list neighbours inherit the cue and parser failures retain a typed audit reason | `custom:phone` | `global` | `phone_number` | `none` | `safe_default` | yes | 0.70 | 78 |
@@ -134,7 +135,7 @@ fallback. Grouped runs
 can extend beyond four groups or 40 bytes with a typed audit reason; the
 [labelled-identifier explanation](../explanation/detection/labelled-identifiers.md)
 describes its stop and audit rules. The `redaction_classes_doc` test pins these
-rows and the 57-spec inventory to the loaded rulepack. The
+rows and the 58-spec inventory to the loaded rulepack. The
 `bundle-tokenization-drift --verify-ack` gate separately checks the bundled
 output against its committed corpus snapshot.
 
@@ -403,7 +404,15 @@ Same-class preference records `SameClassContainment`. See
 
 No standalone deterministic recognizer detects arbitrary streets, cities,
 states, companies, first names or surnames. Rule-based `Name` coverage is limited
-to email display names and locale cues; `Location` and `Organization` are NER-only.
+to email display names and cued names; `Location` and `Organization` are NER-only.
+`name.chat_cue` uses US name frequency lists, not a general EN/DE name lexicon.
+It accepts listed name-words in explicit introductions only when the repeat sweep
+will leave their ordinary uses alone. If punctuation or a recognized following
+word does not establish where the name ends, the rule leaves the phrase intact
+for downstream detectors rather than hiding just a given name. Without another
+detector that phrase may remain raw. It does not cover every compound, inflection
+or surname continuation. A name followed by an ordinary word that is also a
+surname can still be ambiguous (for example, “rose to the challenge”).
 The archived no-OPF audit found `STREET`, `CITY`, `SURNAME`, `FIRSTNAME`, `STATE`
 and `COMPANYNAME` all 0-covered and 0-overlapped at the rule floor
 ([gap analysis](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58)).
@@ -427,7 +436,7 @@ Clean, daemon and `CorePipelineConfig` share this function.
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
 | `core` | `global` | no | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.field, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.field, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.us, phone.national.us.cued, phone.structural, postal.ca, postal.cued_four_digit, postal.cued_short, postal.gb, postal.ie, record_id.field, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.field, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.field, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.cued_short, postal.de, postal.gb, postal.ie, postal.us, record_id.field, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH, en-AU` | yes | `aadhaar.in, age.cue, age.phrase, birth_date.answer, birth_date.cue, bsn.nl, card.cued, card.cued_short, card.structural, cnpj.br, cpf.br, customer_id.field, driver_license.cue_anchored, driver_license.labelled, email.global, email.header.name, email.header.name.paren, employee_id.field, eth.address, iban.cued, iban.structural, id_card.labelled, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.chat_cue, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.e164.spaced.cued, phone.national.de, phone.national.us, phone.national.us.cued, phone.structural, postal.at_ch, postal.au, postal.ca, postal.cued_four_digit, postal.cued_short, postal.de, postal.gb, postal.ie, postal.us, record_id.field, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, tax_number.labelled, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 Use `--locale=global` or a narrower policy to avoid compatibility expansion
