@@ -861,6 +861,8 @@ impl Daemon {
             .defer_redactions(limits.global_v2_state_bytes.saturating_sub(base_bytes))
             .map_err(|_| Failure::Pipeline)?;
         let mut results = None;
+        // Later passes re-clean blocks whose raw text is unchanged; reuse their inference.
+        let _inference = gaze_recognizers::inference_request_spanning();
         for _ in 0..limits.stabilization_passes {
             audit.reset_pass().map_err(|_| Failure::Pipeline)?;
             let before = transaction.semantic_revision();

@@ -198,7 +198,7 @@ pub(crate) struct NymArgs {
     /// Path to the pinned Nym-small int8 bundle from `gaze setup --safety-net nym` (default: GAZE_NYM_MODEL_DIR)
     #[arg(long)]
     pub(crate) nym_model_dir: Option<PathBuf>,
-    /// ONNX Runtime intra-op threads for the Nym backend (default: 1)
+    /// ONNX Runtime intra-op threads for the Nym backend (default: 4)
     #[arg(long)]
     pub(crate) nym_intra_threads: Option<std::num::NonZeroUsize>,
 }

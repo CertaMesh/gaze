@@ -246,11 +246,11 @@ impl Daemon {
     }
 
     fn handle_line(&mut self, line: &str) -> DaemonResponse {
+        #[cfg(feature = "perf-timers")]
+        let _perf = crate::perf::Document::from_env();
         if v2::is_v2(line) {
             return DaemonResponse::V2(self.handle_v2(line));
         }
-        #[cfg(feature = "perf-timers")]
-        let _perf = crate::perf::Document::from_env();
         // Keep context opaque so only the shared parser applies its depth and size limits.
         let envelope =
             serde_json::from_str::<HashMap<String, Box<serde_json::value::RawValue>>>(line);

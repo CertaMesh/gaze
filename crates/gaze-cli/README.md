@@ -110,7 +110,7 @@ Flags:
 | `--opf-command <path>` / `--opf-checkpoint <path>` | Registry-example aliases for the OpenAI Privacy Filter command and checkpoint. |
 | `--opf-locales <tag[,tag...]>` | Native locales for the OpenAI Privacy Filter registry entry. Empty keeps the backend default. |
 | `--nym-model-dir <path>` | Pinned Nym-small int8 bundle (`SHA256SUMS`, `config.json`, `model_int8.onnx`, `tokenizer.json`). Takes precedence over `GAZE_NYM_MODEL_DIR`, then policy `[safety_net.nym].model_dir`; install with `gaze setup --safety-net nym`. |
-| `--nym-intra-threads <n>` | ONNX Runtime intra-op threads for the `nym` backend. Defaults to `1`. |
+| `--nym-intra-threads <n>` | ONNX Runtime intra-op threads for the `nym` backend. Defaults to `4`; scores are bit-identical across counts. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
 | `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` replaces the suspect span with a one-way `[REDACTED:<class>]` marker (the bytes do not come back; the marker is not a token and restore returns it verbatim) and records an audit row; `resolve` tokenizes the suspect span directly as a restorable token of the suspect's class, then runs the nets once more; what it cannot handle goes to `--safety-net-fallback`. Defaults to `resolve`. Mode catalog and posture guide: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md). |

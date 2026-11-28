@@ -491,6 +491,18 @@ pub trait ProviderAdapter: Send + Sync + 'static {
             .collect()
     }
 
+    /// The tool calls this SSE event names, each as the stream its argument fragments use and
+    /// the tool's name.
+    ///
+    /// Some providers name a streamed tool call in one event and send its arguments in others,
+    /// so an argument fragment cannot carry the name itself. A fragment whose sink is
+    /// [`RestoreSink::ToolInput`] without a name takes the name bound to its stream here or by
+    /// another fragment of the same stream. A stream bound to two different names keeps its
+    /// tokens. The default binds nothing.
+    fn sse_event_tool_calls(&self, _event: &SseEvent) -> Vec<(SseStreamKey, String)> {
+        Vec::new()
+    }
+
     /// Reports whether `request` asked the model for JSON output (a JSON mode or a JSON
     /// schema), which makes every [`SurfaceSyntax::ModelOutput`] response surface a JSON
     /// document. The default, `false`, restores model output as free text.
@@ -517,6 +529,28 @@ pub enum SurfaceSyntax {
     ModelOutput,
 }
 
+/// Where a response surface's text goes, which decides whether restore writes raw values into it.
+///
+/// Restore is scoped to sinks. Assistant text the client shows its user restores; the
+/// arguments of a tool call restore only for a tool the integrator declares with
+/// [`crate::ProxyConfig::with_restore_tools`]; every other surface keeps its tokens. A token the
+/// model writes into a sink that does not restore stays a token, so a valid placeholder cannot
+/// pull an original into a tool, a reasoning trace, or a field the adapter does not classify.
+/// Request protection ignores the sink.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum RestoreSink {
+    /// Never restored. The default, so a surface an adapter does not classify keeps its tokens.
+    #[default]
+    Withheld,
+    /// Assistant text the client shows its user.
+    Display,
+    /// The arguments of a call to the named tool. `None` when this fragment does not carry the
+    /// name; a streamed fragment then takes the name its stream is bound to (see
+    /// [`ProviderAdapter::sse_event_tool_calls`]), and a fragment without one keeps its tokens.
+    ToolInput(Option<String>),
+}
+
 #[non_exhaustive]
 pub struct PiiSurface<'a> {
     pub field_path: CoveragePath,
@@ -524,6 +558,9 @@ pub struct PiiSurface<'a> {
     pub field: Option<gaze_types::FieldProvenance>,
     pub text: &'a mut String,
     pub syntax: SurfaceSyntax,
+    /// Where a response surface's text goes. [`RestoreSink::Withheld`] unless the adapter
+    /// classifies it.
+    pub sink: RestoreSink,
 }
 
 impl<'a> PiiSurface<'a> {
@@ -538,7 +575,15 @@ impl<'a> PiiSurface<'a> {
             field: None,
             text,
             syntax,
+            sink: RestoreSink::Withheld,
         }
+    }
+
+    /// Classifies where this response surface's text goes.
+    #[must_use]
+    pub fn with_sink(mut self, sink: RestoreSink) -> Self {
+        self.sink = sink;
+        self
     }
 }
 
@@ -723,6 +768,7 @@ impl SurfacePath {
             field,
             text,
             syntax,
+            sink: RestoreSink::Withheld,
         }
     }
 }
@@ -843,6 +889,13 @@ pub(crate) fn walk_all_scalars<'a>(
             }
         }
         Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
+/// Sets the sink of every surface pushed since `start`.
+pub(crate) fn sink_from(surfaces: &mut RequestSurfaces<'_>, start: usize, sink: &RestoreSink) {
+    for surface in &mut surfaces.strings[start..] {
+        surface.sink = sink.clone();
     }
 }
 

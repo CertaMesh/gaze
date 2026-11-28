@@ -195,6 +195,21 @@ gaze proxy install-systemd-user
 Those hooks are reserved for the platform integration path. Today they return a
 typed message directing you to `gaze proxy start` and `gaze proxy stop`.
 
+## Declare the tools that receive originals
+
+The proxy restores originals into the assistant text your client shows its user.
+A tool call's arguments keep their placeholders unless you declare the tool, so
+originals never reach a tool or service you did not choose. Declare each tool
+that must act on original values in the policy you pass with `--policy`:
+
+```toml
+[proxy]
+restore_tools = ["save_contact"]
+```
+
+Tool results, documents, reasoning and undeclared tools always keep their
+placeholders. See [`[proxy]`](../../reference/policy.md#proxy).
+
 ## What the proxy does not cover
 
 The proxy supports provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,

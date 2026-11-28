@@ -53,14 +53,15 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
     if args.foreground_daemon {
         daemon::init_foreground_daemon(&paths, args.bind).map_err(map_proxy)?;
     }
-    let mut betas = if let Some(path) = &args.policy {
-        gaze::Policy::load_for_cli(path)
-            .map_err(map_policy_error)?
-            .proxy
-            .anthropic_betas
-    } else {
-        Vec::new()
+    let proxy_policy = match &args.policy {
+        Some(path) => {
+            gaze::Policy::load_for_cli(path)
+                .map_err(map_policy_error)?
+                .proxy
+        }
+        None => gaze::ProxyPolicy::default(),
     };
+    let mut betas = proxy_policy.anthropic_betas;
     betas.extend(args.anthropic_betas);
     let mut anthropic =
         AnthropicAdapter::builder(args.upstream_anthropic.clone()).ephemeral_sessions();
@@ -79,6 +80,17 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
         args.upstream_gemini,
     );
     config.session_ttl = parse_duration(&args.session_ttl)?;
+    // Names match exactly, so a blank or padded name would silently declare nothing.
+    if proxy_policy
+        .restore_tools
+        .iter()
+        .any(|tool| tool.is_empty() || tool.trim() != tool)
+    {
+        return Err(CliError::ProxyDetail(
+            "invalid [proxy] restore_tools entry: empty or padded tool name".into(),
+        ));
+    }
+    config = config.with_restore_tools(proxy_policy.restore_tools);
     #[cfg(feature = "dashboard")]
     let mut _dashboard_launch = None;
     #[cfg(feature = "dashboard")]

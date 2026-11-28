@@ -1,6 +1,6 @@
 {
   "gate_readers": {
-    ".github/workflows/tutorials.yml": "ca590350e59940398c3e788cafac94a84e8e08948b098b2f418f7a23b4f7559b",
+    ".github/workflows/tutorials.yml": "f9e1344eafe0b1805e3bd4697ed9d91692e9a493243a6a3856099b686816e2b7",
     "crates/xtask/src/bundle_tokenization_drift.rs": "3aebd10dd48cc49b187622368f7710dddb517b19646a2c32de7a5b28a5815900",
     "crates/xtask/src/cargo_metadata_audit_isolation.rs": "3aff57b17acdadfa691ed299c4e6a19e91331da3040d6c07c1c2a19bfb065f9b",
     "crates/xtask/src/ci_feature_matrix.rs": "1da381ee3f0222286b005802c36f5ab6eab7bca9e5eaa36827e2a751c7f7bf75",
@@ -412,6 +412,7 @@
     "docs/reference/benchmarks/gates/mcp-operation-order/whitespace-diagnostic.json",
     "docs/reference/benchmarks/gates/nym-inference-reuse/README.md",
     "docs/reference/benchmarks/gates/nym-inference-reuse/bounded-proof.json",
+    "docs/reference/benchmarks/gates/nym-intra-threads/README.md",
     "docs/reference/benchmarks/gold-gap-sample-v3.json",
     "docs/reference/benchmarks/government-id-cells.md",
     "docs/reference/benchmarks/history-generator-v29/history.json",
@@ -878,6 +879,7 @@
     "docs/reference/benchmarks/scored-labels-agentic-generator-v28.json",
     "docs/reference/benchmarks/scored-labels-agentic-generator-v29.json",
     "docs/reference/benchmarks/scored-labels-agentic-generator-v30.json",
+    "docs/reference/benchmarks/scored-labels-agentic-generator-v31.json",
     "docs/reference/benchmarks/scored-labels-agentic-generator-v4.json",
     "docs/reference/benchmarks/scored-labels-agentic-generator-v5.json",
     "docs/reference/benchmarks/scored-labels-agentic-generator-v6.json",
@@ -916,6 +918,7 @@
     "docs/reference/benchmarks/specifications/a436a22c225242899bc242767803d2b9cd82d43412e8ea855dc99533dccf453d.json",
     "docs/reference/benchmarks/specifications/aa1f32b903f0bad2ab5ceadb6685269f8871c06f93ca23095cb36cc6764594c6.json",
     "docs/reference/benchmarks/specifications/ae74d9a02195d3c60b5fe8bc8b0eb984e6926f390fad0ad624958e86577d9edb.json",
+    "docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json",
     "docs/reference/benchmarks/specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json",
     "docs/reference/benchmarks/specifications/cc89228cdc7d63fefd68c0f264f6eb89db5cd0cb7fa37241276ea46278901a48.json",
     "docs/reference/benchmarks/specifications/d0010b6f71ecd9481700895eb439448fc166a76f9a6c31168f2b746125fdb2f0.json",
