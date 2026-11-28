@@ -1,5 +1,5 @@
 {
-  "id": "gaze-benchmark-v1:0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0",
+  "id": "gaze-benchmark-v1:2b1c45f193e2dd35f0d59d24d12c68d06aa8ddb0bfc3ce400e525ecc3291a6ce",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
@@ -73,7 +73,7 @@
       "scripts/bench/family_precedence_history.py": "9db93721c5ee687a3ad6b9c53657737f58d5a7046a9033cfabe768598ba77063",
       "scripts/bench/full_name_case_cells.py": "cde85974bf67f63f78930094249906155ac66b196cdf6a889512504c347ee8c4",
       "scripts/bench/gaze-pipeline-bench.py": "19c333a1aa574f62c2e69c31388f89319097137c4a75b5f7d88a2ecce7f932a1",
-      "scripts/bench/gaze_bench_score.py": "3a14e0780a612797312768df66cbee3a4b14b997cf988db10c1993c37c6c40a1",
+      "scripts/bench/gaze_bench_score.py": "51166047aaa7aa1504e1629b78d25db1e71b51176271542ef3bfcbbd0f02d53f",
       "scripts/bench/gold_gap_evidence.py": "ecaa9c4fa94a2fc7ef17b293eb3f603de0d92b34b62792dc7a03f1d040e75a5f",
       "scripts/bench/gold_gap_tiebreak.py": "e5b9071cff9df996d63e9a62840429a745b11296f4074b3fb827d206cb882d4e",
       "scripts/bench/government_id_cells.py": "027584c0ffd28a0fa07b266d7e640e6c15936195cfc0a24c26cfbd261697d6f8",
@@ -146,15 +146,16 @@
       "scripts/bench/rescore.py": "4d268d104ab2abe816e891f132f1d165054ccd1e14f11499d7a05b07811945cf",
       "scripts/bench/rescore_past_release.py": "8f4c4602d7f0fda5ce36374119e10d534ebbad38a15ff24f218164a98ce8cf42",
       "scripts/bench/rescore_safety_net.py": "cf19c2a4962744cd2eceb73c7e2fedfc7b706137b11463e99e195df0477437aa",
-      "scripts/bench/run_no_opf_benchmark.py": "9791e0158558095738936d6fb1f1bc0cb6789e2ef74eba8e237e26b5c328190b",
+      "scripts/bench/run_no_opf_benchmark.py": "1547c2756e64d1acd09ad2f1251f4ec3865a93f4e92c25cfd6539697e607154e",
       "scripts/bench/safety_net_bench_lib.py": "7586e9e22542bfb543c79a172ee693767921929d4ebd3bf2eb7afbdee16f0566",
-      "scripts/bench/scorecard_record.py": "da72df6ad4df6c611bf23d358d95c4768fb4de55bece1597a4fc65a70461e25e",
+      "scripts/bench/scorecard_record.py": "2e9bc9e0a0ee7198d934bc1e2ba426330f93ad2f1c587a1fb457e4d0a2a9226e",
       "scripts/bench/stage_timing.py": "1dcf159e2e7f125087a3d1393e6a266733b971da9aad81433239701a84821ac0",
       "scripts/bench/structured_input_cells.py": "64b14edbf3902f9e89660b16ee6d2a9f28ad7ee8fa809b32e7e3b282ca79c468",
       "scripts/bench/structured_slice.py": "1d8cbcc57a8f35d88b7d57a73ff3c9256ab1cf90fe98a8f1a5e3f0329d98e394",
       "scripts/bench/subject_build.py": "1bee4cf83a4ad73004bb503da60726e62c621ba4a5065386ca9ad9c2fa634ae5",
       "scripts/bench/tagged_gaze.py": "a2ab9a6cf199247fdb5b02ac4e55881be71d1535f884de33a45b2ecec856130e",
       "scripts/bench/transformers-runner.py": "63c7a867a69d4f00f943980b0300202ccf1085113ade0c153242762f37a302b0",
+      "scripts/bench/unit_cache.py": "c1bb0d29e80cd114917a028b23e3aad728e8490ab69b501ddfb95ca8871549e8",
       "scripts/bench/url_cells.py": "5b3a2a3bace32814caa34836945f08429e1988caf29d7582105c7caabc5ecda8",
       "scripts/bench/url_serialized_cells.py": "fd4a9090c06b3bc556864a7679502220eea2452b95a6674cac166d3042677a56",
       "scripts/bench/verify_record_scorecards.py": "0b9e12af9a0f080f41a52cb760c1079b8116297ebca40da9956fb7c8a9b685f9",
@@ -253,6 +254,7 @@
       "scripts/bench/structured_input_cells.py",
       "scripts/bench/subject_build.py",
       "scripts/bench/trace-lineage-vocabulary.json",
+      "scripts/bench/unit_cache.py",
       "scripts/bench/uv.lock"
     ],
     "validation_vocabulary": [

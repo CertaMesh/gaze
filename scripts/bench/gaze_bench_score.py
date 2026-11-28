@@ -2383,6 +2383,19 @@ def validator_recall_by_label(
     return result
 
 
+def detector_request(document: Document) -> dict[str, object]:
+    """The complete request a detector process receives for one document."""
+    return {
+        "fixture_id": document.uid,
+        "locale_chain": document.locale_chain,
+        "text": document.text,
+    }
+
+
+# A reused response was not timed in this run; latency summaries skip it.
+REUSED_TIMING = {"clean_ms": None, "restore_ms": None, "post_policy_scan_ms": None}
+
+
 class _ReplayProcess:
     message_deadline = False
 
@@ -2413,7 +2426,15 @@ def run_config(
     split_composite_source_ids: bool = False,
     record_document: object | None = None,
     replay_responses: Mapping[str, dict[str, object]] | None = None,
+    response_cache: object | None = None,
 ) -> dict[str, object]:
+    """Run one config over `documents` in one warm detector process.
+
+    `response_cache` (see unit_cache.UnitCache) answers documents whose exact
+    request it holds for this detection identity, and stores every other
+    validated response. The process starts only when some document is not
+    answered; warmups always run live and are never stored.
+    """
     # Checked before the subprocess starts, not on the first response.
     _check_replacing_actions(replacing_actions)
     if not documents:
@@ -2462,20 +2483,25 @@ def run_config(
     first_response_ms: float | None = None
     discarded_warmup_samples: list[dict[str, object]] = []
 
-    def exchange(document: Document) -> tuple[dict[str, object], float]:
+    cache = response_cache if replay_responses is None else None
+    live = replay_responses is None and (
+        cache is None or cache.needs_live(config, [detector_request(document) for document in documents])
+    )
+
+    def exchange(document: Document, *, warmup: bool = False) -> tuple[dict[str, object], float]:
         nonlocal first_response_ms
         if replay_responses is not None:
             response = replay_responses[document.uid]
             if first_response_ms is None:
                 first_response_ms = 0.0
             return response, 0.0
+        request = detector_request(document)
+        if cache is not None and not warmup:
+            reused = cache.get(config, request)
+            if reused is not None:
+                return {**reused, "timing": dict(REUSED_TIMING)}, 0.0
         if process.message_deadline:
             process.check_message_deadline()
-        request = {
-            "fixture_id": document.uid,
-            "locale_chain": document.locale_chain,
-            "text": document.text,
-        }
         request_started = time.perf_counter()
         response = validate_response(
             document,
@@ -2487,17 +2513,19 @@ def run_config(
         validated_at = time.perf_counter()
         if first_response_ms is None:
             first_response_ms = (validated_at - started) * 1000.0
+        if cache is not None and not warmup:
+            cache.put(config, request, response)
         return response, (validated_at - request_started) * 1000.0
 
     process_context = (
-        nullcontext(_ReplayProcess())
-        if replay_responses is not None
-        else BenchSubprocess(command, cwd=repo_root, env=environment)
+        BenchSubprocess(command, cwd=repo_root, env=environment)
+        if live
+        else nullcontext(_ReplayProcess())
     )
     with process_context as process:
-        for warmup_index in range(warmup_count):
+        for warmup_index in range(warmup_count if live or replay_responses is not None else 0):
             warmup_document = documents[warmup_index % len(documents)]
-            response, round_trip_ms = exchange(warmup_document)
+            response, round_trip_ms = exchange(warmup_document, warmup=True)
             if "pipeline_error_code" in response:
                 timing = response["timing"]
                 assert isinstance(timing, dict)
@@ -2623,6 +2651,8 @@ def run_config(
         process.check_message_deadline()
 
     wall_seconds = time.perf_counter() - started
+    if first_response_ms is None:
+        first_response_ms = 0.0
     clean_ms = success_timing.get("clean_ms", [])
     measured_clean_seconds = sum(clean_ms) / 1000.0
     production_documents_per_second = (

@@ -16,6 +16,7 @@ import gaze_bench_score as score
 import scorecard_record as records
 import stage_timing as stages
 import run_no_opf_benchmark as runner
+import unit_cache
 import render_benchmark_doc as renderer
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -327,6 +328,91 @@ class NativeCaptureReuseTests(unittest.TestCase):
             changed["key"]["seed"] += 1
             metadata.write_text(json.dumps(changed))
             self.assertEqual(cache.restore_layers(fresh / "cache", key, root / "wrong-key.gz"), "miss_key")
+
+    def test_reused_units_assemble_the_live_record_byte_for_byte(self):
+        population = [doc for _, doc in documents()]
+        environment = {"PATH": os.environ.get("PATH", "")}
+
+        def capture(directory, units, docs=population):
+            writer = records.RecordWriter(docs, {"documents": {doc.uid: None for doc in docs}},
+                                          corpus_sha256="0" * 64, binary=BINARY)
+            score.run_config(ROOT, BINARY, "rule-floor-core", docs, directory, None, None, None,
+                             0.3, directory, base_environment=environment, warmup_count=1,
+                             record_document=lambda config, document, response, _:
+                                 writer.add("C", config, document, response),
+                             response_cache=units)
+            path = directory / "observations-v1.jsonl.gz"
+            writer.write(path, {}, add_reference=False)
+            return writer, path
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "live").mkdir()
+            (root / "reused").mkdir()
+            ident = {"binary_sha256": identity.file_digest(BINARY)}
+            cold = unit_cache.UnitCache(root / "cache", ident)
+            live_writer, live = capture(root / "live", cold)
+            self.assertEqual((cold.live, cold.reused, cold.publish()), (4, 0, 4))
+            # The shadow record: every live row swapped for its stored unit.
+            rows, swapped = live_writer.assembled_rows(
+                lambda config, document: cold.peek(config, score.detector_request(document)))
+            self.assertEqual((rows, swapped), (live_writer.rows, 4))
+
+            warm = unit_cache.UnitCache(root / "cache", ident)
+            with mock.patch.object(score, "BenchSubprocess", side_effect=AssertionError("detector started")):
+                _, reused = capture(root / "reused", warm)
+            self.assertEqual((warm.reused, warm.live), (4, 0))
+            self.assertEqual(live.read_bytes(), reused.read_bytes())
+            self.assertTrue(unit_cache.compare(live, reused)["identical"])
+
+            # A mixed capture: the detector answers only the evicted document.
+            self.assertEqual(unit_cache.evict(root / "cache", warm.identity_sha256, 0.25, 1)["evicted"], 1)
+            (root / "mixed").mkdir()
+            mixed_units = unit_cache.UnitCache(root / "cache", ident)
+            _, mixed = capture(root / "mixed", mixed_units)
+            self.assertEqual((mixed_units.reused, mixed_units.live, mixed_units.publish()), (3, 1, 1))
+            self.assertEqual(live.read_bytes(), mixed.read_bytes())
+
+            # Gold is not part of a unit; text is.
+            regolded = [score.Document(**{**population[0].__dict__, "spans": ()}), *population[1:]]
+            self.assertFalse(warm.needs_live("rule-floor-core",
+                                             [score.detector_request(doc) for doc in regolded]))
+            retexted = score.Document(**{**population[0].__dict__, "text": population[0].text + "."})
+            self.assertTrue(warm.needs_live("rule-floor-core", [score.detector_request(retexted)]))
+            self.assertIsNone(unit_cache.UnitCache(root / "cache", {"binary_sha256": "f" * 64}).peek(
+                "rule-floor-core", score.detector_request(population[0])))
+            stored = next((root / "cache/units").glob("*/*/*.json.gz"))
+            stored.write_bytes(gzip.compress(stored.read_bytes()[:-12] + b"tampered"))
+            self.assertTrue(unit_cache.UnitCache(root / "cache", ident).needs_live(
+                "rule-floor-core", [score.detector_request(doc) for doc in population]))
+
+
+class UnitIdentityTests(unittest.TestCase):
+    def test_population_inputs_leave_the_detection_identity_and_detection_inputs_stay(self):
+        key = {"binary_sha256": "a" * 64, "corpus_sha256": "b" * 64, "layer_specs": {"A": "x"},
+               "seed": 1, "document_ids_sha256": "c" * 64, "policy_sha256": "d" * 64,
+               "effective_inputs": {"files": {"detector_binary": "a" * 64, "dataset": "e" * 64,
+                                              "policy": "d" * 64}, "models": {"nym": {"w": "f" * 64}}}}
+        machine = {"os": "synthetic"}
+        base = unit_cache.detection_identity(key, Path(__file__).parent, machine)
+        for field, value in (("corpus_sha256", "0" * 64), ("layer_specs", {"A": "y"}), ("seed", 2),
+                             ("document_ids_sha256", "1" * 64)):
+            with self.subTest(population=field):
+                self.assertEqual(base, unit_cache.detection_identity({**key, field: value},
+                                                                     Path(__file__).parent, machine))
+        dataset = copy.deepcopy(key)
+        dataset["effective_inputs"]["files"]["dataset"] = "2" * 64
+        self.assertEqual(base, unit_cache.detection_identity(dataset, Path(__file__).parent, machine))
+        for path in (("binary_sha256",), ("policy_sha256",), ("effective_inputs", "files", "policy"),
+                     ("effective_inputs", "models", "nym", "w")):
+            changed = copy.deepcopy(key)
+            target = changed
+            for part in path[:-1]:
+                target = target[part]
+            target[path[-1]] = "9" * 64
+            with self.subTest(detection=path):
+                self.assertNotEqual(base, unit_cache.detection_identity(changed, Path(__file__).parent, machine))
+        self.assertNotEqual(base, unit_cache.detection_identity(key, Path(__file__).parent, {"os": "other"}))
 
 
 if __name__ == "__main__":
