@@ -36,7 +36,7 @@ impl ProseRecordRecognizer {
     ) -> crate::Result<Self> {
         // A connector is mandatory (including the period in `Fall-Nr.123`).
         // The cue owns one value on its own line, not the next word containing a digit.
-        let cue = Regex::new(&format!(r#"(?i)\b(?:{cue})(?:[\p{{Zs}}\t]*[.:=#]+[\p{{Zs}}\t]*|[\p{{Zs}}\t]+)(?:(?:is|as|ist|lautet)[\p{{Zs}}\t]+)?["'„“]?(?P<value>[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*(?:[\p{{Pd}}_/:.]+[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*)*)"#)).map_err(RecognizerError::InvalidRegex)?;
+        let cue = Regex::new(&format!(r#"(?i)\b(?:{cue})(?:[\p{{Zs}}\t]*[.:=#]+[\p{{Zs}}\t]*|[\p{{Zs}}\t]+)(?:(?:is|as|ist|lautet)[\p{{Zs}}\t]+)?[`"'„“]?(?P<value>[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*(?:[\p{{Pd}}_/:.]+[\p{{L}}\p{{N}}][\p{{L}}\p{{N}}\p{{M}}]*)*)"#)).map_err(RecognizerError::InvalidRegex)?;
         Ok(Self {
             id,
             class,
@@ -87,11 +87,14 @@ impl Recognizer for ProseRecordRecognizer {
     fn token_family(&self) -> &str {
         &self.family
     }
-    fn requires_prior_candidates(&self) -> bool {
+    fn detect_is_locale_invariant(&self) -> bool {
         true
     }
+    fn requires_prior_candidates(&self) -> bool {
+        self.complete_joined
+    }
     fn requires_validated_prior(&self) -> bool {
-        true
+        self.complete_joined
     }
 
     fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Result<Vec<Candidate>, DetectError> {
@@ -115,10 +118,14 @@ impl Recognizer for ProseRecordRecognizer {
                 Regex::new(r"\b[\p{L}\p{N}]+(?:[\p{Pd}_/][\p{L}\p{N}]+)+\b")
                     .expect("static compound token regex")
             });
-            // A bare word_counter is also common tenant metadata. Its five digits
-            // alone aren't a seed; an ID cue or independent detection still counts.
-            static WORD_COUNTER: LazyLock<Regex> = LazyLock::new(|| {
-                Regex::new(r"\A\p{Lu}?\p{Ll}+_[0-9]{5}\z").expect("static word counter regex")
+            // Counters, numbered orders and file shard ordinals do not identify a
+            // person by shape alone. An independent detector or personal cue still counts.
+            static COUNTER: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(r"\A(?:\p{Lu}?\p{Ll}+_[0-9]{5}|(?i:ord(?:er)?)[-_][0-9]+)\z")
+                    .expect("static counter regex")
+            });
+            static FILE_SHARD: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(r"\A[\p{L}/_-]+-[0-9]+-of-[0-9]+\z").expect("static shard name regex")
             });
             static LOGIN_OWNER: LazyLock<Regex> = LazyLock::new(|| {
                 Regex::new(concat!(
@@ -156,9 +163,10 @@ impl Recognizer for ProseRecordRecognizer {
                                 || name.ends_with("_id")
                         })
                 })
-                .map(|c| &c.span)
                 .collect();
-            seeds.sort_unstable_by_key(|r| r.start);
+            seeds.sort_unstable_by_key(|c| c.span.start);
+            let mut cues = seeds.iter().filter(|c| c.complete_record_id).peekable();
+            let mut cue_end = 0;
             for token in JOINED.find_iter(input) {
                 let value = token.as_str();
                 if !value.chars().any(char::is_alphabetic) {
@@ -190,18 +198,39 @@ impl Recognizer for ProseRecordRecognizer {
                 let zip_group = std::iter::once(prefix)
                     .chain(groups)
                     .any(|g| g.len() == 5 && g.bytes().all(|b| b.is_ascii_digit()));
-                let first = seeds.partition_point(|r| r.start < token.start());
-                let mut inside = seeds[first..].iter().take_while(|r| r.start < token.end());
+                let first = seeds.partition_point(|c| c.span.start < token.start());
+                let mut inside = seeds[first..]
+                    .iter()
+                    .take_while(|c| c.span.start < token.end());
                 // Completion must not displace a recognizer that owns the entire ID,
                 // even when its value contains an otherwise eligible five-digit group.
-                if inside.clone().any(|r| **r == token.range()) {
+                if inside
+                    .clone()
+                    .any(|c| c.span == token.range() && !c.complete_record_id)
+                {
                     continue;
                 }
-                if !inside.any(|r| r.end <= token.end()) {
+                // A five-digit postal seed is the same shape evidence as zip_group.
+                // Keep the locale's own detection, but do not let it promote an
+                // order counter or file shard into a person-linked identifier.
+                while let Some(cue) = cues.next_if(|c| c.span.start <= token.start()) {
+                    cue_end = cue_end.max(cue.span.end);
+                }
+                if !inside.any(|c| {
+                    c.span.end <= token.end()
+                        && !c.complete_record_id
+                        && !(zip_group
+                            && matches!(c.recognizer_id.as_str(), "postal.de" | "postal.us")
+                            && c.span.len() == 5)
+                }) {
                     if !zip_group {
                         continue;
                     }
-                    if WORD_COUNTER.is_match(value) {
+                    let file_shard = input[token.end()..]
+                        .strip_prefix('.')
+                        .is_some_and(|s| s.starts_with(|c: char| c.is_ascii_alphabetic()))
+                        && FILE_SHARD.is_match(value);
+                    if cue_end < token.end() && (COUNTER.is_match(value) || file_shard) {
                         while logins.next_if(|m| m.end() < token.start()).is_some() {}
                         if logins.peek().is_none_or(|m| m.end() != token.start())
                             && !LOGIN_USE.is_match(&input[token.end()..])

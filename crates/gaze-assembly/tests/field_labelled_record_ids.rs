@@ -116,6 +116,9 @@ fn prose_ids_protect_one_whole_token_and_restore_its_source_bytes() {
         ("Lookup ", "ACCT_IN_40871", "; thanks."),
         ("Lookup ", "RX_40871", "."),
         ("Employee ID: ", "Ticket_40871", "."),
+        ("Employee ID: ", "ORD-40871", "."),
+        ("Employee ID: `", "ORDER_40871", "`."),
+        ("I logged in as ", "ORDER_40871", "."),
         ("I logged in as ", "ticket_40871", "."),
         ("My login is `", "Ticket_40871", "`."),
         ("I used ", "ticket_40871", " to sign in yesterday."),
@@ -160,6 +163,7 @@ fn carrier_and_artifact_names_are_not_prose_record_ids() {
     for text in [
         "The logs contain Ticket_40871 and batch_40872.",
         "My login failed. The logs contain Ticket_40871.",
+        "Order ORDER_57294 shipped.",
         "Release ACCT_57293 fixes a compiler warning.",
         "Release `ACCT_57293` fixes a compiler warning.",
         "Release (ACCT_57293) is documented.",
@@ -172,6 +176,16 @@ fn carrier_and_artifact_names_are_not_prose_record_ids() {
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         assert_eq!(clean(&pipeline, &active, &session, text).unwrap(), text);
+    }
+    for text in ["ORD-57293", "partitions/eval-00008-of-00017.csv"] {
+        // A configured postcode rule can still protect the five-digit groups.
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let cleaned = clean(&pipeline, &active, &session, text).unwrap();
+        assert!(!cleaned.contains("Custom:record_id"), "{text} -> {cleaned}");
+        assert_eq!(
+            pipeline.restore_strict_text(&session, &cleaned).unwrap(),
+            text
+        );
     }
     let session = Session::new(Scope::Ephemeral).unwrap();
     let fields = std::collections::BTreeMap::from([(
@@ -237,6 +251,19 @@ fn prose_completion_preserves_the_policy_of_an_enclosed_card() {
 
 #[test]
 fn outer_record_policy_covers_nested_and_independent_detections_in_either_order() {
+    let (record_pipeline, locales) = pipeline_for_probe(
+        "[[rule]]\nkind = \"class\"\nclass = \"custom:record_id\"\naction = \"redact\"\n",
+    );
+    for (raw, expected) in [
+        ("Employee ID: ORDER_40871", "Employee ID: [REDACTED]"),
+        ("Customer ID: `ORD-40871`", "Customer ID: `[REDACTED]`"),
+        ("Employee ID: x.ORDER_40871.v2", "Employee ID: [REDACTED]"),
+    ] {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let cleaned = clean(&record_pipeline, &locales, &session, raw).unwrap();
+        assert_eq!(cleaned, expected);
+        assert!(session.snapshot_entries().is_empty());
+    }
     let (pipeline, active) = pipeline_for_probe(
         "[[rule]]\nkind = \"class\"\nclass = \"custom:employee_id\"\naction = \"redact\"\n",
     );

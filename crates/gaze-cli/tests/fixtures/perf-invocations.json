@@ -431,7 +431,7 @@
           "model": "none"
         },
         "r29": {
-          "candidates": 1,
+          "candidates": 0,
           "evidence": "rule",
           "invocations": 1,
           "model": "none"
@@ -449,7 +449,7 @@
           "model": "none"
         },
         "r31": {
-          "candidates": 0,
+          "candidates": 1,
           "evidence": "rule",
           "invocations": 1,
           "model": "none"
@@ -5561,7 +5561,7 @@
           "model": "none"
         },
         "r29": {
-          "candidates": 1,
+          "candidates": 0,
           "evidence": "rule",
           "invocations": 1,
           "model": "none"
@@ -5579,7 +5579,7 @@
           "model": "none"
         },
         "r31": {
-          "candidates": 0,
+          "candidates": 1,
           "evidence": "rule",
           "invocations": 1,
           "model": "none"
@@ -6188,7 +6188,7 @@
           "model": "none"
         },
         "r29": {
-          "candidates": 1,
+          "candidates": 0,
           "evidence": "rule",
           "invocations": 1,
           "model": "none"
@@ -6206,7 +6206,7 @@
           "model": "none"
         },
         "r31": {
-          "candidates": 0,
+          "candidates": 1,
           "evidence": "rule",
           "invocations": 1,
           "model": "none"
