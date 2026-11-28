@@ -405,7 +405,7 @@ loaded rulepack rather than a separate hand-maintained list.
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name`, `email.header.name.paren`, `name.*`, `phone.*`, `iban.structural`, `card.structural`, `ip.*`, `eth.address`, `postal.*` | `email`, `name`, `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:eth_address`, `custom:postal_code` | Default bundle when `[policy.rulepacks]` is omitted. Recognizers declare `safety_tier` and `locale_basis`; format-basis identifiers run independently of the document locale, while linguistic names and quarantined national shapes remain document-gated. |
 | `core-extended` | alias of `core` | same as `core` | Deprecated since v0.8.0; scheduled for removal in v0.10.0. The CLI alias emits a warning and auto-activates locale-gated recognizers for v0.8.x compatibility. |
-| `secrets` | `security_token.anchored`, `security_token.code`, `password.field`, `password.code`, `password.hash` | `custom:security_token`, `custom:password` | Included by newly generated `gaze setup` policies. Direct library callers and hand-authored policies load it next to `core` explicitly. |
+| `secrets` | `security_token.anchored`, `security_token.code`, `security_token.bare`, `security_token.pem`, `security_token.pem_base64`, `security_token.prose`, `password.field`, `password.code`, `password.hash`, `password.prose` | `custom:security_token`, `custom:password` | Included by newly generated `gaze setup` policies. Direct library callers and hand-authored policies load it next to `core` explicitly. |
 
 Use `core` with an explicit locale when you want document-basis,
 locale-shaped recognizers:

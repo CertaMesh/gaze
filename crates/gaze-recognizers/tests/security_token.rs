@@ -423,7 +423,9 @@ fn bearer_cue_is_tokenized() {
 fn cue_anchored_minimum_length_is_fourteen() {
     // The >=14 knee is measured: >=14 covers 151 spans at 1 non-gold holdout match, >=12 covers
     // 159 at 5, >=10 covers 163 at 7. A 13-character run must NOT match, or the knee is fiction.
-    assert_unchanged("api key: Rk9PQkFSLXNh1");
+    // The bare `token` cue isolates this rule: behind an explicit security cue such as `api key`,
+    // `security_token.prose` protects values from eight characters.
+    assert_unchanged("token: Rk9PQkFSLXNh1");
     assert_token_removed(
         "api key: Rk9PQkFSLXNhbQ now active.",
         "Rk9PQkFSLXNhbQ",

@@ -399,11 +399,18 @@ fn actual_assembly_normalization_exposes_source_boundaries_and_raw_size_limitati
                         &[LocaleTag::Global],
                     )
                     .unwrap();
-                assert!(spans.is_empty(), "no 257-unit prefix");
+                // The field rule refuses an over-long value; it never protects a 257-unit
+                // prefix. A quoted value with no escaped quote is protected whole by
+                // the prose rule when it carries a symbol; letters alone are a plain word.
                 let gaze::CleanDocument::Text(clean) = clean else {
                     panic!("text")
                 };
-                assert_eq!(clean, raw);
+                if value.contains('"') || !value.contains('\\') {
+                    assert!(spans.is_empty(), "no 257-unit prefix");
+                    assert_eq!(clean, raw);
+                } else {
+                    assert_source_capture(core.pipeline(), &raw, &value, "password.prose");
+                }
             }
         }
     }
@@ -600,11 +607,12 @@ fn validator_veto_belongs_to_card_or_phone_not_declared_password() {
             "password.field",
         );
         let rows = logs.0.lock().unwrap();
-        assert!(rows
-            .iter()
-            .any(|r| r.recognizer_id.as_deref() == Some("password.field")
-                && r.validator_fail_reason.is_none()
-                && !r.conflict_loser));
+        assert!(rows.iter().any(|r| r
+            .recognizer_id
+            .as_deref()
+            .is_some_and(|id| id.split('+').any(|part| part == "password.field"))
+            && r.validator_fail_reason.is_none()
+            && !r.conflict_loser));
         assert!(
             rows.iter().any(|r| r
                 .recognizer_id

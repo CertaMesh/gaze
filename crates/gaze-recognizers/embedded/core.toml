@@ -1656,6 +1656,10 @@ license = "Apache-2.0"
 # (31.6%) at zero A4 and zero holdout false positives, against the looser
 # `[A-Z0-9][A-Z0-9-]{5,19}` draft's 68 spans and 105 holdout false positives. Requiring a leading
 # letter run and a digit tail is what removes the false matches, and it costs no coverage.
+# Behind a driver cue (not the generic `license number`, which also names software
+# licences such as `WIN-PRO123456`), a second letter group may follow the first, with or
+# without a hyphen (`B-XY123456`, `NZDL1234567`): on the holdout it adds four driver-licence
+# spans and no false positive.
 #
 # LOCALE BASIS: `document` + `global`. Letter-led alphanumeric is not a national format; the cue
 # (driver's/driving licence, DL#, Führerschein, Fahrerlaubnis) is the evidence and it is bilingual
@@ -1671,8 +1675,8 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)(?:\b|_)(?:driver'?s?[ \t_-]?licen[cs]e|driving[ \t_-]?licen[cs]e|licen[cs]e[ \t_-]?number|dl#|dl[_-]?(?:number|num|no|nr)|f[uü]hrerschein(?:[_-]?nummer)?|fahrerlaubnis)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
-capture_groups = [1]
+pattern = '''(?i)(?:\b|_)(?:(?:licen[cs]e[ \t_-]?number)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{1,3}-?\d{5,12})|(?:driver'?s?[ \t_-]?licen[cs]e|driving[ \t_-]?licen[cs]e|dl#|dl[_-]?(?:number|num|no|nr)|f[uü]hrerschein(?:[_-]?nummer)?|fahrerlaubnis)\s*(?:[,:;(_-]?\s*(?:(?:numbers?|nummern?|num[eé]ro|n[uú]mero|no|nr|num|id|code|ident|identification|is|was|ist|est|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|hinterlegt|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\\?["']?\s*[:=#|/,.;-]?\s*\\?["']?([A-Z]{1,3}-?(?:[A-Z]{1,3}-?)?\d{5,12}))\b'''
+capture_groups = [1, 2]
 complete_labelled_value = true
 
 [recognizers.scoring]

@@ -2006,7 +2006,7 @@ every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
 part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [known-record specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7); and the [capture closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure, which let the gate and the capture cache ignore harness files that cannot reach C, A, D or R.
-For comma-separated addresses and benign table and list cells, see the [current specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json).
+For comma-separated addresses and benign table and list cells, see the [comma-address specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json); the [current specification](specifications/1b0502284ffc6d5045a8534948eac7673071fafff230368ddc77d27305f6637d.json) adds the generator v33 credential-form and agent-text cells and the prose credential recognizers to the validation vocabulary.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2559,10 +2559,38 @@ byte-for-byte; its contract is frozen as
 | --- | ---: | ---: | ---: | ---: |
 | v30 | 19,687 | 8,832 | 12,611 | 41,130 |
 | v31 | 19,917 | 9,032 | 12,801 | 41,750 |
+| v32 | 19,935 | 9,048 | 12,801 | 41,784 |
+| v33 | 20,195 | 9,228 | 12,801 | 42,224 |
 
-No release has been measured on generator v31 yet. The v30 history rows above
-stay bound to the v30 specification; the v31 backfill runs outside the PR
+No release has been measured on generator v31, v32 or v33 yet. The v30 history rows
+above stay bound to the v30 specification; the backfill runs outside the PR
 critical path.
+
+### Credential forms and agent text (generator v33)
+
+The same generator module adds `credential_agent_text_` cells: 440 documents
+per partition (260 A, 180 D). Layer A holds credential forms the v31 cells do
+not write: quoted spaced passphrases that end in a word, passwords with an
+inner apostrophe or a closed bracket, quoted passwords inside JSON-escaped
+strings, passwords that end a JSON or code string literal, `$`-led passwords,
+weak passwords that contain the word password, digit-free passphrases with
+function words, passwords behind a place noun (`for my email`, `für die Seite`),
+passwords in `;`-separated connection strings, passwords and spaced passphrases in
+inline and fenced Markdown code, passwords quoted after `text` or `string`,
+and wrapped base64 private keys in an indented YAML block scalar, behind
+JSON-escaped `\n` line breaks, and beside a sibling YAML key, which is not gold. Each whole value is gold; a wrapped key's
+indentation and escape sequences are part of its run. Layer D carries agent
+and coding text beside the same password and security cues with no
+credential: model names, release versions, commit hashes, file names, cloud
+regions, job and function identifiers, environment variable names, database
+column names, filesystem paths, CVE identifiers, quoted UI strings and
+hyphenated adjectives. Dev holds the phrasings a
+review of the credential rules reported; test is worded and valued apart from
+them. Generator v32, which adds the comma-address cells, rebuilds
+byte-for-byte; its contract is frozen as
+[`scored-labels-agentic-generator-v32.json`](scored-labels-agentic-generator-v32.json),
+and the v31 contract stays frozen as
+[`scored-labels-agentic-generator-v31.json`](scored-labels-agentic-generator-v31.json).
 
 ### Measured adjacency layer history
 

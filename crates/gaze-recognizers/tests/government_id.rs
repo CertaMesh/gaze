@@ -401,6 +401,26 @@ fn driver_license_after_german_cue() {
 }
 
 #[test]
+fn driver_license_with_a_second_letter_group() {
+    for (text, value, context) in [
+        (
+            "Sein Führerschein mit der Nummer B-XY123456 wurde überprüft.",
+            "B-XY123456",
+            ["Sein Führerschein mit der Nummer ", " wurde überprüft."],
+        ),
+        (
+            "He must submit his driver license number NZDL1234567 today.",
+            "NZDL1234567",
+            ["He must submit his driver license number ", " today."],
+        ),
+    ] {
+        assert_id_removed(text, value, &context);
+    }
+    // The generic `license number` cue also names software licences; it keeps one letter group.
+    assert_unchanged("Enter the license number WIN-PRO123456 to activate Office.");
+}
+
+#[test]
 fn tighter_anchoring_did_not_cost_coverage() {
     // The looser `[A-Z0-9][A-Z0-9-]{5,19}` draft covered 68 spans with 105 holdout false
     // positives; the letter-led form covers 71 with zero. Tighter anchoring won on BOTH axes.
@@ -1669,8 +1689,9 @@ fn shared_connector_grammar_is_byte_identical_across_the_family() {
     // Then the count, so an EXTRA stray copy (or a sixth rule that forgot to join the array) is caught too.
     assert_eq!(
         core.matches(SHARED_CONNECTOR).count(),
-        CONNECTOR_FAMILY.len() + 2,
-        "each family uses the shared connector; the labelled tax rule has three cue/value arms",
+        CONNECTOR_FAMILY.len() + 3,
+        "each family uses the shared connector; the labelled tax rule has three cue/value arms \
+         and the cued driver-licence rule two",
     );
 }
 

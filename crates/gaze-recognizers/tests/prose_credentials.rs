@@ -1,0 +1,389 @@
+//! Prose credential disclosures and base64-encoded private keys. Values are invented and
+//! cannot authenticate anywhere; the key bodies are filler text, not key material.
+use gaze::{DictionaryBundle, LocaleTag, SafetyNetPolicy, Scope, Session};
+use gaze_assembly::CorePipelineConfig;
+
+fn core() -> gaze_assembly::CorePipeline {
+    CorePipelineConfig::new()
+        .with_bundled_rulepack("secrets")
+        .with_locale(&[LocaleTag::parse("de-DE").unwrap()])
+        .build()
+        .unwrap()
+}
+
+/// The credential spans of `raw` in source order, after a strict restore round trip.
+fn credentials(raw: &str) -> Vec<(String, String)> {
+    let core = core();
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let (clean, spans, _, _) = core
+        .pipeline()
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &session,
+            raw,
+            &[LocaleTag::Global, LocaleTag::parse("de-DE").unwrap()],
+            &DictionaryBundle::default(),
+            SafetyNetPolicy::default(),
+        )
+        .unwrap();
+    let gaze::CleanDocument::Text(clean) = clean else {
+        panic!("text")
+    };
+    assert_eq!(
+        core.pipeline()
+            .restore_strict_text(&session, &clean)
+            .unwrap(),
+        raw
+    );
+    spans
+        .iter()
+        .filter_map(|span| match &span.class {
+            gaze::PiiClass::Custom(class) if class == "password" || class == "security_token" => {
+                Some((class.clone(), raw[span.raw_span.clone()].to_string()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn assert_credential(raw: &str, class: &str, value: &str) {
+    assert_eq!(
+        credentials(raw),
+        [(class.to_string(), value.to_string())],
+        "{raw:?}"
+    );
+}
+
+fn assert_no_credential(raw: &str) {
+    assert_eq!(credentials(raw), [], "{raw:?}");
+}
+
+#[test]
+fn a_password_named_in_prose_is_one_span_without_its_sentence_punctuation() {
+    for (raw, value) in [
+        (
+            "I reset my password to Lantern#5821 as the old one expired.",
+            "Lantern#5821",
+        ),
+        ("Das neue Passwort lautet: Fjord7?Tal.", "Fjord7?Tal"),
+        ("Her account password is Quill9204!", "Quill9204!"),
+        (
+            "Mein Passwort für das Kundenportal lautet \"Birke!7740\", bitte merken.",
+            "Birke!7740",
+        ),
+        (
+            "Das Passwort für den Admin-Bereich ist immer noch 'Kompass_381'.",
+            "Kompass_381",
+        ),
+        (
+            "He set the WLAN-Passwort to Moos4471 yesterday.",
+            "Moos4471",
+        ),
+        (
+            "The temporary passphrase, which you chose, was 'nine lamps 42'.",
+            "nine lamps 42",
+        ),
+        (
+            "Bitte verwenden Sie das Passwort Wald&Weg93, um sich anzumelden.",
+            "Wald&Weg93",
+        ),
+    ] {
+        assert_credential(raw, "password", value);
+    }
+}
+
+#[test]
+fn a_password_with_spaces_quotes_or_brackets_is_protected_whole() {
+    for (raw, value) in [
+        (
+            "Das Passwort lautet \"Grüne Tür 7 offen\".",
+            "Grüne Tür 7 offen",
+        ),
+        (
+            "The passphrase is \"blue Moon 42 rising\".",
+            "blue Moon 42 rising",
+        ),
+        ("The password is \"Xk9#mmL2 ab\".", "Xk9#mmL2 ab"),
+        (
+            "The passphrase is \"correct horse battery staple\".",
+            "correct horse battery staple",
+        ),
+        (
+            "My password is \"correct field horse 7\"",
+            "correct field horse 7",
+        ),
+        ("My password is \"Tr'ust9x\" now.", "Tr'ust9x"),
+        ("Das Passwort ist Fj0rd'Tal99 seit gestern.", "Fj0rd'Tal99"),
+        ("password: Fj0rd\"Tal99", "Fj0rd\"Tal99"),
+        (
+            "{\"msg\":\"Das Passwort ist \\\"Fj0rd#Tal99\\\".\"}",
+            "Fj0rd#Tal99",
+        ),
+        (
+            "{\"message\":\"my password is \\\"Qu1ll#Xy\\\" ok\"}",
+            "Qu1ll#Xy",
+        ),
+        ("The password is Xk9(mmL2 ok", "Xk9(mmL2"),
+        ("The password is Xk9{mm}L2 now.", "Xk9{mm}L2"),
+        ("The password is gr8-Pa55w0rd(old).", "gr8-Pa55w0rd(old)"),
+        (
+            "Note that my email password is now Quarry2'Kranich66 after the lockout.",
+            "Quarry2'Kranich66",
+        ),
+        (
+            "{\"messages\":[{\"role\":\"user\",\"content\":\"my new password is Qu1ll#Xy2026\"}]}",
+            "Qu1ll#Xy2026",
+        ),
+        (
+            "{\"arguments\":\"{\\\"note\\\":\\\"password is Qu1ll#Xy2026\\\"}\"}",
+            "Qu1ll#Xy2026",
+        ),
+        ("msg = \"the password is Fj0rd#Tal99\";", "Fj0rd#Tal99"),
+        (
+            "He said \"the password is Qu1ll#Xy2026\", then left.",
+            "Qu1ll#Xy2026",
+        ),
+        (
+            "{\"content\":\"the password is Fj0rd#Tal99\",\"b\":\"x y\"}",
+            "Fj0rd#Tal99",
+        ),
+        ("Mein Passwort lautet $Tal99abc.", "$Tal99abc"),
+        ("The password for my email is Fj0rd#Tal99.", "Fj0rd#Tal99"),
+        (
+            "Das Passwort für die Seite lautet Fj0rd#Tal99.",
+            "Fj0rd#Tal99",
+        ),
+        (
+            "The password on the login screen is Fj0rd#Tal99.",
+            "Fj0rd#Tal99",
+        ),
+        ("The password is \"Passw0rd!\" ok", "Passw0rd!"),
+        ("Mein Kennwort ist \"Kennwort#2024\".", "Kennwort#2024"),
+        ("My passphrase is \"the moon is blue\".", "the moon is blue"),
+        (
+            "Das Passwort lautet \"der Hund bellt laut\".",
+            "der Hund bellt laut",
+        ),
+        ("The password is Summer2024-only ok", "Summer2024-only"),
+        ("Server=db;Password=Fj0rd#Tal99;User Id=sa;", "Fj0rd#Tal99"),
+        (
+            "Server=db;Database=app;Password=Fj0rd#Tal99;Trusted_Connection=False;",
+            "Fj0rd#Tal99",
+        ),
+        ("The password is Fj0rd#Tal99;then restart.", "Fj0rd#Tal99"),
+        ("The password is Tal99:x.", "Tal99:x"),
+        ("The password is Fj0rd:Tal99.", "Fj0rd:Tal99"),
+        ("The password is Fj0rd,Tal99 ok", "Fj0rd,Tal99"),
+        ("`the password is Fj0rd#Tal99`", "Fj0rd#Tal99"),
+        ("The password is `Fj0rd#Tal99`.", "Fj0rd#Tal99"),
+        ("Das Passwort lautet `Fj0rd#Tal99`.", "Fj0rd#Tal99"),
+        ("The password is ```Fj0rd#Tal99``` ok", "Fj0rd#Tal99"),
+        ("My password string is \"Fj0rd#Tal99\".", "Fj0rd#Tal99"),
+        (
+            "Das Passwort aus dem Text ist \"Fj0rd#Tal99\".",
+            "Fj0rd#Tal99",
+        ),
+        (
+            "The password I sent by text is \"blue horse 42 dance\".",
+            "blue horse 42 dance",
+        ),
+        (
+            "The passphrase is `correct horse battery staple 7`.",
+            "correct horse battery staple 7",
+        ),
+        (
+            "Use passphrase `amber 42 falcon tulip` for the vault.",
+            "amber 42 falcon tulip",
+        ),
+        ("The password is \"$ecretPass9\" ok", "$ecretPass9"),
+    ] {
+        assert_credential(raw, "password", value);
+    }
+}
+
+#[test]
+fn password_words_without_a_credential_value_stay_raw() {
+    for raw in [
+        "Your password must contain at least 12 characters and one digit.",
+        "Use your password to log in, then open the reset-link.",
+        "Klicken Sie auf \"Passwort vergessen?\" und folgen Sie dem Link.",
+        "Das Passwort ist abgelaufen und muss erneuert werden!",
+        "For a new password, visit https://example.invalid/reset now.",
+        "The password for the account was sent to anna@example.invalid today.",
+        "Password policy (version 2 applies): rotate every 90 days.",
+        "Your password: ********",
+        "'password' => Hash::make('secret'),",
+        "The password is read from DB_PASSWORD.",
+        "Store the password as bcrypt_hash in the DB.",
+        "Please reset the password as admin_user first.",
+        "The password is user_password_hash.",
+        "Load the password from vault/kv/app before it works.",
+        "The password is ~/.config/app/pw",
+        "Password is at C:\\Users\\bob2\\pw.txt",
+        "Read the password from $DB_PASS_2 at startup.",
+        "The password is \"too short\".",
+        "The password file is secrets2.txt in the repo.",
+        "Migration 12 renamed the password column to pwd_hash_v2 last sprint.",
+        "The password is ${DB_PASS} at runtime.",
+        "Change the error for a wrong password to \"Incorrect password, try again\".",
+        "The password prompt is \"Please enter it again\".",
+        "Update the password reset email subject to \"Reset your account\".",
+        "tests assert the password error is \"Invalid credentials provided\".",
+        "The password is \"not stored in plain text\" anymore.",
+        "The password is 2fa-enabled for every admin.",
+        "The password is `npm` here.",
+        "The password text is \"Choose a strong one\".",
+        "Set the password string to \"Hello world friend\".",
+    ] {
+        assert_no_credential(raw);
+    }
+}
+
+#[test]
+fn a_security_token_or_code_behind_a_security_cue_is_one_span() {
+    for (raw, value) in [
+        (
+            "Ihr Sicherheitstoken, der Code QX7-PLM4-TR2, wurde bestätigt.",
+            "QX7-PLM4-TR2",
+        ),
+        (
+            "Der Sicherheitscode für den Zugang zum Portal lautet B7KD29QXM.",
+            "B7KD29QXM",
+        ),
+        (
+            "Please confirm the security token Z4QW8RT2PL for the transfer.",
+            "Z4QW8RT2PL",
+        ),
+        (
+            "Sein Security-Token lautet 5RGQ8WX2VN, sagte er.",
+            "5RGQ8WX2VN",
+        ),
+        ("The access code is \"k3j9-ww2p-x7\".", "k3j9-ww2p-x7"),
+        (
+            "Your verification code is 482913 and expires in 10 minutes.",
+            "482913",
+        ),
+        ("Hier der Einmal-Sicherheitscode: 1432154", "1432154"),
+        (
+            "Der Bestätigungscode für Ihre E-Mail lautet 573920.",
+            "573920",
+        ),
+        ("The security code on the screen is 48213957.", "48213957"),
+    ] {
+        assert_credential(raw, "security_token", value);
+    }
+}
+
+#[test]
+fn short_numbers_and_words_behind_a_security_cue_stay_raw() {
+    for raw in [
+        "Der Sicherheitscode auf der Rückseite der Karte hat 3 Ziffern: 123.",
+        "Der Sicherheitscode Ihrer Karte lautet 4821.",
+        "The access code is 123456789 according to the ledger.",
+        "The tokenizer cl100k_base counts 2048 tokens per request.",
+        "Security token rotation is scheduled for next Monday.",
+        "Session token expired at 12:30:45 on the gateway.",
+        "API key v2 endpoints are documented below.",
+        "API key name: ci-deploy-07",
+        "API key rotation job rotate-keys-2026 finished.",
+        "Der Sicherheitscode-Hinweis für Konto SEC-4821 wurde entfernt.",
+        "The API key works with claude-3-opus and gpt-4-turbo.",
+        "Rotate the API key before deploying release v2.14.0-rc1.",
+        "API key fehlt in Version 2.1.0beta3.",
+        "The API key version is 2.1.0beta3.",
+        "The security code check failed on commit 3f9a2b1c.",
+        "Access token lifetime is configured in settings_v2.py.",
+        "Our API key for Stripe lives in us-east-1 now.",
+        "The API key region is us-east-1.",
+        "The session token is refreshed by auth_service_v2 every hour.",
+        "API key usage is tracked in table api_usage_2024.",
+        "The access token comes from get_token_v2 here.",
+        "The verification code was sent at 20261127 09:00.",
+        "The security code CVE-2024-12345 was patched.",
+        "The API key is gpt-4o-mini compatible.",
+        "Der Sicherheitscode ist SHA256-basiert.",
+    ] {
+        assert_no_credential(raw);
+    }
+}
+
+const PRIVATE_PEM: &str = "-----BEGIN RSA PRIVATE KEY-----\nAAAAfillerfillerfillerfillerfillerfillerfillerfillerfiller0123\nBBBBfillerfillerfillerfillerfillerfillerfillerfiller4567\n-----END RSA PRIVATE KEY-----\n";
+
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let word = (u32::from(chunk[0]) << 16)
+            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*chunk.get(2).unwrap_or(&0));
+        for index in 0..4 {
+            if index <= chunk.len() {
+                out.push(ALPHABET[(word >> (18 - 6 * index)) as usize & 63] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn a_base64_encoded_private_key_is_protected_whole_at_every_alignment() {
+    for prefix in ["", "k", "ke"] {
+        let blob = base64(format!("{prefix}{PRIVATE_PEM}").as_bytes());
+        let raw = format!("data:\n  tls.key: {blob}\n  tls.crt: none\n");
+        assert_credential(&raw, "security_token", &blob);
+        assert_credential(
+            &format!("SIGNING_KEY_B64={blob}\n"),
+            "security_token",
+            &blob,
+        );
+    }
+    let blob = base64(PRIVATE_PEM.as_bytes());
+    let wrapped = blob
+        .as_bytes()
+        .chunks(76)
+        .map(|line| std::str::from_utf8(line).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(wrapped.contains('\n'));
+    assert_credential(
+        &format!("{wrapped}\nkind: Secret\n"),
+        "security_token",
+        &wrapped,
+    );
+    let indented = wrapped.replace('\n', "\n    ");
+    assert_credential(
+        &format!("data:\n  tls.key: |\n    {indented}\n  tls.crt: none\n"),
+        "security_token",
+        &indented,
+    );
+    let escaped = wrapped.replace('\n', "\\n");
+    assert_credential(
+        &format!("{{\"k\":\"{escaped}\"}}"),
+        "security_token",
+        &escaped,
+    );
+    assert_credential(
+        &format!("{{\"tls.key\":\"{}\"}}", blob.replace('/', "\\/")),
+        "security_token",
+        &blob.replace('/', "\\/"),
+    );
+}
+
+#[test]
+fn a_wrapped_key_never_takes_the_next_yaml_key() {
+    let blob = base64(PRIVATE_PEM.as_bytes());
+    let first = &blob[..76];
+    for next in ["  databaseConnectionName: primary", "  tls_crt: none"] {
+        let raw = format!("key:\n  tls_key: {first}\n{next}\n");
+        assert_credential(&raw, "security_token", first);
+    }
+}
+
+#[test]
+fn a_base64_encoded_public_certificate_stays_raw() {
+    let certificate = PRIVATE_PEM
+        .replace("RSA PRIVATE KEY", "CERTIFICATE")
+        .replace("AAAA", "MIIB");
+    assert_no_credential(&format!("tls.crt: {}\n", base64(certificate.as_bytes())));
+}

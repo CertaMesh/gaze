@@ -122,3 +122,100 @@ The candidate appends the new hash and code-field definitions. Use the emitted
 `mechanism_arms.py record --policy-delta`. The emitted paths are local artifacts.
 The committed evidence records the policy delta and retains both value-free
 observation archives. Historical release rows are not re-labelled as v25.
+
+## Credentials named in prose
+
+Chat, email and tool-call text often gives a credential in a sentence:
+`I reset my password to …`, `Das Passwort für das Portal lautet „…“`,
+`Ihr Sicherheitstoken, der Code …, wurde bestätigt`. Three `secrets` rules
+cover these, and the private keys that deployment files carry base64-encoded.
+
+`password.prose` starts at a password, passphrase, Passwort or Kennwort cue,
+including German compounds such as `WLAN-Passwort`. The value follows the cue
+after `:` or `=`, or after a copula or preposition (`is`, `was`, `to`, `as`,
+`from`, `ist`, `lautet`, `sei`, `auf`, `zu`, `von`) that may come behind up to
+eight connector words; there a quoted value may be any phrase of six or more
+characters, so `The passphrase is "correct horse battery staple"` is protected.
+Directly after the cue, or quoted behind connector words alone, the value needs
+a digit or a symbol. An unquoted value always needs a digit or a symbol other
+than word punctuation, so `password to log in` and `password reset-link` are
+not credentials; `_` does not count, so identifiers such as `DB_PASSWORD` or
+`bcrypt_hash` are not values either. Quotes and brackets inside a value stay
+in it (`Fj0rd'Tal99`, `gr8-Pa55w0rd(old)`), and so do a quote, colon or
+comma followed by another value character (`Tal99:x`, `Fj0rd,Tal99`). Any
+other quote, colon or comma ends the value, and a semicolon or backtick always
+does, so a password at the end of a JSON or code string (`…Tal99"}`,
+`…Tal99";`), in a connection string (`Password=…;User Id=sa`) or in a Markdown
+code span never takes the closing quote or the next key. A value in inline or
+fenced code on the cue's line (`` `Fj0rd#Tal99` ``) is protected when it has a
+digit or a symbol. A value on its own line inside a fenced block below the cue
+stays raw. JSON-escaped quotes
+(`\"…\"`) delimit a value like plain ones. A trailing `!` stays in the value;
+sentence punctuation does not. The context guard refuses values under six
+characters, one or two plain words, symbol-only placeholders such as
+`********`, URLs, email addresses, paths without digits, Windows paths,
+environment references (`${NAME}` or `$ALL_CAPS`; a `$`-led password such as
+`$Tal99abc` stays protected), ALL_CAPS identifiers, hyphenated adjectives
+behind a short technical stem (`2fa-enabled`; `Summer2024-only` stays
+protected), and quoted UI text: a quoted phrase with a UI marker (not, never,
+please, try, again, reset, enter, forgot, invalid, incorrect, wrong and their
+German equivalents) and no digit
+(`"Please enter it again"`), or one without a digit or symbol that names the
+password itself (`"Incorrect password, try again"`; `"Passw0rd!"` stays
+protected), and quoted text without a digit or symbol named as the password text, copy or
+string (`The password text is "Choose a strong one"`;
+`My password string is "Fj0rd#Tal99"` stays protected). Ordinary passphrases with articles or pronouns
+(`"the moon is blue"`) stay protected. It also refuses matches whose
+cue part names credential metadata (name, label, hint, policy, length,
+rotation, template, field, hash, file, path, model, version, region, endpoint,
+table, service, commit, column, and UI nouns such as error, message, prompt,
+subject, title, button, placeholder, banner and dialog, with their German
+equivalents; where a credential is used, such as `for my email` or `für die
+Seite`, is not metadata): a password's hint or
+policy is not the password. Metadata words inside a quoted value do not count.
+
+`security_token.prose` starts at an explicit security cue: German
+`Sicherheits-`, `Zugangs-`, `Anmelde-`, `Verifizierungs-` and
+`Bestätigungs-` tokens, codes and keys, English security, access, auth,
+verification, session, API, bearer and one-time tokens, codes and keys, and
+`Token-ID`. The value follows the cue directly, or after `:`, `=`, `,` or a
+copula (`is`, `ist`, `lautet`, `der Code`, …) that may come behind up to eight
+connector words. Connector words alone never introduce a value, so in
+`Rotate the API key before deploying release v2.14.0-rc1` the version stays
+text. The value has at least eight characters and both a letter and a digit,
+or is an all-digit one-time code of six to eight digits. Three- and four-digit
+card security codes stay raw here. The same metadata guard applies, and
+versions, model names (`gpt-4o-mini`, `claude-3-opus`), CVE identifiers, file
+names, numbered snake_case identifiers (`auth_service_v2`) and hyphenated
+adjectives (`SHA256-basiert`) are refused. The bare word `token` is not a cue, because agent text uses it for
+model tokens and tokenizer names; a value introduced only by `token` therefore
+stays raw unless the anchored rule owns it.
+
+`security_token.pem_base64` finds the base64 spelling of a private-key
+`-----BEGIN … PRIVATE KEY-----` line at each of the three byte alignments and
+protects the whole contiguous base64 run, so `tls.key:` values in Kubernetes
+secrets, `KEY_B64=` environment lines and keys inside a larger encoded JSON
+file are one restorable span. Wrapped `base64` output continues through lines
+of at least 16 characters and a final padded line, including indented YAML
+block scalars and JSON-escaped `\n` and `\r\n` line breaks. A line that is a YAML
+key (it ends at a colon) never continues the run. A 16-character or longer word
+directly after an escaped line break inside the same JSON string does, and is
+then protected with the key; an unpadded short final line
+stays raw, and it encodes only the public END armour. Encoded certificates and
+public keys stay raw.
+
+Known residuals: a value placed before its cue (`I entered … as the password`),
+a value after `like`/`wie` without quotes, an unquoted spaced passphrase, a
+value that ends in `?`, whose last character is read as sentence punctuation, a
+value that starts with a bracket or ends with an unpaired closing bracket, a
+value in a parenthesised aside, and a security value behind connector words
+without a copula (`Sicherheitscode für den Zugriff auf unser System …`).
+The older `security_token.anchored` rule still tokenizes a hyphenated adjective
+directly after `API key` (`base64-encoded`). A password with a semicolon inside, a comma followed directly by the next key
+without a space (`Fj0rd#Tal99,next: 1`, which protects `next` with the value),
+and a lowercase environment reference (`$db_pass`, which is protected) are
+also residuals. Grouped one-time codes (`482 913`, `4829-13`) and spaced tokens
+(`"k3j9 ww2p x7a9"`) stay raw; a later change owns them together with card
+security codes.
+Generator v31 measures these phrasings with the rest; see the
+[benchmark contract](../../reference/benchmarks/README.md).

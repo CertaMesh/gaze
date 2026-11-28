@@ -243,3 +243,230 @@ def records(api, partition):
             emit("D", "pem_base64", surface, index, "tls.crt: {D}\n" if partition == "test" else "ca.crt: {D}\n",
                  {"D": (value, None)}, "en")
     return result
+
+
+# Generator v33: credential forms the v31 cells do not write, and agent and coding text that
+# names a credential beside values that are not one.
+AGENT_TEXT_PREFIX = "credential_agent_text_"
+AGENT_TEXT = {
+    # Dev carries the review's phrasings, which the rules were fitted on; test is written apart.
+    "dev": {
+        "password_en": [
+            ("My passphrase is \"{V}\".", "phrase"),
+            ("The password is {V} as of today.", "inner_quote"),
+            ('{"message":"the password is \\"{V}\\" ok"}', "plain"),
+            ("His password is {V} for the VPN.", "bracket"),
+            ('{"messages":[{"role":"user","content":"my new password is {V}"}]}', "plain"),
+            ('msg = "the password is {V}";', "plain"),
+            ("The password is {V} until Monday.", "dollar"),
+            ("The password for my email is {V}.", "plain"),
+            ("The password is \"{V}\" in the fixture.", "cue_word"),
+            ("My passphrase is \"{V}\".", "sentence"),
+            ("Server=db;Password={V};User Id=sa;", "plain"),
+            ("The password is {V} ok", "hyphen_stem"),
+            ("The password is `{V}`.", "plain"),
+            ("The password is ```{V}``` ok", "plain"),
+            ("The password I sent by text is \"{V}\".", "plain"),
+            ("The passphrase is `{V}`.", "phrase"),
+        ],
+        "password_de": [
+            ("Das Passwort lautet \"{V}\".", "phrase"),
+            ('{"msg":"Mein Passwort ist \\"{V}\\"."}', "plain"),
+            ('{"content":"Das Passwort lautet {V}","b":"x y"}', "plain"),
+            ("Das Passwort für die Seite lautet {V}.", "plain"),
+            ("Das Passwort lautet \"{V}\".", "sentence_de"),
+            ("Das Passwort lautet `{V}`.", "plain"),
+            ("Das Passwort aus dem Text ist \"{V}\".", "plain"),
+        ],
+        "benign_en": [
+            ("The API key works with {D} and the embeddings model.", "model"),
+            ("Rotate the API key before deploying release {D}.", "version"),
+            ("The security code check failed on commit {D}.", "sha"),
+            ("Access token lifetime is configured in {D}.", "file"),
+            ("Our API key for the payment provider lives in {D} now.", "region"),
+            ("The session token is refreshed by {D} every hour.", "snake"),
+            ("The password is read from {D} at startup.", "env"),
+            ("Store the password as {D} in the users table.", "column"),
+            ("Load the password from {D} before the deploy.", "path"),
+            ("The security code {D} was patched last week.", "cve"),
+            ("The password prompt is {D}.", "ui"),
+            ("Change the error for a wrong password to {D}.", "ui"),
+            ("The password text is {D}.", "ui"),
+            ("The password is {D} for every admin.", "hyphen"),
+        ],
+        "benign_de": [
+            ("Der API-Key fehlt in Version {D}.", "version"),
+            ("Das Passwort wird beim Start aus {D} geladen.", "env"),
+            ("Das Zugangstoken wird in {D} konfiguriert.", "file"),
+            ("Der Sicherheitscode ist {D}.", "hyphen"),
+        ],
+    },
+    "test": {
+        "password_en": [
+            ("Okay, the wifi passphrase was \"{V}\" last I checked.", "phrase"),
+            ("Note that my email password is now {V} after the lockout.", "inner_quote"),
+            ('{"role":"user","content":"set the password: \\"{V}\\" please"}', "plain"),
+            ("Sure, the password for the NAS is {V} today.", "bracket"),
+            ('{"input":{"notes":["the shared password is {V}"]}}', "plain"),
+            ('reply("ok, the password is {V}")', "plain"),
+            ("Heads up, the router password is now {V} again.", "dollar"),
+            ("FYI the password on the kiosk screen is {V} this week.", "plain"),
+            ("Weak, I know, but the password is '{V}' for the demo box.", "cue_word"),
+            ("Honestly my passphrase was '{V}' all along.", "sentence"),
+            ('"ConnectionString": "Host=db;Password={V};Username=app"', "plain"),
+            ("Told them the VPN password is {V} for now.", "hyphen_stem"),
+            ("ok so the staging password is `{V}`, rotate it later", "plain"),
+            ("Paste this: the password is\n```\n{V}\n```", "fenced_lines"),
+            ("Your new password string is '{V}', keep it safe.", "plain"),
+            ("Use passphrase `{V}` for the vault.", "phrase"),
+        ],
+        "password_de": [
+            ("Das WLAN-Passwort war zuletzt \"{V}\".", "phrase"),
+            ('{"text":"Das neue Kennwort lautet \\"{V}\\", danke"}', "plain"),
+            ('{"note":"Kennwort ist {V}","id":"n1 n2"}', "plain"),
+            ("Das Kennwort für meine E-Mail ist {V}.", "plain"),
+            ("Mein Passwort war ehrlich gesagt '{V}'.", "sentence_de"),
+            ("Das Testkennwort ist `{V}` bis Freitag.", "plain"),
+            ("Das Kennwort aus meiner SMS ist '{V}'.", "plain"),
+        ],
+        "benign_en": [
+            ("Since the upgrade our access token only gets accepted by {D} endpoints.", "model"),
+            ("Per the changelog the API key header changed in {D}, see the notes.", "version"),
+            ("I bisected the session token bug down to {D} in the repo history.", "sha"),
+            ("The API key loader reads defaults out of {D} first.", "file"),
+            ("We pinned the access token issuer to {D} for latency.", "region"),
+            ("Each night {D} replaces the session token for the bot.", "snake"),
+            ("In CI the password gets injected via {D} automatically.", "env"),
+            ("Migration 12 renamed the password column to {D} last sprint.", "column"),
+            ("The deploy script copies the password into {D} before boot.", "path"),
+            ("A security code review flagged {D} in the auth library.", "cve"),
+            ("For a failed sign-in the password banner now reads {D} in bold.", "ui"),
+            ("QA wants the forgot-password dialog to say {D} instead.", "ui"),
+            ("Marketing wants the password copy to be {D} on signup.", "ui"),
+            ("Our VPN password is {D} on every laptop.", "hyphen"),
+        ],
+        "benign_de": [
+            ("Seit {D} prüft der Server den API-Key strenger.", "version"),
+            ("Im Container kommt das Passwort aus {D} vom Orchestrator.", "env"),
+            ("Die Sicherheitstoken-Prüfung liegt jetzt in {D} im Repo.", "file"),
+            ("Unser Zugangscode ist {D}.", "hyphen"),
+        ],
+    },
+}
+# Digit-free passphrases built from ordinary words, function words included.
+SENTENCES = {
+    "dev": {"sentence": ["the moon is blue", "it is raining cats", "one for all and all for one"],
+            "sentence_de": ["der Hund bellt laut", "die Katze schläft gern", "ein Baum im Wind"]},
+    "test": {"sentence": ["a fox under the bridge", "we sail at the dawn", "the owl and the lamp"],
+             "sentence_de": ["das Boot im Hafen", "ein Lied für den Mond", "die Brücke am Fluss"]},
+}
+AGENT_VALUES = {
+    "dev": {
+        "model": ["gpt-4-turbo", "claude-3-opus", "mistral-7b-instruct"],
+        "region": ["us-east-1", "eu-central-1", "ap-northeast-1"],
+        "file": ["settings_v2.py", "token3.json", "auth_v4.yml"],
+        "snake": ["auth_service_v2", "token_worker_3", "session_sync_v5"],
+        "env": ["DB_PASSWORD", "REDIS_PASS_1", "API_SECRET_V3"],
+        "column": ["bcrypt_hash", "password_hash", "pw_digest"],
+        "path": ["~/.config/app/pw", "secret/data/api", "../keys/admin"],
+        "words": ["copper", "lagoon", "walrus", "meteor", "crimson", "thistle"],
+        "ui": ['"Please enter it again"', '"Incorrect password, try again"', '"Reset your account"'],
+        "hyphen": ["2fa-enabled", "SHA256-basiert", "e2e-tested"],
+        "sibling": ["databaseConnectionName", "replicaHostOverride", "sessionAffinityMode"],
+    },
+    "test": {
+        "model": ["gemini-1.5-pro", "o3-mini", "phi-3-medium"],
+        "region": ["westeurope", "sa-east-1", "me-south-1"],
+        "file": ["defaults_2024.ini", "keys.v2.json", "app-config3.yaml"],
+        "snake": ["rotate_tokens_job7", "nightly_refresh_v9", "bot_token_sync_4"],
+        "env": ["NAS_ADMIN_PW", "SMTP_PASSWORD_2", "KEYCLOAK_PASS"],
+        "column": ["passwd_bcrypt", "secret_digest", "pwd_hash_v2"],
+        "path": ["/run/secrets/db_pw", "/etc/app/secret3", "C:\\ProgramData\\app\\pw"],
+        "words": ["birch", "lantern", "pebble", "orchid", "harbor", "violet"],
+        "ui": ['"Something went wrong on our side"', '"Did you forget it?"', "'Not the right one, sorry'"],
+        "hyphen": ["mfa-protected", "AES256-signed", "SSO-only"],
+        "sibling": ["clusterIssuerReference", "rotationWindowHours", "metricsScrapeEnabled"],
+    },
+}
+
+
+def agent_text_records(api, partition):
+    rng = api.Rng(api.PARTITION_SEEDS[partition], "credential-agent-text-v32")
+    values = AGENT_VALUES[partition]
+    result = []
+
+    def emit(layer, family, surface, index, template, fields, language):
+        text, gold, decoys = api._fill_with_decoys(template, fields)
+        result.append(api.Record(
+            uid=f"agentic-{partition}-{layer}-credagent-{family}-{surface}-{index}",
+            partition=partition, layer=layer, family=family, surface=AGENT_TEXT_PREFIX + surface,
+            validity=api.BENIGN if layer == "D" else api.UNCHECKED,
+            group=f"{partition}-credagent-{family}-{index}",
+            template=f"credagent/{partition}/{surface}", language=language,
+            region="DE" if language == "de" else "US", text=text, gold=gold, decoys=decoys))
+
+    def stem():
+        word = rng.choice(STEMS[partition])
+        return word + rng.digits(rng.between(2, 3))
+
+    def password(kind):
+        if kind == "phrase":
+            # Spaced passphrases that end in a word, the shape a last-word check misreads.
+            words = [rng.choice(values["words"]) for _ in range(3)]
+            words.insert(rng.between(1, 2), rng.digits(2))
+            return " ".join(words)
+        if kind == "inner_quote":
+            return stem()[:-1] + "'" + rng.choice(STEMS[partition]) + rng.digits(2)
+        if kind == "cue_word":
+            return rng.choice(["Passw0rd", "Kennwort", "MyPassword", "Password"]) + rng.digits(rng.between(1, 4)) + rng.choice("!#")
+        if kind in ("sentence", "sentence_de"):
+            words = SENTENCES[partition][kind]
+            return rng.choice(words)
+        if kind == "hyphen_stem":
+            return rng.choice(STEMS[partition]) + rng.digits(4) + "-" + rng.choice(["only", "safe", "ready"])
+        if kind == "dollar":
+            return "$" + stem() + rng.choice("#%&*+@")
+        if kind == "bracket":
+            opener, closer = rng.choice(["()", "[]", "{}"])
+            return stem() + opener + rng.choice(values["words"]) + closer
+        return stem() + rng.choice("#$%&*+@")
+
+    def benign(kind):
+        if kind == "version":
+            return f"v{rng.between(1, 9)}.{rng.between(0, 19)}.{rng.between(0, 9)}-rc{rng.between(1, 4)}"
+        if kind == "sha":
+            return "".join(rng.choice("0123456789abcdef") for _ in range(8))
+        if kind == "cve":
+            return f"CVE-{rng.between(2019, 2026)}-{rng.between(10000, 49999)}"
+        return rng.choice(values[kind])
+
+    def pem_wrapped():
+        body = "\n".join("".join(rng.choice(BASE64) for _ in range(64)) for _ in range(3))
+        armour = f"-----BEGIN PRIVATE KEY-----\n{body}\n-----END PRIVATE KEY-----\n"
+        whole = base64.b64encode(armour.encode()).decode()
+        return [whole[start:start + 76] for start in range(0, len(whole), 76)]
+
+    for index in range(api.DOCS_PER_FAMILY):
+        for language in ("en", "de"):
+            for surface, (template, kind) in enumerate(AGENT_TEXT[partition][f"password_{language}"]):
+                emit("A", f"password_{language}", f"{kind}_{surface}", index, template,
+                     {"V": (password(kind), "PASSWORD")}, language)
+            for surface, (template, kind) in enumerate(AGENT_TEXT[partition][f"benign_{language}"]):
+                emit("D", f"benign_{language}", f"{kind}_{surface}", index, template,
+                     {"D": (benign(kind), None)}, language)
+        # Wrapped base64 private keys in an indented YAML block scalar and behind JSON-escaped
+        # line breaks: the whole run, indentation and escapes included, is one gold value.
+        lines = pem_wrapped()
+        yaml = ("data:\n  tls.key: |\n    {V}\n  tls.crt: none\n" if partition == "test"
+                else "stringData:\n  key.b64: |\n    {V}\n")
+        emit("A", "pem_base64", "yaml_block", index, yaml,
+             {"V": ("\n    ".join(lines), "SECURITYTOKEN")}, "en")
+        whole = "".join(pem_wrapped())
+        sibling = ("data:\n  tls_key: {V}\n  " + rng.choice(values["sibling"]) + ": primary\n" if partition == "test"
+                   else "key:\n  tls_key: {V}\n  " + rng.choice(values["sibling"]) + ": true\n")
+        emit("A", "pem_base64", "yaml_sibling_key", index, sibling, {"V": (whole, "SECURITYTOKEN")}, "en")
+        lines = pem_wrapped()
+        escaped = '{"secret":"{V}"}' if partition == "test" else '{"key_b64":"{V}"}'
+        emit("A", "pem_base64", "json_escaped_lines", index, escaped,
+             {"V": ("\\n".join(lines), "SECURITYTOKEN")}, "en")
+    return result
