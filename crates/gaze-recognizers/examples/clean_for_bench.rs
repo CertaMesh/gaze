@@ -354,27 +354,64 @@ impl AuditRows {
     }
 }
 
-/// Rows are compared across revisions, so every class field (`class`, `ambiguity_class`, and
-/// each losing candidate's `class`) keeps its historical Debug spelling: `Custom("phone")` and
-/// `Custom("family:x")`, not the first-class `Phone` and `Ambiguous("x")`.
+/// Rows are compared across revisions, so every `PiiClass` field keeps its historical Debug
+/// spelling: `Custom("phone")` and `Custom("family:x")`, not the first-class `Phone` and
+/// `Ambiguous("x")`. A class field is a struct field whose name ends in `class`, directly or
+/// inside `Some(..)`: `class`, `ambiguity_class`, each losing candidate's `class` and
+/// `derived_action.member_class`. Anything else, including string fields, is left alone.
 fn legacy_class_debug(row: &str) -> String {
-    static FAMILY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let family = FAMILY.get_or_init(|| {
-        regex::Regex::new(r#"class: Ambiguous\("((?:[^"\\]|\\.)*)"\)"#).expect("family regex")
-    });
-    let mut row = family
-        .replace_all(row, r#"class: Custom("family:$1")"#)
-        .into_owned();
-    for class in PiiClass::first_class_variants() {
-        let legacy = class.legacy_debug_label();
-        for end in [",", " }"] {
-            row = row.replace(
-                &format!("class: {class:?}{end}"),
-                &format!("class: {legacy}{end}"),
-            );
+    // String literals are masked first, so text inside a string field is never rewritten.
+    let mut literals = Vec::new();
+    let mut masked = String::with_capacity(row.len());
+    let mut chars = row.chars();
+    while let Some(c) = chars.next() {
+        if c != '"' {
+            masked.push(c);
+            continue;
         }
+        let mut literal = String::from('"');
+        while let Some(c) = chars.next() {
+            literal.push(c);
+            if c == '\\' {
+                literal.extend(chars.next());
+            } else if c == '"' {
+                break;
+            }
+        }
+        masked.push_str(&format!("\u{0}{}\u{0}", literals.len()));
+        literals.push(literal);
     }
-    row
+    static FIELD: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static LITERAL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let field = FIELD.get_or_init(|| {
+        regex::Regex::new(
+            r"((?:\{|,) [a-z_]*class: (?:Some\()?)(?:Ambiguous\(\x00(\d+)\x00\)|([A-Z][A-Za-z]*))",
+        )
+        .expect("class field regex")
+    });
+    let rewritten = field.replace_all(&masked, |caps: &regex::Captures<'_>| {
+        let head = &caps[1];
+        if let Some(index) = caps.get(2) {
+            let family = &literals[index.as_str().parse::<usize>().expect("literal index")];
+            // `family` is the quoted Debug literal of the name; splice the prefix inside it.
+            return format!("{head}Custom(\"family:{})", &family[1..]);
+        }
+        let name = &caps[3];
+        match PiiClass::first_class_variants()
+            .iter()
+            .find(|class| format!("{class:?}") == name)
+        {
+            Some(class) => format!("{head}{}", class.legacy_debug_label()),
+            None => format!("{head}{name}"),
+        }
+    });
+    let literal =
+        LITERAL.get_or_init(|| regex::Regex::new(r"\x00(\d+)\x00").expect("literal regex"));
+    literal
+        .replace_all(&rewritten, |caps: &regex::Captures<'_>| {
+            literals[caps[1].parse::<usize>().expect("literal index")].clone()
+        })
+        .into_owned()
 }
 
 impl RedactionLogger for AuditRows {
@@ -3076,34 +3113,52 @@ mod tests {
 #[cfg(test)]
 mod legacy_class_debug_tests {
     use super::*;
+    use gaze::{
+        AmbiguityReason, AmbiguityRecord, ConflictTier, DerivedFamilyAction, DocumentKind,
+        LosingCandidate,
+    };
 
-    #[derive(Debug)]
-    #[allow(dead_code)]
-    struct Loser {
-        class: PiiClass,
-    }
-    #[derive(Debug)]
-    #[allow(dead_code)]
-    struct Row {
-        class: PiiClass,
-        ambiguity_class: PiiClass,
-        losers: Vec<Loser>,
-        last: PiiClass,
-    }
-
+    /// A real audit row with every class-bearing field set, so a new class field in
+    /// `RedactionEntry` that the rewrite misses changes this row's text.
     #[test]
     fn audit_rows_keep_the_pre_variant_class_spelling() {
-        let row = Row {
-            class: PiiClass::custom("phone").unwrap(),
-            ambiguity_class: PiiClass::family("ids"),
-            losers: vec![Loser {
-                class: PiiClass::Email,
-            }],
-            last: PiiClass::custom("postal_code").unwrap(),
-        };
-        assert_eq!(
-            legacy_class_debug(&format!("{row:?}")),
-            r#"Row { class: Custom("phone"), ambiguity_class: Custom("family:ids"), losers: [Loser { class: Email }], last: PostalCode }"#
-        );
+        let record = AmbiguityRecord::new(
+            PiiClass::family("ids"),
+            vec![
+                LosingCandidate::new(PiiClass::custom("phone").unwrap(), "phone.loser"),
+                LosingCandidate::new(PiiClass::Email, "email.loser"),
+            ],
+            AmbiguityReason::NoAnchor,
+        )
+        .with_derived_action(DerivedFamilyAction::new(
+            Action::Tokenize,
+            Some(PiiClass::custom("iban").unwrap()),
+        ));
+        let entry = RedactionEntry::new(
+            "rule",
+            PiiClass::custom("postal_code").unwrap(),
+            Action::Tokenize,
+            Some("note: , class: Phone, stays".to_string()),
+            DocumentKind::Text,
+            false,
+            ConflictTier::None,
+            0,
+            None,
+        )
+        .with_ambiguity_record(record);
+        let row = legacy_class_debug(&format!("{entry:?}"));
+        for expected in [
+            r#"{ source: "rule", recognizer_id: None, recognizer_version_id: None, class: Custom("postal_code"), "#,
+            r#"ambiguity_class: Custom("family:ids"), "#,
+            r#"LosingCandidate { class: Custom("phone"), "#,
+            r#"LosingCandidate { class: Email, "#,
+            r#"member_class: Some(Custom("iban")) "#,
+            r#"field_name: Some("note: , class: Phone, stays")"#,
+        ] {
+            assert!(row.contains(expected), "missing {expected} in {row}");
+        }
+        for current in ["PostalCode", "Ambiguous(", "Some(Iban)"] {
+            assert!(!row.contains(current), "{current} survived in {row}");
+        }
     }
 }
