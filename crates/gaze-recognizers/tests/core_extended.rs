@@ -1938,9 +1938,9 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
     assert!(matches!(
         err,
         RulepackError::SameClassWithoutCooperation {
-            class: PiiClass::Custom(ref name),
+            class: PiiClass::IpAddress,
             ..
-        } if name == "ip_address"
+        }
     ));
 
     // `custom:postal_code` is served by eight recognizers, so each names the other seven. Dropping
@@ -1973,9 +1973,9 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
     assert!(matches!(
         err,
         RulepackError::SameClassWithoutCooperation {
-            class: PiiClass::Custom(ref name),
+            class: PiiClass::PostalCode,
             ..
-        } if name == "postal_code"
+        }
     ));
 }
 
