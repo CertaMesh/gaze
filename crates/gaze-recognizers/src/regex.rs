@@ -935,6 +935,22 @@ impl RegexDetector {
     }
 
     fn span_from_captures(&self, caps: &regex::Captures<'_>) -> Option<std::ops::Range<usize>> {
+        // `Karte` also means a map or menu, and an otherwise unsupported compact
+        // number could be a phone or timestamp. Neither licenses a code unless
+        // the preceding PAN itself passes Luhn. Never validate the short code.
+        if self.source == "card.security_code" {
+            let no_card_cue = caps.name("card_cue").is_none();
+            if no_card_cue && caps.name("prefixed").is_none() && caps.name("postfix").is_none() {
+                return None;
+            }
+            if (no_card_cue
+                || caps.name("weak_cue").is_some()
+                || caps.name("checksum_only").is_some())
+                && !ValidatorKind::Luhn.validates(caps.name("pan")?.as_str())
+            {
+                return None;
+            }
+        }
         if let Some(groups) = &self.capture_groups {
             groups
                 .iter()

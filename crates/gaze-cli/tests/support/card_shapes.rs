@@ -5,11 +5,10 @@
 /// `before`, one token, then `after`: every card digit tokenized, nothing around it.
 /// Round 2 review findings F-A and F-B.
 const CARD_SHAPES: &[(&str, &str, &str)] = &[
-    // CVV or expiry after the card.
-    ("Karte ", "4111 1111 1111 1111", " 123 (CVV)"),
+    // Expiry and ordinary short numbers after the card.
     ("Karte ", "4111 1111 1111 1111", " 12 28"),
-    ("Karte ", "4111111111111111", " 123"),
-    ("Karte ", "4111 1111 1111 1111", " １２３"),
+    ("Karte ", "4111111111111111", " 123 EUR"),
+    ("Karte ", "4111 1111 1111 1111", " １２３ EUR"),
     // A number before the card (the 21-digit run the old pattern stopped short in).
     ("Nr 7 ", "4111 1111 1111 1111", ""),
     ("Nr 12345 ", "4111 1111 1111 1111", ""),
@@ -19,8 +18,7 @@ const CARD_SHAPES: &[(&str, &str, &str)] = &[
     ("Ref 12 ", "4111 1111 1111 1111 003", " 45 ok"),
     ("Karte ", "4111 1111 1111 1111", "\u{200D}1234 ok"),
     ("Karte ", "4111 1111 1111 1111", "１２３４ ok"),
-    // F-B: every card layout, not only 4-4-4-4, with a CVV after it.
-    ("Amex ", "3782 822463 10005", " 1234"),
-    ("Diners ", "3056 930902 5904", " 123"),
+    // A count and a page reference have their own owner, even beside a PAN.
+    ("Amex ", "3782 822463 10005", " 1234 units"),
+    ("Diners ", "3056 930902 5904", " 123 (Seite)"),
 ];
-

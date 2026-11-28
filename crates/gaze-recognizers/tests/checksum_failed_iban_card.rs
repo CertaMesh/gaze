@@ -97,6 +97,11 @@ fn restore_boundary_reports_checksum_failed_financial_values() {
 
 #[test]
 fn restore_boundary_cue_windows_match_forward_recognizers() {
+    let adjacent = "Card: 4111111111111112 1234 Card: 4111111111111113.";
+    let events = financial_events(adjacent);
+    let ranges: Vec<_> = events.into_iter().map(|event| event.location).collect();
+    assert_eq!(ranges, [6..22, 34..50]);
+
     for (prefix, value, trailer, class) in [
         (
             "{\"card\": {\"number\": \"",

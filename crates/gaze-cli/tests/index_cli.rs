@@ -557,6 +557,12 @@ fn index_ingest_tokenizes_core_identifiers_so_search_never_shows_them_raw() {
             token: ":Custom:birth_date_",
         },
         CoreCase {
+            class: "security_token",
+            line: "Card: 4111111111111111; CVV: 094",
+            raw: "094",
+            token: ":Custom:security_token_",
+        },
+        CoreCase {
             class: "age",
             line: "Applicant age: 72",
             raw: "72",

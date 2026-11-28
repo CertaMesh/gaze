@@ -2007,7 +2007,7 @@ change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
 part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [known-record specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7); and the [capture-closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure, which let the gate and the capture cache ignore harness files that cannot reach C, A, D or R.
 The [comma-address specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
-Following that, the [current specification](specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds the complete prose ID cells and their counterweights.
+The [prose-ID specification](specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds the complete prose ID cells and their counterweights. In generator v34, the [current specification](specifications/81aa1126747b47a87aabcc2ccfb6393cae539e50d913343ac62797a77c5bf2b2.json) adds card security code cells and their public counterweights.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2584,6 +2584,24 @@ Dotted tool names, public paths and field
 cues with no value carry no gold. Layer R is unchanged. The v32 corpus
 rebuilds byte-for-byte under its [frozen contract](scored-labels-agentic-generator-v32.json).
 No detector or release has been measured as part of this addition.
+
+### Card security codes (generator v34)
+
+The [card cells](../../../scripts/bench/card_security_code_cells.py) add 700 A
+and 98 D documents per partition. In English and German, A pairs a compact or
+grouped PAN with a separate three- or four-digit code. Only its digits are
+`SECURITYTOKEN` gold. Cases include a bare trailing field, `CVV:` / `CVC:`, a
+postfix label in parentheses, and a conjunction with or without an article.
+A direct code label after a valid compact PAN does not require a card cue.
+Each card-labelled PAN has a cued checksum-invalid twin. In 208 mixed A records
+a page or invoice number follows the PAN; only the PAN is gold.
+
+D has no gold. Each PAN layout has a checksum-failed public reference and an
+adjacent public number. The card credit guard includes these references,
+including five uniformly hyphenated groups of four with no valid PAN window.
+Other controls use code help, form metadata, incidental CVV/CVC mentions and
+amounts. V34 totals 43,987 documents per partition (21,435 A, 9,751 D, 12,801 R).
+V33 rebuilds byte-for-byte under its [frozen contract](scored-labels-agentic-generator-v33.json).
 
 ### Measured adjacency layer history
 

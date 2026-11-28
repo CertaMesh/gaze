@@ -565,6 +565,9 @@ locale_basis = "document"
 # whole: after a cue a 4-4-4-4-3 number is one token even when its first 16 digits pass Luhn
 # (a mistyped 19-digit card cannot be told from a card and its CVV). Without a cue
 # `card.structural` still scopes a card exactly.
+# The second capture handles a *direct* card label and a whitespace-separated
+# short field. The PAN is protected whether the field is a code or e.g. a page
+# number. A hyphen inside one long reference is not a field separator.
 [recognizers.match]
 kind = "regex"
 pattern = '''
@@ -592,8 +595,18 @@ pattern = '''
 )
 (?:[\x20\x{00A0}\x{202F}-]\d{3})?
 (?:[^\d\x20\x{00A0}\x{202F}-]|[\x20\x{00A0}\x{202F}-][^\d]|[\x20\x{00A0}\x{202F}-]?\z)
+| (?ix:\b(?:
+    (?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?card(?:[\x20_-]?(?:number|num|no|nr))?
+  | (?:kredit|debit|bank|ec|giro|geld|prepaid)[\x20-]?karte(?:nnummer|nnr)?
+  | karten?(?:[\p{Zs}\t]+(?:nummer|nr)|n(?:nummer|nr))|visa|master[\x20]?card|amex|american\x20express|diners(?:\x20club)?|maestro|jcb|unionpay|girocard
+  )\b\.?[\p{Zs}\t]*(?:(?:is|ist|lautet)\b[\p{Zs}\t]*)?[:=]?[\p{Zs}\t]*
+  ([2-6][0-9]{15,18}|3[0-9]{13,14}
+  |[2-6][0-9]{3}(?:[\p{Zs}-][0-9]{4}){3}(?:[\p{Zs}-][0-9]{3})?
+  |[2-6][0-9]{3}[\p{Zs}-][0-9]{6}[\p{Zs}-][0-9]{4,5}
+  |(?:5[06-9]|6[0-9])(?:[0-9]{10,13}|[0-9]{2}(?:[\p{Zs}-][0-9]{4}){2}))
+  [\p{Zs}\t]+[0-9]{3,4}\b[\p{Zs}\t]*(?:\z|[^\d\p{Zs}\t-]))
 '''
-capture_groups = [1]
+capture_groups = [1, 2]
 
 [recognizers.validator]
 kind = "luhn"
@@ -602,6 +615,52 @@ on_fail = "record"
 [recognizers.scoring]
 base = 0.70
 priority = 80
+
+[recognizers.token]
+
+# This positional field needs a *direct* card cue: "card reader serial" is
+# not a card. A bare code must finish the field; e.g. "120 EUR", "120.50",
+# "120 (page)" and "120 45" are not evidence. Only the code is captured, so
+# punctuation, spaces and the label remain available to the reader. With an
+# explicit code label, a Luhn-valid PAN can stand without a preceding card
+# word. Bare `Karte` and other compact PAN shapes also require passing Luhn.
+[[recognizers]]
+id = "card.security_code"
+safety_tier = "safe_default"
+class = "custom:security_token"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''
+(?ix)
+(?:\b(?P<card_cue>
+    (?:(?:credit|debit|payment|bank|prepaid|gift)[\x20_-]?)?card(?:[\x20_-]?(?:number|num|no|nr))?
+  | (?:kredit|debit|bank|ec|giro|geld|prepaid)[\x20-]?karte(?:nnummer|nnr)?
+  | (?P<weak_cue>karte)
+  | karten?(?:[\p{Zs}\t]+(?:nummer|nr)|n(?:nummer|nr))|visa|master[\x20]?card|amex|american\x20express|diners(?:\x20club)?|maestro|jcb|unionpay|girocard
+)\b\.?[\p{Zs}\t]*(?:(?:is|ist|lautet)\b[\p{Zs}\t]*)?[:=]?[\p{Zs}\t]*)?
+\b(?P<pan>
+    [2-6][0-9]{15,18}|3[0-9]{13,14}
+  | [2-6][0-9]{3}(?:[\p{Zs}-][0-9]{4}){3}(?:[\p{Zs}-][0-9]{3})?
+  | [2-6][0-9]{3}[\p{Zs}-][0-9]{6}[\p{Zs}-][0-9]{4,5}
+  | (?:5[06-9]|6[0-9])(?:[0-9]{10,13}|[0-9]{2}(?:[\p{Zs}-][0-9]{4}){2})
+  | (?P<checksum_only>[0-9]{13,19})
+)
+(?:
+    [\p{Zs}\t]*[,;]?[\p{Zs}\t]*(?:(?:and|und)\b[\p{Zs}\t]+)?(?:(?:the|der|die)\b[\p{Zs}\t]+)?(?:\([\p{Zs}\t]*)?\b(?:cv[cv]2?|security\x20code|sicherheitscode|kartenprüfnummer|prüfnummer)\b
+    [\p{Zs}\t]*(?:(?:is|ist|lautet)\b[\p{Zs}\t]*)?[:=]?[\p{Zs}\t]*(?P<prefixed>[0-9]{3,4})\b
+    (?:[\p{Zs}\t]+\p{L}|[\p{Zs}\t]*(?:\z|[\r\n;!?()]|[.,](?:\z|\s)))
+  | [\p{Zs}\t]+([0-9]{3,4})(?:[\p{Zs}\t]*(?P<postfix>\((?:cv[cv]2?|security\x20code|sicherheitscode|kartenprüfnummer|prüfnummer)\))|[\p{Zs}\t]*(?:\z|[\r\n]|[.!?;](?:\z|\s)))
+)
+'''
+capture_groups = [5, 6]
+
+[recognizers.scoring]
+base = 0.85
+priority = 85
 
 [recognizers.token]
 

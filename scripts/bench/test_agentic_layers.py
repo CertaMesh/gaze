@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "01f148c88b6f438f66cea88e98ef5d160480b7c2fcb23250473ee16badbc2b6a",
-    "test": "30c18e267516f1203e9592285a83d5a1563c0f7365618024fb101e6840e95ee2",
+    "dev": "436b4cc14cc18e2af28c6057b7b730f6588eb8651d79c71d992e1e3f34d77f9c",
+    "test": "67ddb4efec09d366e720ff7cba1a0c8bcc7aeb25c4116a9221022c391bb08d49",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -274,6 +274,11 @@ class GeneratorTests(unittest.TestCase):
         records = self.corpora["test"]
         uids = {record.uid for record in records}
         for record in records:
+            if record.surface == "card_security_code_boundary_code_only":
+                # Without a preceding card label the Luhn-failing counterpart
+                # is a public reference followed by code help, not another PAN.
+                self.assertIn(f"{record.group}-boundary_help-benign", uids)
+                continue
             # Cued card cells alternate validity per document instead
             # (`CueCellTests.test_card_cells_carry_both_validities`).
             if record.validity == agentic.VALID and not record.surface.startswith(("cue_", "coverage_")):
@@ -467,13 +472,14 @@ class RepeatSliceTests(unittest.TestCase):
         self.assertIn(agentic.NBSP, texts["nbsp"])
 
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
-        # Address cells record their benign designators as decoys.
+        # Some A/D surfaces explicitly record public values (for example a
+        # designator beside an address or a page number beside a PAN).
         for record in agentic.generate("test"):
             if record.surface == "inventory_count_csv":
                 (count,) = record.decoys
                 self.assertEqual(record.gold, ())
                 self.assertEqual(count.value, record.text.splitlines()[1].split(",")[1].strip())
-            elif record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_")):
+            elif record.layer != agentic.LAYER_REPEATS and not record.surface.startswith(("address_", "tel_", "cue_", "block_", "url_", "gov_", "zipage_", "coverage_", "recordids_", "fullnames_", "structured_", "card_security_code_")):
                 self.assertNotIn("decoys", record.to_json())
 
 
@@ -2297,7 +2303,8 @@ class GateTests(unittest.TestCase):
 
     def test_credit_guard_families_come_from_the_counterweights(self) -> None:
         self.assertEqual(agentic.CREDIT_GUARD_FAMILIES,
-                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16", "invisible_card_twin"), "IBAN": (),
+                         {"CREDITCARDNUMBER": (*CUE_CARD_TWINS, "ref_number_16", "invisible_card_twin",
+                                               "card_code_reference_twin"), "IBAN": (),
                           "TAXNUM": ("ref_number_11", "gov_twin_tax_eleven", "gov_near_tax_eleven", "gov_twin_tax_grouped", "gov_near_tax_grouped", "invisible_tax_twin"), "CPF": ("ref_number_11",),
                           "BSN": ("ref_number_9",), "NHSNUMBER": ("ref_number_10",),
                           "PHONENUMBER": ()})
