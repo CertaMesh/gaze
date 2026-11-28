@@ -91,6 +91,9 @@ class CaptureIdentityTests(unittest.TestCase):
                 calls.append(args)
                 if args[0] == "lscpu":
                     return "Architecture: synthetic"
+                if args[1] == str(libc):
+                    # glibc's loader answers ldd this way; it is a leaf, not unresolved.
+                    return "statically linked"
                 library = (libpython if args[1] == str(python) else
                            dependency if args[1] == str(extension) else libc)
                 return f"{library} (0x000)"
@@ -101,7 +104,7 @@ class CaptureIdentityTests(unittest.TestCase):
                     mock.patch.object(identity.sys, "executable", str(python)), \
                     mock.patch.dict(identity.sys.modules, {"synthetic_extension": SimpleNamespace(__file__=str(extension))}):
                 original = identity.native_runtime({"detector": detector})
-                for path in (libpython, dependency):
+                for path in (libpython, dependency, libc):
                     with self.subTest(library=path.name):
                         path.write_bytes(b"synthetic changed")
                         self.assertNotEqual(identity.native_runtime({"detector": detector}), original)
@@ -142,6 +145,12 @@ class CaptureIdentityTests(unittest.TestCase):
             renderer.history_entry_from_scorecard(
                 {"capture_cache": {}, "cache_replay": False}, version="v0.1.0", machine="synthetic",
                 scorecard_filename="synthetic.json", scorecard_sha256="0" * 64)
+
+    def test_reused_detector_responses_cannot_enter_release_evidence(self):
+        with self.assertRaisesRegex(renderer.RenderError, "measured live"):
+            renderer.history_entry_from_scorecard(
+                {"unit_reuse": {"reused_responses": 1, "live_responses": 3}}, version="v0.1.0",
+                machine="synthetic", scorecard_filename="synthetic.json", scorecard_sha256="0" * 64)
 
     def test_runner_key_binds_native_artifacts_and_capture_parameters(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -350,7 +359,17 @@ class NativeCaptureReuseTests(unittest.TestCase):
             (root / "reused").mkdir()
             ident = {"binary_sha256": identity.file_digest(BINARY)}
             cold = unit_cache.UnitCache(root / "cache", ident)
-            live_writer, live = capture(root / "live", cold)
+            sent = []
+            exchange = score.BenchSubprocess.exchange
+
+            def recording(process, request):
+                sent.append(request)
+                return exchange(process, request)
+
+            with mock.patch.object(score.BenchSubprocess, "exchange", recording):
+                live_writer, live = capture(root / "live", cold)
+            # The unit key is exactly what the detector receives (warmup first).
+            self.assertEqual(sent, [unit_cache.detector_request(doc) for doc in (population[0], *population)])
             self.assertEqual((cold.live, cold.reused, cold.publish()), (4, 0, 4))
             # The shadow record: every live row swapped for its stored unit.
             rows, swapped = live_writer.assembled_rows(
@@ -361,6 +380,17 @@ class NativeCaptureReuseTests(unittest.TestCase):
             with mock.patch.object(score, "BenchSubprocess", side_effect=AssertionError("detector started")):
                 _, reused = capture(root / "reused", warm)
             self.assertEqual((warm.reused, warm.live), (4, 0))
+            # Nothing ran, so nothing was timed; the declared warmups stay recorded.
+            with mock.patch.object(score, "BenchSubprocess", side_effect=AssertionError("detector started")):
+                reused_run = unit_cache.run_config(
+                    unit_cache.UnitCache(root / "cache", ident), ROOT, BINARY, "rule-floor-core",
+                    population, root, None, None, None, 0.3, root, base_environment=environment,
+                    warmup_count=1)
+            self.assertEqual((reused_run["process"]["warmup_count"], reused_run["process"]["reused_only"],
+                              reused_run["process"]["cold_start_to_first_validated_response_ms"]), (1, True, None))
+            # --no-cache reads nothing, even when every unit is stored.
+            self.assertIsNone(unit_cache.UnitCache(root / "cache", ident, read=False).get(
+                "rule-floor-core", unit_cache.detector_request(population[0])))
             self.assertEqual(live.read_bytes(), reused.read_bytes())
             self.assertTrue(unit_cache.compare(live, reused)["identical"])
 
@@ -374,16 +404,19 @@ class NativeCaptureReuseTests(unittest.TestCase):
 
             # Gold is not part of a unit; text is.
             regolded = [score.Document(**{**population[0].__dict__, "spans": ()}), *population[1:]]
-            self.assertFalse(warm.needs_live("rule-floor-core",
-                                             [unit_cache.detector_request(doc) for doc in regolded]))
+            self.assertIsNotNone(warm.peek("rule-floor-core", unit_cache.detector_request(regolded[0])))
             retexted = score.Document(**{**population[0].__dict__, "text": population[0].text + "."})
-            self.assertTrue(warm.needs_live("rule-floor-core", [unit_cache.detector_request(retexted)]))
+            self.assertIsNone(warm.peek("rule-floor-core", unit_cache.detector_request(retexted)))
             self.assertIsNone(unit_cache.UnitCache(root / "cache", {"binary_sha256": "f" * 64}).peek(
                 "rule-floor-core", unit_cache.detector_request(population[0])))
-            stored = next((root / "cache/units").glob("*/*/*.json.gz"))
-            stored.write_bytes(gzip.compress(stored.read_bytes()[:-12] + b"tampered"))
-            self.assertTrue(unit_cache.UnitCache(root / "cache", ident).needs_live(
-                "rule-floor-core", [unit_cache.detector_request(doc) for doc in population]))
+            request = unit_cache.detector_request(population[0])
+            stored = unit_cache.UnitCache(root / "cache", ident)._path(unit_cache._unit_digest("rule-floor-core", request))
+            original = stored.read_bytes()
+            stored.write_bytes(gzip.compress(original[:-12] + b"tampered"))
+            self.assertIsNone(unit_cache.UnitCache(root / "cache", ident).peek("rule-floor-core", request))
+            # A valid gzip header over an invalid deflate body is a miss, not a crash.
+            stored.write_bytes(original[:10] + b"\xff" * 32)
+            self.assertIsNone(unit_cache.UnitCache(root / "cache", ident).peek("rule-floor-core", request))
 
 
 class UnitIdentityTests(unittest.TestCase):

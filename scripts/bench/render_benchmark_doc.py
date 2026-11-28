@@ -985,6 +985,8 @@ def history_entry_from_scorecard(
             past_capture.admit(scorecard, scorecard_path, version=version)
         except ValueError as error:
             raise RenderError("release cache admission requires verified run evidence") from error
+    if (scorecard.get("unit_reuse") or {}).get("reused_responses"):
+        raise RenderError("release evidence must be measured live; this scorecard reused detector responses")
     if not VERSION_RE.match(version):
         raise RenderError(f"--version must look like v1.2.3, got {version!r}")
     if scorecard.get("schema_version") != SCORECARD_SCHEMA_VERSION:

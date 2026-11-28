@@ -152,6 +152,10 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
             output = _command("ldd", str(binary))
             if not output:
                 raise ValueError("unresolved dynamic library closure")
+            # The dynamic loader (and any static library) has no dependencies;
+            # its own bytes are already bound by the object that loads it.
+            if output == "statically linked":
+                continue
             for line in output.splitlines():
                 line = line.strip()
                 if line.startswith("linux-vdso"):

@@ -29,6 +29,7 @@ import json
 import os
 import random
 import sys
+import zlib
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -67,6 +68,10 @@ def run_config(units: "UnitCache", repo_root, binary, config, documents, *args,
     """
     import gaze_bench_score as score
 
+    # Response validation flags are not part of a unit; only the defaults reuse.
+    if (kwargs.get("replacing_actions", score.MANIFEST_REPLACING_ACTIONS) != score.MANIFEST_REPLACING_ACTIONS
+            or kwargs.get("split_composite_source_ids", False)):
+        raise ValueError("per-document reuse supports only the default response validation")
     requests = {document.uid: detector_request(document) for document in documents}
     responses = {}
     for document in documents:
@@ -88,6 +93,13 @@ def run_config(units: "UnitCache", repo_root, binary, config, documents, *args,
     if live is not None:
         for key in ("latency_ms", "warm_latency_ms", "process"):
             run[key] = live[key]
+    else:
+        # Nothing ran: no timing was measured, which is not a zero measurement.
+        run["process"] = {**run["process"], "wall_seconds": None, "documents_per_second": None,
+                          "start_to_first_response_ms": None,
+                          "cold_start_to_first_validated_response_ms": None,
+                          "warmup_count": warmup_count, "discarded_warmup_samples": [],
+                          "reused_only": True}
     return run
 
 
@@ -101,6 +113,10 @@ def detection_identity(observation_key: Mapping[str, object], bench: Path,
     identity["effective_inputs"] = inputs
     identity["unit_format"] = FORMAT
     identity["unit_code"] = {name: file_digest(bench / name) for name in UNIT_CODE}
+    # Response validation admits source IDs from this vocabulary; reused
+    # responses are not revalidated, so the effective vocabulary is bound.
+    import gaze_bench_score as score
+    identity["validation_vocabulary"] = sorted(score.load_committed_source_id_vocabulary(bench.parents[1]))
     identity["machine"] = dict(machine)
     return identity
 
@@ -117,7 +133,7 @@ def _unit_digest(config: str, request: Mapping[str, object]) -> str:
 class UnitCache:
     """Read verified units, buffer new ones, and publish them only after the inputs re-verify.
 
-    `read=False` captures every document live (shadow and cold captures).
+    `read=False` captures every document live (the `--unit-shadow` capture).
     Lookups for the assembled shadow record use `peek`, which never counts
     toward reuse.
     """
@@ -144,7 +160,7 @@ class UnitCache:
                 entry = json.loads(stream.read())
         except FileNotFoundError:
             return None
-        except (OSError, EOFError, UnicodeError, json.JSONDecodeError):
+        except (OSError, EOFError, UnicodeError, json.JSONDecodeError, zlib.error):
             return None
         response = entry.get("response") if isinstance(entry, dict) else None
         if (not isinstance(response, dict) or entry.get("format") != FORMAT
@@ -154,9 +170,6 @@ class UnitCache:
                 or response.get("fixture_id") != request["fixture_id"]):
             return None
         return response
-
-    def needs_live(self, config: str, requests: Sequence[Mapping[str, object]]) -> bool:
-        return not self.read or any(self.peek(config, request) is None for request in requests)
 
     def get(self, config: str, request: Mapping[str, object]) -> dict[str, object] | None:
         if not self.read:
@@ -195,7 +208,7 @@ class UnitCache:
                      "response_sha256": hashlib.sha256(_canonical(response)).hexdigest(),
                      "response": response}
             # Insertion order is kept: records serialize responses unsorted.
-            with temporary.open("wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as stream:
+            with temporary.open("wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as stream:
                 stream.write(json.dumps(entry, ensure_ascii=False, separators=(",", ":"),
                                         allow_nan=False).encode("utf-8"))
             temporary.replace(path)

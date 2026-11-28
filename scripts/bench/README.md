@@ -287,8 +287,13 @@ document in a run misses, and it receives only the missing documents. A unit
 that fails its hash check counts as a miss. New units are published only after
 the capture finishes and its inputs verify again. `scorecard.unit_reuse` and
 `run-evidence.json` report how many responses were reused and how many ran
-live. Timing captures (`--performance-gating`, `--measured-repetitions` above
-1, `--skip-build`) and `--no-unit-reuse` capture every document live.
+live. `--no-cache` reads and writes no unit, so release captures stay fully
+live; the release renderer also refuses a scorecard whose
+`unit_reuse.reused_responses` is above zero. Timing captures
+(`--performance-gating`, `--measured-repetitions` above 1, `--skip-build`) and
+`--no-unit-reuse` capture every document live. The identity also binds the
+effective source-ID validation vocabulary, because reused responses are not
+revalidated.
 
 The gain depends on what a PR changes:
 
@@ -306,20 +311,23 @@ check after any change to `UNIT_CODE` or the detector's request loop. Run all
 three commands on one quiet machine with the same policy:
 
 ```bash
-# 1. Populate a fresh unit cache with a fully live capture.
+# 1. Populate a fresh, empty cache dir: nothing hits, so every document runs live.
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 \
-  --release --policy target/gate/policy.toml --no-cache --cache-dir target/bench-data/shadow-cache \
+  --release --policy target/gate/policy.toml --cache-dir target/bench-data/shadow-cache \
   --output-dir target/bench-data/shadow-a
 # 2. Capture every document live again, assemble the same record from units, and
 #    fail unless both files are byte-identical (writes unit-shadow.json).
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 \
   --release --policy target/gate/policy.toml --no-cache --unit-shadow \
   --cache-dir target/bench-data/shadow-cache --output-dir target/bench-data/shadow-b
-# 3. Evict half the units, capture mixed, and compare observation rows.
+# 3. Evict half the units and the whole-record entry from step 1, capture mixed,
+#    and compare observation rows.
+#    Only this step tests that a response does not depend on its process neighbours.
 uv run --project scripts/bench python scripts/bench/unit_cache.py evict \
   --cache-dir target/bench-data/shadow-cache --identity <identity_sha256 from unit-shadow.json>
+find target/bench-data/shadow-cache -mindepth 1 -maxdepth 1 ! -name units -exec rm -rf {} +
 uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 \
-  --release --policy target/gate/policy.toml --no-cache --cache-dir target/bench-data/shadow-cache \
+  --release --policy target/gate/policy.toml --cache-dir target/bench-data/shadow-cache \
   --output-dir target/bench-data/shadow-c
 uv run --project scripts/bench python scripts/bench/unit_cache.py compare \
   target/bench-data/shadow-b/full/observations-v1.jsonl.gz \
@@ -839,7 +847,7 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/905272f39b12aa875e83a5f9764f4ea28b2ed3ef3e02d2794b886861c58138fd.json)
+The [current specification](../../docs/reference/benchmarks/specifications/8e86c6ae3ffbaddc349c38ab2f9359349cb0ab11c247a4e6753a9aaa74d1e6a9.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,

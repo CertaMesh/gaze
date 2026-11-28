@@ -198,7 +198,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--cache-dir", type=Path,
         help="exact-key observation cache (default: shared checkout target/bench-data/cache)",
     )
-    parser.add_argument("--no-cache", action="store_true", help="measure without reading or writing the observation cache")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="measure without reading or writing the observation or per-document cache")
     parser.add_argument("--no-unit-reuse", action="store_true",
                         help="capture every document live and store no per-document responses")
     parser.add_argument("--unit-shadow", action="store_true",
@@ -1574,17 +1575,18 @@ def _run(args: argparse.Namespace) -> int:
                 return finish_run(args, output_dir, candidate)
 
     units = unit_key = None
-    # Per-document reuse needs the same verified inventory, even when the
-    # whole-record cache is off; timing captures stay fully live.
+    # Per-document reuse needs the same verified inventory; --no-cache reads and
+    # writes no unit, except that a shadow looks units up to assemble its copy.
+    # Timing captures stay fully live.
     if (not args.no_unit_reuse and not args.skip_build and not args.performance_gating
             and args.measured_repetitions == 1 and build_receipt["mode"] == "producer-build"
-            and (cache_key is not None or bypass == "explicit_no_cache")):
+            and (cache_key is not None or (args.unit_shadow and bypass == "explicit_no_cache"))):
         unit_key = cache_key if cache_key is not None else read_key()[0]
         if unit_key is not None:
             units = unit_cache.UnitCache(
                 cache_dir, unit_cache.detection_identity(
                     unit_key, repo_root / "scripts/bench", capture_identity.machine_identity()),
-                read=not args.unit_shadow, write=not args.unit_shadow)
+                read=not args.no_cache, write=not args.no_cache)
     if args.unit_shadow and units is None:
         raise CandidateError("unit shadow needs a verified effective input inventory")
     with stages.labels(layer="C"), stages.measure("validator_measurements"):
