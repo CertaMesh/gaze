@@ -280,6 +280,7 @@ checks:
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- recognizer-composition-validator
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- no-tenant-knowledge
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- family-policy-table-coherence
+      - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- shipped-class-coverage
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- locale-cue-bundle-coherence
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- fixture-citation-lint
       - env CARGO_BUILD_JOBS=2 GAZE_DISABLE_OS_KEYSTORE=1 nice -n 10 cargo run -p xtask -- bundle-tokenization-drift --verify-ack
@@ -395,6 +396,7 @@ checks:
       - cargo run -p xtask -- no-tenant-knowledge
       - cargo run -p xtask -- bundle-tokenization-drift
       - cargo run -p xtask -- family-policy-table-coherence
+      - cargo run -p xtask -- shipped-class-coverage
       - cargo run -p xtask -- locale-cue-bundle-coherence
       - cargo run -p xtask -- fixture-citation-lint
       - cargo run -p xtask -- trybuild-fixture-hygiene

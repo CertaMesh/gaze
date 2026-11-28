@@ -94,6 +94,7 @@ cargo run -p xtask -- recognizer-composition-validator
 cargo run -p xtask -- no-tenant-knowledge
 cargo run -p xtask -- bundle-tokenization-drift
 cargo run -p xtask -- family-policy-table-coherence
+cargo run -p xtask -- shipped-class-coverage
 cargo run -p xtask -- locale-cue-bundle-coherence
 cargo run -p xtask -- fixture-citation-lint
 cargo run -p xtask -- trybuild-fixture-hygiene
