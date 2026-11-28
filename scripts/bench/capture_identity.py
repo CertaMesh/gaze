@@ -116,9 +116,15 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
         for path in standard_library.rglob("*")
         if path.is_file() and not {"site-packages", "dist-packages"}.intersection(path.relative_to(standard_library).parts)
     }
+    loaded_roots = set(native_roots)
     for path in standard_library.rglob("*"):
         if path.is_file():
             include_native(path)
+    # Stdlib extensions nothing has imported yet. One may still be imported
+    # lazily, so its closure is bound, but a dependency the loader cannot find
+    # means it can never load (uv's _tkinter without Tcl/Tk): record that
+    # instead of refusing the whole inventory.
+    unimported = native_roots - loaded_roots
     system, os_build, hardware = _machine()
     libraries = {}
     if system == "Darwin":
@@ -142,26 +148,33 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
                 else:
                     raise ValueError("missing dynamic library")
     else:
-        pending = list(native_roots)
+        pending = [(path, path in unimported) for path in native_roots]
         seen = set()
         while pending:
-            binary = pending.pop()
-            if binary in seen:
+            binary, optional = pending.pop()
+            if (binary, optional) in seen or (binary, False) in seen:
                 continue
-            seen.add(binary)
+            seen.add((binary, optional))
             output = _command("ldd", str(binary))
             if not output:
                 raise ValueError("unresolved dynamic library closure")
+            # glibc's dynamic loader (and any static object) has no
+            # dependencies; its own bytes are bound by the object loading it.
+            if output == "statically linked":
+                continue
             for line in output.splitlines():
                 line = line.strip()
                 if line.startswith("linux-vdso"):
+                    continue
+                if optional and line.endswith("=> not found"):
+                    libraries[f"{binary}: {line.split('=>', 1)[0].strip()}"] = {"unresolved": True}
                     continue
                 name = (line.split("=>", 1)[-1] if "=>" in line else line).strip().split(" (", 1)[0]
                 path = Path(name)
                 if not path.is_absolute() or not path.is_file():
                     raise ValueError("unresolved dynamic library")
                 libraries[name] = {"sha256": file_digest(path)}
-                pending.append(path)
+                pending.append((path, optional))
     return {"system": system, "os_build_sha256": digest(os_build),
             "hardware_sha256": digest(hardware), "libraries": libraries,
             "native_roots": {str(path): file_digest(path) for path in sorted(native_roots)},

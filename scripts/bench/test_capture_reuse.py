@@ -4,6 +4,7 @@ import copy
 import gzip
 import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -105,6 +106,45 @@ class CaptureIdentityTests(unittest.TestCase):
                         path.write_bytes(b"synthetic changed")
                         self.assertNotEqual(identity.native_runtime({"detector": detector}), original)
                         path.write_bytes(b"synthetic original")
+
+    def test_glibc_host_closure_yields_a_cache_enabled_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stdlib = root / "stdlib"
+            (stdlib / "lib-dynload").mkdir(parents=True)
+            python, detector, libc, loader = (root / name for name in ("python", "detector", "libc.so.6", "ld-linux.so.2"))
+            tkinter = stdlib / "lib-dynload/_tkinter.cpython-313-x86_64-linux-gnu.so"
+            for path in (python, detector, libc, loader, tkinter):
+                path.write_bytes(b"synthetic original")
+
+            def command(*args):
+                if args[0] == "lscpu":
+                    return "Architecture: synthetic"
+                if args[1] == str(loader):
+                    return "statically linked"
+                if args[1] == str(tkinter):
+                    # Never imported, and its Tcl/Tk dependencies are not on the loader path.
+                    return f"linux-vdso.so.1 (0x0)\nlibtcl9.0.so => not found\nlibc.so.6 => {libc} (0x0)"
+                return f"linux-vdso.so.1 (0x0)\nlibc.so.6 => {libc} (0x0)\n{loader} (0x0)"
+            with mock.patch.object(identity.platform, "system", return_value="Linux"), \
+                    mock.patch.object(identity, "_command", side_effect=command), \
+                    mock.patch.object(identity.importlib.metadata, "distributions", return_value=[]), \
+                    mock.patch.object(identity.sysconfig, "get_path", return_value=str(stdlib)), \
+                    mock.patch.object(identity.sys, "executable", str(python)), \
+                    mock.patch.dict(identity.sys.modules, {}):
+                runtime = identity.native_runtime({"detector": detector})
+                self.assertEqual(runtime["libraries"][str(loader)], {"sha256": identity.file_digest(loader)})
+                self.assertEqual(runtime["libraries"][f"{tkinter}: libtcl9.0.so"], {"unresolved": True})
+                # An imported extension must resolve completely.
+                with mock.patch.dict(identity.sys.modules, {"_tkinter": SimpleNamespace(__file__=str(tkinter))}):
+                    with self.assertRaisesRegex(ValueError, "unresolved dynamic library"):
+                        identity.native_runtime({"detector": detector})
+
+    @unittest.skipUnless(identity.platform.system() == "Linux", "needs a real Linux loader")
+    def test_this_linux_host_resolves_a_cache_enabled_identity(self):
+        runtime = identity.native_runtime({"detector": Path(sys.executable)})
+        self.assertEqual(runtime["system"], "Linux")
+        self.assertTrue(any(entry.get("sha256") for entry in runtime["libraries"].values()))
 
     def test_unresolved_python_loader_disables_runtime_inventory(self):
         def command(*args):
