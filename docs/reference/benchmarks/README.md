@@ -836,6 +836,22 @@ and a metadata-only audit row; address fields and other Nym labels remain
 eligible. The measured Nym rows below identify the source revision of each
 guard version.
 
+Nym's plate digit-run guard v1 refuses a `LICENSE_PLATE` span that is a
+standalone run of more than eight ASCII digits. All-digit plates exist; the
+longest standard scheme we know of, Israel's `123-45-678`, has eight digits.
+Decode takes the argmax over all labels, so such a span reaches the guard only
+when the model already ranked the identifier labels lower than plate. The
+guard costs recall only where a real identifier is mislabelled as a plate and
+no primary recognizer covers it. The refusal is typed
+`nym_license_plate_digit_run_v1` telemetry with a metadata-only audit row.
+Plates with letters or separators, runs of eight digits or fewer, runs cut out
+of a longer token, and other Nym labels on the same digits stay eligible. In a
+counterfactual over the v0.17.0 generator-v30 record, which predates the guard,
+this shape covers no gold bytes in any layer. It covers 27 false-positive
+bytes in layer D: two nine-digit `deviceSerial` values on the BSN benign twin
+`ref_number_9`, which caused that twin's 0 → 18 Nym credit-guard failure, and
+one nine-digit vehicle ID in a government log.
+
 The retained v0.17 candidate ablations use byte-quality measurements, including concurrent runs; they establish no latency or RSS comparison. The GLiNER DOB cost figures below retain their separately pinned historical quiet-host evidence and were not re-measured for that candidate.
 
 The retained v0.17 Nym safety-net ablation **fails both v2 and v1 credit guards**: enabling Nym adds 18 false-positive bytes on the benign BSN counterweight (0 → 18). The fresh v0.16.0 → v0.17.0 release comparison has 18 bytes on both sides for that counterweight, and its numeric gain gates pass. The other five retained v0.17 candidate mechanism ablations pass both contracts. The failed component verdict remains in [`mechanism-arms.json`](mechanism-arms.json).

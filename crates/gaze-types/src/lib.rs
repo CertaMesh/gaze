@@ -2117,6 +2117,9 @@ pub enum LeakReportTelemetry {
 pub enum SafetyNetRefusalReason {
     /// Nym BUILDING_NUMBER on an ASCII-digit pagination/count field from key table v1.
     NymPaginationKeyV1,
+    /// Nym LICENSE_PLATE on a standalone run of more than eight ASCII digits, longer than
+    /// any all-digit plate (v1).
+    NymLicensePlateDigitRunV1,
 }
 
 impl SafetyNetRefusalReason {
@@ -2124,6 +2127,7 @@ impl SafetyNetRefusalReason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NymPaginationKeyV1 => "nym_pagination_key_v1",
+            Self::NymLicensePlateDigitRunV1 => "nym_license_plate_digit_run_v1",
         }
     }
 
@@ -2131,6 +2135,7 @@ impl SafetyNetRefusalReason {
     pub fn audit_labels(self) -> (&'static str, &'static str) {
         match self {
             Self::NymPaginationKeyV1 => ("BUILDING_NUMBER", "custom:building_number"),
+            Self::NymLicensePlateDigitRunV1 => ("LICENSE_PLATE", "custom:license_plate"),
         }
     }
 }
