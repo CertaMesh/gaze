@@ -271,6 +271,69 @@ Release admission still requires `--no-cache`: its existing renderer cannot
 validate the linked local run evidence and refuses reusable base scorecards.
 This change does not expand historical or competitor cache admission.
 
+#### Per-document reuse
+
+When the whole-record cache misses, the runner reuses single detector responses.
+A unit is one response for one config and one exact request: fixture ID, locale
+chain and text. Units live under `<cache-dir>/units/<identity>/`. The identity
+is the whole-record key without its population fields, namely the corpus,
+generated manifest, layer sub-specifications, seed, document list, profile and
+scored-label contracts. It also binds the harness files on the request and
+response path (`unit_cache.UNIT_CODE`) and `capture_identity.machine_identity()`.
+Gold is not part of a unit, so changing a document's gold reuses its response,
+and gold-gap evidence is recomputed when the record is assembled. A changed text,
+locale or fixture ID misses. The detector process starts only when some
+document in a run misses, and it receives only the missing documents. A unit
+that fails its hash check counts as a miss. New units are published only after
+the capture finishes and its inputs verify again. `scorecard.unit_reuse` and
+`run-evidence.json` report how many responses were reused and how many ran
+live. `--no-cache` reads and writes no unit, so release captures stay fully
+live; the release renderer also refuses a scorecard whose
+`unit_reuse.reused_responses` is above zero. Timing captures
+(`--performance-gating`, `--measured-repetitions` above 1, `--skip-build`) and
+`--no-unit-reuse` capture every document live. The identity also binds the
+effective source-ID validation vocabulary, because reused responses are not
+revalidated.
+
+The gain depends on what a PR changes:
+
+- A PR that changes detection changes the detector or validator bytes, the
+  policy or a model. Its candidate side captures every document live, and only
+  its base side reuses units.
+- A PR that changes only the benchmark captures only new or changed documents
+  on both sides. For example, a new 580-document generator cell captures 580
+  documents, not 44,660.
+
+Plan gate windows for a detector PR as one full capture plus a cached base.
+
+Before per-document reuse was trusted, a shadow capture proved it. Repeat that
+check after any change to `UNIT_CODE` or the detector's request loop. Run all
+three commands on one quiet machine with the same policy:
+
+```bash
+# 1. Populate a fresh, empty cache dir: nothing hits, so every document runs live.
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 \
+  --release --policy target/gate/policy.toml --cache-dir target/bench-data/shadow-cache \
+  --output-dir target/bench-data/shadow-a
+# 2. Capture every document live again, assemble the same record from units, and
+#    fail unless both files are byte-identical (writes unit-shadow.json).
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 \
+  --release --policy target/gate/policy.toml --no-cache --unit-shadow \
+  --cache-dir target/bench-data/shadow-cache --output-dir target/bench-data/shadow-b
+# 3. Evict half the units and the whole-record entry from step 1, capture mixed,
+#    and compare observation rows.
+#    Only this step tests that a response does not depend on its process neighbours.
+uv run --project scripts/bench python scripts/bench/unit_cache.py evict \
+  --cache-dir target/bench-data/shadow-cache --identity <identity_sha256 from unit-shadow.json>
+find target/bench-data/shadow-cache -mindepth 1 -maxdepth 1 ! -name units -exec rm -rf {} +
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --seed 20260710 \
+  --release --policy target/gate/policy.toml --cache-dir target/bench-data/shadow-cache \
+  --output-dir target/bench-data/shadow-c
+uv run --project scripts/bench python scripts/bench/unit_cache.py compare \
+  target/bench-data/shadow-b/full/observations-v1.jsonl.gz \
+  target/bench-data/shadow-c/full/observations-v1.jsonl.gz
+```
+
 Each runner execution writes `run-evidence.json`, including on failure. It
 reports build wall/CPU, native startup/model-load, detection and restore by
 layer/config/repetition, parent scoring time, replay scoring by contract, and
