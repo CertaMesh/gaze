@@ -442,6 +442,137 @@ mod pii_class_tests {
             assert_eq!(class.as_family_name(), Some(*family));
         }
     }
+
+    /// Every class name the shipped rulepacks emit.
+    const SHIPPED_CLASS_NAMES: &[&str] = &[
+        "postal_code",
+        "phone",
+        "security_token",
+        "password",
+        "credit_card",
+        "vat_id",
+        "tax_number",
+        "ssn",
+        "national_id",
+        "ip_address",
+        "iban",
+        "driver_license",
+        "birth_date",
+        "age",
+        "url",
+        "steuer_id",
+        "passport",
+        "pan",
+        "nir",
+        "nino",
+        "nhs_number",
+        "eth_address",
+        "cpf",
+        "cnpj",
+        "bsn",
+        "aadhaar",
+        "customer_id",
+        "employee_id",
+        "record_id",
+    ];
+
+    #[test]
+    fn shipped_class_names_keep_their_wire_spellings() {
+        assert_eq!(SHIPPED_CLASS_NAMES.len(), 29);
+        for name in SHIPPED_CLASS_NAMES {
+            let class = PiiClass::custom(name).expect("shipped class name");
+            assert_eq!(class.class_name(), format!("Custom:{name}"));
+            assert_eq!(class.to_canonical_str(), format!("custom:{name}"));
+
+            let json = serde_json::to_string(&class).unwrap();
+            assert_eq!(json, format!(r#"{{"Custom":"{name}"}}"#));
+            assert_eq!(serde_json::from_str::<PiiClass>(&json).unwrap(), class);
+
+            let policy = format!("custom:{name}");
+            assert_eq!(PiiClass::from_policy_name(&policy), Some(class.clone()));
+            assert_eq!(PiiClass::from_canonical_str(&policy), Some(class.clone()));
+            assert_eq!(
+                PiiClass::from_policy_name(&class.to_canonical_str()),
+                Some(class.clone())
+            );
+
+            let audit = serde_json::to_string(&PiiClassAudit::new(class.clone())).unwrap();
+            assert_eq!(audit, format!(r#""custom:{name}""#));
+            assert_eq!(
+                serde_json::from_str::<PiiClassAudit>(&audit)
+                    .unwrap()
+                    .into_inner(),
+                class
+            );
+        }
+    }
+
+    #[test]
+    fn family_class_keeps_its_wire_spellings() {
+        let class = PiiClass::family("payment-card-or-iban");
+        assert_eq!(class.class_name(), "Custom:family:payment-card-or-iban");
+        assert_eq!(
+            class.to_canonical_str(),
+            "custom:family:payment-card-or-iban"
+        );
+        let json = serde_json::to_string(&class).unwrap();
+        assert_eq!(json, r#"{"Custom":"family:payment-card-or-iban"}"#);
+        assert_eq!(serde_json::from_str::<PiiClass>(&json).unwrap(), class);
+        assert_eq!(
+            PiiClass::from_canonical_str("custom:family:payment-card-or-iban"),
+            Some(class.clone())
+        );
+        assert_eq!(class.as_family_name(), Some("payment-card-or-iban"));
+    }
+
+    #[test]
+    fn shipped_classes_sort_in_the_historical_order() {
+        let mut classes: Vec<PiiClass> = SHIPPED_CLASS_NAMES
+            .iter()
+            .map(|name| PiiClass::custom(name).unwrap())
+            .chain(PiiClass::builtin_variants().iter().rev().cloned())
+            .chain(std::iter::once(PiiClass::family("payment-card-or-iban")))
+            .collect();
+        classes.sort();
+        let sorted: Vec<String> = classes.iter().map(PiiClass::to_canonical_str).collect();
+        let expected = [
+            "email",
+            "name",
+            "location",
+            "organization",
+            "custom:aadhaar",
+            "custom:age",
+            "custom:birth_date",
+            "custom:bsn",
+            "custom:cnpj",
+            "custom:cpf",
+            "custom:credit_card",
+            "custom:customer_id",
+            "custom:driver_license",
+            "custom:employee_id",
+            "custom:eth_address",
+            "custom:family:payment-card-or-iban",
+            "custom:iban",
+            "custom:ip_address",
+            "custom:national_id",
+            "custom:nhs_number",
+            "custom:nino",
+            "custom:nir",
+            "custom:pan",
+            "custom:passport",
+            "custom:password",
+            "custom:phone",
+            "custom:postal_code",
+            "custom:record_id",
+            "custom:security_token",
+            "custom:ssn",
+            "custom:steuer_id",
+            "custom:tax_number",
+            "custom:url",
+            "custom:vat_id",
+        ];
+        assert_eq!(sorted, expected);
+    }
 }
 
 /// Audit-canonical form of [`PiiClass`].
