@@ -10,9 +10,9 @@
   Other surfaces on the default: `CorpusIngestor::with_safety_net_resolution`
   and the `gaze setup` doctor's Nym and DOB checks. The proxy's routing probe
   keeps `redact`, so a residual there is still reported as unsurfaced PII
-  (HTTP 422). Decided as 1.0 default F3 (Resolve/Strict standard profile).
-- **Breaking:** a safety-net fallback refusal (default `refuse`, or explicit
-  `strict`) is now a typed error instead of the generic `Pipeline` error:
+  (HTTP 422). This is the 1.0 standard profile: output is restorable or
+  refused, never one-way, unless a caller chooses `redact`.
+- **Breaking:** any safety-net fallback refusal is now a typed error instead of the generic `Pipeline` error:
   `gaze clean` and `gaze eval` print
   `{"error":"SafetyNetFallback","exit":3,"reason":"safety_net_fallback_<reason>"}`,
   and `gaze daemon` (JSONL v1 and v2) answers `"error":"SafetyNetFallback"` with

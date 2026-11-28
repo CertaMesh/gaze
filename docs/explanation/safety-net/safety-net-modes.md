@@ -3,6 +3,9 @@
 A safety net reports suspect PII in clean output; only the core acts on it.
 The default is `resolve` with `refuse` fallback: output is fully restorable or
 refused, never one-way.
+This default is a project decision for 1.0, the standard profile: no default
+path writes one-way output, and `[REDACTED:<class>]` markers appear only when a
+caller explicitly chooses the `redact` fallback or mode.
 `gaze clean` and `gaze daemon` use `--safety-net-mode` /
 `--safety-net-fallback`. Rust callers pass `SafetyNetPolicy` to
 `Pipeline::clean_with_safety_net_policy_detect_context`; its default is the

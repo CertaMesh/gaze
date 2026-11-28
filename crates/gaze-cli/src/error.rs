@@ -379,6 +379,21 @@ mod tests {
     }
 
     #[test]
+    fn every_fallback_reason_has_its_own_closed_code() {
+        for reason in [
+            gaze_types::FallbackReason::OverlapConflict,
+            gaze_types::FallbackReason::ValidatorVeto,
+            gaze_types::FallbackReason::AnchorMissing,
+            gaze_types::FallbackReason::ResidualSuspect,
+        ] {
+            assert_eq!(
+                safety_net_fallback_code(reason),
+                format!("safety_net_fallback_{}", reason.as_str())
+            );
+        }
+    }
+
+    #[test]
     fn stderr_line_keeps_existing_error_bytes() {
         let cases = [
             (CliError::Pipeline, r#"{"error":"Pipeline","exit":3}"#),

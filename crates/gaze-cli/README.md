@@ -411,7 +411,7 @@ Exit codes are defined by `CliError` in [`src/error.rs`](src/error.rs).
 | `0` | Success, help, version output, or tolerant-mode safety-net runs that produced only stderr warnings. |
 | `1` | `StdinParse`, `EmptyInput`, `InputTooLarge`, `InvalidEncoding`. |
 | `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, `SafetyNetConfig` (missing backend command/checkpoint or safety-net flags supplied without the matching feature), or `SafetyNetArtifactMissing` (Axis-1 fail-closed when a backend's pinned artifact is absent, including a missing `SHA256SUMS`). |
-| `3` | `UnknownToken`, `InvalidSignature`, `InvalidBlobVersion`, `BlobExpired`, `Pipeline`, sanitized panic path, and `SafetyNetFailure` variants: `Unavailable`, `WeightsMissing`, `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`, `InvalidOutput`, `SuspectedLeak` (strict mode only). |
+| `3` | `UnknownToken`, `InvalidSignature`, `InvalidBlobVersion`, `BlobExpired`, `Pipeline`, `SafetyNetFallback` (a fallback refused a residual it could not tokenize; stderr carries only the closed `safety_net_fallback_*` `reason`), sanitized panic path, and `SafetyNetFailure` variants: `Unavailable`, `WeightsMissing`, `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`, `InvalidOutput`, `SuspectedLeak` (strict mode only). |
 | `4` | `Io`, `PolicyOpen`, `SessionFile` (missing, existing, unreadable, or non-session `--session-out` / `--session-file` path). |
 | `8` | `Untransformable`: a confirmed sensitive value has no safe reversible rendering, so nothing was written. Includes caller record values too short for safe matching (`caller_value_too_short`). Stderr carries only the closed `reason`. |
 

@@ -1645,6 +1645,22 @@ fn untransformable_failure_reports_the_closed_reason() {
 }
 
 #[test]
+fn safety_net_fallback_failure_reports_the_closed_reason() {
+    let d = daemon();
+    let failure = protection_failure(
+        &d.pipeline,
+        gaze::Error::SafetyNetFallback(gaze::FallbackReason::ResidualSuspect),
+    );
+    let body: Value = serde_json::from_str(d.v2.error(failure, None).get()).unwrap();
+    assert_eq!(body["error"], "SafetyNetFallback");
+    assert_eq!(body["reason"], "safety_net_fallback_residual_suspect");
+    assert_eq!(
+        body["detail"],
+        "safety net flagged a residual that cannot be tokenized"
+    );
+}
+
+#[test]
 fn old_block_quoting_a_newly_minted_token_is_cleaned_again() {
     let mut d = daemon();
     let state = open(&mut d, "literal");
