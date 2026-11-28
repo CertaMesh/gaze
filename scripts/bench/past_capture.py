@@ -92,14 +92,13 @@ def key(*, harness_root, release_root, args, binary, probe, receipt, spec,
         models['bundle:' + name] = Path(path).expanduser()
     # The detached validator belongs to the measuring checkout, never the release.
     validator_sources = harness_root / 'scripts/bench/validator_recall_probe'
-    validator = {'source': identity.tree(validator_sources),
-                 'gaze': harness, 'binary': identity.file_digest(probe)}
+    # The probe's sources and bytes identify it; the harness commit does not.
+    validator = {'source': identity.tree(validator_sources), 'binary': identity.file_digest(probe)}
     dependencies = agentic.policy_dependency_provenance(policy_path, release_root, policy)
     inputs = identity.snapshot(files=files, models=models, environment=environment,
                                runtime=identity.native_runtime({'detector': binary, 'validator': probe}))
     return {'format': FORMAT, 'binary_sha256': inputs['files']['detector_binary'],
-            'benchmark': {'spec_id': specs.validate(spec)['id'],
-                          'harness_revision': harness['revision'], 'validator': validator},
+            'benchmark': {'layer_specs': specs.layer_specs(spec), 'validator': validator},
             'subject': {'release_tag': tag, 'build': receipt},
             'execution': {'parameters': parameters, 'inputs': inputs,
                           'capture_protocol': specs.capture_protocol(args),
@@ -119,8 +118,7 @@ def validate_binding(card, header, key, *, version=None):
             or key.get('binary_sha256') != header.get('binary_sha256')):
         raise ValueError('release_capture_binding')
     benchmark, subject, execution = key['benchmark'], key['subject'], key['execution']
-    if (benchmark['spec_id'] != specs.identity(card, required=True)
-            or benchmark['harness_revision'] != card['runner_provenance']['harness_revision']
+    if (benchmark['layer_specs'] != specs.layer_identity(card, required=True)
             or subject['build'] != card['subject_build']
             or execution['parameters'] != card['parameters']
             or execution['capture_protocol'] != card['capture_protocol']
