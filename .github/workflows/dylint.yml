@@ -12,7 +12,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Called from test.yml, github.workflow and github.run_id are the caller's,
+  # so a fixed prefix keeps this group distinct from the caller's own group.
+  # PR runs share a group per ref (the caller cancels superseded ones); every
+  # other run gets a group of its own, so it is never dropped as a pending run.
+  group: dylint-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: false
 
 jobs:
