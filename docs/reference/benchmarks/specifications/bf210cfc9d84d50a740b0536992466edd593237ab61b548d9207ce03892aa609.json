@@ -1,21 +1,21 @@
 {
-  "id": "gaze-benchmark-v1:578d794413681e96077e65c0c32b74474af9bed5c131178cddc3a9f78042184c",
+  "id": "gaze-benchmark-v1:bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
     "generator": {
       "generator": "scripts/bench/agentic_layers.py",
-      "generator_version": 31,
+      "generator_version": 32,
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 41750,
+      "documents": 41784,
       "documents_by_layer": {
-        "A": 19917,
-        "D": 9032,
+        "A": 19935,
+        "D": 9048,
         "R": 12801
       },
-      "corpus_sha256": "8380d500b949265ef5e01f9a8b801819fd8d83373474f87abcdc535a4df33944",
+      "corpus_sha256": "5c259f8e24cbf4f691cddafbb4ac61f90d4b5112d0bfdc40cf90d73517b873cc",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,10 +24,10 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "9480508e4ddeca0c4ce82e40acede4c18aca64f318dfdc75eeb04457ee7cd695"
+      "generated": "8c3ac7f6c8a62ac5c11af9897cfadbcccdfd8b1a9a7a784d36336958ceb1b3c1"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "3e94cfa0a61b773c17ff1c676b1d1704cb27c212bf48b987ae3a0095d621ad49",
+      "scripts/bench/agentic_layers.py": "d2e0e5672cdc5bf83c8d63dc0adf7a04cac6618026f59b0f77ad6964a30c92b3",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -86,7 +86,7 @@
       "scripts/bench/jwt_payload_oracle.py": "d2b25a0baf7ef29d90fba7ac30513a703d93f6ee1b375d92006478b0bc906ec2",
       "scripts/bench/known_record_arm.py": "41e2a585eb2eb7707348123dddfeb64ae19638599e848e067d6c064c8718a997",
       "scripts/bench/known_record_attribution.py": "34e6f26aaab7378da4505306badb14cadd8c70932fd4460f0e0182f97d6d720f",
-      "scripts/bench/known_record_cells.py": "6ff3f7332261cb31a4159c77f5eca3273913cdb83303ed470b22fcc1790fc847",
+      "scripts/bench/known_record_cells.py": "fd23bacc4cc0c74fc813bc3eb6ee81e1be9d811938e5107c81d3173137c46c04",
       "scripts/bench/known_record_gain.py": "fe2007f6ed5e3f3a82bb3b1f7f9c3c17821488bcbabef62b0b6fa7557b1b2a6c",
       "scripts/bench/known_record_shipping_gate.py": "d78c3d9d8ce0a0146f56678befd5c722ec86d34cd562a3341e97346dfd6b8a6a",
       "scripts/bench/layer_display.py": "b37c4f763bc5f7eee4340ac0cfd041e4434f279449a31adf5177f30055434df1",
@@ -390,14 +390,14 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 19917,
-        "document_ids_sha256": "59e83287c06e5107027aa5426a7d40197377e66746f5ab4e1af99f150b4bd01f",
-        "descriptors_sha256": "50fb3b21d03bd612711512bd64cab58c8df677680cfd7f29b9cf01c94f690aa8"
+        "documents": 19935,
+        "document_ids_sha256": "be6430c5bc691b8eb86cc5fa102d00e1d4fee900546f0fcce94e287373594b24",
+        "descriptors_sha256": "c5f31630b1b135020b2e7ae623f7b1e333623444bc20ac14f8e3b92ae09f8270"
       },
       "D": {
-        "documents": 9032,
-        "document_ids_sha256": "b18bb8d9074196dd31c12cfd1a5ff7206d1bace3e4f6b23ddc07ff2efa44956b",
-        "descriptors_sha256": "1f4a0cdf30f7480ddc523370ef23efbc70f687ab2b4adcd9eb974a944259e562"
+        "documents": 9048,
+        "document_ids_sha256": "f84c8dca6afabdb003f02068b36b792a436d09fc9566b46545d6df128b28692b",
+        "descriptors_sha256": "5b26d9261cf2431550b5585b949fdace620da13921f10aa1c7b391bc31797a4c"
       },
       "R": {
         "documents": 12801,

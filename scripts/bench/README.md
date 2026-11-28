@@ -790,9 +790,10 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [sub-specification specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
+The [capture closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
-The [current specification](../../docs/reference/benchmarks/specifications/578d794413681e96077e65c0c32b74474af9bed5c131178cddc3a9f78042184c.json)
+The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells.
+The [current specification](../../docs/reference/benchmarks/specifications/8fb68ef295a9c41d45639e405ac5a517c0291c8c9097028f2e9cf6b1009f5714.json)
 differs from it only in the `known_record_cells.py` digest: cell
 generator v8, which defines the `core` capture profile policy. The per-profile
 capture loop lives in `scripts/ci/known_record_normalization_capture.py`,

@@ -119,6 +119,11 @@ fn builder(recognizers: Vec<Spans>, rows: &Rows) -> PipelineBuilder {
             StreetNumberOrder::NumberBefore,
             vec!["street".into(), "lane".into()],
         )
+        .register_street_lexicon(
+            LocaleTag::DeDe,
+            StreetNumberOrder::NumberAfter,
+            vec!["gasse".into()],
+        )
         .rule(DefaultRule::new(Action::Tokenize))
         .redaction_logger(rows.clone());
     for recognizer in recognizers {
@@ -190,6 +195,59 @@ fn a_whole_us_address_is_protected_with_its_unit_and_state() {
             AddressGrowth::from_recognizer_id(id).map(AddressGrowth::recognizer_id),
             Some(id)
         );
+    }
+}
+
+#[test]
+fn inline_numbers_complete_address_gaps_without_absorbing_field_separators() {
+    let pipeline = builder(
+        vec![
+            ner(&[
+                "Drusk Street",
+                "Suite",
+                "Brinmoor",
+                "Corvathgasse",
+                "Wohnung",
+            ]),
+            postcode(&["00572"]),
+        ],
+        &Rows::default(),
+    )
+    .build()
+    .unwrap();
+    for (raw, expected) in [
+        (
+            "Drusk Street, Suite 200B, Brinmoor",
+            vec!["Drusk Street", "Suite", "200B", "Brinmoor"],
+        ),
+        (
+            "Corvathgasse, Wohnung 7, 00572",
+            vec!["Corvathgasse", "Wohnung", "7", "00572"],
+        ),
+        (
+            "Corvathgasse, 17a, 00572",
+            vec!["Corvathgasse", "17a", "00572"],
+        ),
+        (
+            "Corvathgasse,17a,00572",
+            vec!["Corvathgasse", "17a", "00572"],
+        ),
+        (
+            "Street, available spaces, ZIP\nDrusk Street, 17, 00572",
+            vec!["Drusk Street", "00572"],
+        ),
+        ("Brinmoor, 17, Brinmoor", vec!["Brinmoor", "Brinmoor"]),
+        (
+            "Drusk Street; Suite 200, Brinmoor",
+            vec!["Drusk Street", "Suite", "Brinmoor"],
+        ),
+        ("Corvathgasse, 17\n00572", vec!["Corvathgasse", "00572"]),
+        (
+            "Drusk Street, Suite 200\tBrinmoor",
+            vec!["Drusk Street", "Suite", "Brinmoor"],
+        ),
+    ] {
+        assert_eq!(tokenized(&pipeline, raw), expected, "{raw}");
     }
 }
 

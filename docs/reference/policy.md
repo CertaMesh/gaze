@@ -1063,6 +1063,7 @@ environment.
 ```toml
 [proxy]
 anthropic_betas = ["claude-code-20250219", "effort-2025-11-24"]
+restore_tools = ["save_contact"]
 ```
 
 `anthropic_betas` defaults to an empty array of strings. Each entry permits exactly
@@ -1070,6 +1071,15 @@ one value in the Anthropic proxy's comma-separated `anthropic-beta` header.
 The proxy validates entries at startup. Empty entries, commas and non-visible
 ASCII are rejected. Repeatable `proxy serve --anthropic-beta` values extend
 this list. Entries never bypass body inspection or enable unknown fields.
+
+`restore_tools` defaults to an empty array. Proxy restore is sink-scoped: the
+assistant text the client shows its user restores, and a model's tool-call
+arguments restore only when this list names the tool exactly. The arguments of
+every other tool, tool results, documents, reasoning and thought summaries keep
+their tokens, so originals never reach a tool or service you did not declare.
+A token the model writes into one of those places stays a token. Declare only
+the tools that must act on original values. Names match exactly; `gaze proxy
+serve` rejects empty or padded names at startup.
 
 See the [Anthropic contract](../explanation/proxy/anthropic-messages-contract.md)
 for supported request schemas and explicit refusals.
@@ -1439,11 +1449,18 @@ four locale buckets:
 - `address_military_post_offices` (`locale-en`): exact-case `APO`, `FPO`,
   `DPO`.
 
+In a comma-separated line, if a winner already covers the unit designator,
+the missing number can join separately. It needs an address winner after the
+comma and either a recognized street immediately before the designator or a
+postcode after the number. A bare house number between two commas requires a
+street whose locale writes the number after it and a postcode on the right; bare years are
+excluded. Neither form crosses field punctuation, tabs or line breaks.
+
 Each piece is its own `location` token, so every piece restores exactly and
 the winner it grew from keeps its class; the separators stay raw. The
 recognizer id is the closed reason the piece joined, one of
 `address.block.unit`, `address.block.unit_number_before`,
-`address.block.military_box`, `address.block.region_code` and
+`address.block.inline_number`, `address.block.military_box`, `address.block.region_code` and
 `address.block.military_post_office` (`gaze::AddressGrowth`), and the trace
 sources add the anchor's recognizer id. Pieces are `Learned` evidence, so the
 repeat-value sweep never copies `Suite 312` to a second, unanchored

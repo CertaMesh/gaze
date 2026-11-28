@@ -109,3 +109,18 @@ def test_exchange_reads_a_burst_of_replies_written_at_once(tmp_path, monkeypatch
     finally:
         daemon.close()
     assert daemon.proc.returncode == 0 and daemon.peak > 0
+
+
+def test_every_amendment_matches_the_live_budget():
+    # A budget changes only through a dated amendment; the latest one per budget is in force.
+    latest = {}
+    for amendment in BUDGETS["amendments"]:
+        assert amendment["date"] and amendment["reason"] and amendment["measurements"]
+        for name, change in amendment["change"].items():
+            latest[(amendment["envelope"], name)] = change["to"]
+    for (envelope, name), value in latest.items():
+        live = BUDGETS["envelopes"][envelope]
+        assert (live["budgets"][name] if name in live["budgets"] else live[name]) == value
+    # Every envelope gates unless its latest amendment says otherwise.
+    for name, envelope in BUDGETS["envelopes"].items():
+        assert envelope["release_gate"] is latest.get((name, "release_gate"), True)
