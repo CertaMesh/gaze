@@ -67,6 +67,28 @@ the net bytes elsewhere. A matcher that protected every declared word-name would
 otherwise trade its new false positives against leaks removed on the rare-name
 cells.
 
+Generator v8 captures layer K under two profiles and adds one control. The
+`default` profile is the gate policy that `gaze setup` writes, with NER and the
+Nym safety net. The `core` profile is the declared MCP protection profile:
+bundled `core` rules with no NER or safety net (`CORE_PROFILE_POLICY` in the
+cell generator). Under it, the record matcher and the core rules are the only
+cover for a declared value, so the default profile's NER cannot hide a record
+regression. The new `control_exact_unlisted_field_name` control declares a
+coined single name (`Qorvex`, `Zentha`), which is in neither common-name list,
+as the whole value of a `contact` field in `tool_json` and `log_kv`. Its
+counterweight puts a superstring (`Qorvexline`) under the same key, and that
+value must stay raw. The other 120 v7 pairs keep their bytes.
+
+The K gate compares each profile separately, under every gated scored-label
+contract. The no-regression clauses hold in each profile on its own: leaked
+bytes and refusals do not rise, exact-restore and valid-manifest counts do not
+fall, false-positive bytes added stay below leaked bytes removed, and the
+word-name veto applies. The caller-known phone and card exemption applies in
+each profile the same way. The improvement clause (some leaked bytes fall) is
+met when either profile's leaked bytes fall, because a matcher change can be
+visible only under `core`, where NER does not cover the declared value. A gain
+in one profile never offsets a regression in the other.
+
 ## v5 all-on attribution
 
 The full v5 producer and layer K measured each class and match kind at source

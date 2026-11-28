@@ -47,7 +47,13 @@ def main():
     else:
         if not policy.is_file():
             raise SystemExit('run setup on this subject first')
-        if (output/'observations-v1.jsonl.gz').exists():
+        # A known-record capture writes the default profile here and the core
+        # profile under core/; a partial pair must be removed, not reused.
+        records = [output/'observations-v1.jsonl.gz', output/'core'/'observations-v1.jsonl.gz']
+        present = [path.exists() for path in records]
+        if kind == 'normalization' and any(present) and not all(present):
+            raise SystemExit('incomplete known-record capture (one profile missing); remove the output and recapture both profiles')
+        if present[0]:
             raise SystemExit('observation already exists; verify and reuse it instead of recapturing')
         python = [sys.executable]
         model = Path(os.environ.get('GAZE_NER_MODEL_DIR', str(Path.home()/'.local/share/gaze/models/davlan-mbert-ner-hrl')))

@@ -37,7 +37,7 @@ import agentic_layers as agentic
 import gaze_bench_score as score
 from known_record_attribution import normalized_match_text
 
-GENERATOR_VERSION = 7
+GENERATOR_VERSION = 8
 SEED = 2026092901
 LAYER = "K"
 SOURCE_POSITIVE = "known-record-kind-cells"
@@ -68,6 +68,27 @@ UNLISTED_NAMES = ("Maren", "Tamsin", "Odalys", "Brynja")
 UNLISTED_NAME_TWINS = {"Maren": "Marenhaus", "Tamsin": "Tamsinware", "Odalys": "Odalysite", "Brynja": "Brynjavik"}
 # Given names that are also ordinary English words; generated list, see above.
 WORD_NAMES = ("Summer", "Dawn", "Ivy", "Autumn")
+# Coined single names that are neither listed names nor words, declared as a
+# whole structured field value; NER has no name context there.
+FIELD_NAMES = ("Qorvex", "Zentha")
+FIELD_NAME_TWINS = {"Qorvex": "Qorvexline", "Zentha": "Zenthaport"}
+# Known-record capture profiles. `default` is the gate policy `gaze setup`
+# writes. `core` is the declared MCP protection profile (bundled `core`, no NER
+# or safety net; see `gaze mcp doctor`), where a declared value has only the
+# record matcher and the core rules.
+CORE_PROFILE_POLICY = """schema_version = "0.1.0"
+
+[session]
+scope = "conversation"
+
+[policy.rulepacks]
+bundled = ["core"]
+
+[[rule]]
+kind = "default"
+action = "tokenize"
+"""
+CAPTURE_PROFILES = ("default", "core")
 GREETINGS = ("Hi", "Hello", "Dear", "Hallo", "Bonjour", "Olá")
 # Record JSON keys the context parser infers; other classes need a field_map.
 INFERRED_KEYS = {"Name": "name", "Location": "address", "custom:phone": "phone", "custom:iban": "iban"}
@@ -96,6 +117,9 @@ class ControlKind(str, Enum):
     # A declared name that is also an ordinary word needs corroboration; alone it
     # stays raw, and so does its ordinary-word use. Prices both sides of that rule.
     UNCORROBORATED_WORD_NAME = "control_uncorroborated_word_name"
+    # A coined declared name as a whole `contact` field value; a superstring
+    # value under the same key stays raw.
+    EXACT_UNLISTED_FIELD_NAME = "control_exact_unlisted_field_name"
 
 
 Bucket = MatchKind | ControlKind
@@ -108,6 +132,7 @@ CONTROL_MEASURED_KIND = {
     ControlKind.EXACT_AFTER_SPACE_FOLDING: "exact",
     ControlKind.CASE_FOLDED_AFTER_SPACE_FOLDING: "case_folded",
     ControlKind.UNCORROBORATED_WORD_NAME: MatchKind.CORROBORATED_SINGLE.value,
+    ControlKind.EXACT_UNLISTED_FIELD_NAME: "exact",
 }
 
 
@@ -317,14 +342,14 @@ class Builder:
         return "".join(self._parts)
 
 
-def wrap(surface: str, ticket: int, fill: Callable[[Builder], list[Target]]) -> tuple[str, tuple[agentic.Gold, ...], tuple[Target, ...]]:
+def wrap(surface: str, ticket: int, fill: Callable[[Builder], list[Target]], field: str = "note") -> tuple[str, tuple[agentic.Gold, ...], tuple[Target, ...]]:
     builder = Builder()
     if surface == "email":
         builder.add(f"Subject: Ticket {ticket}\n\n")
     elif surface == "log_kv":
-        builder.add(f'2026-05-04T09:12:44Z INFO crm.note ticket={ticket} note="')
+        builder.add(f'2026-05-04T09:12:44Z INFO crm.note ticket={ticket} {field}="')
     elif surface == "tool_json":
-        builder.add(f'{{"tool": "crm.add_note", "ticket": {ticket}, "note": "')
+        builder.add(f'{{"tool": "crm.add_note", "ticket": {ticket}, "{field}": "')
     before = len(builder.text())
     targets = fill(builder)
     body = builder.text()[before:]
@@ -608,6 +633,20 @@ def _corroborated_variant(variant: str, index: int, rng: agentic.Rng) -> tuple[F
 
         return positive, counterweight, record
 
+    if variant == "unlisted_field":
+        given = FIELD_NAMES[index % len(FIELD_NAMES)]
+        record = (RecordField("Name", given), RecordField("Name", surname))
+
+        def positive(b: Builder) -> list[Target]:
+            span = b.gold_span(given, "FIRSTNAME")
+            return [_target(span, 0, ("name_single", "exact"))]
+
+        def counterweight(b: Builder) -> list[Target]:
+            span = b.add(FIELD_NAME_TWINS[given])
+            return [_target(span, 0, ("name_single", "exact"), False)]
+
+        return positive, counterweight, record
+
     if variant == "word_name_alone":
         given = WORD_NAMES[index % len(WORD_NAMES)]
         record = (RecordField("Name", given), RecordField("Name", surname))
@@ -706,17 +745,20 @@ VARIANTS: dict[Bucket, tuple[str, ...]] = {
         "term_nonbreaking_hyphen_source", "term_unicode_space_source",
     ),
     ControlKind.UNCORROBORATED_WORD_NAME: ("word_name_alone",),
+    ControlKind.EXACT_UNLISTED_FIELD_NAME: ("unlisted_field",),
 }
 
 
 def surfaces_for(variant: str) -> tuple[str, ...]:
+    if variant == "unlisted_field":
+        return tuple(s for s in SURFACES if s in SINGLE_LINE_SURFACES)
     if "line_break" in variant:
         return tuple(s for s in SURFACES if s not in SINGLE_LINE_SURFACES)
     return SURFACES
 
 
 def _english_only(variant: str) -> bool:
-    return variant in CORROBORATED_VARIANTS or variant in {"unlisted_alone", "word_name_alone"}
+    return variant in CORROBORATED_VARIANTS or variant in {"unlisted_alone", "word_name_alone", "unlisted_field"}
 
 
 def _term_variant(variant: str) -> tuple[Fill, Fill, tuple[RecordField, ...]]:
@@ -780,7 +822,8 @@ def generate() -> list[Pair]:
                 cells = []
                 for role, fill in ((Role.POSITIVE, positive_fill), (Role.COUNTERWEIGHT, counterweight_fill)):
                     ticket += 1
-                    text, gold, targets = wrap(surface, ticket, fill)
+                    field = "contact" if variant == "unlisted_field" else "note"
+                    text, gold, targets = wrap(surface, ticket, fill, field)
                     uid = f"known-record-kind-{bucket.value}-{variant}-{surface}-{role.value}"
                     cells.append(Cell(uid, role, bucket, variant, surface, language, text, gold, record, targets))
                 pairs.append(Pair(*cells))

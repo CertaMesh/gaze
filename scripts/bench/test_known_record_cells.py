@@ -16,8 +16,8 @@ import known_record_cells as cells
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A generator change must bump GENERATOR_VERSION and this hash together.
-PINNED_CORPUS_SHA256 = "9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0"
-PAIRS = 120
+PINNED_CORPUS_SHA256 = "61a56f5ea2c7cf920500aa587c84adb2cb1c4029c6ca7bcc90d7f167f4c78dc1"
+PAIRS = 122
 
 
 def recorder_kind(text: str, raw: str) -> str:
@@ -92,11 +92,11 @@ class KnownRecordCellTests(unittest.TestCase):
     def test_preexisting_v5_pairs_keep_identical_bytes_kinds_and_buckets(self) -> None:
         import hashlib
         # v7 rebuilt the unlisted-name pairs and added the word-name control;
-        # every other v5 pair keeps its bytes.
+        # v8 added the field-name control; every other v5 pair keeps its bytes.
         legacy = [
             p for p in self.pairs
             if not p.positive.variant.startswith("term_")
-            and p.positive.variant not in {"unlisted_alone", "word_name_alone"}
+            and p.positive.variant not in {"unlisted_alone", "word_name_alone", "unlisted_field"}
         ]
         self.assertEqual(len(legacy), 80)
         self.assertEqual(
@@ -108,6 +108,15 @@ class KnownRecordCellTests(unittest.TestCase):
             self.assertEqual(positive.measured_kind(), positive.targets[0].attribution[1])
             expected = positive.probe_kind.value if positive.probe_kind else cells.CONTROL_MEASURED_KIND[positive.control_kind]
             self.assertEqual(positive.measured_kind(), expected)
+
+    def test_v7_pairs_keep_identical_bytes(self) -> None:
+        import hashlib
+        v7 = [p for p in self.pairs if p.positive.variant != "unlisted_field"]
+        self.assertEqual(len(v7), 120)
+        self.assertEqual(
+            hashlib.sha256(cells.corpus_bytes(v7)).hexdigest(),
+            "9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0",
+        )
 
     def test_generation_is_deterministic_and_pinned(self) -> None:
         again = cells.generate()
@@ -216,12 +225,15 @@ class KnownRecordCellTests(unittest.TestCase):
             self.assertEqual(cells.model_matches(twin.text, twin.record), [], twin.uid)
 
     def test_name_controls_follow_the_common_name_dictionaries(self) -> None:
-        for name in cells.UNLISTED_NAMES:
+        for name in (*cells.UNLISTED_NAMES, *cells.FIELD_NAMES, *cells.FIELD_NAME_TWINS.values()):
             self.assertNotIn(name.casefold(), cells.COMMON_NAMES)
         for name in (*cells.WORD_NAMES, *cells.LISTED_COMMON_NAMES):
             self.assertIn(name.casefold(), cells.COMMON_NAMES)
         rare = pair_of(self.pairs, "unlisted_alone").positive
         self.assertEqual(len(cells.model_matches(rare.text, rare.record)), 1)
+        field = pair_of(self.pairs, "unlisted_field").positive
+        self.assertIn(f'contact="{field.record[0].raw}"', field.text.replace('": "', '="'))
+        self.assertEqual(len(cells.model_matches(field.text, field.record)), 1)
         word = pair_of(self.pairs, "word_name_alone").positive
         self.assertEqual(cells.model_matches(word.text, word.record), [])
 

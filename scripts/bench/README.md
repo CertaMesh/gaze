@@ -508,6 +508,12 @@ Generator version 7 rebuilds the unlisted-name control with rare declared names
 and superstring twins, and adds `control_uncorroborated_word_name` for given
 names that are also ordinary words. It has 120 pairs; the pinned v7 corpus hash
 is `9b2534a956edccb5d761db52d5eb6324c33b466576a436131eac27db3b4ab2d0`.
+Generator version 8 adds `control_exact_unlisted_field_name` (coined declared
+names as whole `contact` field values, with superstring twins) and the `core`
+capture profile (bundled `core`, no NER or safety net). The capture writes the
+core profile's record and scorecards to `<output>/core`. It has 122 pairs; the
+pinned v8 corpus hash is
+`61a56f5ea2c7cf920500aa587c84adb2cb1c4029c6ca7bcc90d7f167f4c78dc1`.
 The model-free tests pin all pre-existing v5 pairs byte for byte, including
 their match kinds and buckets. Keep historical v5 results under their original
 specification; compare each implementation against the same v6 cells.
@@ -787,7 +793,13 @@ any change to it.
 The [capture-closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
 The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
-The [current specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [prose record-ID specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [current specification](../../docs/reference/benchmarks/specifications/6f19bc591b57cc328a818d609eb8e250002cf8627cde2f2d2fcd951f929438bb.json)
+differs from it only in the `known_record_cells.py` digest: cell
+generator v8, which defines the `core` capture profile policy. The per-profile
+capture loop lives in `scripts/ci/known_record_normalization_capture.py`,
+which the specification does not cover; each K `capture.json` pins it in
+`arm.harness`.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
