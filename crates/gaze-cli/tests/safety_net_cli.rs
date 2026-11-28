@@ -224,6 +224,9 @@ fn default_safety_net_fallback_refuses_a_residual_it_cannot_tokenize() {
     );
     assert!(out.stdout.is_empty());
     assert!(!String::from_utf8_lossy(&out.stderr).contains("Plain"));
+    let stderr: Value = serde_json::from_slice(&out.stderr).unwrap();
+    assert_eq!(stderr["error"], "SafetyNetFallback");
+    assert_eq!(stderr["reason"], "safety_net_fallback_residual_suspect");
 
     let mut redact = safety_args(&opf, checkpoint.path());
     redact.extend(["--safety-net-fallback".to_string(), "redact".to_string()]);

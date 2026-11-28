@@ -1061,10 +1061,18 @@ fn default_refuse_fallback_tokenizes_what_redact_tokenizes_and_refuses_what_it_d
     assert_eq!(session.restore_strict_text(&refused).unwrap(), RAW);
 
     let (deleted, _) = run(true, SafetyNetFallback::Redact);
-    assert!(deleted.is_ok(), "Redact deletes the declined residual");
+    assert!(
+        deleted
+            .as_ref()
+            .is_ok_and(|text| text.contains("[REDACTED:")),
+        "Redact writes a one-way marker over the declined residual: {deleted:?}"
+    );
     let (refused, _) = run(true, SafetyNetFallback::Refuse);
     assert!(
-        matches!(refused, Err(Error::SafetyNetFallback(_))),
+        matches!(
+            refused,
+            Err(Error::SafetyNetFallback(FallbackReason::ResidualSuspect))
+        ),
         "Refuse must reject what Redact deletes: {refused:?}"
     );
 }

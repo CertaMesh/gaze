@@ -76,6 +76,23 @@ pub(crate) enum CliError {
     Untransformable {
         reason: gaze_types::UntransformableReason,
     },
+    /// The safety-net fallback refused a residual it could not tokenize (the default `refuse`,
+    /// or `strict`), so nothing was written. Exit code 3; only the closed code reaches stderr.
+    SafetyNetFallback {
+        reason: gaze_types::FallbackReason,
+    },
+}
+
+/// The closed `safety_net_fallback_*` code for a fallback refusal, the same spelling the
+/// benchmark records.
+pub(crate) fn safety_net_fallback_code(reason: gaze_types::FallbackReason) -> &'static str {
+    match reason {
+        gaze_types::FallbackReason::OverlapConflict => "safety_net_fallback_overlap_conflict",
+        gaze_types::FallbackReason::ValidatorVeto => "safety_net_fallback_validator_veto",
+        gaze_types::FallbackReason::AnchorMissing => "safety_net_fallback_anchor_missing",
+        gaze_types::FallbackReason::ResidualSuspect => "safety_net_fallback_residual_suspect",
+        _ => "safety_net_fallback",
+    }
 }
 
 impl CliError {
@@ -103,7 +120,8 @@ impl CliError {
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
             | Self::BlobExpired
-            | Self::Pipeline => 3,
+            | Self::Pipeline
+            | Self::SafetyNetFallback { .. } => 3,
             Self::Io | Self::PolicyOpen | Self::PolicyOpenDetail(_) | Self::SessionFile(_) => 4,
             #[cfg(feature = "document")]
             Self::DocumentDetail(_) => 5,
@@ -150,6 +168,7 @@ impl CliError {
             #[cfg(feature = "proxy")]
             Self::ProxyDetail(_) => "Proxy",
             Self::Untransformable { .. } => "Untransformable",
+            Self::SafetyNetFallback { .. } => "SafetyNetFallback",
         }
     }
 
@@ -243,6 +262,12 @@ impl CliError {
                 )
             }
             Self::Untransformable { reason } => untransformable_line(*reason),
+            Self::SafetyNetFallback { reason } => format!(
+                r#"{{"error":"{}","exit":{},"reason":"{}"}}"#,
+                self.variant_name(),
+                self.exit_code(),
+                safety_net_fallback_code(*reason)
+            ),
             Self::SafetyNetFailure { variant } => format!(
                 r#"{{"error":"{}","exit":{},"variant":"{}"}}"#,
                 self.variant_name(),
@@ -357,6 +382,12 @@ mod tests {
     fn stderr_line_keeps_existing_error_bytes() {
         let cases = [
             (CliError::Pipeline, r#"{"error":"Pipeline","exit":3}"#),
+            (
+                CliError::SafetyNetFallback {
+                    reason: gaze_types::FallbackReason::OverlapConflict,
+                },
+                r#"{"error":"SafetyNetFallback","exit":3,"reason":"safety_net_fallback_overlap_conflict"}"#,
+            ),
             (
                 CliError::PolicyConfig,
                 r#"{"error":"PolicyConfig","exit":2}"#,

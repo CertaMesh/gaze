@@ -346,6 +346,8 @@ enum Failure {
     Protection(&'static str),
     /// Confirmed sensitive value with no safe rendering; carries the closed reason.
     Untransformable(&'static str),
+    /// The safety-net fallback refused a residual; carries the `safety_net_fallback_*` code.
+    SafetyNetFallback(&'static str),
 }
 
 impl Failure {
@@ -366,6 +368,7 @@ impl Failure {
             Self::ContextInvalid => "PolicyConfig",
             Self::Protection(variant) => variant,
             Self::Untransformable(_) => "Untransformable",
+            Self::SafetyNetFallback(_) => "SafetyNetFallback",
         }
     }
     fn detail(self) -> &'static str {
@@ -374,12 +377,13 @@ impl Failure {
             Self::CacheCapacity => "complete request exceeds capacity",
             Self::CacheConvergence => "complete request did not stabilize",
             Self::Untransformable(_) => "confirmed sensitive field cannot be transformed",
+            Self::SafetyNetFallback(_) => "safety net flagged a residual that cannot be tokenized",
             _ => "daemon request failed closed",
         }
     }
     fn reason(self) -> Option<&'static str> {
         match self {
-            Self::Untransformable(reason) => Some(reason),
+            Self::Untransformable(reason) | Self::SafetyNetFallback(reason) => Some(reason),
             _ => None,
         }
     }
@@ -1328,6 +1332,9 @@ fn protection_failure(pipeline: &gaze::Pipeline, error: gaze::Error) -> Failure 
     }
     match map_clean_error(pipeline, error) {
         CliError::Untransformable { reason } => Failure::Untransformable(reason.as_str()),
+        CliError::SafetyNetFallback { reason } => {
+            Failure::SafetyNetFallback(crate::error::safety_net_fallback_code(reason))
+        }
         cli => Failure::Protection(DaemonError::Cli(cli).variant()),
     }
 }

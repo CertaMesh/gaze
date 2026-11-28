@@ -33,8 +33,9 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 The default safety-net fallback changed from `redact` to `refuse`. Output is
 now either fully restorable or refused: where Gaze used to write a one-way
-`[REDACTED:<class>]` marker, `gaze clean`, `gaze daemon` and `gaze eval` exit
-`3` with `SafetyNetFallback`, and Rust callers of `SafetyNetPolicy::default()`
+`[REDACTED:<class>]` marker, `gaze clean` and `gaze eval` exit `3` with
+`{"error":"SafetyNetFallback","exit":3,"reason":"safety_net_fallback_<reason>"}`,
+`gaze daemon` answers `"error":"SafetyNetFallback"` with the same `reason`, and Rust callers of `SafetyNetPolicy::default()`
 or `clean_with_safety_net*` get
 `Error::SafetyNetFallback(reason)`. A residual that used to ship raw in the leak
 report, such as a sub-word, is now refused too. Suspects the resolve pass can
@@ -44,7 +45,8 @@ tokenize are unaffected.
   `--on-residual redact`) or `SafetyNetPolicy::new(SafetyNetMode::Resolve,
   SafetyNetFallback::Redact)`. Markers remain one-way and never restore.
 - Handle the refusal like any other typed refusal: retry without the flagged
-  content, or route it to a human.
+  content, or route it to a human. Scripts that matched `"error":"Pipeline"` for
+  a `--safety-net-fallback strict` refusal now see `"SafetyNetFallback"`.
 - `match` on `SafetyNetFallback` needs an arm for the new `Refuse` variant if it
   does not already have a wildcard (the enum is `#[non_exhaustive]`).
 

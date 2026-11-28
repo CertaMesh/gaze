@@ -582,6 +582,7 @@ pub(crate) fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
     }
     match err {
         gaze::Error::SafetyNet(err) => map_safety_net_error(err),
+        gaze::Error::SafetyNetFallback(reason) => CliError::SafetyNetFallback { reason },
         _ => CliError::Pipeline,
     }
 }
