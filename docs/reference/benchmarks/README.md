@@ -2009,7 +2009,7 @@ part of the immutable measuring specification. The [refusal contract v2 specific
 the [first chat v33 specification](specifications/b12892ef5bd7ae7fcec863583fc3943b9e2e0717222c5f0ada3811ae02a92875.json) adds name boundaries; the [corrected chat specification](specifications/6344230f48555654e039e7a401e3eef72768eae3a1da32a06128e87b2700fb4d.json) corrects one demonym counterweight; and the [last chat prerelease](specifications/e89688e904336bc3a4e8de8e90c5c199a1a295f13f9cc5d1d50cc9f2f10ed9ce.json) binds those cells using the [per-layer capture closure](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json).
 Those chat v32/v33 specifications came from `chat-name-cues`, not main.
 Main's [canonical v32 specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) measures comma-separated addresses and benign table/list counts;
-the [current specification](specifications/19722b334c63c29d707352bd4955e71101c71a0f7480d6bda62e4231dbdd6417.json) integrates both sets of cells on v34.
+the [chat v34 specification](specifications/19722b334c63c29d707352bd4955e71101c71a0f7480d6bda62e4231dbdd6417.json) integrates both sets of cells. Main's [v33 specification](specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds prose record IDs to v32. The [current v35 specification](specifications/f2680df580d999cb7363c3f4f245bf7acbc5a4a4a0e92517a8cb51c69ba75bd2.json) includes chat names and prose record IDs.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2618,8 +2618,34 @@ Generator v34 extends main's `59891a50` v32 corpus without modifying its
 address or inventory cells. It adds all 140 A and 24 D chat cells described
 above, for **41,948 documents per partition**: 20,075 A, 9,072 D and 12,801 R.
 Reconstructing version 32 selects the original address/inventory corpus and
-its [canonical contract](scored-labels-agentic-generator-v32.json). There is
-no canonical v33; a bare v33 request cannot identify a chat prerelease.
+its [canonical contract](scored-labels-agentic-generator-v32.json).
+
+### Prose record IDs (generator v33)
+
+The [record-ID cells](../../../scripts/bench/prose_record_id_cells.py) add 800 A
+and 605 D documents per partition. Layer A scores the whole identifier, not
+just the first digit run. It covers personal case, claim, member, medical,
+customer and employee records in English and German, including a numeric case
+and `Fall-Nr.` immediately followed by digits. Employee and account keys also
+appear in running text without a field cue. Dev and test use different wording
+and value pools. Layer D reuses the exact uncued keys as public release or
+reference codes and tool selectors. Ten login values per partition are also
+used unchanged as plain release names, backtick-quoted release tags, and build
+tags. Another ten lowercase and ten title-case logins per partition pair a word
+with an underscore and five digits. The exact same spellings name software
+counters in D; only their use as a person's login is gold. Each personal numeric `case` value also
+appears in a benign switch arm and in prose naming a software test case.
+Dotted tool names, public paths and field
+cues with no value carry no gold. Layer R is unchanged. The v32 corpus
+rebuilds byte-for-byte under its [frozen contract](scored-labels-agentic-generator-v32.json).
+No detector or release has been measured as part of this addition.
+
+### Chat names on the prose record-ID corpus (generator v35)
+
+Generator v35 adds 140 A and 24 D chat messages to main's v33, for **43,353
+documents per partition**: 20,875 A, 9,677 D and 12,801 R. Both parent
+corpora rebuild byte-for-byte: v33 selects [main's prose-ID contract](scored-labels-agentic-generator-v33.json),
+and v34 selects the [chat branch contract](scored-labels-agentic-chat-prerelease-v34.json).
 
 ### Measured adjacency layer history
 

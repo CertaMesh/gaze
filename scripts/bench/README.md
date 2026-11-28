@@ -795,8 +795,10 @@ changes one published English counterweight to a demonym that is also a listed g
 The [last chat prerelease specification](../../docs/reference/benchmarks/specifications/e89688e904336bc3a4e8de8e90c5c199a1a295f13f9cc5d1d50cc9f2f10ed9ce.json)
 binds those cells using the [per-layer capture closure](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json).
 Main's [canonical v32 specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells.
-The [current specification](../../docs/reference/benchmarks/specifications/19722b334c63c29d707352bd4955e71101c71a0f7480d6bda62e4231dbdd6417.json)
+The [chat v34 specification](../../docs/reference/benchmarks/specifications/19722b334c63c29d707352bd4955e71101c71a0f7480d6bda62e4231dbdd6417.json)
 adds both chat cell families to main's corpus as [generator v34](../../docs/reference/benchmarks/README.md#integrated-addresses-and-chat-names-generator-v34).
+Main's [v33 specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds prose record IDs and their benign counterweights.
+The [current specification](../../docs/reference/benchmarks/specifications/f2680df580d999cb7363c3f4f245bf7acbc5a4a4a0e92517a8cb51c69ba75bd2.json) combines chat and prose-ID cells in generator v35.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

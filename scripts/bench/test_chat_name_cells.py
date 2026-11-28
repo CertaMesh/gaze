@@ -91,8 +91,18 @@ def test_integrated_cells_preserve_chat_prereleases(partition, chat_v32, chat_v3
     assert hashlib.sha256(api.corpus_bytes(prior)).hexdigest() == chat_v33
     without_boundaries = [r for r in prior if not r.surface.startswith(cells.BOUNDARY_PREFIX)]
     assert hashlib.sha256(api.corpus_bytes(without_boundaries)).hexdigest() == chat_v32
-    with pytest.raises(api.LayerError, match="prerelease"):
-        api.records_as_of(33, integrated)
+
+
+@pytest.mark.parametrize("partition,main_v33,chat_v34", [
+    ("dev", "01f148c88b6f438f66cea88e98ef5d160480b7c2fcb23250473ee16badbc2b6a",
+     "53b40c4d505a17f802fb7790c0050b20c95e5c2b1499cba1111efab6300544ca"),
+    ("test", "30c18e267516f1203e9592285a83d5a1563c0f7365618024fb101e6840e95ee2",
+     "92db838aa2b9d4e31f7a9aa71b670b0c9ba947f36583a8032c9d0d1a729c5b1d"),
+])
+def test_prose_id_and_chat_histories_remain_distinct(partition, main_v33, chat_v34):
+    rows = api.generate(partition)
+    for version, expected in ((33, main_v33), (34, chat_v34)):
+        assert hashlib.sha256(api.corpus_bytes(api.records_as_of(version, rows))).hexdigest() == expected
 
 
 @pytest.mark.parametrize("partition", api.PARTITIONS)

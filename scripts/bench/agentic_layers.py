@@ -56,9 +56,10 @@ import invisible_separator_cells as invisible_separators
 import issuer_credential_cells as issuer_credentials
 import prose_credential_cells as prose_credentials
 import chat_name_cells as chat_names
+import prose_record_id_cells as prose_record_ids
 
 
-GENERATOR_VERSION = 34
+GENERATOR_VERSION = 35
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -4520,14 +4521,17 @@ GENERATOR_ADDITIONS = {
     29: "issuer_credentials_",
     31: prose_credentials.SURFACE_PREFIX,
     32: ("address_gap_", "inventory_count_"),
-    34: (chat_names.SURFACE_PREFIX, chat_names.BOUNDARY_PREFIX),
+    33: prose_record_ids.SURFACE_PREFIX,
+    35: (chat_names.SURFACE_PREFIX, chat_names.BOUNDARY_PREFIX),
 }
 
 
 def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
     """The documents of generator `version`, from the current generator's output."""
-    if version == 33:
-        raise LayerError("v33 was a chat branch prerelease; rebuild it at the revision for its specification")
+    if version == 34:
+        # Chat v34 branched from main's v32 before the prose-ID cells landed.
+        records = (record for record in records if not record.surface.startswith(prose_record_ids.SURFACE_PREFIX))
+        version = 35
     if not 3 <= version <= GENERATOR_VERSION:
         raise LayerError(f"generator version {version} cannot be rebuilt from version {GENERATOR_VERSION}")
     later = tuple(prefix for added, prefixes in GENERATOR_ADDITIONS.items() if added > version
@@ -4568,6 +4572,8 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    34: Path("docs/reference/benchmarks/scored-labels-agentic-chat-prerelease-v34.json"),
+    33: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v33.json"),
     32: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v32.json"),
     31: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v31.json"),
     30: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v30.json"),
@@ -4862,6 +4868,7 @@ def generate(partition: str) -> list[Record]:
         + invisible_separators.records(sys.modules[__name__], partition)
         + issuer_credentials.records(sys.modules[__name__], partition)
         + prose_credentials.records(sys.modules[__name__], partition)
+        + prose_record_ids.records(sys.modules[__name__], partition)
         + chat_names.records(sys.modules[__name__], partition)
         + chat_names.boundary_records(sys.modules[__name__], partition)
     )
