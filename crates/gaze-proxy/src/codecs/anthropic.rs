@@ -3738,14 +3738,19 @@ fn transform_response_mutable(
             for value in values.iter_mut() {
                 transform_response_mutable(value, ctx, ledger, reading)?;
             }
+            let withhold = matches!(reading, RestoreReading::Withhold);
             let mut logical = String::new();
+            // A withheld array emits its tokens: the guard reads those bytes, as each
+            // element's own guard does, and the residual proves the restored reading.
+            let mut emitted = String::new();
             let mut authorized = Vec::<Range<usize>>::new();
             for value in values {
                 if let JsonKind::String(value) = &value.kind {
                     // A withheld string keeps its tokens, so prove the restored reading each
                     // element's own check proved; its tokens alone carry no authorized range.
                     let withheld;
-                    let (text, ranges) = if matches!(reading, RestoreReading::Withhold) {
+                    let (text, ranges) = if withhold {
+                        emitted.push_str(&value.value);
                         withheld = ctx.restore(&value.value)?;
                         (&withheld.text, &withheld.authorized_output_ranges)
                     } else {
@@ -3760,7 +3765,7 @@ fn transform_response_mutable(
                     );
                 }
             }
-            guard_mutable_text_response(&logical)?;
+            guard_mutable_text_response(if withhold { &emitted } else { &logical })?;
             ctx.validate(&logical, &authorized)?;
             Ok(())
         }

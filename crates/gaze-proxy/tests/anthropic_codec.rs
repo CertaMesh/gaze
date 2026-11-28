@@ -78,7 +78,7 @@ impl ResponseResidualValidator for SyntheticResidualValidator {
     }
 }
 
-/// Refuses every email-shaped word outside an authorized range, as the pipeline's residual
+/// Refuses every complete address (`local@domain`) outside an authorized range, as the pipeline's residual
 /// does: a format-preserving fake (`email1.<hex>@gaze-fake.invalid`) is email-shaped too.
 struct EmailShapedResidualValidator;
 
@@ -98,7 +98,11 @@ impl ResponseResidualValidator for EmailShapedResidualValidator {
                     let covered = authorized_output_ranges
                         .iter()
                         .any(|range| range.start <= begin && range.end >= index);
-                    if value[begin..index].contains('@') && !covered {
+                    let word = &value[begin..index];
+                    let address = word
+                        .find('@')
+                        .is_some_and(|at| at > 0 && at + 1 < word.len());
+                    if address && !covered {
                         return Err(CodecErrorCode::ProviderOriginPii);
                     }
                 }
@@ -1780,12 +1784,21 @@ fn withheld_string_arrays_prove_the_restored_reading_like_their_elements() {
     let fake = transaction
         .format_preserving_fake(&PiiClass::Email, EMAIL)
         .unwrap();
+    // An original the mutable-text guard rejects; its emitted token is what the guard reads.
+    let link = transaction
+        .tokenize(
+            &PiiClass::Custom("report_link".into()),
+            "https://example.invalid/report",
+        )
+        .unwrap();
     let snapshot = transaction.commit().unwrap();
-    let response = |value: &str| {
+    // `elements` are the array's JSON string elements, written between its brackets.
+    let response = |elements: &str| {
         format!(
-            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"tool_use","id":"toolu_1","name":"undeclared","input":{{"to":["{value}"]}}}},{{"type":"tool_result","tool_use_id":"toolu_0","content":["{value}"]}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":2}}}}"#
+            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"tool_use","id":"toolu_1","name":"undeclared","input":{{"to":[{elements}]}}}},{{"type":"tool_result","tool_use_id":"toolu_0","content":[{elements}]}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":2}}}}"#
         )
     };
+    let quoted = |value: &str| format!("\"{value}\"");
     let restore = |body: String| {
         let mut residual = EmailShapedResidualValidator;
         let mut context = ResponseTransformContext::new(
@@ -1798,12 +1811,15 @@ fn withheld_string_arrays_prove_the_restored_reading_like_their_elements() {
             .restore_response(body.as_bytes(), &mut context)
             .map(|proved| String::from_utf8(proved.bytes().to_vec()).unwrap())
     };
-    let output = restore(response(&fake)).unwrap();
+    let output = restore(response(&quoted(&fake))).unwrap();
     assert_eq!(output.matches(fake.as_str()).count(), 2);
     assert!(!output.contains(EMAIL));
-    // The array proof still runs: a provider-origin email in a withheld array refuses.
+    let output = restore(response(&quoted(&link))).unwrap();
+    assert_eq!(output.matches(link.as_str()).count(), 2);
+    assert!(!output.contains("https://"));
+    // The joined proof still runs: each half of this address passes alone, the array refuses.
     assert_eq!(
-        restore(response("carol@example.invalid"))
+        restore(response(r#""carol","@example.invalid""#))
             .unwrap_err()
             .code(),
         CodecErrorCode::ProviderOriginPii
