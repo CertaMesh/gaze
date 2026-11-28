@@ -79,25 +79,33 @@ impl StreetLexicon {
 
     /// Organization evidence needs an unambiguous street ending. In particular,
     /// an English `-ing` word must not become a German `Ring` street by suffix.
-    pub(crate) fn organization_street(&self, text: &str, locales: &[LocaleTag]) -> bool {
-        let Some(last) = text.split_whitespace().next_back() else {
-            return false;
-        };
+    pub(crate) fn unambiguous_street_order(
+        &self,
+        text: &str,
+        locales: &[LocaleTag],
+    ) -> Option<StreetNumberOrder> {
+        let last = text.split_whitespace().next_back()?;
         let last = last.trim_end_matches('.');
         let word = last.to_lowercase();
         let multi_word = text.split_whitespace().nth(1).is_some();
         locales
             .iter()
             .filter_map(|locale| self.by_locale.get(locale))
-            .flat_map(|orders| orders.iter())
-            .any(|(&order, entries)| {
-                entries.iter().any(|entry| {
-                    entry_matches(entry, order, &word, multi_word)
-                        && (word == entry.stem
-                            || !word.ends_with("ing")
-                            || last.ends_with("-Ring")
-                            || last.ends_with("-ring")
-                            || last.ends_with("Ring"))
+            .find_map(|orders| {
+                [
+                    StreetNumberOrder::NumberBefore,
+                    StreetNumberOrder::NumberAfter,
+                ]
+                .into_iter()
+                .find(|&order| {
+                    orders.get(&order).into_iter().flatten().any(|entry| {
+                        entry_matches(entry, order, &word, multi_word)
+                            && (word == entry.stem
+                                || !word.ends_with("ing")
+                                || last.ends_with("-Ring")
+                                || last.ends_with("-ring")
+                                || last.ends_with("Ring"))
+                    })
                 })
             })
     }
@@ -197,7 +205,7 @@ fn number_after(text: &str, street_end: usize) -> Option<Range<usize>> {
 }
 
 /// A lone four-digit 1900-2099 with no letter or range part.
-fn is_bare_year(number: &str) -> bool {
+pub(crate) fn is_bare_year(number: &str) -> bool {
     number.len() == 4
         && number.bytes().all(|b| b.is_ascii_digit())
         && (number.starts_with("19") || number.starts_with("20"))
