@@ -1,21 +1,21 @@
 {
-  "id": "gaze-benchmark-v1:13bb8d694a999b212b527b09e4f6b5fda2f9512c36690a2371c5fa9b5a4f0fce",
+  "id": "gaze-benchmark-v1:bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
     "generator": {
       "generator": "scripts/bench/agentic_layers.py",
-      "generator_version": 31,
+      "generator_version": 32,
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 41750,
+      "documents": 41784,
       "documents_by_layer": {
-        "A": 19917,
-        "D": 9032,
+        "A": 19935,
+        "D": 9048,
         "R": 12801
       },
-      "corpus_sha256": "8380d500b949265ef5e01f9a8b801819fd8d83373474f87abcdc535a4df33944",
+      "corpus_sha256": "5c259f8e24cbf4f691cddafbb4ac61f90d4b5112d0bfdc40cf90d73517b873cc",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,10 +24,10 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "9480508e4ddeca0c4ce82e40acede4c18aca64f318dfdc75eeb04457ee7cd695"
+      "generated": "8c3ac7f6c8a62ac5c11af9897cfadbcccdfd8b1a9a7a784d36336958ceb1b3c1"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "3e94cfa0a61b773c17ff1c676b1d1704cb27c212bf48b987ae3a0095d621ad49",
+      "scripts/bench/agentic_layers.py": "d2e0e5672cdc5bf83c8d63dc0adf7a04cac6618026f59b0f77ad6964a30c92b3",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -77,7 +77,6 @@
       "scripts/bench/gold_gap_evidence.py": "ecaa9c4fa94a2fc7ef17b293eb3f603de0d92b34b62792dc7a03f1d040e75a5f",
       "scripts/bench/gold_gap_tiebreak.py": "e5b9071cff9df996d63e9a62840429a745b11296f4074b3fb827d206cb882d4e",
       "scripts/bench/government_id_cells.py": "027584c0ffd28a0fa07b266d7e640e6c15936195cfc0a24c26cfbd261697d6f8",
-      "scripts/bench/heldout_panels.py": "a0d9e223d8e489c1ee634acb5801cd3bebf305394a06b318fa86b76bfe7b9d9a",
       "scripts/bench/iban_trailing_word_enumeration.py": "83ba3d356cd7e4ee129e834b9cae60d97e73d428698cc497191f8ba1dc6081ee",
       "scripts/bench/inference_reuse_proof.py": "cfed22114bfc72f53b84ee92ec2244a6f71ec1ff3f2cf62f56ec5cf561616e59",
       "scripts/bench/invisible_separator_cells.py": "5d0e1d8beff7b01dac1971bd4c01e264ee5f9fc67795eb9e621ba071d4117324",
@@ -144,7 +143,6 @@
       "scripts/bench/render_agentic_adjacency_doc.py": "fd1b7e3734087f96cc89244ce6cfccd3c0406927c2be7151d26466192bc9909b",
       "scripts/bench/render_benchmark_doc.py": "a08ace21a122909b601a84ba8d4e912e960d88cade67dc0dab2164e95b587dce",
       "scripts/bench/replay_enumeration_proof.py": "103430afee59a9928a1968c5040aac3c1d4d7a452e86213cd98b41ae1211ab03",
-      "scripts/bench/report_metrics.py": "d6ddad2563f608a812103b1b28ac90d0ae76c9dc83744c19ed954f4f662b2081",
       "scripts/bench/rescore.py": "4d268d104ab2abe816e891f132f1d165054ccd1e14f11499d7a05b07811945cf",
       "scripts/bench/rescore_past_release.py": "8f4c4602d7f0fda5ce36374119e10d534ebbad38a15ff24f218164a98ce8cf42",
       "scripts/bench/rescore_safety_net.py": "cf19c2a4962744cd2eceb73c7e2fedfc7b706137b11463e99e195df0477437aa",
@@ -392,14 +390,14 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 19917,
-        "document_ids_sha256": "59e83287c06e5107027aa5426a7d40197377e66746f5ab4e1af99f150b4bd01f",
-        "descriptors_sha256": "50fb3b21d03bd612711512bd64cab58c8df677680cfd7f29b9cf01c94f690aa8"
+        "documents": 19935,
+        "document_ids_sha256": "be6430c5bc691b8eb86cc5fa102d00e1d4fee900546f0fcce94e287373594b24",
+        "descriptors_sha256": "c5f31630b1b135020b2e7ae623f7b1e333623444bc20ac14f8e3b92ae09f8270"
       },
       "D": {
-        "documents": 9032,
-        "document_ids_sha256": "b18bb8d9074196dd31c12cfd1a5ff7206d1bace3e4f6b23ddc07ff2efa44956b",
-        "descriptors_sha256": "1f4a0cdf30f7480ddc523370ef23efbc70f687ab2b4adcd9eb974a944259e562"
+        "documents": 9048,
+        "document_ids_sha256": "f84c8dca6afabdb003f02068b36b792a436d09fc9566b46545d6df128b28692b",
+        "descriptors_sha256": "5b26d9261cf2431550b5585b949fdace620da13921f10aa1c7b391bc31797a4c"
       },
       "R": {
         "documents": 12801,

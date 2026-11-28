@@ -71,11 +71,36 @@ Adapters implement `ProviderAdapter`:
   Gemini's omitted candidate index is the protobuf JSON default 0; an explicit
   malformed index is ambiguous. The default adapter method marks every surface
   complete, which leaves a split token pseudonymized.
+- `sse_event_tool_calls(event)` names the tool calls an event announces, keyed
+  by the stream their argument fragments use. The OpenAI Responses API names a
+  call in `output_item` events and sends its arguments in separate delta events.
+  It defaults to no bindings.
 - `requests_json_output(request)` reports whether the request asked the model
   for JSON output. It defaults to `false`.
 
 Adapters do not decide what is PII. They only describe where strings live; the
 configured `gaze::Pipeline` and recognizer registry make detection decisions.
+
+### Sink-scoped restore
+
+Each response surface declares a `RestoreSink`, which decides whether its tokens
+restore at all:
+
+| `RestoreSink` | Restore |
+|---|---|
+| `Display` | Assistant text the client shows its user. Always restores. |
+| `ToolInput(name)` | A tool call's arguments. Restores only when `ProxyConfig::with_restore_tools` (policy `[proxy] restore_tools`) names the tool exactly. |
+| `Withheld` | Everything else, and the default: tool results, documents, reasoning, thought summaries, and fields an adapter does not classify. Never restores. |
+
+The MCP bridge restores only into argument fields its policy allows; the proxy
+now matches it. A token the model writes into a sink that does not restore stays
+a token, so a valid placeholder cannot pull an original into an undeclared tool
+or an external service. A streamed tool call takes its name from the fragment
+or from its stream's binding. A stream without a name, or bound to two different
+names, keeps its tokens. The Anthropic codec applies the same rule: `text`
+restores, `tool_use.input` and its `input_json_delta` restore only for a
+declared tool, and `tool_result`, `search_result` and `document` fields are
+checked for provider-origin PII but keep their tokens.
 
 Each surface declares restore syntax. Protection scans its text as supplied.
 

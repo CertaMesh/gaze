@@ -3556,6 +3556,14 @@ fn transform_response_block(
         node.raw_preserve = true;
         return Ok(());
     }
+    // Sink-scoped restore: a tool's input restores only for a declared tool. Results and
+    // documents the provider returns are not assistant text, so they keep their tokens.
+    let input_reading =
+        if block_type == "tool_use" && ctx.restores_tool_input(object_string(node, "name").ok()) {
+            RestoreReading::Decoded
+        } else {
+            RestoreReading::Withhold
+        };
     ledger.mark(node.occurrence)?;
     let JsonKind::Object(members) = &mut node.kind else {
         return Err(CodecErrorCode::UnsupportedResponseSurface);
@@ -3594,16 +3602,16 @@ fn transform_response_block(
             }
             ("text", "citations") => transform_response_citations(&mut member.value, ctx, ledger)?,
             ("tool_use", "input") => {
+                transform_response_mutable(&mut member.value, ctx, ledger, input_reading)?;
+                saw_input = true;
+            }
+            ("tool_result", "content") => {
                 transform_response_mutable(
                     &mut member.value,
                     ctx,
                     ledger,
-                    RestoreReading::Decoded,
+                    RestoreReading::Withhold,
                 )?;
-                saw_input = true;
-            }
-            ("tool_result", "content") => {
-                transform_response_mutable(&mut member.value, ctx, ledger, RestoreReading::Source)?;
                 saw_content = true;
             }
             ("tool_result", "tool_use_id") => {
@@ -3612,7 +3620,12 @@ fn transform_response_block(
             }
             ("tool_result", "is_error") => response_bool_or_null(&member.value, ledger)?,
             ("search_result" | "document", "title" | "context" | "text" | "content") => {
-                transform_response_mutable(&mut member.value, ctx, ledger, RestoreReading::Source)?;
+                transform_response_mutable(
+                    &mut member.value,
+                    ctx,
+                    ledger,
+                    RestoreReading::Withhold,
+                )?;
                 saw_user_payload = true;
             }
             ("search_result" | "document", "source" | "id") => {
@@ -3695,6 +3708,9 @@ enum RestoreReading {
     /// The value a JSON parser reads: `tool_use.input` is a decoded JSON value the agent acts
     /// on, so `Robert \"Bob\" Smith` becomes `Robert "Bob" Smith`.
     Decoded,
+    /// No restore: the destination is not a sink that receives originals, so its tokens stay.
+    /// The text is still checked for provider-origin PII.
+    Withhold,
 }
 
 fn transform_response_mutable(
@@ -3773,6 +3789,12 @@ fn restore_json_string(
     let restored = match reading {
         RestoreReading::Source => ctx.restore(&value.value)?,
         RestoreReading::Decoded => ctx.restore_decoded(&value.value)?,
+        // Strict restore still refuses tokens this session never minted, and the residual
+        // proof runs on the restored reading; the emitted text keeps its tokens.
+        RestoreReading::Withhold => {
+            let restored = ctx.restore(&value.value)?;
+            return ctx.validate(&restored.text, &restored.authorized_output_ranges);
+        }
     };
     ctx.validate(&restored.text, &restored.authorized_output_ranges)?;
     value.value = restored.text;
@@ -4489,6 +4511,8 @@ enum BlockKind {
 
 struct BlockAccumulator {
     kind: BlockKind,
+    /// The tool a `tool_use` block calls, from its `content_block_start`.
+    tool: Option<String>,
     start_slot: usize,
     start_frame: Vec<u8>,
     delta_slots: Vec<usize>,
@@ -5436,6 +5460,9 @@ fn transform_block_start(
         .to_owned();
     let mut logical = String::new();
     let mut signature = String::new();
+    let tool = (block_type == "tool_use")
+        .then(|| object_string(block, "name").ok().map(str::to_owned))
+        .flatten();
     let kind = match block_type.as_str() {
         "text" => {
             ledger
@@ -5584,6 +5611,7 @@ fn transform_block_start(
     }
     Ok(BlockAccumulator {
         kind,
+        tool,
         start_slot,
         start_frame,
         delta_slots: Vec::new(),
@@ -5866,14 +5894,14 @@ fn finish_block(
             )?;
             let mut ledger = CoverageLedger::new(partial.occurrence_count);
             // The accumulated `partial_json` is the tool's `input`, the same decoded
-            // destination as a non-streamed `tool_use.input`.
-            transform_response_mutable(
-                &mut partial.root,
-                ctx,
-                &mut ledger,
-                RestoreReading::Decoded,
-            )
-            .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
+            // destination as a non-streamed `tool_use.input`, restored only for a declared tool.
+            let reading = if ctx.restores_tool_input(accumulator.tool.as_deref()) {
+                RestoreReading::Decoded
+            } else {
+                RestoreReading::Withhold
+            };
+            transform_response_mutable(&mut partial.root, ctx, &mut ledger, reading)
+                .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
             ledger
                 .finish()
                 .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;

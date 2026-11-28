@@ -8,8 +8,9 @@ use serde_json::Value;
 use url::{Host, Url};
 
 use crate::adapter::{
-    push_string, push_text_blocks, walk_all_scalars, AdapterContract, PiiSurface, ProviderAdapter,
-    RequestSurfaces, SessionPolicy, SessionRegistryConfig, SseEvent, SurfacePath, SurfaceSyntax,
+    push_string, push_text_blocks, sink_from, walk_all_scalars, AdapterContract, PiiSurface,
+    ProviderAdapter, RequestSurfaces, RestoreSink, SessionPolicy, SessionRegistryConfig, SseEvent,
+    SurfacePath, SurfaceSyntax,
 };
 use crate::codec::CodecLimits;
 use crate::codecs::anthropic::AnthropicMessagesCodec;
@@ -393,6 +394,7 @@ impl ProviderAdapter for AnthropicAdapter {
                                                     .index(index)
                                                     .member("content"),
                                                 message_value,
+                                                &RestoreSink::Withheld,
                                             );
                                         }
                                     }
@@ -411,7 +413,12 @@ impl ProviderAdapter for AnthropicAdapter {
         let mut surfaces = RequestSurfaces::default();
         if let Value::Object(root) = body {
             if let Some(content) = root.get_mut("content") {
-                collect_content_blocks(&mut surfaces, &SurfacePath::root("content"), content);
+                collect_content_blocks(
+                    &mut surfaces,
+                    &SurfacePath::root("content"),
+                    content,
+                    &RestoreSink::Display,
+                );
             }
         }
         surfaces.strings
@@ -426,18 +433,20 @@ impl ProviderAdapter for AnthropicAdapter {
                     for (key, value) in delta {
                         if let Value::String(text) = value {
                             match key.as_str() {
-                                "text" => surfaces.push(PiiSurface {
-                                    field_path: "delta.text".into(),
-                                    field: None,
-                                    text,
-                                    syntax: SurfaceSyntax::ModelOutput,
-                                }),
-                                "partial_json" => surfaces.push(PiiSurface {
-                                    field_path: "delta.partial_json".into(),
-                                    field: None,
-                                    text,
-                                    syntax: SurfaceSyntax::Json,
-                                }),
+                                "text" => surfaces.push(
+                                    PiiSurface::new("delta.text", text, SurfaceSyntax::ModelOutput)
+                                        .with_sink(RestoreSink::Display),
+                                ),
+                                // Each event restores alone here, and the delta does not name
+                                // its tool, so streamed tool input keeps its tokens.
+                                "partial_json" => surfaces.push(
+                                    PiiSurface::new(
+                                        "delta.partial_json",
+                                        text,
+                                        SurfaceSyntax::Json,
+                                    )
+                                    .with_sink(RestoreSink::ToolInput(None)),
+                                ),
                                 _ => {}
                             }
                         }
@@ -449,18 +458,26 @@ impl ProviderAdapter for AnthropicAdapter {
     }
 }
 
+/// Surfaces content blocks. `text` is the sink of their text: assistant text in a response,
+/// and nothing a request restores. Tool input goes to its named tool; tool results keep their
+/// tokens.
 fn collect_content_blocks<'a>(
     surfaces: &mut RequestSurfaces<'a>,
     prefix: &SurfacePath,
     content: &'a mut Value,
+    text_sink: &RestoreSink,
 ) {
+    let start = surfaces.strings.len();
     match content {
-        Value::String(_) => push_string(
-            surfaces,
-            prefix.clone(),
-            content,
-            SurfaceSyntax::ModelOutput,
-        ),
+        Value::String(_) => {
+            push_string(
+                surfaces,
+                prefix.clone(),
+                content,
+                SurfaceSyntax::ModelOutput,
+            );
+            sink_from(surfaces, start, text_sink);
+        }
         Value::Array(blocks) => {
             for (index, block) in blocks.iter_mut().enumerate() {
                 let Value::Object(block) = block else {
@@ -473,13 +490,17 @@ fn collect_content_blocks<'a>(
                                 prefix
                                     .index(index)
                                     .member("text")
-                                    .surface(text, SurfaceSyntax::ModelOutput),
+                                    .surface(text, SurfaceSyntax::ModelOutput)
+                                    .with_sink(text_sink.clone()),
                             );
                         }
                     }
                     Some("tool_use") => {
+                        let tool = block.get("name").and_then(Value::as_str).map(str::to_owned);
                         if let Some(input) = block.get_mut("input") {
+                            let start = surfaces.strings.len();
                             walk_all_scalars(surfaces, prefix.index(index).member("input"), input);
+                            sink_from(surfaces, start, &RestoreSink::ToolInput(tool));
                         }
                     }
                     Some("tool_result") => {
@@ -488,6 +509,7 @@ fn collect_content_blocks<'a>(
                                 surfaces,
                                 &prefix.index(index).member("content"),
                                 result,
+                                &RestoreSink::Withheld,
                             );
                         }
                     }
