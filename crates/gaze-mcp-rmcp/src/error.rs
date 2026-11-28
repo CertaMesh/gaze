@@ -27,6 +27,15 @@ pub enum RmcpFrontendError {
     #[error("duplicate tool registration: {0}")]
     DuplicateTool(String),
 
+    /// The built-in HTTP transport would give every caller one Session: it was
+    /// handed one host, or a resolver that cannot tell callers apart. Use
+    /// [`crate::RmcpFrontend::serve_conversations`] with a resolver whose
+    /// [`crate::PrincipalResolver::distinguishes_callers`] is true.
+    #[error(
+        "built-in HTTP gives each caller its own Session; serve it with RmcpFrontend::serve_conversations and a PrincipalResolver that tells callers apart"
+    )]
+    SharedHttpHost,
+
     /// An unexpected transport-internal failure not classifiable as the
     /// above. Use sparingly — most failures fit one of the named variants.
     #[error("internal frontend error: {0}")]
@@ -40,6 +49,7 @@ impl RmcpFrontendError {
             Self::Transport(_) => "transport",
             Self::MalformedRequest(_) => "malformed-request",
             Self::DuplicateTool(_) => "duplicate-tool",
+            Self::SharedHttpHost => "shared-http-host",
             Self::Internal(_) => "internal",
         }
     }

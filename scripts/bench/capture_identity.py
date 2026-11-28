@@ -66,6 +66,24 @@ def _command(*args: str) -> str:
                                    env={**os.environ, "LC_ALL": "C"}).strip()
 
 
+def _machine() -> tuple[str, str, str]:
+    system = platform.system()
+    if system == "Darwin":
+        return (system, _command("/usr/bin/sw_vers"),
+                _command("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string", "hw.machine", "hw.ncpu"))
+    if system == "Linux":
+        return (system, platform.platform(),
+                "\n".join(line for line in _command("lscpu").splitlines()
+                          if not line.startswith(("CPU MHz:", "CPU(s) scaling MHz:"))))
+    raise ValueError("native cache runtime is unsupported")
+
+
+def machine_identity() -> dict:
+    """The OS build and CPU a capture ran on; a gain gate compares only equal machines."""
+    system, os_build, hardware = _machine()
+    return {"system": system, "os_build_sha256": digest(os_build), "hardware_sha256": digest(hardware)}
+
+
 def native_runtime(binaries: dict[str, Path]) -> dict:
     """Bind the actual loader closure, including OS-shipped shared-cache libraries."""
     native_roots = {Path(sys.executable), *binaries.values()}
@@ -101,10 +119,9 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
     for path in standard_library.rglob("*"):
         if path.is_file():
             include_native(path)
-    system = platform.system()
+    system, os_build, hardware = _machine()
     libraries = {}
     if system == "Darwin":
-        os_build = _command("/usr/bin/sw_vers")
         pending = list(native_roots)
         seen = set()
         while pending:
@@ -124,11 +141,7 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
                     pending.append(path)
                 else:
                     raise ValueError("missing dynamic library")
-        hardware = _command("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string", "hw.machine", "hw.ncpu")
-    elif system == "Linux":
-        os_build = platform.platform()
-        hardware = "\n".join(line for line in _command("lscpu").splitlines()
-                             if not line.startswith(("CPU MHz:", "CPU(s) scaling MHz:")))
+    else:
         pending = list(native_roots)
         seen = set()
         while pending:
@@ -149,8 +162,6 @@ def native_runtime(binaries: dict[str, Path]) -> dict:
                     raise ValueError("unresolved dynamic library")
                 libraries[name] = {"sha256": file_digest(path)}
                 pending.append(path)
-    else:
-        raise ValueError("native cache runtime is unsupported")
     return {"system": system, "os_build_sha256": digest(os_build),
             "hardware_sha256": digest(hardware), "libraries": libraries,
             "native_roots": {str(path): file_digest(path) for path in sorted(native_roots)},
