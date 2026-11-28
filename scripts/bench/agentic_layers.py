@@ -57,7 +57,7 @@ import issuer_credential_cells as issuer_credentials
 import prose_credential_cells as prose_credentials
 
 
-GENERATOR_VERSION = 31
+GENERATOR_VERSION = 32
 PARTITIONS = ("dev", "test")
 PUBLISHED_PARTITION = "test"
 PARTITION_SEEDS = {"dev": 2026092601, "test": 2026092602}
@@ -1844,7 +1844,8 @@ def check_lookalike_pairs(records: Sequence[Record]) -> None:
 # unassigned `00xxx` range and GB postcodes in the unused `ZZ` area. Every
 # number range, like every name pool, is split between the partitions.
 
-ADDRESS_SURFACES = ("address_prose", "address_block", "address_log_kv", "address_csv", "address_tool_json")
+ADDRESS_SURFACES = ("address_prose", "address_block", "address_log_kv", "address_csv", "address_tool_json",
+                    "address_gap_prose")
 DOCS_PER_ADDRESS_CELL = {LAYER_IDENTIFIERS: 6, LAYER_LOOKALIKES: 4}
 ADDRESS_LABELS = frozenset({"BUILDINGNUM", "CITY", "STATE", "STREET", "ZIPCODE"})
 
@@ -2058,6 +2059,15 @@ ADDRESS_CELLS = (
              "Lieferung an {ST} {HN}, {ZP} {CI}. Die Rückmeldung liegt in {X} des Teams.",
              "Zustellung: {ST} {HN}, {ZP} {CI}\nDie Antwort liegt in {X} der Buchhaltung.",
              decoy=D_.POSTFACH),
+    _address("address_comma_suite", D_.SUITE, "US", "gap_prose",
+             "Forward my mail to {HN} {ST}, {UN}, {CI}, {SA} {ZP}.",
+             "The tenant lives at {HN} {ST}, {UN}, {CI}, {SA} {ZP}."),
+    _address("address_comma_wohnung", D_.WOHNUNG, "DE", "gap_prose",
+             "Neue Lieferadresse: {ST} {HN}, {UN}, {ZP} {CI}.",
+             "Die Mieterin wohnt in der {ST} {HN}, {UN}, {ZP} {CI}."),
+    _address("address_comma_hausnummer", None, "DE", "gap_prose",
+             "Anschrift (Straße, Hausnummer, Ort): {ST}, {HN}, {ZP} {CI}.",
+             "Versand an: {ST}, {HN}, {ZP} {CI}."),
 )
 
 # Layer D. {X} is the benign designator; no street, city or postcode anywhere.
@@ -2090,6 +2100,15 @@ ADDRESS_TWINS = (
     _designator_twin("designator_postfach_log", D_.POSTFACH, "log_kv", "DE",
                      'level=warn event=mailbox.full target="{X}"',
                      'svc=mail op=sync folder="{X}" result=ok'),
+    _designator_twin("designator_comma_table", D_.SUITE, "gap_table", "US",
+                     "Region | Regression | Mirror\nTrelling | {X} | Lindmar",
+                     "Site\tTests\tReplica\nBrinmoor\t{X}\tKornhelm"),
+    _designator_twin("designator_comma_list", D_.WOHNUNG, "gap_list", "DE",
+                     "Filter: Halbruck; {X}; Lindmar",
+                     "Suchbegriffe: Tervelau, {X}; Kornhelm"),
+    _designator_twin("designator_comma_quantity", D_.UNIT, "gap_list", "US",
+                     "Scoreboard (team, units, rival): Trelling, {X}, Ashvale Point",
+                     "Team inventory (home, count, away): Brinmoor, {X}, Calder Rise"),
 )
 del D_
 
@@ -4499,6 +4518,7 @@ GENERATOR_ADDITIONS = {
     28: ("invisible_bom_", "invisible_joined_", "invisible_boundary_"),
     29: "issuer_credentials_",
     31: prose_credentials.SURFACE_PREFIX,
+    32: ("address_gap_", "inventory_count_"),
 }
 
 
@@ -4544,6 +4564,7 @@ def records_as_of(version: int, records: Iterable[Record]) -> list[Record]:
 
 # The committed contract each older generator version was scored under.
 HISTORICAL_CONTRACTS = {
+    31: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v31.json"),
     30: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v30.json"),
     29: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v29.json"),
     28: Path("docs/reference/benchmarks/scored-labels-agentic-generator-v28.json"),
@@ -4806,6 +4827,11 @@ def generate(partition: str) -> list[Record]:
         + _labelled_lookalike_records(LOOKALIKE_TWINS, partition, LAYER_LOOKALIKES)
         + _address_records(ADDRESS_CELLS, partition, LAYER_IDENTIFIERS)
         + _address_records(ADDRESS_TWINS, partition, LAYER_LOOKALIKES)
+        + [_coverage_record(partition, LAYER_LOOKALIKES, "public_parking_count", "inventory_count_csv", i,
+                            "Road, vacancies, zone\nKalvik Lane, {N}, 00043" if partition == "dev" else
+                            "Street, available spaces, district\nDrusk Street, {N}, 00076",
+                            {"N": (str((12 if partition == "dev" else 27) + i), DECOY_PREFIX + "benign")},
+                            "en", "US") for i in range(DOCS_PER_ADDRESS_CELL[LAYER_LOOKALIKES])]
         + _phone_records(PHONE_CELLS, partition, LAYER_IDENTIFIERS)
         + _phone_records(PHONE_TWINS, partition, LAYER_LOOKALIKES)
         + _cue_records(CUE_CELLS, partition, LAYER_IDENTIFIERS)

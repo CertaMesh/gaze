@@ -17,6 +17,8 @@ use crate::LocaleTag;
 
 /// Recognizer id of a grown unit designator with its number (`Suite 312`).
 pub const ADDRESS_UNIT_RECOGNIZER_ID: &str = "address.block.unit";
+/// Recognizer id of a short number between corroborating address parts.
+pub const ADDRESS_INLINE_NUMBER_RECOGNIZER_ID: &str = "address.block.inline_number";
 /// Recognizer id of a grown number-first designator (`3. Etage`).
 pub const ADDRESS_UNIT_NUMBER_BEFORE_RECOGNIZER_ID: &str = "address.block.unit_number_before";
 /// Recognizer id of the `Box` of a military line (`PSC 806, Box 9504`).
@@ -64,16 +66,19 @@ pub enum AddressGrowth {
     RegionCode,
     /// A military post office.
     MilitaryPostOffice,
+    /// A missing house or unit number in a comma-separated address.
+    InlineNumber,
 }
 
 impl AddressGrowth {
     /// Every reason, in declaration order.
-    pub const ALL: [AddressGrowth; 5] = [
+    pub const ALL: [AddressGrowth; 6] = [
         AddressGrowth::Unit,
         AddressGrowth::UnitNumberBefore,
         AddressGrowth::MilitaryBox,
         AddressGrowth::RegionCode,
         AddressGrowth::MilitaryPostOffice,
+        AddressGrowth::InlineNumber,
     ];
 
     /// The recognizer id the grown candidate carries.
@@ -84,6 +89,7 @@ impl AddressGrowth {
             AddressGrowth::MilitaryBox => ADDRESS_MILITARY_BOX_RECOGNIZER_ID,
             AddressGrowth::RegionCode => ADDRESS_REGION_CODE_RECOGNIZER_ID,
             AddressGrowth::MilitaryPostOffice => ADDRESS_MILITARY_POST_OFFICE_RECOGNIZER_ID,
+            AddressGrowth::InlineNumber => ADDRESS_INLINE_NUMBER_RECOGNIZER_ID,
         }
     }
 
@@ -110,6 +116,8 @@ pub(crate) enum AnchorKind {
     /// German block, `IL 00068`), because an address puts the unit and the
     /// state before the postcode and a German postcode is followed by the city.
     Postcode,
+    /// A location whose ending the active street lexicon recognizes.
+    Street(crate::StreetNumberOrder),
     /// A street, city, house number or building number.
     Place,
 }
@@ -205,6 +213,15 @@ impl AddressGrammar {
                 .any(|other| overlaps(span, other))
         };
         for (index, anchor) in anchors.iter().enumerate() {
+            if let Some(number) = self.inline_number(text, anchors, index, chain) {
+                if !taken(&number, &found) {
+                    found.push(GrownPiece {
+                        span: number,
+                        growth: AddressGrowth::InlineNumber,
+                        anchor: index,
+                    });
+                }
+            }
             // Rightward.
             let mut edge = anchor.span.end;
             let mut previous: Option<(AddressGrowth, Range<usize>)> = None;
@@ -293,6 +310,62 @@ impl AddressGrammar {
         }
         found.sort_by_key(|piece| (piece.span.start, piece.span.end));
         found
+    }
+
+    /// Read only the unclaimed number, not punctuation or previously settled
+    /// spans. The caller supplies consecutive address anchors in text order.
+    fn inline_number(
+        &self,
+        text: &str,
+        anchors: &[Anchor],
+        i: usize,
+        chain: &[LocaleTag],
+    ) -> Option<Range<usize>> {
+        let left = &anchors[i];
+        let right = anchors.get(i + 1)?;
+        let gap = text.get(left.span.end..right.span.start)?;
+        if gap.len() > 12 {
+            return None;
+        }
+        let before_comma = gap.strip_suffix(", ").or_else(|| gap.strip_suffix(','))?;
+        let number = if let Some(house) = before_comma.strip_prefix(',') {
+            let house = house.strip_prefix(' ').unwrap_or(house);
+            // A comma-delimited number in a city list is not a house number.
+            if left.kind != AnchorKind::Street(crate::StreetNumberOrder::NumberAfter)
+                || right.kind != AnchorKind::Postcode
+                || house.bytes().filter(u8::is_ascii_digit).count() > 4
+                || crate::house_number::is_bare_year(house)
+            {
+                return None;
+            }
+            house
+        } else {
+            // NER sometimes claims just `Suite`, so growing the whole unit
+            // from either side would overlap a settled selection.
+            let unit = &text[left.span.start..left.span.end + before_comma.len()];
+            if !self
+                .words(chain, AddressVocabulary::UnitDesignators)
+                .any(|word| designator_len(unit, word) == Some(unit.len()))
+            {
+                return None;
+            }
+            let street_before = i
+                .checked_sub(1)
+                .and_then(|p| anchors.get(p))
+                .is_some_and(|p| {
+                    matches!(p.kind, AnchorKind::Street(_))
+                        && matches!(text.get(p.span.end..left.span.start), Some(", " | ","))
+                });
+            if right.kind != AnchorKind::Postcode && !street_before {
+                return None;
+            }
+            &before_comma[before_comma.find(|c: char| c.is_ascii_digit())?..]
+        };
+        if unit_number_len(number) != Some(number.len()) {
+            return None;
+        }
+        let end = left.span.end + before_comma.len();
+        Some(end - number.len()..end)
     }
 }
 
