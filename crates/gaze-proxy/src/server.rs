@@ -3952,6 +3952,11 @@ fn transform_sse(
             if stream.is_ambiguous() {
                 ambiguous.insert(stream);
             } else {
+                // The id a naming event gives the call is the stream's id too: a client may
+                // join the stream's id-less fragments to the call by it.
+                if let Some(call) = key.call_id() {
+                    bind_once(&mut stream_calls, stream.clone(), call);
+                }
                 bind_once(&mut tool_names, stream, &tool);
             }
         }

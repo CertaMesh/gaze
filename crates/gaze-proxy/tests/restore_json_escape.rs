@@ -1821,3 +1821,129 @@ async fn openai_chat_stream_chunk_whose_id_names_an_undeclared_call_keeps_its_to
         .collect();
     assert_still_tokens("chat chunk naming an undeclared call by id", &arguments);
 }
+
+/// A Chat call id announced at two indices names neither. Argument chunks that carry only
+/// `index` keep their tokens: a client may map the index to that id and the id to the
+/// undeclared tool.
+#[tokio::test]
+async fn openai_chat_stream_call_id_announced_at_two_indices_keeps_its_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let mut payloads = vec![
+            chat_chunk(
+                json!({"role": "assistant", "tool_calls": [{"index": 0, "id": "call_1",
+                "type": "function", "function": {"name": "save_contact"}}]}),
+            ),
+            chat_chunk(json!({"tool_calls": [{"index": 1, "id": "call_1",
+                "type": "function", "function": {"name": UNDECLARED_TOOL}}]})),
+        ];
+        for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+            payloads.push(chat_chunk(json!({
+                "tool_calls": [{"index": 0, "function": {"arguments": fragment}}]
+            })));
+        }
+        (
+            "text/event-stream",
+            sse_body(&payloads) + "data: [DONE]\n\n",
+        )
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let body = post_legacy(&proxy, "/v1/chat/completions", chat_request(false, true)).await;
+    let arguments: String = sse_payloads(&body)
+        .iter()
+        .filter_map(|payload| {
+            payload["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
+        })
+        .collect();
+    assert_still_tokens("chat call id announced at two indices", &arguments);
+}
+
+/// The Responses mirror: an item id announced at two output indices, with deltas that
+/// carry no `item_id`.
+#[tokio::test]
+async fn openai_responses_item_id_announced_at_two_indices_keeps_its_tokens() {
+    let upstream = spawn_upstream(|_, tokens| {
+        let mut payloads = vec![
+            json!({"type": "response.output_item.added", "output_index": 0, "item": {
+                "type": "function_call", "id": "fc_1", "call_id": "call_0",
+                "name": "save_contact", "arguments": ""}}),
+            json!({"type": "response.output_item.added", "output_index": 1, "item": {
+                "type": "function_call", "id": "fc_1", "call_id": "call_1",
+                "name": UNDECLARED_TOOL, "arguments": ""}}),
+        ];
+        for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+            payloads.push(json!({"type": "response.function_call_arguments.delta",
+                "output_index": 0, "delta": fragment}));
+        }
+        ("text/event-stream", sse_body(&payloads))
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let mut request = responses_request(false);
+    request["stream"] = json!(true);
+    let body = post_legacy(&proxy, "/v1/responses", request).await;
+    let arguments: String = sse_payloads(&body)
+        .iter()
+        .filter(|payload| payload["type"] == "response.function_call_arguments.delta")
+        .filter_map(|payload| payload["delta"].as_str())
+        .collect();
+    assert_still_tokens("responses item id announced at two indices", &arguments);
+}
+
+/// Ordinary streams still restore: Responses deltas repeat their item's id, and a Chat call
+/// carries its id only on its first chunk.
+#[tokio::test]
+async fn openai_ordinary_streams_with_call_ids_restore_declared_tool_arguments() {
+    let upstream = spawn_upstream(|request, tokens| {
+        if request.get("input").is_some() {
+            let mut payloads = vec![json!({"type": "response.output_item.added",
+                "output_index": 0, "item": {"type": "function_call", "id": "fc_0",
+                "call_id": "call_0", "name": "save_contact", "arguments": ""}})];
+            for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+                payloads.push(json!({"type": "response.function_call_arguments.delta",
+                    "item_id": "fc_0", "output_index": 0, "delta": fragment}));
+            }
+            payloads.push(
+                json!({"type": "response.output_item.done", "output_index": 0,
+                "item": {"type": "function_call", "id": "fc_0", "call_id": "call_0",
+                "name": "save_contact", "arguments": tokens.json_document()}}),
+            );
+            return ("text/event-stream", sse_body(&payloads));
+        }
+        let mut payloads = vec![chat_chunk(json!({"role": "assistant", "tool_calls": [{
+            "index": 0, "id": "call_0", "type": "function",
+            "function": {"name": "save_contact", "arguments": ""}}]}))];
+        for fragment in fragments_around_tokens(&tokens.json_document(), tokens) {
+            payloads.push(chat_chunk(json!({
+                "tool_calls": [{"index": 0, "function": {"arguments": fragment}}]
+            })));
+        }
+        (
+            "text/event-stream",
+            sse_body(&payloads) + "data: [DONE]\n\n",
+        )
+    })
+    .await;
+    let proxy = spawn_legacy(&upstream).await;
+
+    let mut request = responses_request(false);
+    request["stream"] = json!(true);
+    let body = post_legacy(&proxy, "/v1/responses", request).await;
+    let arguments: String = sse_payloads(&body)
+        .iter()
+        .filter(|payload| payload["type"] == "response.function_call_arguments.delta")
+        .filter_map(|payload| payload["delta"].as_str())
+        .collect();
+    assert_exact_json("ordinary responses deltas", &arguments);
+
+    let body = post_legacy(&proxy, "/v1/chat/completions", chat_request(false, true)).await;
+    let arguments: String = sse_payloads(&body)
+        .iter()
+        .filter_map(|payload| {
+            payload["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
+        })
+        .collect();
+    assert_exact_json("ordinary chat deltas", &arguments);
+}
