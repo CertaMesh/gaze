@@ -9,3 +9,7 @@
   SHA-256. Each panel has a frozen label-scope map and a disputed-label ledger
   that reports GraSCCo ward and room codes, and the standalone places and brand
   uses PrivacyBench+ leaves unlabelled, beside the as-annotated scores.
+- The current benchmark specification is re-registered for the two new report
+  scripts. They stay outside the capture closure, so every per-layer
+  sub-specification and capture cache key is unchanged; only the full
+  specification ID moves.
