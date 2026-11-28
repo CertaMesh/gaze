@@ -29,6 +29,30 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: match the first-class `PiiClass` variants
+
+Every class a shipped rulepack emits is now its own `PiiClass` variant, for
+example `PiiClass::Phone`, `PiiClass::Iban` and `PiiClass::PostalCode`.
+Collision-family classes are `PiiClass::Ambiguous(family)`, holding the family
+name without the `family:` prefix. `PiiClass::Custom(String)` remains for
+classes that Gaze does not ship.
+
+- An exhaustive `match` on `PiiClass` needs arms for the new variants, or a
+  wildcard arm for the `custom:` classes.
+- `PiiClass::custom("phone")`, `from_policy_name("custom:phone")`,
+  `from_canonical_str("custom:phone")` and serde all return `PiiClass::Phone`.
+  A hand-built `PiiClass::Custom("phone".into())` compares, orders and hashes
+  equal to `PiiClass::Phone`, but a pattern `PiiClass::Custom(name) if name ==
+  "phone"` no longer matches parsed classes. Match the variant instead, or
+  compare `class.to_canonical_str()` with `"custom:phone"`.
+- `as_custom_name()` returns `None` for first-class and family variants. Use
+  `legacy_custom_name()` for the name after `custom:`, `as_family_name()` for
+  a family, and `is_custom_like()` to test for every non-built-in class.
+
+The wire format is unchanged. Tokens stay `Custom:phone_1`, audit and policy
+names stay `custom:phone`, serde stays `{"Custom":"phone"}`, and stored
+manifests restore as before.
+
 ### Action required: stop depending on `gaze-model-setup`
 
 The `gaze-model-setup` crate is no longer published; its code moved into

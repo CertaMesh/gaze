@@ -93,7 +93,7 @@ pub(crate) fn parse_index_class(value: &str) -> Result<PiiClass, String> {
         other => PiiClass::from_canonical_str(other)
             .or_else(|| PiiClass::from_policy_name(other))
             .ok_or_else(|| {
-                "class must be one of name, email, org, organization, or custom:<name>".to_string()
+                "class must be one of name, email, location, org, organization, or custom:<name> (for example custom:phone)".to_string()
             }),
     }
 }

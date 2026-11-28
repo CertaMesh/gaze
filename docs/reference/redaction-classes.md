@@ -30,11 +30,47 @@ Containment checks run first; see [resolution order](#full-conflict-resolution-o
 | `Name` | `name` | 80 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
 | `Organization` | `organization` | 70 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
 | `Location` | `location` | 60 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
-| `Custom` | `custom:<name>` | 50 | `crates/gaze-types/src/lib.rs:82-92,233-246`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `PostalCode` | `custom:postal_code` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Phone` | `custom:phone` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `SecurityToken` | `custom:security_token` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Password` | `custom:password` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `CreditCard` | `custom:credit_card` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `VatId` | `custom:vat_id` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `TaxNumber` | `custom:tax_number` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Ssn` | `custom:ssn` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `NationalId` | `custom:national_id` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `IpAddress` | `custom:ip_address` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Iban` | `custom:iban` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `DriverLicense` | `custom:driver_license` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `BirthDate` | `custom:birth_date` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Age` | `custom:age` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Url` | `custom:url` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `SteuerId` | `custom:steuer_id` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Passport` | `custom:passport` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Pan` | `custom:pan` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Nir` | `custom:nir` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Nino` | `custom:nino` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `NhsNumber` | `custom:nhs_number` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `EthAddress` | `custom:eth_address` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Cpf` | `custom:cpf` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Cnpj` | `custom:cnpj` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Bsn` | `custom:bsn` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Aadhaar` | `custom:aadhaar` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `CustomerId` | `custom:customer_id` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `EmployeeId` | `custom:employee_id` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `RecordId` | `custom:record_id` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Ambiguous` | `custom:family:<name>` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Custom` | `custom:<name>` | 50 | `crates/gaze-types/src/lib.rs` (`PiiClass`, `first_class_table!`); `crates/gaze/src/resolver.rs` (`class_priority`) |
 <!-- redaction-classes-gate:pii-classes:end -->
 
-`Custom(String)` is parametric: the table's `custom:<name>` denotes every
-tenant, identifier, and ambiguity-family class, not one literal class.
+Every class a shipped rulepack emits has its own variant. Those variants keep
+the `custom:<name>` wire spelling: token labels such as `Custom:phone_1`, audit
+and policy names such as `custom:phone`, and the serde form `{"Custom":"phone"}`.
+`Ambiguous(String)` holds a collision-family name and is spelled
+`custom:family:<name>`. `Custom(String)` is parametric and denotes every adopter
+or safety-net-only class that Gaze does not ship as a variant. Parsing a shipped
+name, for example `custom:phone`, always yields its variant, and
+`PiiClass::Custom("phone".into())` compares equal to `PiiClass::Phone`.
 
 ## Embedded recognizers
 
