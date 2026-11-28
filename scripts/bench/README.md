@@ -135,6 +135,67 @@ uv run --project scripts/bench python scripts/bench/json_structure_census.py gat
 document offset where the base had none. It is a diagnostic beside the gain
 gate, not a replacement for it.
 
+## Report-only metrics and held-out panels
+
+The gain gate scores protected bytes. `report_metrics.py` reads the same
+record and reports what byte totals hide, per layer:
+
+- Exact-span precision and recall, on raw gold and on gold whose adjacent
+  parts of one type are merged across spaces, tabs or dots.
+- Exposure: each gold span is fully hidden, partially exposed or completely
+  missed, judged on its letters and digits, with the residue characters left.
+- Type agreement: of the fully hidden spans whose label has a Gaze class, the
+  share an overlapping prediction types correctly. `TYPE_CLASSES` and
+  `UNTYPED` rule on every label; an unruled label stops the report.
+- Harmless masking: recorded decoys a prediction touches, and benign
+  documents (layer D and the hard negatives) with any masking.
+
+```bash
+uv run --project scripts/bench python scripts/bench/report_metrics.py \
+  target/bench-data/gate-candidate/full/observations-v1.jsonl.gz \
+  --dataset target/bench-data/dataiku-en-de/test.parquet --output target/gate/metrics.json
+```
+
+Without `--dataset` the metadata-only holdout documents are counted as unread.
+
+`heldout_panels.py` runs a `gaze` binary and policy over two public corpora
+the project never tunes on and scores them with the same metrics:
+
+- [PrivacyBench+](https://huggingface.co/datasets/Tracer-ML/PrivacyBench-Plus)
+  by Tracer, human-annotated English workplace text, CC BY 4.0. It is a
+  modified copy of [PrivacyBench](https://huggingface.co/datasets/TonicAI/Privacy-Bench)
+  v2.5 by TonicAI, CC BY 4.0. Only the two companies Tracer recommends for
+  evaluation are read. Spans Tracer marked unresolved and its indirect
+  identifiers are neutral.
+- [GraSCCo_PII v2](https://doi.org/10.5281/zenodo.15747389), German clinical
+  case reports, CC BY 4.0, the whole corpus. Labels Gaze does not target
+  (`GRASCCO_NEUTRAL`) are neutral.
+
+```bash
+uv run --project scripts/bench python scripts/bench/heldout_panels.py \
+  --binary target/release/gaze --policy target/gate/policy.toml --output target/gate/panels.json
+```
+
+Data is downloaded at run time from a pinned revision and SHA-256, verified
+before it is read and cached in `target/heldout-panels/`; nothing is
+committed. Each document runs in its own daemon session. The report carries
+both corpora's attribution.
+
+Each panel's label-scope map is frozen in `heldout_panels.py`: a gold label
+without a ruling stops the run. The `DISPUTED` ledger there records where a
+panel's annotation policy differs from Gaze's contract, such as GraSCCo ward
+and room codes labelled `ID`, and the standalone places and brand uses that
+PrivacyBench+ leaves unlabelled. The report lists what each entry covers beside
+the as-annotated scores, which the ledger never changes, and for GraSCCo also
+the exposure with disputed gold treated as neutral.
+
+Neither script enters the gain gate or the capture: each writes only its own
+report, and no capture or gate module imports them, so neither joins the
+capture closure or changes a layer sub-specification. Like every non-test
+module under `scripts/bench/`, they still change the full benchmark
+specification ID. Do not tune a rule against a panel; a tuned panel is no
+longer held out.
+
 ## Scored-label contracts
 
 A scored-label contract says which corpus labels count as gold PII. Without
@@ -787,7 +848,10 @@ any change to it.
 The [capture-closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
 The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
-The [current specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [prose-ID specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [current specification](../../docs/reference/benchmarks/specifications/230b403596a01684ae0aecd1233b990242d4531dfd80676111c75da4544e76c6.json)
+differs from it only in the `report_metrics.py` and `heldout_panels.py` digests;
+both are outside the capture closure, so every sub-specification is unchanged.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
