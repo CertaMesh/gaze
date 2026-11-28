@@ -845,10 +845,11 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [capture closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
+The [capture-closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
-The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells.
-The [current specification](../../docs/reference/benchmarks/specifications/f32b60156d1c7f4fad97445987eb1eb48c6110093a6b0391b7d61855511f01fb.json)
+The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
+The [prose-ID specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [current specification](../../docs/reference/benchmarks/specifications/230b403596a01684ae0aecd1233b990242d4531dfd80676111c75da4544e76c6.json)
 differs from it only in the `report_metrics.py` and `heldout_panels.py` digests;
 both are outside the capture closure, so every sub-specification is unchanged.
 Previous manifests retain their original identities.
