@@ -472,15 +472,17 @@ fn span_to_disposition(
     )))
 }
 
-/// The longest all-digit registration a plate scheme issues. All-digit plates exist (short
-/// US and Delaware-style numbers, some trailer and dealer plates), but none is longer than
-/// eight digits; longer plates always carry letters.
+/// The longest all-digit registration in a standard plate scheme we know of. All-digit plates
+/// exist (short US and Delaware-style numbers, some trailer and dealer plates); Israel's
+/// current `123-45-678` scheme is the longest at eight digits.
 const MAX_ALL_DIGIT_PLATE: usize = 8;
 
-/// A standalone run of more than [`MAX_ALL_DIGIT_PLATE`] ASCII digits is a serial, reference or
-/// account number, never a license plate. Only the plate label is refused: the same run stays
-/// eligible for every other Nym label and every primary recognizer. A run touching a letter or
-/// digit outside the span is part of a longer token and is left to the model.
+/// `LICENSE_PLATE` is the wrong label for a standalone run of more than
+/// [`MAX_ALL_DIGIT_PLATE`] ASCII digits. Decode takes the argmax over all labels, so a span
+/// reaches this guard only when the model already ranked the identifier labels (SSN, phone,
+/// account number, government ID) lower than plate. Only the plate label is refused: the same
+/// run stays eligible for every primary recognizer. A run touching a letter or digit outside
+/// the span is part of a longer token and is left to the model.
 fn is_overlong_plate_digit_run(text: &str, span: &NymSpan) -> bool {
     let value = &text[span.start..span.end];
     span.label == NymLabel::LicensePlate
@@ -1088,10 +1090,10 @@ mod tests {
         };
         // Nine digits and more: equipment serials and references, in JSON, logs and prose.
         assert!(refused(
-            r#"{"deviceSerial": "971533824", "page": 1}"#,
-            "971533824"
+            r#"{"deviceSerial": "482019375", "page": 1}"#,
+            "482019375"
         ));
-        assert!(refused("vehicle ID: 000867345", "000867345"));
+        assert!(refused("vehicle ID: 000412907", "000412907"));
         assert!(refused("ref 12345678901234", "12345678901234"));
         // Up to eight digits is a real all-digit plate shape.
         for (text, value) in [("plate 123456", "123456"), ("plate 12345678", "12345678")] {
@@ -1110,14 +1112,15 @@ mod tests {
             ("plate 1234-56789", "1234-56789"),
             ("code X123456789", "123456789"),
             ("serial 1234567890", "123456789"),
+            ("plate ١٢٣٤٥٦٧٨٩", "١٢٣٤٥٦٧٨٩"),
         ] {
             assert!(!refused(text, value), "{text}");
         }
         // Another label on the same run is not this veto's business.
         assert!(matches!(
             disposition_for(
-                "Hausnummer 971533824",
-                "971533824",
+                "Hausnummer 482019375",
+                "482019375",
                 NymLabel::BuildingNumber,
                 None
             ),

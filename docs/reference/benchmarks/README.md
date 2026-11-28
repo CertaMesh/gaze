@@ -837,12 +837,16 @@ eligible. The measured Nym rows below identify the source revision of each
 guard version.
 
 Nym's plate digit-run guard v1 refuses a `LICENSE_PLATE` span that is a
-standalone run of more than eight ASCII digits. All-digit plates exist, but no
-scheme issues one longer than eight digits. Such a run is a serial, reference
-or account number. The refusal is typed `nym_license_plate_digit_run_v1`
-telemetry with a metadata-only audit row. Plates with letters or separators,
-runs of eight digits or fewer, runs cut out of a longer token, and other Nym
-labels on the same digits stay eligible. In the v0.17.0 generator-v30 record,
+standalone run of more than eight ASCII digits. All-digit plates exist; the
+longest standard scheme we know of, Israel's `123-45-678`, has eight digits.
+Decode takes the argmax over all labels, so such a span reaches the guard only
+when the model already ranked the identifier labels lower than plate. The
+guard costs recall only where a real identifier is mislabelled as a plate and
+no primary recognizer covers it. The refusal is typed
+`nym_license_plate_digit_run_v1` telemetry with a metadata-only audit row.
+Plates with letters or separators, runs of eight digits or fewer, runs cut out
+of a longer token, and other Nym labels on the same digits stay eligible. In a
+counterfactual over the v0.17.0 generator-v30 record, which predates the guard,
 this shape covers no gold bytes in any layer. It covers 27 false-positive
 bytes in layer D: two nine-digit `deviceSerial` values on the BSN benign twin
 `ref_number_9`, which caused that twin's 0 → 18 Nym credit-guard failure, and

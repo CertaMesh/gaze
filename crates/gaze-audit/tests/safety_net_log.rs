@@ -118,6 +118,14 @@ fn nym_pagination_refusal_has_a_typed_audit_row_without_source_bytes() {
         SafetyNetRefusalReason::NymPaginationKeyV1.audit_labels(),
         ("BUILDING_NUMBER", "custom:building_number")
     );
+    assert_eq!(
+        SafetyNetRefusalReason::NymLicensePlateDigitRunV1.audit_labels(),
+        ("LICENSE_PLATE", "custom:license_plate")
+    );
+    assert_eq!(
+        SafetyNetRefusalReason::NymLicensePlateDigitRunV1.as_str(),
+        "nym_license_plate_digit_run_v1"
+    );
     let temp = NamedTempFile::new().expect("temp db");
     let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");
     let event = LeakReportTelemetry::ModelSpanRefused {
