@@ -313,7 +313,6 @@ fn manifest_iban_and_card_values_are_authorized_at_the_restore_boundary() {
 }
 
 #[test]
-#[ignore = "needs the context.rs IBAN precursor"]
 fn policy_mapped_iban_record_is_accepted_and_tokenized() {
     let class = PiiClass::from_policy_name("custom:iban").expect("iban policy class");
     assert_eq!(class.to_canonical_str(), "custom:iban");
