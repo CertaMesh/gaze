@@ -845,8 +845,11 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [current specification](../../docs/reference/benchmarks/specifications/13bb8d694a999b212b527b09e4f6b5fda2f9512c36690a2371c5fa9b5a4f0fce.json)
+The [capture-closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
+The [current specification](../../docs/reference/benchmarks/specifications/13bb8d694a999b212b527b09e4f6b5fda2f9512c36690a2371c5fa9b5a4f0fce.json)
+differs from it only in the `report_metrics.py` and `heldout_panels.py` digests;
+both are outside the capture closure, so every sub-specification is unchanged.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
