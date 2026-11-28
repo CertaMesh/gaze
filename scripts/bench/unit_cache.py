@@ -47,6 +47,50 @@ POPULATION_FILES = ("dataset", "negative_corpus", "benchmark_protocol", "scored_
                     "agentic_scored_labels")
 
 
+def detector_request(document) -> dict[str, object]:
+    """The complete request a detector process receives for one document."""
+    return {"fixture_id": document.uid, "locale_chain": document.locale_chain, "text": document.text}
+
+
+# A reused response was not timed in this run; latency summaries skip it.
+REUSED_TIMING = {"clean_ms": None, "restore_ms": None, "post_policy_scan_ms": None}
+
+
+def run_config(units: "UnitCache", repo_root, binary, config, documents, *args,
+               warmup_count: int = 0, record_document=None, **kwargs) -> dict[str, object]:
+    """`gaze_bench_score.run_config` with stored responses answering the documents they hold.
+
+    Missing documents run live in one warm process, with the warmups; then every
+    document is scored through the scorer's replay path in its original order,
+    so records keep their row order. Latency and process provenance come from
+    the live run only; a fully reused run has no timing samples.
+    """
+    import gaze_bench_score as score
+
+    requests = {document.uid: detector_request(document) for document in documents}
+    responses = {}
+    for document in documents:
+        reused = units.get(config, requests[document.uid])
+        if reused is not None:
+            responses[document.uid] = {**reused, "timing": dict(REUSED_TIMING)}
+    missing = [document for document in documents if document.uid not in responses]
+    live = None
+    if missing:
+        fresh = {}
+        live = score.run_config(repo_root, binary, config, missing, *args, warmup_count=warmup_count,
+                                record_document=lambda _config, document, response, _measured:
+                                    fresh.__setitem__(document.uid, response), **kwargs)
+        for document in missing:
+            units.put(config, requests[document.uid], fresh[document.uid])
+            responses[document.uid] = fresh[document.uid]
+    run = score.run_config(repo_root, binary, config, documents, *args, warmup_count=0,
+                           record_document=record_document, replay_responses=responses, **kwargs)
+    if live is not None:
+        for key in ("latency_ms", "warm_latency_ms", "process"):
+            run[key] = live[key]
+    return run
+
+
 def detection_identity(observation_key: Mapping[str, object], bench: Path,
                        machine: Mapping[str, object]) -> dict[str, object]:
     """The observation-cache key without its population, plus harness code and machine."""

@@ -336,11 +336,10 @@ class NativeCaptureReuseTests(unittest.TestCase):
         def capture(directory, units, docs=population):
             writer = records.RecordWriter(docs, {"documents": {doc.uid: None for doc in docs}},
                                           corpus_sha256="0" * 64, binary=BINARY)
-            score.run_config(ROOT, BINARY, "rule-floor-core", docs, directory, None, None, None,
-                             0.3, directory, base_environment=environment, warmup_count=1,
-                             record_document=lambda config, document, response, _:
-                                 writer.add("C", config, document, response),
-                             response_cache=units)
+            unit_cache.run_config(units, ROOT, BINARY, "rule-floor-core", docs, directory, None, None,
+                                  None, 0.3, directory, base_environment=environment, warmup_count=1,
+                                  record_document=lambda config, document, response, _:
+                                      writer.add("C", config, document, response))
             path = directory / "observations-v1.jsonl.gz"
             writer.write(path, {}, add_reference=False)
             return writer, path
@@ -355,7 +354,7 @@ class NativeCaptureReuseTests(unittest.TestCase):
             self.assertEqual((cold.live, cold.reused, cold.publish()), (4, 0, 4))
             # The shadow record: every live row swapped for its stored unit.
             rows, swapped = live_writer.assembled_rows(
-                lambda config, document: cold.peek(config, score.detector_request(document)))
+                lambda config, document: cold.peek(config, unit_cache.detector_request(document)))
             self.assertEqual((rows, swapped), (live_writer.rows, 4))
 
             warm = unit_cache.UnitCache(root / "cache", ident)
@@ -376,15 +375,15 @@ class NativeCaptureReuseTests(unittest.TestCase):
             # Gold is not part of a unit; text is.
             regolded = [score.Document(**{**population[0].__dict__, "spans": ()}), *population[1:]]
             self.assertFalse(warm.needs_live("rule-floor-core",
-                                             [score.detector_request(doc) for doc in regolded]))
+                                             [unit_cache.detector_request(doc) for doc in regolded]))
             retexted = score.Document(**{**population[0].__dict__, "text": population[0].text + "."})
-            self.assertTrue(warm.needs_live("rule-floor-core", [score.detector_request(retexted)]))
+            self.assertTrue(warm.needs_live("rule-floor-core", [unit_cache.detector_request(retexted)]))
             self.assertIsNone(unit_cache.UnitCache(root / "cache", {"binary_sha256": "f" * 64}).peek(
-                "rule-floor-core", score.detector_request(population[0])))
+                "rule-floor-core", unit_cache.detector_request(population[0])))
             stored = next((root / "cache/units").glob("*/*/*.json.gz"))
             stored.write_bytes(gzip.compress(stored.read_bytes()[:-12] + b"tampered"))
             self.assertTrue(unit_cache.UnitCache(root / "cache", ident).needs_live(
-                "rule-floor-core", [score.detector_request(doc) for doc in population]))
+                "rule-floor-core", [unit_cache.detector_request(doc) for doc in population]))
 
 
 class UnitIdentityTests(unittest.TestCase):

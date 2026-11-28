@@ -8,6 +8,7 @@ import stage_timing as stages
 
 import argparse
 import copy
+import functools
 import hashlib
 import json
 import os
@@ -643,7 +644,8 @@ def execute_measurements(
         current: list[dict[str, object]] = []
         for config in configs:
             with stages.labels(layer=record_layer, config=config, repetition=repetition), stages.measure("layer_capture"), stages.scoring():
-                run = score.run_config(
+                run = (functools.partial(unit_cache.run_config, units) if units is not None
+                       else score.run_config)(
                     repo_root,
                     binary,
                     config,
@@ -665,7 +667,6 @@ def execute_measurements(
                             record_writer.add(record_layer, config, document, response, measurements))
                         if record_writer is not None and repetition == 1 else None
                     ),
-                    response_cache=units,
                 )
             current.append(run)
         repetition_runs.append(current)
@@ -892,7 +893,7 @@ def run_unit_shadow(output_dir: Path, candidate: Mapping[str, object],
                     record_writer: records.RecordWriter, units: unit_cache.UnitCache) -> dict:
     """Write the record assembled from stored units under the live record's header."""
     rows, swapped = record_writer.assembled_rows(
-        lambda config, document: units.peek(config, score.detector_request(document)))
+        lambda config, document: units.peek(config, unit_cache.detector_request(document)))
     assembled = output_dir / "observations-assembled.jsonl.gz"
     record_writer.write(assembled, candidate, add_reference=True, rows=rows)
     return {"assembled": assembled, "rows": len(rows), "assembled_from_units": swapped,
