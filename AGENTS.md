@@ -240,11 +240,12 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
    change".
 8. Exception to the gain requirement of rule 3 and to rule 4, for decided fail-closed defaults
    only. It applies to a default change that does nothing but turn a one-way marker or a shipped
-   residual into a typed refusal, leaves every tokenized manifest identical, and is recorded as a project decision in a tracked document
-   in this repository (cite its path in the PR body). Such a change is gated on identical
-   full-corpus base/candidate scorecards under v2 and v1, refusal counts included, plus targeted
-   tests that drive the changed path through each affected surface. Any other change, including
-   any change to what is detected, tokenized or restored, follows rules 1-7.
+   residual into a typed refusal, leaves every tokenized manifest identical, and is recorded as a
+   project decision in a tracked document in this repository (cite its path in the PR body). Such
+   a change is gated on identical full-corpus base/candidate scorecards under v2 and v1, refusal
+   counts included, plus targeted tests that drive the changed path through each affected surface.
+   Any other change, including any change to what is detected, tokenized or restored, follows
+   rules 1-7.
 
 Main stays certified. No detection change reaches main without full-corpus-equivalent evidence
 for the exact integrated candidate. Certification requires a full evaluation, a verified
