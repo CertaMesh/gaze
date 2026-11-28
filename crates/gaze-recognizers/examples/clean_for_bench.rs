@@ -348,10 +348,33 @@ impl AuditRows {
             .map(|mut entry| {
                 entry.created_at = 0;
                 entry.session_id = None;
-                format!("{entry:?}")
+                legacy_class_debug(&format!("{entry:?}"))
             })
             .collect()
     }
+}
+
+/// Rows are compared across revisions, so every class field (`class`, `ambiguity_class`, and
+/// each losing candidate's `class`) keeps its historical Debug spelling: `Custom("phone")` and
+/// `Custom("family:x")`, not the first-class `Phone` and `Ambiguous("x")`.
+fn legacy_class_debug(row: &str) -> String {
+    static FAMILY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let family = FAMILY.get_or_init(|| {
+        regex::Regex::new(r#"class: Ambiguous\("((?:[^"\\]|\\.)*)"\)"#).expect("family regex")
+    });
+    let mut row = family
+        .replace_all(row, r#"class: Custom("family:$1")"#)
+        .into_owned();
+    for class in PiiClass::first_class_variants() {
+        let legacy = class.legacy_debug_label();
+        for end in [",", " }"] {
+            row = row.replace(
+                &format!("class: {class:?}{end}"),
+                &format!("class: {legacy}{end}"),
+            );
+        }
+    }
+    row
 }
 
 impl RedactionLogger for AuditRows {
@@ -3046,6 +3069,41 @@ mod tests {
         assert_eq!(
             listed("defeat_kinds"),
             kinds.map(|k| k.as_str().to_string()).to_vec()
+        );
+    }
+}
+
+#[cfg(test)]
+mod legacy_class_debug_tests {
+    use super::*;
+
+    #[derive(Debug)]
+    #[allow(dead_code)]
+    struct Loser {
+        class: PiiClass,
+    }
+    #[derive(Debug)]
+    #[allow(dead_code)]
+    struct Row {
+        class: PiiClass,
+        ambiguity_class: PiiClass,
+        losers: Vec<Loser>,
+        last: PiiClass,
+    }
+
+    #[test]
+    fn audit_rows_keep_the_pre_variant_class_spelling() {
+        let row = Row {
+            class: PiiClass::custom("phone").unwrap(),
+            ambiguity_class: PiiClass::family("ids"),
+            losers: vec![Loser {
+                class: PiiClass::Email,
+            }],
+            last: PiiClass::custom("postal_code").unwrap(),
+        };
+        assert_eq!(
+            legacy_class_debug(&format!("{row:?}")),
+            r#"Row { class: Custom("phone"), ambiguity_class: Custom("family:ids"), losers: [Loser { class: Email }], last: PostalCode }"#
         );
     }
 }
