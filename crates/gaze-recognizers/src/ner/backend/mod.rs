@@ -6,6 +6,7 @@ use super::types::{NerBackendKind, NerSpanResult, VerifiedArtifacts};
 
 mod ort;
 mod preparation;
+pub(crate) mod reuse;
 #[cfg(feature = "test-support")]
 pub(crate) mod test_support;
 

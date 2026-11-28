@@ -156,9 +156,9 @@ numeric `cache_creation_input_tokens` and `cache_read_input_tokens` only.
 | Surface | Restore/proof rule |
 | --- | --- |
 | `text` | Text is restored through the committed manifest. Citation text and admitted document-title/title fields are restored; citation indices and source/URL controls are validated. |
-| `tool_use` | `input` object keys and string values are restored recursively. A restored-key collision fails closed. `id` and `name` remain validated controls. |
-| `tool_result` | String or block-array content is restored recursively; `tool_use_id` and `is_error` remain controls. |
-| `search_result` and `document` | Admitted user-payload fields are restored; identifiers and source controls are validated. |
+| `tool_use` | For a tool named in `ProxyConfig::with_restore_tools` (policy `[proxy] restore_tools`), `input` object keys and string values are restored recursively, and a restored-key collision fails closed. Any other tool's `input` keeps its tokens and is still checked for provider-origin PII. `id` and `name` remain validated controls. |
+| `tool_result` | Content keeps its tokens and is checked for provider-origin PII; `tool_use_id` and `is_error` remain controls. |
+| `search_result` and `document` | Admitted user-payload fields keep their tokens and are checked; identifiers and source controls are validated. |
 | `thinking` and `redacted_thinking` | Signed bytes remain exact and any manifest token inside them remains pseudonymized. Unknown tokens, malformed signatures, or provider-origin PII in the retained bytes reject the response. |
 | Opaque, image, unknown, or malformed content | Rejected; there is no pass-through fallback. |
 
@@ -179,7 +179,7 @@ upstream stream is not a byte pass-through.
 | `message_start` | Opens one strict message lifecycle. Its response controls and usage are validated. |
 | `content_block_start` | Opens one unused index for an admitted `text`, `tool_use`, `thinking`, or `redacted_thinking` block. |
 | `content_block_delta` / `text_delta` | Text is accumulated by block index and restored only after the block is complete. |
-| `content_block_delta` / `input_json_delta` | `partial_json` is accumulated by tool block, parsed strictly, restored recursively, and rebuilt only after completion. |
+| `content_block_delta` / `input_json_delta` | `partial_json` is accumulated by tool block, parsed strictly, restored recursively only when the block's `content_block_start` names a declared tool, and rebuilt only after completion. |
 | `content_block_delta` / `citations_delta` | Citations are validated, restored exactly once, and retain provider order. |
 | `content_block_delta` / `thinking_delta` or `signature_delta` | Signed reasoning/signature bytes remain exact and pseudonymized; signed-surface failures close the stream. |
 | `content_block_stop` | Closes one active index. A stopped index cannot be reused. |
