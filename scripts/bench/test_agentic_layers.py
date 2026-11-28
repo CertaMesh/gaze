@@ -3213,3 +3213,17 @@ class RulepackPathDeltaTests(unittest.TestCase):
             self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
             delta.write_text('[mechanism_delta]\nappend_rulepack_paths=["base-core.toml"]\n')
             self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+
+
+def test_gate_refuses_sides_captured_on_different_machines():
+    import copy as _copy
+    base = _scorecard(dict.fromkeys(("C", "A", "D", "R"), 0))
+    machine = {"system": "Linux", "os_build_sha256": "a" * 64, "hardware_sha256": "b" * 64}
+    base.setdefault("runner_provenance", {})["machine"] = machine
+    candidate = _copy.deepcopy(base)
+    assert agentic.compare_layers(base, candidate)["verdict"] != "not_comparable"
+    for other in ({**machine, "hardware_sha256": "c" * 64}, None):
+        candidate["runner_provenance"]["machine"] = other
+        result = agentic.compare_layers(base, candidate)
+        assert result["verdict"] == "not_comparable"
+        assert "capture_machine" in result["differing"]

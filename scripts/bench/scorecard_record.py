@@ -724,6 +724,36 @@ def mark_cache_replay(path: Path, key_sha256: str) -> None:
     _write_rows(path, [header, *observations])
 
 
+def rebind_reuse(path: Path, spec: Mapping[str, object], binary_sha256: str,
+                 current: Mapping[str, object]) -> bool:
+    """Bind a verified cache replay to the executing specification and subject.
+
+    Only a record whose sub-specifications and executable equal the executing
+    ones can be rebound. Observations stay byte-identical; `capture_reuse`
+    names the specification, source and record that were captured.
+    """
+    header, observations = _read(path)
+    card = header["scorecard"]
+    try:
+        if benchmark_spec.layer_identity(card, required=True) != benchmark_spec.layer_specs(spec):
+            raise RecordError("benchmark_spec_mismatch")
+    except benchmark_spec.SpecError as error:
+        raise RecordError(error.code) from error
+    if _header_binary_sha256(header) != binary_sha256:
+        raise RecordError("reused capture binds another executable")
+    current = {"benchmark_spec": spec, **current}
+    if all(card.get(key) == value for key, value in current.items()):
+        return False
+    header["scorecard"] = {**card, **copy.deepcopy(current), "capture_reuse": {
+        "version": 1, "captured_benchmark_spec_id": card["benchmark_spec"]["id"],
+        "captured": {key: card.get(key) for key in current if key != "benchmark_spec"},
+        "captured_record_sha256": score.sha256_file(path)}}
+    header["benchmark_spec_id"] = spec["id"]
+    _write_rows(path, [header, *observations])
+    _read(path)
+    return True
+
+
 def pin_template(
     source: Path, template: Path, output: Path, *, strip_layers: bool = False
 ) -> None:
