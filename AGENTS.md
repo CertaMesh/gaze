@@ -238,6 +238,10 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
    candidate sha, scorecard paths, v2 and v1 leaked bytes per layer, false-positive bytes per layer,
    and refusals. A PR skips the block only by ticking "not a detection change and not a benchmark
    change".
+8. Decided policy defaults. A default change that a recorded 1.0 decision (F-number) settled, and
+   that the corpus cannot see, is gated on identical base/candidate scorecards plus targeted tests
+   that drive the changed path directly through each affected surface. Cite the decision in the PR
+   body. This does not relax rule 4 for detection changes.
 
 Main stays certified. No detection change reaches main without full-corpus-equivalent evidence
 for the exact integrated candidate. Certification requires a full evaluation, a verified
