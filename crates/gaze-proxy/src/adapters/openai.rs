@@ -259,7 +259,8 @@ impl ProviderAdapter for OpenAiAdapter {
                 .map(|name| {
                     let output_index = data.get("output_index").and_then(Value::as_u64);
                     (
-                        SseStreamKey::new("responses.arguments", [output_index]),
+                        SseStreamKey::new("responses.arguments", [output_index])
+                            .with_call_id(data.get("item_id").and_then(Value::as_str)),
                         name.to_owned(),
                     )
                 })
@@ -296,7 +297,8 @@ impl ProviderAdapter for OpenAiAdapter {
                 // An unreadable index stays `None`, which makes every compatible stream
                 // ambiguous rather than dropping the name.
                 Some((
-                    SseStreamKey::new("responses.arguments", [output_index]),
+                    SseStreamKey::new("responses.arguments", [output_index])
+                        .with_call_id(item.get("id").and_then(Value::as_str)),
                     name.to_owned(),
                 ))
             })
@@ -481,7 +483,10 @@ fn collect_responses_event_surfaces<'a>(
         "function_call_arguments.delta" | "mcp_call_arguments.delta" => (
             "delta",
             SurfaceSyntax::Json,
-            Some(SseStreamKey::new("responses.arguments", [output_index])),
+            Some(
+                SseStreamKey::new("responses.arguments", [output_index])
+                    .with_call_id(data.get("item_id").and_then(Value::as_str)),
+            ),
             named_tool(),
         ),
         // The final arguments repeat the deltas outside their stream binding, so a name on
@@ -605,7 +610,8 @@ fn chat_tool_call_names(data: &Value) -> Vec<(SseStreamKey, String)> {
             {
                 let call_index = call.get("index").and_then(Value::as_u64);
                 names.push((
-                    SseStreamKey::new("choices.tool_calls.arguments", [choice_index, call_index]),
+                    SseStreamKey::new("choices.tool_calls.arguments", [choice_index, call_index])
+                        .with_call_id(call.get("id").and_then(Value::as_str)),
                     name.to_owned(),
                 ));
             }
@@ -644,16 +650,23 @@ fn collect_delta_stream_surfaces<'a>(
                 };
                 for (position, tool_call) in tool_calls.iter_mut().enumerate() {
                     let call_index = tool_call.get("index").and_then(Value::as_u64);
+                    let call_id = tool_call
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned);
                     let mut fragment = RequestSurfaces::default();
                     collect_tool_call_arguments(
                         &mut fragment,
                         &prefix.member("tool_calls").index(position),
                         tool_call,
                     );
-                    let stream = Some(SseStreamKey::new(
-                        "choices.tool_calls.arguments",
-                        [choice_index, call_index],
-                    ));
+                    let stream = Some(
+                        SseStreamKey::new(
+                            "choices.tool_calls.arguments",
+                            [choice_index, call_index],
+                        )
+                        .with_call_id(call_id.as_deref()),
+                    );
                     extend_stream(surfaces, stream, fragment);
                 }
             }
