@@ -191,6 +191,16 @@ contracts. This exception does not apply to ordinary phone or card recognizer ru
    to that side's specification and build and keeps its observation bytes
    ([capture reuse](scripts/bench/README.md#capture-reuse-and-timing)). Nothing that can
    change detection output or observation bytes may leave the key.
+
+   On a whole-record miss, per-document reuse answers each document whose exact request (fixture
+   ID, locale chain and text) already has a stored response under the same detection identity.
+   That identity is every input above except the population inputs: corpus, generated manifest,
+   seed, document IDs, scored-label contracts and layer sub-specifications. It adds the harness
+   files on the request and response path and the machine identity. Gold is not part of a unit.
+   A detector PR's candidate side still captures every document live, because its detector bytes
+   differ; only its base side and benchmark-only PRs gain. Plan a detector PR's gate as one full
+   capture plus a cached base
+   ([per-document reuse](scripts/bench/README.md#per-document-reuse)).
    Skip the release-only copy and render steps:
 
    ```bash
@@ -244,6 +254,10 @@ for the exact integrated candidate. Certification requires a full evaluation, a 
 incremental evaluation with a sound affected-unit selector validated in shadow first, or a
 full-gated combined merge train. A targeted subset can inform a PR, but never certifies main.
 Both gated contracts, mechanism policy deltas and the full release benchmark remain required.
+A gate's mechanism pair must isolate the mechanism the PR changes. For a new or changed rule,
+use a same-binary rulepack ablation without that rule. For a Nym or NER change, switch that model
+off and on. The reviewer confirms the declared pair before anyone measures it; a pair for another
+mechanism, such as Nym off/on for a rule-only change, cannot certify the PR.
 
 Benchmark specifications have immutable version IDs. Never compare results across specifications.
 Integrity checks remain mandatory. Historical remeasurement is off the PR critical path:

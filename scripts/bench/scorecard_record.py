@@ -410,6 +410,21 @@ def _compact_response(response: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def _observation_row(layer: str, config: str, original: score.Document,
+                     compact: dict[str, object], response: Mapping[str, object]) -> dict[str, object]:
+    if "pipeline_error_code" not in response:
+        compact["gold_gap_evidence"] = _gap_evidence(
+            original, score.final_trace_predictions(original, dict(response))
+        )
+    return {
+        "kind": "observation",
+        "layer": layer,
+        "config": config,
+        "document_id": original.uid,
+        "response": compact,
+    }
+
+
 class RecordWriter:
     def __init__(
         self,
@@ -475,20 +490,28 @@ class RecordWriter:
             self.lineage = lineage
             if lineage:
                 validate_response_lineage(compact, len(original.text.encode("utf-8")), document.uid)
-        if "pipeline_error_code" not in response:
-            compact["gold_gap_evidence"] = _gap_evidence(
-                original, score.final_trace_predictions(original, dict(response))
-            )
-        row = {
-            "kind": "observation",
-            "layer": layer,
-            "config": config,
-            "document_id": document.uid,
-            "response": compact,
-        }
-        self.rows.append(row)
+        self.rows.append(_observation_row(layer, config, original, compact, response))
 
-    def write(self, path: Path, scorecard: Mapping[str, object], *, add_reference: bool) -> dict[str, object]:
+    def assembled_rows(self, cached) -> tuple[list[dict[str, object]], int]:
+        """These rows with each response `cached(config, document)` holds swapped in.
+
+        Returns the rows and how many were swapped. A shadow capture writes both
+        sets under one header, so equal files mean equal observations.
+        """
+        rows, swapped = [], 0
+        for row in self.rows:
+            original = self.documents[row["document_id"]]
+            response = cached(row["config"], original)
+            if response is None:
+                rows.append(row)
+                continue
+            rows.append(_observation_row(row["layer"], row["config"], original,
+                                         _compact_response(response), response))
+            swapped += 1
+        return rows, swapped
+
+    def write(self, path: Path, scorecard: Mapping[str, object], *, add_reference: bool,
+              rows: Sequence[Mapping[str, object]] | None = None) -> dict[str, object]:
         if self.binary is not None and score.sha256_file(self.binary) != self.binary_sha256:
             raise RecordError("benchmark executable changed during capture")
         if set(self.document_layers) != set(self.documents):
@@ -525,7 +548,8 @@ class RecordWriter:
         if self.binary_sha256 is not None:
             header["binary_sha256"] = self.binary_sha256
             _header_binary_sha256(header)
-        rows = [header, *self.rows]
+        observations = self.rows if rows is None else rows
+        rows = [header, *observations]
         _write_rows(path, rows)
         digest = score.sha256_file(path)
         return {
@@ -535,7 +559,7 @@ class RecordWriter:
             "schema_version": self.schema_version,
             "corpus_sha256": self.corpus_sha256,
             **({"binary_sha256": self.binary_sha256} if self.binary_sha256 is not None else {}),
-            "observations": len(self.rows),
+            "observations": len(observations),
             "bytes": path.stat().st_size,
         }
 

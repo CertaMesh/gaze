@@ -8,6 +8,7 @@ import stage_timing as stages
 
 import argparse
 import copy
+import functools
 import hashlib
 import json
 import os
@@ -28,6 +29,7 @@ import capture_identity
 import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 import scorecard_record as records
+import unit_cache
 
 
 QUICK_DOCUMENTS = 256
@@ -196,13 +198,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--cache-dir", type=Path,
         help="exact-key observation cache (default: shared checkout target/bench-data/cache)",
     )
-    parser.add_argument("--no-cache", action="store_true", help="measure without reading or writing the observation cache")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="measure without reading or writing the observation or per-document cache")
+    parser.add_argument("--no-unit-reuse", action="store_true",
+                        help="capture every document live and store no per-document responses")
+    parser.add_argument("--unit-shadow", action="store_true",
+                        help="with --no-cache: capture every document live, assemble the same record "
+                             "from stored per-document responses, and fail unless both are byte-identical")
     parser.add_argument("--score-jobs", type=int, default=None, help="bounded observation replay workers (default: 4)")
     parser.add_argument(
         "--cross-check", action="store_true",
         help="explicit independent contract capture for replay-equivalence checks only",
     )
     args = parser.parse_args(argv)
+    if args.unit_shadow and (not args.no_cache or args.no_unit_reuse):
+        parser.error("--unit-shadow requires --no-cache and per-document reuse")
     if (args.scored_labels is not None or args.agentic_scored_labels is not None) and not args.cross_check:
         parser.error(
             "capture once without scoring-contract flags, then use rescore.py for every contract; "
@@ -618,6 +628,7 @@ def execute_measurements(
     split_composite_source_ids: bool = False,
     record_writer: records.RecordWriter | None = None,
     record_layer: str = "C",
+    units: unit_cache.UnitCache | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if measured_repetitions <= 0:
         raise CandidateError("measured repetitions must be positive")
@@ -634,7 +645,8 @@ def execute_measurements(
         current: list[dict[str, object]] = []
         for config in configs:
             with stages.labels(layer=record_layer, config=config, repetition=repetition), stages.measure("layer_capture"), stages.scoring():
-                run = score.run_config(
+                run = (functools.partial(unit_cache.run_config, units) if units is not None
+                       else score.run_config)(
                     repo_root,
                     binary,
                     config,
@@ -723,6 +735,7 @@ def measure_agentic_layers(
     replacing_actions: frozenset[str] = score.MANIFEST_REPLACING_ACTIONS,
     split_composite_source_ids: bool = False,
     record_writer: records.RecordWriter | None = None,
+    units: unit_cache.UnitCache | None = None,
 ) -> dict[str, object]:
     """Score layers A, D and R as separate cells next to the Kiji/A4 layer C.
 
@@ -807,6 +820,7 @@ def measure_agentic_layers(
             split_composite_source_ids=split_composite_source_ids,
             record_writer=record_writer,
             record_layer=layer,
+            units=units,
         )
         block: dict[str, object] = {
             "description": description,
@@ -874,6 +888,30 @@ def observation_cache_dir(repo_root: Path, configured: Path | None) -> Path:
     except subprocess.CalledProcessError:
         return repo_root / "target/bench-data/cache"
     return Path(common).parent / "target/bench-data/cache"
+
+
+def run_unit_shadow(output_dir: Path, candidate: Mapping[str, object],
+                    record_writer: records.RecordWriter, units: unit_cache.UnitCache) -> dict:
+    """Write the record assembled from stored units under the live record's header."""
+    rows, swapped = record_writer.assembled_rows(
+        lambda config, document: units.peek(config, unit_cache.detector_request(document)))
+    assembled = output_dir / "observations-assembled.jsonl.gz"
+    record_writer.write(assembled, candidate, add_reference=True, rows=rows)
+    return {"assembled": assembled, "rows": len(rows), "assembled_from_units": swapped,
+            "identity_sha256": units.identity_sha256}
+
+
+def finish_unit_shadow(output_dir: Path, live: Path, shadow: dict) -> None:
+    assembled = shadow.pop("assembled")
+    # Equal headers by construction, so the whole files must be equal bytes.
+    report = {**shadow, "live_sha256": score.sha256_file(live),
+              "assembled_sha256": score.sha256_file(assembled),
+              "rows_compared": unit_cache.compare(live, assembled)}
+    report["passed"] = (report["live_sha256"] == report["assembled_sha256"]
+                        and shadow["assembled_from_units"] == shadow["rows"])
+    write_json(output_dir / "unit-shadow.json", report)
+    if not report["passed"]:
+        raise CandidateError("unit shadow failed: the assembled record differs or misses units")
 
 
 def store_observations_if_unchanged(cache_dir: Path, key: Mapping[str, object],
@@ -1536,6 +1574,21 @@ def _run(args: argparse.Namespace) -> int:
             else:
                 return finish_run(args, output_dir, candidate)
 
+    units = unit_key = None
+    # Per-document reuse needs the same verified inventory; --no-cache reads and
+    # writes no unit, except that a shadow looks units up to assemble its copy.
+    # Timing captures stay fully live.
+    if (not args.no_unit_reuse and not args.skip_build and not args.performance_gating
+            and args.measured_repetitions == 1 and build_receipt["mode"] == "producer-build"
+            and (cache_key is not None or (args.unit_shadow and bypass == "explicit_no_cache"))):
+        unit_key = cache_key if cache_key is not None else read_key()[0]
+        if unit_key is not None:
+            units = unit_cache.UnitCache(
+                cache_dir, unit_cache.detection_identity(
+                    unit_key, repo_root / "scripts/bench", capture_identity.machine_identity()),
+                read=not args.no_cache, write=not args.no_cache)
+    if args.unit_shadow and units is None:
+        raise CandidateError("unit shadow needs a verified effective input inventory")
     with stages.labels(layer="C"), stages.measure("validator_measurements"):
         complete_validator_measurements = score.collect_validator_measurements(
             validator_probe,
@@ -1572,6 +1625,7 @@ def _run(args: argparse.Namespace) -> int:
         policy_path=policy_path,
         source_environment=source_environment,
         record_writer=record_writer,
+        units=units,
     )
     dataset_report["validator_gold_census"] = score.validator_gold_census(
         available_documents, validator_measurements
@@ -1634,6 +1688,7 @@ def _run(args: argparse.Namespace) -> int:
                 policy_path=policy_path,
                 source_environment=source_environment,
                 record_writer=record_writer,
+                units=units,
             )
         candidate["layers"]["gold_validity"] = {
             "C": agentic.gold_validity_digest(documents, validator_measurements)
@@ -1646,10 +1701,22 @@ def _run(args: argparse.Namespace) -> int:
     candidate["cache_replay"] = False
     if cache_key is not None:
         candidate["capture_cache"] = benchmark_cache.provenance(cache_key)
+    if units is not None:
+        candidate["unit_reuse"] = units.provenance()
     output_record = output_dir / "observations-v1.jsonl.gz"
+    if args.unit_shadow:
+        shadow = run_unit_shadow(output_dir, candidate, record_writer, units)
     candidate["observation_record"] = record_writer.write(
         output_record, candidate, add_reference=True
     )
+    if args.unit_shadow:
+        finish_unit_shadow(output_dir, output_record, shadow)
+    if units is not None and units.write:
+        if read_key()[0] != (cache_key if cache_key is not None else unit_key):
+            raise CandidateError("effective inputs changed during capture; refusing unit publication")
+        published = units.publish()
+        if evidence is not None:
+            evidence.cache["units"] = {**units.provenance(), "published": published}
     if not args.no_cache and cache_key is not None:
         store_observations_if_unchanged(cache_dir, cache_key, output_record, read_key)
     return finish_run(args, output_dir, candidate)
