@@ -139,4 +139,18 @@ def records(api, partition):
         ):
             emit("D", "en", "public_tag", "ownership_" + surface, index, development if dev else held_out,
                  {"V": (value, None)})
+
+    counters = api.Rng(api.PARTITION_SEEDS[partition], "prose-word-counter-ownership")
+    words = ("batch", "queue", "worker") if dev else ("shard", "buffer", "packet")
+    for index in range(api.DOCS_PER_FAMILY):
+        word = words[index % len(words)]
+        serial = ("4" if dev else "7") + counters.digits(4)
+        for case, stem in (("lower", word), ("title", word.title())):
+            value = f"{stem}_{serial}"
+            emit("A", "en", "record_id", f"counter_{case}_login", index,
+                 "I sign in as {V} to see my invoices." if dev else "My login is {V} on the benefits portal.",
+                 {"V": (value, "RECORD_ID")})
+            emit("D", "en", "software_counter", f"counter_{case}_metadata", index,
+                 "The scheduler incremented {V} after the job finished." if dev else
+                 "Telemetry lists {V} among the parser's internal counters.", {"V": (value, None)})
     return result
