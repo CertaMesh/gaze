@@ -131,7 +131,7 @@ impl DobJudgeRecognizer {
             .map_err(|_| DobJudgeLoadError::Model)?;
         drop(model_load);
         Ok(Self {
-            class: PiiClass::Custom("birth_date".into()),
+            class: PiiClass::BirthDate,
             tokenizer,
             session: Mutex::new(session),
             date_regex: Regex::new(DATE_PATTERN).map_err(|_| DobJudgeLoadError::Scanner)?,

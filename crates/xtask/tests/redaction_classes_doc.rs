@@ -124,12 +124,9 @@ fn clean_cell(cell: &str) -> String {
 }
 
 fn class_name(class: &PiiClass) -> String {
-    match class {
-        PiiClass::Email => "Email".to_string(),
-        PiiClass::Name => "Name".to_string(),
-        PiiClass::Location => "Location".to_string(),
-        PiiClass::Organization => "Organization".to_string(),
-        PiiClass::Custom(name) => format!("custom:{name}"),
+    match class.legacy_custom_name() {
+        Some(name) => format!("custom:{name}"),
+        None => class.class_name(),
     }
 }
 
@@ -324,37 +321,56 @@ fn class_priorities() -> BTreeMap<String, String> {
         })
         .expect("class_priority must contain a match expression");
 
-    match_expression
-        .arms
-        .iter()
-        .map(|arm| {
-            let variant = match &arm.pat {
-                Pat::Path(path) => path
-                    .path
-                    .segments
-                    .last()
-                    .expect("class path segment")
-                    .ident
-                    .to_string(),
-                Pat::TupleStruct(tuple) => tuple
-                    .path
-                    .segments
-                    .last()
-                    .expect("custom class path segment")
-                    .ident
-                    .to_string(),
+    let mut priorities = BTreeMap::new();
+    let mut wildcard = None::<String>;
+    for arm in &match_expression.arms {
+        let priority = match arm.body.as_ref() {
+            Expr::Lit(literal) => match &literal.lit {
+                syn::Lit::Int(integer) => integer.base10_digits().to_string(),
+                _ => panic!("class priority must be an integer"),
+            },
+            _ => panic!("class priority must be a literal"),
+        };
+        let patterns = match &arm.pat {
+            Pat::Or(or) => or.cases.iter().collect::<Vec<_>>(),
+            Pat::Wild(_) => {
+                assert!(
+                    wildcard.replace(priority.clone()).is_none(),
+                    "class_priority has two wildcard arms"
+                );
+                continue;
+            }
+            pattern => vec![pattern],
+        };
+        for pattern in patterns {
+            let variant = match pattern {
+                Pat::Path(path) => &path.path,
+                Pat::TupleStruct(tuple) => &tuple.path,
                 _ => panic!("unsupported class_priority pattern"),
-            };
-            let priority = match arm.body.as_ref() {
-                Expr::Lit(literal) => match &literal.lit {
-                    syn::Lit::Int(integer) => integer.base10_digits().to_string(),
-                    _ => panic!("class priority must be an integer"),
-                },
-                _ => panic!("class priority must be a literal"),
-            };
-            (variant, priority)
-        })
-        .collect()
+            }
+            .segments
+            .last()
+            .expect("class path segment")
+            .ident
+            .to_string();
+            assert!(
+                priorities
+                    .insert(variant.clone(), priority.clone())
+                    .is_none(),
+                "class_priority lists {variant} twice"
+            );
+        }
+    }
+    // A wildcard arm covers every `PiiClass` variant without an explicit arm.
+    if let Some(priority) = wildcard {
+        let variants = enum_variants("crates/gaze-types/src/lib.rs", "PiiClass");
+        for variant in variants.keys() {
+            priorities
+                .entry(variant.clone())
+                .or_insert_with(|| priority.clone());
+        }
+    }
+    priorities
 }
 
 fn expected_class_rows() -> BTreeSet<ClassRow> {
@@ -366,37 +382,55 @@ fn expected_class_rows() -> BTreeSet<ClassRow> {
         "PiiClass variants and resolver class_priority arms must stay exhaustive"
     );
 
-    let actual_policy_pairs = [
-        (PiiClass::Email, "Email", "email"),
-        (PiiClass::Name, "Name", "name"),
-        (PiiClass::Location, "Location", "location"),
-        (PiiClass::Organization, "Organization", "organization"),
+    let mut actual_policy_pairs = vec![
+        (PiiClass::Email, "Email".to_string(), "email".to_string()),
+        (PiiClass::Name, "Name".to_string(), "name".to_string()),
+        (
+            PiiClass::Location,
+            "Location".to_string(),
+            "location".to_string(),
+        ),
+        (
+            PiiClass::Organization,
+            "Organization".to_string(),
+            "organization".to_string(),
+        ),
         (
             PiiClass::custom("reference").expect("valid custom class"),
-            "Custom",
-            "custom:<name>",
+            "Custom".to_string(),
+            "custom:<name>".to_string(),
+        ),
+        (
+            PiiClass::family("reference"),
+            "Ambiguous".to_string(),
+            "custom:family:<name>".to_string(),
         ),
     ];
+    for class in PiiClass::first_class_variants() {
+        let variant = format!("{class:?}");
+        actual_policy_pairs.push((class.clone(), variant, class.to_canonical_str()));
+    }
     actual_policy_pairs
         .into_iter()
         .map(|(actual, variant, policy_name)| {
-            let parsed = if variant == "Custom" {
-                PiiClass::from_policy_name("custom:reference")
-            } else {
-                PiiClass::from_policy_name(policy_name)
+            let parsed = match variant.as_str() {
+                "Custom" => PiiClass::from_policy_name("custom:reference"),
+                "Ambiguous" => PiiClass::from_policy_name("custom:family:reference"),
+                _ => PiiClass::from_policy_name(&policy_name),
             };
-            assert_eq!(
-                parsed.as_ref(),
-                Some(&actual),
-                "documented PiiClass spelling must parse to the real enum"
+            assert!(
+                parsed.as_ref() == Some(&actual)
+                    && std::mem::discriminant(parsed.as_ref().unwrap())
+                        == std::mem::discriminant(&actual),
+                "documented PiiClass spelling {policy_name} must parse to the real {variant} variant"
             );
             ClassRow {
-                variant: variant.to_string(),
-                policy_name: policy_name.to_string(),
                 priority: priorities
-                    .get(variant)
+                    .get(&variant)
                     .unwrap_or_else(|| panic!("missing class priority for {variant}"))
                     .clone(),
+                variant,
+                policy_name,
             }
         })
         .collect()

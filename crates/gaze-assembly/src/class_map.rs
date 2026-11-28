@@ -20,8 +20,8 @@ pub(crate) fn class_for_dictionary(
             old_class: original_class,
             new_class: override_class.clone(),
             uncovered_rule: format!(
-                "no tokenize-or-stricter action rule covers {:?}",
-                override_class
+                "no tokenize-or-stricter action rule covers {}",
+                override_class.legacy_debug_label()
             ),
         })
     }

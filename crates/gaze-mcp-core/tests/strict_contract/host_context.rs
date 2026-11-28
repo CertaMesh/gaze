@@ -673,6 +673,60 @@ async fn private_identifier_dispatch(
     .await
 }
 
+/// Host-context classes become opaque `host_<hex>` labels unless they are one of the eight
+/// shipped classes kept by name. Shipped classes outside that list are hidden too.
+#[tokio::test]
+async fn host_context_class_labels_stay_opaque_except_the_kept_shipped_names() {
+    let kept = [
+        "phone",
+        "iban",
+        "credit_card",
+        "national_id",
+        "steuer_id",
+        "passport",
+        "birth_date",
+        "postal_code",
+    ];
+    for name in kept
+        .into_iter()
+        .chain(["ssn", "customer_id", "tenant_case"])
+    {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let response = private_identifier_call(&session, "private_dictionary", Some(name), true)
+            .await
+            .unwrap_or_else(|error| panic!("{name}: dispatch failed: {error:?}"));
+        let payload = response
+            .payload
+            .as_str()
+            .expect("string payload")
+            .to_owned();
+        assert_eq!(
+            session.restore_strict_text(&payload).unwrap(),
+            KNOWN,
+            "{name}: strict restore"
+        );
+        let entries = session.snapshot_entries();
+        assert_eq!(entries.len(), 1, "{name}: one manifest entry");
+        let canonical = entries[0].class.to_canonical_str();
+        if kept.contains(&name) {
+            assert_eq!(canonical, format!("custom:{name}"), "{name}: kept by name");
+            assert!(
+                payload.contains(&format!(":Custom:{name}_1>")),
+                "{name}: token label {payload}"
+            );
+        } else {
+            let id = canonical
+                .strip_prefix("custom:host_")
+                .unwrap_or_else(|| panic!("{name}: class {canonical} must be opaque"));
+            assert!(
+                matches!(id.len(), 32 | 64) && id.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "{name}: opaque id {id}"
+            );
+            assert!(!payload.contains(name), "{name}: label leaked in {payload}");
+        }
+    }
+}
+
 #[tokio::test]
 async fn host_context_private_labels_are_session_scoped_and_defeat_public_hash_guesses() {
     use sha2::{Digest, Sha256};

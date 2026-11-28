@@ -29,6 +29,42 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: match the first-class `PiiClass` variants
+
+Every class a shipped rulepack emits is now its own `PiiClass` variant, for
+example `PiiClass::Phone`, `PiiClass::Iban` and `PiiClass::PostalCode`.
+Collision-family classes are `PiiClass::Ambiguous(family)`, holding the family
+name without the `family:` prefix. `PiiClass::Custom(String)` remains for
+classes that Gaze does not ship.
+
+- `PiiClass` is now `#[non_exhaustive]`. A `match` on it outside `gaze-types`
+  needs a wildcard arm, for example `_ if class.is_custom_like() => ...`.
+  Minor releases may add a variant for each newly shipped class; the
+  `shipped-class-coverage` gate makes every shipped class a variant.
+- `PiiClass::custom("phone")`, `from_policy_name("custom:phone")`,
+  `from_canonical_str("custom:phone")` and serde all return `PiiClass::Phone`.
+  A hand-built `PiiClass::Custom("phone".into())` compares, orders and hashes
+  equal to `PiiClass::Phone`, but a pattern `PiiClass::Custom(name) if name ==
+  "phone"` no longer matches parsed classes. Match the variant instead, or
+  compare `class.to_canonical_str()` with `"custom:phone"`.
+- `as_custom_name()` returns `None` for first-class and family variants. Use
+  `legacy_custom_name()` for the name after `custom:`, `as_family_name()` for
+  a family, and `is_custom_like()` to test for every non-built-in class.
+- Equal values can differ on `as_custom_name()`: `Custom("family:x")` equals
+  `Ambiguous("x")`, but only the first returns a custom name. Constructors and
+  parsers normalize, so read classes through `as_family_name()` and
+  `legacy_custom_name()` rather than matching on the `Custom` or `Ambiguous`
+  variant.
+- `Debug` output of `PiiClass` changed. A class that printed `Custom("phone")`
+  now prints `Phone`, and a family prints `Ambiguous("x")`. Update `{:?}`
+  assertions and any code that matches error messages built with `Debug`. Use
+  `legacy_debug_label()` for the old spelling.
+
+The wire format is unchanged. Tokens stay `Custom:phone_1`, audit and policy
+names stay `custom:phone`, serde stays `{"Custom":"phone"}`, and stored
+manifests restore as before. Safety-net `raw_label` audit values and the
+rulepack and class-map error messages keep the old `Custom("phone")` spelling.
+
 ### Action required: declare the tools whose proxy arguments restore
 
 Proxy restore is now sink-scoped, like the MCP bridge. Before, the proxy restored

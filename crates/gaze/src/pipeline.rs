@@ -5457,7 +5457,9 @@ fn model_span_to_suspect(
         backend_name,
         span.confidence,
         kind,
-        format!("{:?}", span.class),
+        // Stored in audit rows and matched by `gaze audit --raw-label`: keep the
+        // historical spelling, `Custom("phone")`, not the variant's Debug form.
+        span.class.legacy_debug_label(),
         field_path.map(str::to_string),
     ))
 }
@@ -5868,9 +5870,29 @@ fn street_corroborated_house_numbers(
 fn is_address_anchor(class: &crate::PiiClass) -> bool {
     matches!(class, crate::PiiClass::Location)
         || matches!(
-            class.as_custom_name(),
+            class.legacy_custom_name().as_deref(),
             Some("postal_code" | "building_number")
         )
+}
+
+/// What an address winner is for growth. Equality, not a variant pattern, so a
+/// hand-built `Custom("postal_code")` is a postcode too.
+fn address_anchor_kind(
+    class: &crate::PiiClass,
+    value: &str,
+    registry: &RecognizerRegistry,
+    locale_chain: &[crate::LocaleTag],
+) -> crate::address_block::AnchorKind {
+    if *class == crate::PiiClass::PostalCode {
+        crate::address_block::AnchorKind::Postcode
+    } else if let Some(order) = registry
+        .street_lexicon()
+        .unambiguous_street_order(value, locale_chain)
+    {
+        crate::address_block::AnchorKind::Street(order)
+    } else {
+        crate::address_block::AnchorKind::Place
+    }
 }
 
 /// Address pieces grown from the settled address winners.
@@ -5918,16 +5940,7 @@ fn address_block_pieces(
         .iter()
         .map(|(span, _, class)| crate::address_block::Anchor {
             span: span.clone(),
-            kind: if class.as_custom_name() == Some("postal_code") {
-                crate::address_block::AnchorKind::Postcode
-            } else if let Some(order) = registry
-                .street_lexicon()
-                .unambiguous_street_order(&text[span.clone()], locale_chain)
-            {
-                crate::address_block::AnchorKind::Street(order)
-            } else {
-                crate::address_block::AnchorKind::Place
-            },
+            kind: address_anchor_kind(class, &text[span.clone()], registry, locale_chain),
         })
         .collect::<Vec<_>>();
     grammar
@@ -6111,7 +6124,13 @@ fn generalize_token(class: &PiiClass) -> String {
         PiiClass::Name => "[NAME]".to_string(),
         PiiClass::Location => "[LOCATION]".to_string(),
         PiiClass::Organization => "[ORGANIZATION]".to_string(),
-        PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
+        other => format!(
+            "[{}]",
+            other
+                .legacy_custom_name()
+                .unwrap_or_default()
+                .to_ascii_uppercase()
+        ),
     }
 }
 
@@ -8757,10 +8776,61 @@ mod tests {
         );
     }
 
+    /// The safety-net `raw_label` is stored in audit rows and matched by
+    /// `gaze audit --raw-label`, so it keeps the historical class spelling.
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn model_span_raw_label_keeps_the_historical_class_spelling() {
+        // OPF maps `private_phone` to the safety-net phone class.
+        let class = gaze_types::SafetyNetPiiClass::Phone.to_pii_class();
+        let span = ModelSpan {
+            text: "+1-212-555-0104".into(),
+            byte_range: 6..21,
+            class,
+            confidence: Some(0.9),
+            model_name: "opf".into(),
+        };
+        let suspect = model_span_to_suspect(span, "opf", &Manifest::from_spans(Vec::new()), None)
+            .expect("an uncovered span is a suspect");
+        assert_eq!(suspect.raw_label, "Custom(\"phone\")");
+    }
+
+    #[test]
+    fn address_anchor_kind_treats_every_postal_code_spelling_as_a_postcode() {
+        use crate::address_block::AnchorKind;
+
+        let pipeline = Pipeline::builder().build().unwrap();
+        let registry = pipeline.registry();
+        let locales = [crate::LocaleTag::EnUs];
+        for class in [PiiClass::PostalCode, PiiClass::Custom("postal_code".into())] {
+            assert_eq!(
+                address_anchor_kind(&class, "00096", registry, &locales),
+                AnchorKind::Postcode,
+                "{class:?}"
+            );
+        }
+        assert_eq!(
+            address_anchor_kind(&PiiClass::Location, "Brinmoor", registry, &locales),
+            AnchorKind::Place
+        );
+    }
+
     #[test]
     fn generalize_token_custom_class_preserves_identity() {
         // Regression guard: custom classes must not collapse to an indistinct [PII].
         assert_eq!(generalize_token(&PiiClass::Custom("foo".into())), "[FOO]");
+        assert_eq!(
+            generalize_token(&PiiClass::custom("phone").unwrap()),
+            "[PHONE]"
+        );
+        assert_eq!(
+            generalize_token(&PiiClass::custom("postal_code").unwrap()),
+            "[POSTAL_CODE]"
+        );
+        assert_eq!(
+            generalize_token(&PiiClass::family("payment-card-or-iban")),
+            "[FAMILY:PAYMENT-CARD-OR-IBAN]"
+        );
     }
 
     #[test]

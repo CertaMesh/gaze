@@ -32,6 +32,7 @@ mod readme_version_check;
 mod repo;
 mod safety_net_sanity;
 mod scrub_public_text;
+mod shipped_class_coverage;
 mod tokenbridge_encrypted_index;
 mod tokenbridge_no_raw_index;
 mod trybuild_fixture_hygiene;
@@ -51,6 +52,7 @@ enum Command {
     NoTenantKnowledge,
     FixtureCitationLint,
     FamilyPolicyTableCoherence,
+    ShippedClassCoverage,
     CargoMetadataAuditIsolation,
     DashboardIsolation,
     DylintGate,
@@ -81,6 +83,7 @@ fn main() -> Result<()> {
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
         Command::FixtureCitationLint => fixture_citation::run(),
         Command::FamilyPolicyTableCoherence => family_policy_coherence::run(),
+        Command::ShippedClassCoverage => shipped_class_coverage::run(),
         Command::CargoMetadataAuditIsolation => cargo_metadata_audit_isolation::run(),
         Command::DashboardIsolation => dashboard_isolation::run(),
         Command::DylintGate => dylint_gate::run(),

@@ -127,10 +127,10 @@ The browser-MITM project is separate (formerly in-tree `debug-proxy`).
   Do not duplicate the variant list here.
 - Active xtask gates: `symmetric-potemkin`, `class-map-override-safety`,
   `recognizer-composition-validator`, `no-tenant-knowledge`, `bundle-tokenization-drift`,
-  `family-policy-table-coherence`, `locale-cue-bundle-coherence`, `fixture-citation-lint`,
-  `ci-feature-matrix`, `cargo-metadata-audit-isolation`, `readme-version-check`, `dylint-gate`
-  (canonical audit-sink isolation), `safety-net-sanity`, `tokenbridge-no-raw-index`,
-  `tokenbridge-encrypted-index`. All gates must invoke at least one behavioral test;
+  `family-policy-table-coherence`, `shipped-class-coverage`, `locale-cue-bundle-coherence`,
+  `fixture-citation-lint`, `ci-feature-matrix`, `cargo-metadata-audit-isolation`,
+  `readme-version-check`, `dylint-gate` (canonical audit-sink isolation), `safety-net-sanity`,
+  `tokenbridge-no-raw-index`, `tokenbridge-encrypted-index`. All gates must invoke at least one behavioral test;
   symbol-or-string-presence-only checks are recursive-Potemkin and forbidden.
 - `core-extended` no-policy bundled activation: the authoritative compatibility locale chain and
   complete active-recognizer list live in [Shipped default

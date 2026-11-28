@@ -167,8 +167,8 @@ fn census(path: &std::path::Path) -> Result<Value, Box<dyn std::error::Error>> {
             "family": m.family, "variant": m.variant, "precedence": m.precedence,
             "mandatory_anchor": m.mandatory_anchor
         }));
-        json!({"id": id, "class": format!("{:?}", recognizer.supported_class()),
-            "classes": recognizer.possible_classes().iter().map(|class| format!("{class:?}")).collect::<Vec<_>>(),
+        json!({"id": id, "class": recognizer.supported_class().legacy_debug_label(),
+            "classes": recognizer.possible_classes().iter().map(|class| class.legacy_debug_label()).collect::<Vec<_>>(),
             "locales": recognizer.locales().iter().map(|locale| locale.as_str()).collect::<Vec<_>>(),
             "locale_basis": format!("{:?}", recognizer.locale_basis()),
             "token_family": recognizer.token_family(), "membership": membership})

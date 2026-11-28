@@ -1253,8 +1253,8 @@ fn buffered_audit_bytes(audit: &DeferredRedactions<'_>, reports: &[LeakReport]) 
 
 fn class_allocation_bytes(class: &PiiClass) -> usize {
     match class {
-        PiiClass::Custom(value) => value.capacity(),
-        PiiClass::Email | PiiClass::Name | PiiClass::Location | PiiClass::Organization => 0,
+        PiiClass::Custom(value) | PiiClass::Ambiguous(value) => value.capacity(),
+        _ => 0,
     }
 }
 
@@ -1414,7 +1414,9 @@ fn result_bytes(results: &[BlockResult]) -> usize {
                         + b.manifest
                             .iter()
                             .map(|span| match &span.class {
-                                PiiClass::Custom(name) => name.capacity(),
+                                PiiClass::Custom(name) | PiiClass::Ambiguous(name) => {
+                                    name.capacity()
+                                }
                                 _ => 0,
                             })
                             .sum::<usize>()

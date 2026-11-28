@@ -201,11 +201,10 @@ fn lint_strict_mode_rejects_overlap() {
     assert!(matches!(
         err,
         RulepackError::ConflictingLocaleProjection {
-            class: PiiClass::Custom(ref class),
+            class: PiiClass::PostalCode,
             ref recognizer_ids,
             ref locale_overlap,
-        } if class == "postal_code"
-            && recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
+        } if recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
             && locale_overlap == &vec![LocaleTag::DeDe, LocaleTag::EnUs]
     ));
 }
@@ -223,11 +222,10 @@ fn lint_strict_mode_rejects_overlap_with_inline_comment() {
     assert!(matches!(
         err,
         RulepackError::ConflictingLocaleProjection {
-            class: PiiClass::Custom(ref class),
+            class: PiiClass::PostalCode,
             ref recognizer_ids,
             ref locale_overlap,
-        } if class == "postal_code"
-            && recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
+        } if recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
             && locale_overlap == &vec![LocaleTag::DeDe, LocaleTag::EnUs]
     ));
 }
@@ -375,11 +373,10 @@ fn lint_projects_format_basis_recognizers_globally() {
     assert!(matches!(
         err,
         RulepackError::ConflictingLocaleProjection {
-            class: PiiClass::Custom(ref class),
+            class: PiiClass::PostalCode,
             ref recognizer_ids,
             ref locale_overlap,
-        } if class == "postal_code"
-            && recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
+        } if recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
             && locale_overlap == &vec![LocaleTag::DeDe, LocaleTag::Global]
     ));
 }

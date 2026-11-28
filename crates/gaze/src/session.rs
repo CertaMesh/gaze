@@ -708,7 +708,11 @@ impl Session {
             ),
             // Lowercasing preserves the dedicated `custom:` sentinel namespace
             // for format-preserving fakes, so restore can detect them too.
-            PiiClass::Custom(name) => format!("{}:custom:{name}_{index}", self.session_hex()),
+            other => format!(
+                "{}:custom:{}_{index}",
+                self.session_hex(),
+                other.legacy_custom_name().unwrap_or_default()
+            ),
         })
     }
 
@@ -1573,7 +1577,10 @@ impl<'session> SessionTransaction<'session> {
                         index
                     )
                 }
-                PiiClass::Custom(name) => format!("{prefix}:custom:{name}_{index}"),
+                other => format!(
+                    "{prefix}:custom:{}_{index}",
+                    other.legacy_custom_name().unwrap_or_default()
+                ),
             },
         );
         self.charge_mapping(DEFAULT_COUNTER_FAMILY, class, raw, &token, added);
@@ -2592,17 +2599,17 @@ fn authorized_structural_values_from_state(state: &SessionState) -> BTreeSet<(Pi
     for entry in snapshot_entries_from_state(state) {
         // A cued checksum failure is only recognizable in its sentence. The manifest stores
         // the value alone, so authorize its canonical form directly from the typed entry.
-        if let PiiClass::Custom(class) = &entry.class {
-            let canonical = match class.as_str() {
-                "iban" => Some(gaze_types::iban_canonicalize(
-                    &crate::normalize::normalize(&entry.raw).text,
-                )),
-                "credit_card" => Some(ascii_digits(&crate::normalize::normalize(&entry.raw).text)),
-                _ => None,
-            };
-            if let Some(canonical) = canonical {
-                authorized.insert((entry.class.clone(), canonical));
+        let canonical = match entry.class.legacy_custom_name().as_deref() {
+            Some("iban") => Some(gaze_types::iban_canonicalize(
+                &crate::normalize::normalize(&entry.raw).text,
+            )),
+            Some("credit_card") => {
+                Some(ascii_digits(&crate::normalize::normalize(&entry.raw).text))
             }
+            _ => None,
+        };
+        if let Some(canonical) = canonical {
+            authorized.insert((entry.class.clone(), canonical));
         }
         for finding in structural_findings(&entry.raw) {
             authorized.insert((finding.class, finding.canonical));
@@ -2989,6 +2996,12 @@ pub(crate) fn parsed_restore_token(raw: &str) -> ParsedRestoreToken {
     }
 }
 
+/// Maps a token's `custom:` name onto its first-class, family or adopter class.
+fn legacy_custom_class(name: &str) -> PiiClass {
+    PiiClass::from_canonical_str(&format!("custom:{name}"))
+        .unwrap_or_else(|| PiiClass::Custom(name.to_string()))
+}
+
 fn parse_restore_token_parts(raw: &str) -> Option<(PiiClass, u32)> {
     if let Some(rest) = raw.strip_prefix("email") {
         let (ordinal, tail) = rest.split_once('.')?;
@@ -3005,17 +3018,11 @@ fn parse_restore_token_parts(raw: &str) -> Option<(PiiClass, u32)> {
 
     if let Some(rest) = body.strip_prefix("Custom:") {
         let (name, ordinal) = rest.rsplit_once('_')?;
-        return Some((
-            PiiClass::Custom(name.to_string()),
-            parse_ascii_ordinal(ordinal)?,
-        ));
+        return Some((legacy_custom_class(name), parse_ascii_ordinal(ordinal)?));
     }
     if let Some(rest) = body.strip_prefix("custom:") {
         let (name, ordinal) = rest.rsplit_once('_')?;
-        return Some((
-            PiiClass::Custom(name.to_string()),
-            parse_ascii_ordinal(ordinal)?,
-        ));
+        return Some((legacy_custom_class(name), parse_ascii_ordinal(ordinal)?));
     }
 
     let (class, ordinal) = body.rsplit_once('_')?;

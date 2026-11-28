@@ -282,7 +282,9 @@ pub enum RulepackError {
     #[error("unknown pattern_template placeholder '{placeholder}' in recognizer '{id}'")]
     UnknownPatternTemplatePlaceholder { id: String, placeholder: String },
     #[error(
-        "context class_map override for dictionary '{dict}' changes {old_class:?} to {new_class:?}, but {uncovered_rule}"
+        "context class_map override for dictionary '{dict}' changes {} to {}, but {uncovered_rule}",
+        .old_class.legacy_debug_label(),
+        .new_class.legacy_debug_label()
     )]
     ClassMapOverrideClash {
         dict: String,
@@ -291,7 +293,8 @@ pub enum RulepackError {
         uncovered_rule: String,
     },
     #[error(
-        "same-class recognizers '{recognizer_a}' and '{recognizer_b}' both emit {class:?} but neither declares cooperates_with"
+        "same-class recognizers '{recognizer_a}' and '{recognizer_b}' both emit {} but neither declares cooperates_with",
+        .class.legacy_debug_label()
     )]
     SameClassWithoutCooperation {
         class: PiiClass,
@@ -299,7 +302,8 @@ pub enum RulepackError {
         recognizer_b: String,
     },
     #[error(
-        "recognizers {recognizer_ids:?} share class {class:?} with equivalent regex shape and overlapping locale projection {locale_overlap:?}"
+        "recognizers {recognizer_ids:?} share class {} with equivalent regex shape and overlapping locale projection {locale_overlap:?}",
+        .class.legacy_debug_label()
     )]
     ConflictingLocaleProjection {
         class: PiiClass,

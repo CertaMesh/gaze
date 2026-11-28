@@ -32,6 +32,7 @@
     "gaze-assembly::context_class_override",
     "gaze-assembly::core_pipeline_dictionaries",
     "gaze-assembly::field_labelled_record_ids",
+    "gaze-assembly::first_class_classes",
     "gaze-assembly::loopback_ip",
     "gaze-assembly::record_context",
     "gaze-assembly::rust_library_example",

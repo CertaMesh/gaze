@@ -738,8 +738,8 @@ fn structured_containment(
     } else {
         (existing, candidate)
     };
-    let structured_container = matches!(container.class, PiiClass::Custom(_));
-    let builtin_enclosed = !matches!(enclosed.class, PiiClass::Custom(_));
+    let structured_container = container.class.is_custom_like();
+    let builtin_enclosed = !enclosed.class.is_custom_like();
     (structured_container && builtin_enclosed).then_some(candidate_encloses)
 }
 
@@ -1110,7 +1110,11 @@ fn class_priority(class: &PiiClass) -> u8 {
         PiiClass::Name => 80,
         PiiClass::Organization => 70,
         PiiClass::Location => 60,
-        PiiClass::Custom(_) => 50,
+        // Every other class is custom-like (`PiiClass::is_custom_like`):
+        // first-class shipped classes, families and adopter classes share the
+        // historical `Custom` priority. `PiiClass` is non-exhaustive, so a new
+        // shipped class lands here too.
+        _ => 50,
     }
 }
 

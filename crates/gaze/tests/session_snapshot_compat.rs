@@ -71,6 +71,19 @@ fn v6_fixture_restores_byte_exact_and_keeps_evidence() {
 }
 
 #[test]
+fn v6_fixture_continues_its_postal_counter_under_the_first_class_variant() {
+    let session = import(V6);
+    assert_eq!(
+        session.tokenize(&PiiClass::PostalCode, "12345").unwrap(),
+        "<e9560063:Custom:postal_code_1>"
+    );
+    assert_eq!(
+        session.tokenize(&PiiClass::PostalCode, "54321").unwrap(),
+        "<e9560063:Custom:postal_code_2>"
+    );
+}
+
+#[test]
 fn v7_fixture_restores_its_json_escaped_spelling() {
     assert_eq!(V7[0], 7);
     let session = import(V7);
