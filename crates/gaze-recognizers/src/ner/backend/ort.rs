@@ -13,6 +13,7 @@ use crate::ner::types::{LabelMap, NerSpanResult, MODEL_FILE, TOKENIZER_FILE};
 #[cfg(test)]
 use super::preparation::ENCODE_CALLS;
 use super::preparation::{encode_input, planning_encoding, prepare_windows};
+use super::reuse;
 
 /// BERT-family token-classification backend. Owns its tokenizer, ONNX session,
 /// label map, and `id2label` vocab. BIO/IOB2 subword tags are merged via
@@ -23,6 +24,7 @@ pub(crate) struct OrtBackend {
     labels: LabelMap,
     id2label: Vec<String>,
     has_token_type_ids: bool,
+    generation: u64,
 }
 
 impl OrtBackend {
@@ -51,6 +53,7 @@ impl OrtBackend {
             labels,
             id2label,
             has_token_type_ids,
+            generation: reuse::model_generation(),
         })
     }
 }
@@ -105,6 +108,16 @@ impl OrtBackend {
             return Ok(Vec::new());
         }
 
+        let key = reuse::WindowKey::new(self.generation, ids, attention);
+        if let Some(logits) = reuse::get(&key) {
+            return decode_output(
+                labels,
+                id2label,
+                offsets,
+                Some((&logits.0, &logits.1)),
+                input,
+            );
+        }
         let seq_len = ids.len();
         let input_ids: Vec<i64> = ids.iter().map(|&v| v as i64).collect();
         let attn_mask: Vec<i64> = attention.iter().map(|&v| v as i64).collect();
@@ -148,7 +161,9 @@ impl OrtBackend {
         let (shape, flat) = value
             .try_extract_tensor::<f32>()
             .map_err(|_| NerRuntimeError::Output("expected a float32 logits tensor".into()))?;
-        decode_output(labels, id2label, offsets, Some((shape, flat)), input)
+        let decoded = decode_output(labels, id2label, offsets, Some((shape, flat)), input)?;
+        reuse::insert(key, std::sync::Arc::new((shape.to_vec(), flat.to_vec())));
+        Ok(decoded)
     }
 }
 

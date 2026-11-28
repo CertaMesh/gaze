@@ -27,6 +27,22 @@ pub fn inference_request() -> impl Drop {
     }
 }
 
+/// Shares built-in inference reuse across every pipeline call until the guard drops.
+/// Use it around repeated calls on the same inputs, such as stabilization passes.
+#[doc(hidden)]
+pub fn inference_request_spanning() -> impl Drop {
+    #[cfg(feature = "safety-net-nym")]
+    let nym = safety_net::nym::InferenceRequest::spanning();
+    #[cfg(not(feature = "safety-net-nym"))]
+    let nym = gaze_types::perf::Disabled;
+    SpanningRequest(ner::backend::reuse::Spanning::enter(), nym)
+}
+
+struct SpanningRequest<A, B>(A, B);
+impl<A, B> Drop for SpanningRequest<A, B> {
+    fn drop(&mut self) {}
+}
+
 mod anchored_match;
 // Pinned model bundle verification, shared by the primary NER bundle and the Nym safety net.
 mod bundle;

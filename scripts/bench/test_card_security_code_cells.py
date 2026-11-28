@@ -1,4 +1,4 @@
-"""Generator v33 ownership, UTF-8 source boundaries and historical corpus pins."""
+"""Generator v34 ownership, UTF-8 source boundaries and historical corpus pins."""
 import hashlib
 from itertools import product
 from pathlib import Path
@@ -72,7 +72,7 @@ def test_gold_and_public_twins(partition):
     assert positive == set(product(("en", "de"), layouts, (3, 4), (api.VALID, api.INVALID), forms))
     assert public == set(product(("en", "de"), layouts, (3, 4)))
     assert other == set(product(("en", "de"), ("reference", "loose", "metadata", "amount")))
-    assert cells.REFERENCE_TWIN in api.guard_families(33) and cells.REFERENCE_TWIN not in api.guard_families(32)
+    assert cells.REFERENCE_TWIN in api.guard_families(34) and cells.REFERENCE_TWIN not in api.guard_families(33)
 
 
 @pytest.mark.parametrize("partition", api.PARTITIONS)
@@ -153,11 +153,11 @@ def test_v31_rebuilds_byte_for_byte(partition, expected):
 
 
 @pytest.mark.parametrize("partition,expected", [
-    ("dev", "58333493d84c3753eb2163a14002670a95d010260c1bca495579d30034afacc6"),
-    ("test", "5c259f8e24cbf4f691cddafbb4ac61f90d4b5112d0bfdc40cf90d73517b873cc"),
+    ("dev", "01f148c88b6f438f66cea88e98ef5d160480b7c2fcb23250473ee16badbc2b6a"),
+    ("test", "30c18e267516f1203e9592285a83d5a1563c0f7365618024fb101e6840e95ee2"),
 ])
-def test_v32_rebuilds_byte_for_byte(partition, expected):
-    old = api.records_as_of(32, api.generate(partition))
+def test_v33_rebuilds_byte_for_byte(partition, expected):
+    old = api.records_as_of(33, api.generate(partition))
     assert hashlib.sha256(api.corpus_bytes(old)).hexdigest() == expected
-    assert api.load_contract(Path(__file__).resolve().parents[2], version=32).sha256 == (
-        "8c3ac7f6c8a62ac5c11af9897cfadbcccdfd8b1a9a7a784d36336958ceb1b3c1")
+    assert api.load_contract(Path(__file__).resolve().parents[2], version=33).sha256 == (
+        "1f181417b92b4ecdc3b9e7730d086a7e9a3b322cd34e76a2dbdd867256f70182")

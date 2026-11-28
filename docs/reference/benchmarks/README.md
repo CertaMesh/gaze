@@ -2005,8 +2005,9 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) adds the JSON structure census to the measuring closure; and the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) changes the known-record cell and arm harness digests.
-The [capture closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure. The [generator v32 specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells. In generator v33, the [current specification](specifications/59f5a7ffc27c73ed306598d41378d0a97f0eb8dc39c403c02a1c7a6aceb8a0b1.json) adds card security code cells and the `card.security_code` source ID to the validation vocabulary.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [known-record specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7); and the [capture-closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure, which let the gate and the capture cache ignore harness files that cannot reach C, A, D or R.
+The [comma-address specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
+The [prose-ID specification](specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds the complete prose ID cells and their counterweights. In generator v34, the [current specification](specifications/81aa1126747b47a87aabcc2ccfb6393cae539e50d913343ac62797a77c5bf2b2.json) adds card security code cells and their public counterweights.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2564,36 +2565,43 @@ No release has been measured on generator v31 yet. The v30 history rows above
 stay bound to the v30 specification; the v31 backfill runs outside the PR
 critical path.
 
-### Card security codes (generator v33)
+### Prose record IDs (generator v33)
 
-The [generator](../../../scripts/bench/card_security_code_cells.py) adds 798
-documents per partition: 700 in A and 98 in D. In English and German, A pairs
-a PAN with a separately scored three- or four-digit code: bare after a space,
-after `CVV:` or `CVC:`, or before `(CVV)` or `(CVC)`. Other disclosures put
-the assignment inside parentheses, after a conjunction, or before a note about
-the back of the card. Dev uses `and CVV:` / `und Prüfnummer:`; test uses
-`and the CVV is` / `und die Prüfnummer ist`. A direct code label after a valid compact PAN
-does not need a card word before the number.
-The PAN is `CREDITCARDNUMBER` and the code digits are `SECURITYTOKEN`; the
-separator and the cue are not gold. PANs are compact (12–19 digits) or grouped
-4-4-4, 4-4-4-4, 4-6-5, 4-6-4 or 4-4-4-4-3. Short Maestro PANs appear in
-4-4-4 and compact 12–15 forms; the 14- and 15-digit forms also cover Diners
-and Amex. Each card-labelled PAN has a cued checksum-invalid twin. In 208 of the A
-records, the second number is explicitly a page or invoice
-number: only the PAN is gold, so protecting the public number costs FP bytes.
+The [record-ID cells](../../../scripts/bench/prose_record_id_cells.py) add 800 A
+and 605 D documents per partition. Layer A scores the whole identifier, not
+just the first digit run. It covers personal case, claim, member, medical,
+customer and employee records in English and German, including a numeric case
+and `Fall-Nr.` immediately followed by digits. Employee and account keys also
+appear in running text without a field cue. Dev and test use different wording
+and value pools. Layer D reuses the exact uncued keys as public release or
+reference codes and tool selectors. Ten login values per partition are also
+used unchanged as plain release names, backtick-quoted release tags, and build
+tags. Another ten lowercase and ten title-case logins per partition pair a word
+with an underscore and five digits. The exact same spellings name software
+counters in D; only their use as a person's login is gold. Each personal numeric `case` value also
+appears in a benign switch arm and in prose naming a software test case.
+Dotted tool names, public paths and field
+cues with no value carry no gold. Layer R is unchanged. The v32 corpus
+rebuilds byte-for-byte under its [frozen contract](scored-labels-agentic-generator-v32.json).
+No detector or release has been measured as part of this addition.
 
-D has no gold. Each PAN layout has a checksum-failed public reference of the
-same shape next to a public number; these references join the card credit guard.
-One twin contrasts a four-group PAN and a space-separated code after `Karte Nr.`
-or `Card no.` with a single public stock reference after `Kartennummer:` or
-`Card:`. The reference has the same digits, in five uniformly hyphenated groups
-of four; no 12–19 digit window passes Luhn. Other controls use an unlabelled
-checksum-invalid reference followed by code help or form metadata, non-PAN
-references, incidental CVV/CVC mentions and amounts. None discloses a security
-code. V33 totals 42,582 documents per partition (20,635 A, 9,146 D, 12,801 R).
-V32, including the comma-separated address cells, rebuilds byte-for-byte under its
-[frozen contract](scored-labels-agentic-generator-v32.json); no v33 detection
-result is claimed here.
+### Card security codes (generator v34)
+
+The [card cells](../../../scripts/bench/card_security_code_cells.py) add 700 A
+and 98 D documents per partition. In English and German, A pairs a compact or
+grouped PAN with a separate three- or four-digit code. Only its digits are
+`SECURITYTOKEN` gold. Cases include a bare trailing field, `CVV:` / `CVC:`, a
+postfix label in parentheses, and a conjunction with or without an article.
+A direct code label after a valid compact PAN does not require a card cue.
+Each card-labelled PAN has a cued checksum-invalid twin. In 208 mixed A records
+a page or invoice number follows the PAN; only the PAN is gold.
+
+D has no gold. Each PAN layout has a checksum-failed public reference and an
+adjacent public number. The card credit guard includes these references,
+including five uniformly hyphenated groups of four with no valid PAN window.
+Other controls use code help, form metadata, incidental CVV/CVC mentions and
+amounts. V34 totals 43,987 documents per partition (21,435 A, 9,751 D, 12,801 R).
+V33 rebuilds byte-for-byte under its [frozen contract](scored-labels-agentic-generator-v33.json).
 
 ### Measured adjacency layer history
 

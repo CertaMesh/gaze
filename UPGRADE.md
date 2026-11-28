@@ -29,6 +29,42 @@ This is a critical defect. Never re-tokenize stored manifests to migrate.
 
 ## v0.17.x → unreleased
 
+### Action required: declare the tools whose proxy arguments restore
+
+Proxy restore is now sink-scoped, like the MCP bridge. Before, the proxy restored
+originals into every tool call's arguments (Anthropic `tool_use.input`, OpenAI
+`tool_calls[].function.arguments` and Responses `function_call`/`mcp_call`
+arguments, Gemini `functionCall.args`), so originals reached any tool or
+external service the model chose. Tool results, documents, reasoning and
+Gemini thought summaries also restored.
+
+Now only the assistant text the client shows its user restores by default.
+Tool arguments restore only for tools you declare; everything else keeps its
+tokens. An agent that must act on original values in a tool call needs that
+tool declared:
+
+```toml
+[proxy]
+restore_tools = ["save_contact"]
+```
+
+Library users call `ProxyConfig::with_restore_tools(["save_contact"])`. Names
+match exactly. Custom `ProviderAdapter` implementations must classify each
+response surface with `PiiSurface::with_sink`; an unclassified surface is
+`RestoreSink::Withheld` and keeps its tokens. Code that builds `PiiSurface` with
+a struct literal must add `sink` or use `PiiSurface::new`. Adapters whose
+streamed tool arguments do not name their tool implement
+`ProviderAdapter::sse_event_tool_calls`.
+
+Two streamed positions keep their tokens even for a declared tool, because they
+cannot be tied to one tool name: OpenAI Responses `*_arguments.done` events
+(read the restored arguments from the deltas, `output_item.done`, or
+`response.completed`) and tool input streamed through the legacy Anthropic
+adapter. The direct Anthropic profile that `gaze proxy serve` uses restores
+streamed input for declared tools. A tool-call stream renamed by a later chunk,
+including a chunk whose call index cannot be read, keeps its tokens. `gaze proxy serve` rejects
+empty or padded `restore_tools` names at startup.
+
 ### Action required: stop depending on `gaze-model-setup`
 
 The `gaze-model-setup` crate is no longer published; its code moved into

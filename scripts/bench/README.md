@@ -784,10 +784,11 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [capture closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
+The [capture-closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
-The [generator v32 specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells.
-The [current specification](../../docs/reference/benchmarks/specifications/59f5a7ffc27c73ed306598d41378d0a97f0eb8dc39c403c02a1c7a6aceb8a0b1.json) adds [generator v33's card security code cells](../../docs/reference/benchmarks/README.md#card-security-codes-generator-v33) and the `card.security_code` source ID to the validation vocabulary.
+The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
+The [prose-ID specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [current specification](../../docs/reference/benchmarks/specifications/81aa1126747b47a87aabcc2ccfb6393cae539e50d913343ac62797a77c5bf2b2.json) adds [generator v34's card security code cells](../../docs/reference/benchmarks/README.md#card-security-codes-generator-v34) and the `card.security_code` source ID to the validation vocabulary.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject
