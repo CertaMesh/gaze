@@ -1,0 +1,1 @@
+- Protect dotted German birth dates marked with `*` in personal details and parser-valid German telephone numbers with a parenthesized area code and spaced extension. The DOB judge remains opt-in.

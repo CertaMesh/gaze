@@ -30,6 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
+    "dev": "1d2a79e22d2b92bff2d3b293b16d20ec681440057327fa950d0c78cea1e4c854",
+    "test": "5f242f9d076ffe36c800d596c6b9cf9650819fd333cd4411a00fb7fc3f63685e",
+}
+V31_CORPUS_SHA256 = {
     "dev": "1a4d44deff1a09c5020ee80db548698de292bc7ca25524206fe66a846feaf27b",
     "test": "8380d500b949265ef5e01f9a8b801819fd8d83373474f87abcdc535a4df33944",
 }
@@ -149,6 +153,8 @@ class GeneratorTests(unittest.TestCase):
 
     def test_previous_partition_documents_are_byte_identical(self) -> None:
         for partition, records in self.corpora.items():
+            v31 = agentic.records_as_of(31, records)
+            self.assertEqual(hashlib.sha256(agentic.corpus_bytes(v31)).hexdigest(), V31_CORPUS_SHA256[partition])
             v9 = agentic.records_as_of(9, records)
             self.assertEqual(hashlib.sha256(agentic.corpus_bytes(v9)).hexdigest(), V9_CORPUS_SHA256[partition])
             v8 = agentic.records_as_of(8, records)
@@ -1720,7 +1726,8 @@ class ContractTests(unittest.TestCase):
         dob = [d for d in applied if d.excluded_spans]
         self.assertTrue(dob)
         self.assertTrue(all(
-            d.cell and ("|dob|" in d.cell or "|birth_date_cue|" in d.cell or "|dob_sentence_break" in d.cell)
+            d.cell and any(family in d.cell for family in (
+                "|dob|", "|birth_date_cue|", "|dob_sentence_break", "|clinical_birth_date|"))
             for d in dob
         ))
 

@@ -348,6 +348,44 @@ fn dates_without_a_birth_cue_stay_untouched() {
 }
 
 #[test]
+fn german_clinical_markers_protect_only_the_value() {
+    let pipeline = pipeline();
+    for (template, value, class) in [
+        ("* {}", "12.03.1961", "birth_date"),
+        ("Patientin, * {}", "7.4.1982", "birth_date"),
+        ("Personalien (* {})", "04.09.1982", "birth_date"),
+        ("Personalien:\n* {}", "04.09.1982", "birth_date"),
+        ("geb. {}", "12.03.1961", "birth_date"),
+        // BNetzA Mitteilung 148/2021: reserved Berlin and Frankfurt landlines.
+        ("Rückruf: {}.", "(030) 23125 - 167", "phone"),
+        ("Mobilnummer: {}", "(030) 23125 - 167", "phone"),
+        ("{}", "(030) 23125.167", "phone"),
+        ("{}", "(030) 23125/167", "phone"),
+        ("{}", "069/90009-241", "phone"),
+    ] {
+        let text = template.replace("{}", value);
+        let cleaned = clean_and_restore(&pipeline, &text);
+        assert_eq!(
+            without_tokens(&cleaned),
+            template.replace("{}", "\0"),
+            "{text}"
+        );
+        assert!(cleaned.contains(&format!(":Custom:{class}_")), "{cleaned}");
+    }
+    for text in [
+        "* 12.03.1961 – Kontrolle",
+        "* 12.03.1961, Kontrolltermin",
+        "Aufnahme am 12.03.1961",
+        "RR 120/80 mmHg",
+        "Einnahme: 1-0-1",
+        "Referenzbereich (030) 100 - 120 mg/dl",
+        "Referenzbereich:\n(030) 100 - 120 mg/dl",
+    ] {
+        assert_eq!(clean_and_restore(&pipeline, text), text);
+    }
+}
+
+#[test]
 fn only_the_date_is_tokenized_not_the_cue_or_the_following_text() {
     let text = "Geboren am 30.05.1971 in Köln.";
     let cleaned = clean_and_restore(&pipeline(), text);

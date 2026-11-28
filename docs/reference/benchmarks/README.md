@@ -2005,7 +2005,8 @@ report exact restores and valid manifests for the common population.
 every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
-part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [known-record specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7); and the [current specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure, which let the gate and the capture cache ignore harness files that cannot reach C, A, D or R.
+part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) differs from it only by adding the JSON structure census to the measuring closure; the [known-record specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) differs from that only in the known-record cell and arm harness digests (cell generator v7); and the [capture-closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure, which let the gate and the capture cache ignore harness files that cannot reach C, A, D or R.
+On that basis, the [current specification](specifications/135d115a6e04073b766111d3f0b2355164883e1d1ed8b412a16484422e83dd44.json) adds German clinical dates and telephone numbers to the generated layers.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2558,6 +2559,12 @@ byte-for-byte; its contract is frozen as
 | --- | ---: | ---: | ---: | ---: |
 | v30 | 19,687 | 8,832 | 12,611 | 41,130 |
 | v31 | 19,917 | 9,032 | 12,801 | 41,750 |
+| v32 | 19,977 | 9,082 | 12,801 | 41,860 |
+
+Generator v32 adds German clinical birth markers and national telephone formats,
+with dated list items, encounter dates, lab ranges and dosing schedules as
+counterweights. Gold covers the date or telephone value alone. Telephone gold
+uses valid BNetzA media numbers; it does not measure parser-invalid phone recall.
 
 No release has been measured on generator v31 yet. The v30 history rows above
 stay bound to the v30 specification; the v31 backfill runs outside the PR
