@@ -254,6 +254,10 @@ for the exact integrated candidate. Certification requires a full evaluation, a 
 incremental evaluation with a sound affected-unit selector validated in shadow first, or a
 full-gated combined merge train. A targeted subset can inform a PR, but never certifies main.
 Both gated contracts, mechanism policy deltas and the full release benchmark remain required.
+A gate's mechanism pair must isolate the mechanism the PR changes. For a new or changed rule,
+use a same-binary rulepack ablation without that rule. For a Nym or NER change, switch that model
+off and on. The reviewer confirms the declared pair before anyone measures it; a pair for another
+mechanism, such as Nym off/on for a rule-only change, cannot certify the PR.
 
 Benchmark specifications have immutable version IDs. Never compare results across specifications.
 Integrity checks remain mandatory. Historical remeasurement is off the PR critical path:
