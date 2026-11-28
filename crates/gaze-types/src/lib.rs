@@ -4741,6 +4741,12 @@ pub trait Recognizer: Send + Sync {
         false
     }
 
+    /// A post-floor recognizer which derives new evidence from a prior match must
+    /// see its guard and validator verdict, not a raw window offered for audit.
+    fn requires_validated_prior(&self) -> bool {
+        false
+    }
+
     /// Whether this recognizer binds values through structured field labels. A repeat of
     /// such a value may not become a token inside a JSON number or object key; the pipeline
     /// refuses an exact repeat there instead of corrupting the carrier.
@@ -4835,6 +4841,9 @@ pub struct Candidate {
     pub labelled_value_capture_end: Option<usize>,
     /// The recognizer's match guard vetoed the original capture.
     pub regex_guard_rejected: bool,
+    /// This whole identifier binds the policy of its enclosed evidence and exact copies.
+    /// A detector claim, not a policy decision; resolution must not rewrite its class.
+    pub complete_record_id: bool,
 }
 
 impl Candidate {
@@ -4873,6 +4882,7 @@ impl Candidate {
             labelled_value_scan_reason: None,
             labelled_value_capture_end: None,
             regex_guard_rejected: false,
+            complete_record_id: false,
         }
     }
 
@@ -4924,6 +4934,9 @@ pub struct DetectContext<'a> {
     pub dictionaries: &'a DictionaryBundle,
     /// Structured-field context. Hint alone can never yield Protected or NonSensitive.
     pub fields: Option<FieldContext<'a>>,
+    /// The caller is scanning a structured document or one of its typed leaves,
+    /// rather than free prose. Does not declare any field public or non-sensitive.
+    pub structured_carrier: bool,
     /// Whether a recognizer degraded due to unavailable optional capability.
     pub degraded: Cell<bool>,
     /// For each byte of the detection input, the byte range of the caller's source text it
@@ -4943,6 +4956,7 @@ impl<'a> DetectContext<'a> {
             locale_chain,
             dictionaries,
             fields: None,
+            structured_carrier: false,
             degraded: Cell::new(false),
             source_spans: None,
             prior_candidates: None,

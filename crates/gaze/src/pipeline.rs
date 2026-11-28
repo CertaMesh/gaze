@@ -3,6 +3,7 @@ mod occurrence;
 mod outcomes;
 mod protection;
 use occurrence::{Batch, Ledger, Occurrence, Origin, Relation};
+mod record_policy;
 mod recovery;
 mod residual;
 pub use lineage::{
@@ -118,6 +119,8 @@ pub enum Error {
     UnsupportedSafetyNetModeForStructured { mode: SafetyNetMode },
     #[error("unsupported policy action variant")]
     UnsupportedActionVariant,
+    #[error("cannot establish record identifier policy inheritance across an opaque rule")]
+    OpaqueRecordPolicy,
     #[error("manifest sweep failed closed: {0}")]
     ManifestSweep(#[from] crate::sweep::ManifestSweepError),
 }
@@ -1305,6 +1308,8 @@ impl Pipeline {
         let json_literals = JsonStringLiterals::scan(text);
         let spans = &normalized.spans;
         let mut ctx = DetectContext::new(locale_chain, dictionaries).with_source_spans(spans);
+        ctx.structured_carrier =
+            document_kind == DocumentKind::Structured || json_literals.is_document();
         // Field spans arrive in source coordinates; recognizers read the normalized view.
         let projected;
         let field = match field {
@@ -1400,6 +1405,14 @@ impl Pipeline {
             family_emissions,
             ..
         } = whole;
+        let context = build_context(field_name);
+        let record_policy = record_policy::RecordPolicy::plan(
+            self,
+            &evidence,
+            &normalized,
+            &context,
+            locale_chain,
+        )?;
         let residual_plan = if self.residual_coverage {
             Some(residual::plan(
                 self,
@@ -1407,8 +1420,9 @@ impl Pipeline {
                 &order,
                 &normalized.text,
                 text,
-                &build_context(field_name),
+                &context,
                 locale_chain,
+                &record_policy,
             )?)
         } else {
             None
@@ -1503,9 +1517,8 @@ impl Pipeline {
                 let span = &detection.detection.span;
                 detection.sweep_link = sweep_links.get(&(span.start, span.end)).copied();
             }
-            let context = build_context(field_name);
             let resolved = self.resolve_action(&detection.detection.class, &context);
-            let action = resolved.action;
+            let action = record_policy.effective(&detection.detection.span, resolved.action);
             if let (Some(derived), Some(record)) =
                 (resolved.derived, detection.ambiguity_record.as_mut())
             {
@@ -1613,10 +1626,10 @@ impl Pipeline {
                 // of a family class derives its action from the members too.
                 // The cell was planned on a previewed action; the runtime
                 // verdict must be that action, and it must protect.
-                let actual = residual::fragment_action(
-                    self.resolve_action(&cell.class, &build_context(field_name))
-                        .action,
-                );
+                let actual = residual::fragment_action(record_policy.effective(
+                    &ledger.segment().original_raw[cell.representative],
+                    self.resolve_action(&cell.class, &context).action,
+                ));
                 if actual != cell.action || !actual.is_protective() {
                     return Err(clean_to_raw_mapping_error(
                         "residual policy preview mismatch",

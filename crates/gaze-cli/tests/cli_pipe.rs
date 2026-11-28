@@ -2708,6 +2708,41 @@ fn s1_rulepack_path_only_no_policy_tokenizes_custom_class() {
     );
 }
 
+#[test]
+fn prose_cues_keep_the_independent_id_winner_and_the_strictest_policy() {
+    let dir = tempdir().unwrap();
+    let pack = dir.path().join("ids.toml");
+    let mut rules = String::from("schema_version = '0.1.0'\nrulepack_id = 'ids'\nrulepack_version = '0.1.0'\ndefault_locales = ['global']\n");
+    for (id, priority) in [("record_id", 70), ("case_id", 10)] {
+        rules.push_str(&format!("\n[[recognizers]]\nid = 'explicit.{id}'\nclass = 'custom:{id}'\nenabled = true\nlocales = ['global']\n[recognizers.match]\nkind = 'regex'\npattern = 'ZZ-[0-9]{{2}}'\n[recognizers.scoring]\nbase = 0.90\npriority = {priority}\n"));
+    }
+    fs::write(&pack, rules).unwrap();
+    let pack_arg = format!("--rulepack-path={}", pack.display());
+    for text in ["Observed ZZ-42", "Case ID: ZZ-42", "Employee ID: ZZ-42"] {
+        let response = clean_json_with_args(&[&pack_arg], text);
+        let clean = response["clean_text"].as_str().unwrap();
+        assert!(clean.ends_with(":Custom:record_id_1>"), "{text}: {clean}");
+        assert_eq!(
+            restore_success_text(response["session_blob"].as_str().unwrap(), clean),
+            text
+        );
+    }
+    let policy = dir.path().join("policy.toml");
+    for losing in ["case_id", "employee_id"] {
+        fs::write(&policy, format!("[session]\nscope = 'persistent'\nttl_secs = 86400\n[[rule]]\nkind = 'class'\nclass = 'custom:{losing}'\naction = 'redact'\n[[rule]]\nkind = 'default'\naction = 'tokenize'\n")).unwrap();
+        let response = clean_json_with_args(
+            &[&pack_arg, &format!("--policy={}", policy.display())],
+            "Employee ID: ZZ-42",
+        );
+        let clean = response["clean_text"].as_str().unwrap();
+        assert_eq!(clean, "Employee ID: [REDACTED]");
+        assert_eq!(
+            restore_success_text(response["session_blob"].as_str().unwrap(), clean),
+            clean
+        );
+    }
+}
+
 // Combining sources must protect classes from both bundled and path rulepacks.
 #[test]
 fn s1_rulepack_bundled_and_path_no_policy_tokenize_both_sources() {
@@ -5500,7 +5535,7 @@ action = "tokenize"
 
 #[test]
 fn strict_literal_roundtrip_agrees_with_telemetry_and_audit() {
-    let raw = "Grüße Kunde_7 ORDER_12345 FOO_12 alice@example.invalid";
+    let raw = "Grüße Kunde_7 ORDER_1234 FOO_12 alice@example.invalid";
     let (clean, blob, _) = clean_ok(raw);
     let dir = tempdir().unwrap();
     for telemetry in [false, true] {
