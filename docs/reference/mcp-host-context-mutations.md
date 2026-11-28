@@ -113,7 +113,7 @@ restored, and Anvil reported `passing_and_current=true`.
 | `argument-entries` | Empty keys and structural entries consume the record-independent entry budget. |
 | `guess-preparation` | Normalization and folding do not repeat for terms or pair joins. |
 | `guess-case-mode` | A case or whitespace variant cannot disable exact-only record protection. |
-| `guess-allowed-kinds` | Case and whitespace variants require their own allowed match kinds. |
+| `guess-allowed-kinds` | Case and whitespace variants require their own or a looser allowed match kind. |
 | `guess-boundaries` | A superstring does not exclude an unguessed record term. |
 | `folded-boundary-view` | Boundary checks use the response matcher's normalized text view. |
 | `guess-whitespace` | Tool-collapsed whitespace cannot reopen echo membership detection. |

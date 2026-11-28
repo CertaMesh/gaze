@@ -129,6 +129,7 @@
     "crates/gaze-recognizers/README.md",
     "crates/gaze-recognizers/assets/ner/README.md",
     "crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json",
+    "crates/gaze-recognizers/assets/record-common-name-words-en-v1.txt",
     "crates/gaze-recognizers/assets/record-common-names-v1.txt",
     "crates/gaze-recognizers/benches/gaze_pipeline_bench_snapshot.json",
     "crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json",

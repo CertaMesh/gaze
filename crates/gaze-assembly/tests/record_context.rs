@@ -295,9 +295,10 @@ fn record_kind_after_normalization_matches_attribution_fixtures() {
             else {
                 panic!("expected text")
             };
+            // An exact occurrence also satisfies the whitespace-flexible kind.
             assert_eq!(
                 !clean.contains(raw),
-                kind == expected_kind,
+                kind == expected_kind || expected_kind == "exact",
                 "record kind parity: {value:?}, {raw:?}, {kind}"
             );
             assert_eq!(
@@ -347,7 +348,7 @@ fn record_whitespace_flex_has_a_bounded_gap() {
 }
 
 #[test]
-fn measured_full_name_defaults_keep_whitespace_only_variant_off() {
+fn full_name_defaults_protect_same_case_whitespace_variants() {
     let context = Context::from_json_str(r#"{"record":{"full_name":"Maren Okafor"}}"#).unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
     let pipeline =
@@ -357,7 +358,7 @@ fn measured_full_name_defaults_keep_whitespace_only_variant_off() {
         ("Maren Okafor", true),
         ("MAREN OKAFOR", true),
         ("MAREN  OKAFOR", true),
-        ("Maren  Okafor", false),
+        ("Maren  Okafor", true),
     ] {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let CleanDocument::Text(clean) = pipeline
@@ -419,38 +420,10 @@ fn single_token_record_names_need_corroboration() {
     );
 }
 
-#[test]
-fn unlisted_single_name_exact_requires_opt_in() {
-    let default_context =
-        Context::from_json_str(r#"{"record":{"first_name":"Maren","last_name":"May"}}"#).unwrap();
+/// Cleans `raw` under `context_json`, checks byte-exact restore, and returns the clean text.
+fn clean_with_context(context_json: &str, raw: &str) -> String {
+    let context = Context::from_json_str(context_json).unwrap();
     let locales = LocaleChain::merge_policy_and_cli(None, None);
-    let raw = "May 2026. Maren called.";
-    let default_pipeline = build_pipeline(
-        &policy(Action::Tokenize),
-        &default_context,
-        &[],
-        &locales,
-        None,
-    )
-    .unwrap();
-    let default_session = Session::new(Scope::Ephemeral).unwrap();
-    let default_bundle = gaze::dictionary_bundle_from_context(&default_context).unwrap();
-    let CleanDocument::Text(default_clean) = default_pipeline
-        .pseudonymize_with_detect_context(
-            &default_session,
-            RawDocument::Text(raw.into()),
-            locales.as_slice(),
-            &default_bundle,
-        )
-        .unwrap()
-    else {
-        panic!("expected text")
-    };
-    assert!(default_clean.contains("Maren"));
-
-    let context = Context::from_json_str(
-        r#"{"record":{"first_name":"Maren","last_name":"May"},"record_match_kinds":{"name_single":["exact"]}}"#,
-    ).unwrap();
     let pipeline =
         build_pipeline(&policy(Action::Tokenize), &context, &[], &locales, None).unwrap();
     let session = Session::new(Scope::Ephemeral).unwrap();
@@ -466,8 +439,6 @@ fn unlisted_single_name_exact_requires_opt_in() {
     else {
         panic!("expected text")
     };
-    assert!(clean.contains("May 2026"));
-    assert!(!clean.contains("Maren"));
     assert_eq!(
         pipeline
             .restore_with_telemetry(&session, &clean)
@@ -476,6 +447,140 @@ fn unlisted_single_name_exact_requires_opt_in() {
             .text,
         raw
     );
+    clean
+}
+
+/// A spelling closer to the declared value is never less protected than a looser one:
+/// letter case alone must not decide whether a declared value leaks. Each row is one
+/// class group and spelling; benign rows keep near misses, identifier twins and common
+/// words raw.
+#[test]
+fn record_spellings_closer_to_the_declared_value_are_never_less_protected() {
+    const RARE: &str = r#"{"record":{"first_name":"Qorvex"}}"#;
+    const COMMON: &str = r#"{"record":{"first_name":"Maren","last_name":"May"}}"#;
+    const FULL: &str = r#"{"record":{"full_name":"Maren Okafor"}}"#;
+    // `Summer` is on the generated English name∩word list.
+    const WORD_NAME: &str = r#"{"record":{"first_name":"Summer","last_name":"Lindqvist"}}"#;
+    const PASSPORT: &str =
+        r#"{"record":{"passport":"SYN-PASS-123456"},"field_map":{"/passport":"custom:passport"}}"#;
+    const NATIONAL_ID: &str = r#"{"record":{"national_id":"SYN ID 12345"},"field_map":{"/national_id":"custom:national_id"}}"#;
+    const CITY: &str = r#"{"record":{"city":"Exampleville"}}"#;
+    const CITY_EXACT: &str =
+        r#"{"record":{"city":"Exampleville"},"record_match_kinds":{"address_part":["exact"]}}"#;
+    const RARE_FOLDED_ONLY: &str = r#"{"record":{"first_name":"Qorvex"},"record_match_kinds":{"name_single":["case_folded"]}}"#;
+    const RARE_EXACT_ONLY: &str =
+        r#"{"record":{"first_name":"Qorvex"},"record_match_kinds":{"name_single":["exact"]}}"#;
+    const FULL_LOOSEST_ONLY: &str = r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["whitespace_case_folded"]}}"#;
+    const FULL_WS_ONLY: &str = r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["whitespace_flexible"]}}"#;
+    const FULL_EXACT_ONLY: &str =
+        r#"{"record":{"full_name":"Maren Okafor"},"record_match_kinds":{"name_multi":["exact"]}}"#;
+    for (context, raw, value, protected) in [
+        // Single unlisted name: every case spelling, including the declared one.
+        (RARE, "found Qorvex today", "Qorvex", true),
+        (RARE, "found qorvex today", "qorvex", true),
+        (RARE, "found QORVEX today", "QORVEX", true),
+        (RARE, "found Qorvexian today", "Qorvexian", false),
+        (RARE, "ticket qorvex_build failed", "qorvex_build", false),
+        (RARE, "found Qorvax today", "Qorvax", false),
+        // Common single names stay behind corroboration in every case.
+        (COMMON, "May 2026 report", "May 2026", false),
+        (COMMON, "MAY 2026 report", "MAY 2026", false),
+        (COMMON, "you may proceed", "may proceed", false),
+        (COMMON, "Maren called.", "Maren", true),
+        (
+            WORD_NAME,
+            "Summer schedule starts Monday",
+            "Summer schedule",
+            false,
+        ),
+        (
+            WORD_NAME,
+            "SUMMER schedule starts Monday",
+            "SUMMER schedule",
+            false,
+        ),
+        (
+            WORD_NAME,
+            "summer schedule starts Monday",
+            "summer schedule",
+            false,
+        ),
+        (WORD_NAME, "Summer Lindqvist called", "Summer", true),
+        // Full names: case and whitespace spellings, never reordered names.
+        (FULL, "Maren Okafor called", "Maren Okafor", true),
+        (FULL, "MAREN OKAFOR called", "MAREN OKAFOR", true),
+        (FULL, "Maren  Okafor called", "Maren  Okafor", true),
+        (FULL, "MAREN  OKAFOR called", "MAREN  OKAFOR", true),
+        (FULL, "Maren-Okafor called", "Maren-Okafor", false),
+        // Identifier classes stay exact or whitespace-flexible; case is significant.
+        (
+            PASSPORT,
+            "passport SYN-PASS-123456 ok",
+            "SYN-PASS-123456",
+            true,
+        ),
+        (
+            PASSPORT,
+            "passport syn-pass-123456 ok",
+            "syn-pass-123456",
+            false,
+        ),
+        (
+            PASSPORT,
+            "passport SYN-PASS-1234567 ok",
+            "SYN-PASS-1234567",
+            false,
+        ),
+        (NATIONAL_ID, "id SYN ID 12345 ok", "SYN ID 12345", true),
+        (NATIONAL_ID, "id SYN  ID  12345 ok", "SYN  ID  12345", true),
+        (NATIONAL_ID, "id syn id 12345 ok", "syn id 12345", false),
+        // Address parts stay off until the adopter enables them.
+        (CITY, "city Exampleville", "Exampleville", false),
+        (CITY_EXACT, "city Exampleville", "Exampleville", true),
+        (CITY_EXACT, "city EXAMPLEVILLE", "EXAMPLEVILLE", false),
+        // Explicit kind lists: a closer spelling satisfies a looser kind, never the reverse.
+        (RARE_FOLDED_ONLY, "found Qorvex today", "Qorvex", true),
+        (RARE_EXACT_ONLY, "found qorvex today", "qorvex", false),
+        (
+            FULL_LOOSEST_ONLY,
+            "Maren Okafor called",
+            "Maren Okafor",
+            true,
+        ),
+        (
+            FULL_LOOSEST_ONLY,
+            "Maren  Okafor called",
+            "Maren  Okafor",
+            true,
+        ),
+        (
+            FULL_LOOSEST_ONLY,
+            "maren okafor called",
+            "maren okafor",
+            true,
+        ),
+        (FULL_WS_ONLY, "Maren Okafor called", "Maren Okafor", true),
+        (FULL_WS_ONLY, "maren okafor called", "maren okafor", false),
+        (
+            FULL_EXACT_ONLY,
+            "maren okafor called",
+            "maren okafor",
+            false,
+        ),
+        (
+            FULL_EXACT_ONLY,
+            "Maren  Okafor called",
+            "Maren  Okafor",
+            false,
+        ),
+    ] {
+        let clean = clean_with_context(context, raw);
+        assert_eq!(
+            !clean.contains(value),
+            protected,
+            "{context} :: {raw:?} -> {clean:?}"
+        );
+    }
 }
 
 #[test]

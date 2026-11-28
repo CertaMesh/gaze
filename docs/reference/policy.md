@@ -243,12 +243,14 @@ APIs return `Result<DictionaryBundle, UntransformableReason>`. They enforce the
 same short-value refusal before producing dictionaries, including for callers
 that manually build a pipeline.
 
-Common single names (`Will`, `Grace`, `May`, `Mark`) from the
-[versioned dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)
-are retained. `corroborated_single` needs a NER person span, another record name
+Common single names (`Will`, `Grace`, `May`, `Mark`, `Summer`) from the
+[curated dictionary](../../crates/gaze-recognizers/assets/record-common-names-v1.txt)
+and the [generated English name∩word list](../../crates/gaze-recognizers/assets/record-common-name-words-en-v1.txt)
+are retained. The generated list intersects SSA given names that ranked in any
+year's top 1,000 with lowercase SCOWL en_US words. `corroborated_single` needs a NER person span, another record name
 in the phrase, or a full record name elsewhere plus a name-position cue.
-Other single names match changed-case copies by default; same-case exact needs
-opt-in or another detector. Unicode folding and Aho–Corasick match the dictionary.
+Other single names match in any letter case by default, including the declared
+spelling; letter case never decides protection. Unicode folding and Aho–Corasick match the dictionary.
 Default Nym has no person label, so model corroboration comes from NER.
 
 Default kinds ([measured oracle](benchmarks/known-record-oracle.md)):
@@ -260,10 +262,9 @@ Default kinds ([measured oracle](benchmarks/known-record-oracle.md)):
 | Multi-token name | `exact`, `case_folded`, `whitespace_case_folded` |
 | Single-token name | `case_folded`, `corroborated_single` |
 
-Other pairs are off, including address parts, email, single-name `exact` and
-multi-name `whitespace_flexible`. Whitespace flexibility changes runs only,
-never separators. Disabling address/single-name exact adds 337/123 leaked gold
-bytes versus all-on. Exact caller-known phone/card stays on despite 69/99
+Other pairs are off, including address parts and email. Whitespace flexibility
+changes runs only, never separators. Disabling address-part exact adds 337
+leaked gold bytes versus all-on. Exact caller-known phone/card stays on despite 69/99
 layer-D benign bytes; ordinary recognizers are unchanged.
 
 The adopter can replace a class group's allowed kinds in the same context JSON:
@@ -287,8 +288,11 @@ more benign bytes than leaked bytes, while unmeasured kinds have unknown gain.
 Dictionary and record terms use `gaze_types::normalize::normalize`, the same
 detection view as document text. Record whitespace canonicalization and the
 short-value floor follow that normalization. Match-kind classification uses
-that view and remains exclusive: an exact occurrence is `exact`, even when
-`case_folded` is enabled. Tokens cover the original source bytes and restore
+that view and is ordered: a spelling closer to the declared value satisfies every
+looser enabled kind. An exact occurrence passes `whitespace_flexible`,
+`case_folded` and `whitespace_case_folded`; a whitespace-only or case-only
+variant passes `whitespace_case_folded`. A looser spelling never passes a
+stricter kind, and `corroborated_single` stays separate. Tokens cover the original source bytes and restore
 byte-exact.
 
 Case-folded kinds apply only to names; whitespace kinds require a

@@ -99,6 +99,20 @@ Observer-only tools must explicitly inspect `Context::untransformable_reason()`,
 warn without caller values, and clear `record_value_rejections` before conversion
 or assembly. Owner-side `gaze eval` makes this choice explicitly.
 
+### Behavior change: declared spellings satisfy looser record kinds
+
+An occurrence closer to a declared record value now satisfies every looser
+enabled kind in `record_match_kinds`. By default, an unlisted single name such
+as `Qorvex` is protected in its declared spelling as well as in other letter
+cases, and a same-case full name with extra spaces is protected like its
+upper-case copy. Before, these spellings could stay raw. Common single names
+still need corroboration, and that set now includes English given names that
+are also ordinary words (`Summer`, `Dawn`): a declared `Summer` that appears
+alone, without a neighbouring record name or NER person evidence, stays raw in
+every letter case. Restore is unchanged. A list such as
+`{"name_single": ["case_folded"]}` now also protects exact occurrences; to
+protect only one spelling, list only the stricter kind.
+
 ### Action required: update proxy adapters and field-path readers
 
 Custom `ProviderAdapter::request_pii_surfaces` implementations now return

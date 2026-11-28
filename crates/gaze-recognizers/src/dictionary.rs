@@ -267,19 +267,20 @@ impl Recognizer for DictionaryRecognizer {
                 } else {
                     record_match_kind(matched, term)
                 };
-                entry
-                    .record_allowed_kinds()
-                    .unwrap_or(&self.record_allowed_kinds)
-                    .contains(&kind)
-                    && (!corroborate_single_name
-                        || corroborated_record_name(
-                            input,
-                            normalized_text.as_ref(),
-                            *start,
-                            *end,
-                            ctx,
-                            &self.dictionary_name,
-                        ))
+                record_kind_allowed(
+                    kind,
+                    entry
+                        .record_allowed_kinds()
+                        .unwrap_or(&self.record_allowed_kinds),
+                ) && (!corroborate_single_name
+                    || corroborated_record_name(
+                        input,
+                        normalized_text.as_ref(),
+                        *start,
+                        *end,
+                        ctx,
+                        &self.dictionary_name,
+                    ))
             })
             .filter(|(start, end, _)| emitted_spans.insert((*start, *end)))
             .map(|(start, end, index)| {
@@ -327,6 +328,26 @@ fn record_match_kind(matched: &str, term: &str) -> RecordMatchKind {
     })
 }
 
+/// A spelling closer to the declared value satisfies every looser kind: an
+/// exact occurrence passes `case_folded`, and an exact or case-only variant
+/// passes `whitespace_case_folded`. For names, letter case alone never decides
+/// whether a declared value is protected; identifiers cannot enable case kinds,
+/// and common single names keep their own `corroborated_single` rule.
+pub(crate) fn record_kind_allowed(
+    kind: RecordMatchKind,
+    allowed: &BTreeSet<RecordMatchKind>,
+) -> bool {
+    use RecordMatchKind::*;
+    let satisfies: &[RecordMatchKind] = match kind {
+        Exact => &[Exact, WhitespaceFlexible, CaseFolded, WhitespaceCaseFolded],
+        WhitespaceFlexible => &[WhitespaceFlexible, WhitespaceCaseFolded],
+        CaseFolded => &[CaseFolded, WhitespaceCaseFolded],
+        WhitespaceCaseFolded => &[WhitespaceCaseFolded],
+        CorroboratedSingle => &[CorroboratedSingle],
+    };
+    satisfies.iter().any(|looser| allowed.contains(looser))
+}
+
 pub(crate) fn record_match_kind_with_folded(
     matched: &str,
     term: &str,
@@ -346,8 +367,10 @@ pub(crate) fn record_match_kind_with_folded(
     }
 }
 
-/// A versioned common-word dictionary, compiled once through Aho–Corasick.
-/// Full-span checks prevent a substring such as `may` from gating `Mayer`.
+/// Versioned common-word dictionaries, compiled once through Aho–Corasick: the
+/// curated multilingual list and the generated English name∩word list
+/// (`scripts/fetch/build_record_common_name_words.py`). Full-span checks prevent
+/// a substring such as `may` from gating `Mayer`.
 fn record_name_is_common(name: &str) -> bool {
     record_name_is_common_folded(&name.case_fold().collect::<String>())
 }
@@ -355,11 +378,15 @@ fn record_name_is_common(name: &str) -> bool {
 pub(crate) fn record_name_is_common_folded(folded: &str) -> bool {
     static COMMON: OnceLock<AhoCorasick> = OnceLock::new();
     let dictionary = COMMON.get_or_init(|| {
-        let terms = include_str!("../assets/record-common-names-v1.txt")
-            .lines()
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(|line| line.case_fold().collect::<String>())
-            .collect::<BTreeSet<_>>();
+        let terms = [
+            include_str!("../assets/record-common-names-v1.txt"),
+            include_str!("../assets/record-common-name-words-en-v1.txt"),
+        ]
+        .into_iter()
+        .flat_map(str::lines)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| line.case_fold().collect::<String>())
+        .collect::<BTreeSet<_>>();
         AhoCorasickBuilder::new()
             .build(terms)
             .expect("static common-word dictionary")
@@ -955,8 +982,25 @@ mod tests {
                 .len(),
             1
         );
+        // The exact spelling satisfies the looser kind, so case alone never leaves it raw.
+        assert_eq!(
+            recognizer
+                .detect("Maren Okafor", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
+        let recognizer = recognizer
+            .with_record_allowed_kinds([RecordMatchKind::CaseFolded].into_iter().collect());
+        assert_eq!(
+            recognizer
+                .detect("Maren Okafor", &detect_context)
+                .unwrap()
+                .len(),
+            1
+        );
         assert!(recognizer
-            .detect("Maren Okafor", &detect_context)
+            .detect("Maren  Okafor", &detect_context)
             .unwrap()
             .is_empty());
     }
@@ -1125,6 +1169,10 @@ mod tests {
     fn uncommon_single_record_name_matches_without_corroboration() {
         assert!(record_name_is_common("Will"));
         assert!(record_name_is_common("GRACE"));
+        // From the generated English name∩word list.
+        assert!(record_name_is_common("Summer"));
+        assert!(record_name_is_common("dawn"));
+        assert!(!record_name_is_common("Summers"));
         assert!(!record_name_is_common("Maren"));
         assert!(!record_name_is_common("Okafor"));
         let key = gaze::record_dictionary_name(&PiiClass::Name, 0);
@@ -1494,7 +1542,10 @@ mod normalized_duplicate_tests {
     fn ineligible_duplicate_cannot_hide_an_eligible_match_kind() {
         let entry = DictionaryEntry::new(
             "tag",
-            vec!["ＱORVEX".into(), "qorvex".into()],
+            // The earlier term is only a case-folded match here; exact-only must not
+            // let it shadow the exact duplicate. (An exact occurrence satisfies every
+            // looser kind, so the ineligible duplicate has to be the looser spelling.)
+            vec!["qorvex".into(), "ＱORVEX".into()],
             true,
             DictionarySource::Cli,
         )
@@ -1503,7 +1554,7 @@ mod normalized_duplicate_tests {
         let context = DetectContext::new(&[LocaleTag::Global], &dictionaries);
         let recognizer = DictionaryRecognizer::new("tag", PiiClass::Name, "tag", true, "counter")
             .with_unicode_case_insensitive()
-            .with_record_allowed_kinds([RecordMatchKind::CaseFolded].into_iter().collect());
+            .with_record_allowed_kinds([RecordMatchKind::Exact].into_iter().collect());
         let hits = recognizer.detect("QORVEX", &context).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 0..6);
