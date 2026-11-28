@@ -3742,11 +3742,19 @@ fn transform_response_mutable(
             let mut authorized = Vec::<Range<usize>>::new();
             for value in values {
                 if let JsonKind::String(value) = &value.kind {
+                    // A withheld string keeps its tokens, so prove the restored reading each
+                    // element's own check proved; its tokens alone carry no authorized range.
+                    let withheld;
+                    let (text, ranges) = if matches!(reading, RestoreReading::Withhold) {
+                        withheld = ctx.restore(&value.value)?;
+                        (&withheld.text, &withheld.authorized_output_ranges)
+                    } else {
+                        (&value.value, &value.authorized)
+                    };
                     let base = logical.len();
-                    logical.push_str(&value.value);
+                    logical.push_str(text);
                     authorized.extend(
-                        value
-                            .authorized
+                        ranges
                             .iter()
                             .map(|range| base + range.start..base + range.end),
                     );

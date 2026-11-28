@@ -78,6 +78,37 @@ impl ResponseResidualValidator for SyntheticResidualValidator {
     }
 }
 
+/// Refuses every email-shaped word outside an authorized range, as the pipeline's residual
+/// does: a format-preserving fake (`email1.<hex>@gaze-fake.invalid`) is email-shaped too.
+struct EmailShapedResidualValidator;
+
+impl ResponseResidualValidator for EmailShapedResidualValidator {
+    fn validate(
+        &mut self,
+        value: &str,
+        authorized_output_ranges: &[std::ops::Range<usize>],
+    ) -> Result<(), CodecErrorCode> {
+        let is_word = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '@');
+        let mut start = None;
+        for (index, c) in value.char_indices().chain([(value.len(), ' ')]) {
+            match (is_word(c), start) {
+                (true, None) => start = Some(index),
+                (false, Some(begin)) => {
+                    start = None;
+                    let covered = authorized_output_ranges
+                        .iter()
+                        .any(|range| range.start <= begin && range.end >= index);
+                    if value[begin..index].contains('@') && !covered {
+                        return Err(CodecErrorCode::ProviderOriginPii);
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
+
 struct AllowAllResidualValidator;
 
 impl ResponseResidualValidator for AllowAllResidualValidator {
@@ -1738,5 +1769,43 @@ fn withheld_fields_keep_tokens_but_still_refuse_tokens_the_session_never_minted(
     assert_eq!(
         restore(response(&forged)).unwrap_err().code(),
         CodecErrorCode::RestoreFailedClosed
+    );
+}
+
+#[test]
+fn withheld_string_arrays_prove_the_restored_reading_like_their_elements() {
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let fake = transaction
+        .format_preserving_fake(&PiiClass::Email, EMAIL)
+        .unwrap();
+    let snapshot = transaction.commit().unwrap();
+    let response = |value: &str| {
+        format!(
+            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"tool_use","id":"toolu_1","name":"undeclared","input":{{"to":["{value}"]}}}},{{"type":"tool_result","tool_use_id":"toolu_0","content":["{value}"]}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":2}}}}"#
+        )
+    };
+    let restore = |body: String| {
+        let mut residual = EmailShapedResidualValidator;
+        let mut context = ResponseTransformContext::new(
+            &snapshot,
+            &mut residual,
+            WireFormat::Json,
+            CodecLimits::default(),
+        );
+        codec
+            .restore_response(body.as_bytes(), &mut context)
+            .map(|proved| String::from_utf8(proved.bytes().to_vec()).unwrap())
+    };
+    let output = restore(response(&fake)).unwrap();
+    assert_eq!(output.matches(fake.as_str()).count(), 2);
+    assert!(!output.contains(EMAIL));
+    // The array proof still runs: a provider-origin email in a withheld array refuses.
+    assert_eq!(
+        restore(response("carol@example.invalid"))
+            .unwrap_err()
+            .code(),
+        CodecErrorCode::ProviderOriginPii
     );
 }
