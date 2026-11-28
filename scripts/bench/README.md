@@ -786,9 +786,8 @@ not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
 The [capture closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
-The [current specification](../../docs/reference/benchmarks/specifications/e46b7339804020d5bf860cdd36712159657ce5b61b32d45ce0a1510e77adaaf0.json)
-adds [generator v32's card security code cells](../../docs/reference/benchmarks/README.md#card-security-codes-generator-v32)
-and the `card.security_code` source ID to the validation vocabulary.
+The [generator v32 specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells.
+The [current specification](../../docs/reference/benchmarks/specifications/59f5a7ffc27c73ed306598d41378d0a97f0eb8dc39c403c02a1c7a6aceb8a0b1.json) adds [generator v33's card security code cells](../../docs/reference/benchmarks/README.md#card-security-codes-generator-v33) and the `card.security_code` source ID to the validation vocabulary.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

@@ -2006,7 +2006,7 @@ every exact-restore or valid-manifest count drop fails. This option does not
 change scored-label contracts. Generator v30 keeps the same corpus; the
 versioned semantics live in `scripts/bench/benchmark-protocol.json`, which is
 part of the immutable measuring specification. The [refusal contract v2 specification](specifications/8ac741d84038b62a6e7fe6d89fd47195d44eb66d954ceb9bee4ada41070c0742.json) pins these inputs; the [pipeline-producer specification](specifications/c34bc8b6e52ecf1aabf37041d901742a508a506e68ba0e9789ba00f67b3770e2.json) adds the pipeline producer pin; the [field-labelled record-ID specification](specifications/46e98b98074e3ae9735fbd6b46990ed6f34b39ec01346e56f6d15fac64599ce1.json) adds the field-labelled record-ID rules to the validation vocabulary; the [generator v31 specification](specifications/f40ee93555008dd3c722e80f72112da50f21415a5bdbad7ed0d7973860f32068.json) adds generator v31's prose credential cells; the [JSON structure census specification](specifications/009210b045af6d35139d7f8a5961316d852c136335641ddd5dae6ed55ffc9f10.json) adds the JSON structure census to the measuring closure; and the [known-record v7 specification](specifications/50cbff0d4b72e27443a0821d24f3e52abfe10f76e1461120e06c84df3460b71f.json) changes the known-record cell and arm harness digests.
-The [capture closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure. In generator v32, the [current specification](specifications/e46b7339804020d5bf860cdd36712159657ce5b61b32d45ce0a1510e77adaaf0.json) adds the card security code cells and the `card.security_code` source ID to the validation vocabulary.
+The [capture closure specification](specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json) adds per-layer sub-specifications and the capture closure. The [generator v32 specification](specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells. In generator v33, the [current specification](specifications/59f5a7ffc27c73ed306598d41378d0a97f0eb8dc39c403c02a1c7a6aceb8a0b1.json) adds card security code cells and the `card.security_code` source ID to the validation vocabulary.
 
 Final protection evidence optionally carries `protection_outcome`, serialized
 from `ProtectionOutcome`. `PossiblySensitive(reason)` protection counts
@@ -2564,7 +2564,7 @@ No release has been measured on generator v31 yet. The v30 history rows above
 stay bound to the v30 specification; the v31 backfill runs outside the PR
 critical path.
 
-### Card security codes (generator v32)
+### Card security codes (generator v33)
 
 The [generator](../../../scripts/bench/card_security_code_cells.py) adds 798
 documents per partition: 700 in A and 98 in D. In English and German, A pairs
@@ -2590,9 +2590,9 @@ or `Card no.` with a single public stock reference after `Kartennummer:` or
 of four; no 12–19 digit window passes Luhn. Other controls use an unlabelled
 checksum-invalid reference followed by code help or form metadata, non-PAN
 references, incidental CVV/CVC mentions and amounts. None discloses a security
-code. V32 totals 42,548 documents per partition (20,617 A, 9,130 D, 12,801 R).
-V31 rebuilds byte-for-byte under its
-[frozen contract](scored-labels-agentic-generator-v31.json); no v32 detection
+code. V33 totals 42,582 documents per partition (20,635 A, 9,146 D, 12,801 R).
+V32, including the comma-separated address cells, rebuilds byte-for-byte under its
+[frozen contract](scored-labels-agentic-generator-v32.json); no v33 detection
 result is claimed here.
 
 ### Measured adjacency layer history

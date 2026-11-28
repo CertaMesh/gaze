@@ -1,4 +1,4 @@
-"""CC0 synthetic payment cards and separately owned short numbers (generator v32)."""
+"""CC0 synthetic payment cards and separately owned short numbers (generator v33)."""
 
 SURFACE_PREFIX = "card_security_code_"
 BOUNDARY_PREFIX = SURFACE_PREFIX + "boundary_"
@@ -56,6 +56,8 @@ BOUNDARY_COPY = {
 
 
 def records(api, partition):
+    # Preserve the independently seeded card fixtures when moving them from
+    # draft generator v32 to v33 after the address cells took v32 on main.
     rng = api.Rng(api.PARTITION_SEEDS[partition], "card-security-code-v32")
     result = []
 
