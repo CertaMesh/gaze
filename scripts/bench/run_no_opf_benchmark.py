@@ -952,8 +952,8 @@ def observation_cache_key(
         runtime = capture_identity.native_runtime({"detector": binary, "validator": validator_probe})
         inputs = capture_identity.snapshot(files=files, models=models,
                                           environment=build_no_opf_environment(source_environment), runtime=runtime)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, agentic.LayerError):
-        return None, "effective input inventory is unresolved"
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, agentic.LayerError) as error:
+        return None, f"effective input inventory is unresolved ({type(error).__name__}: {error})"
     return {
         "schema_version": capture_identity.SCHEMA_VERSION,
         "effective_inputs": inputs,
@@ -1501,6 +1501,11 @@ def _run(args: argparse.Namespace) -> int:
         bypass = "unqualified_subject_build"
     if bypass is None:
         cache_key, bypass = read_key()
+    if cache_key is None:
+        # Never silent: a disabled cache turns a reusable gate into a full capture.
+        requested = bypass in ("explicit_no_cache", "fresh_performance_required", "unbound_skip_build")
+        print(f"{'observation cache bypassed' if requested else 'WARNING observation cache DISABLED'}: "
+              f"{bypass}; every document is captured live", file=sys.stderr)
     if evidence is not None:
         evidence.cache = {"status": "disabled" if cache_key is None else "miss",
                           "key_sha256": benchmark_cache.key_digest(cache_key) if cache_key else None,
