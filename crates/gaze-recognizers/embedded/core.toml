@@ -474,18 +474,18 @@ kind = "regex"
 # A name-word requires an explicit self-identification and the end of the name phrase.
 # A recipient instruction or handle only licenses a distinct given name. Require a
 # token boundary on both sides; neither the handle nor the cue is part of the name.
+# Require the same phrase ending for one or two parts. Otherwise a given-name
+# token can hide the beginning of a full name from the downstream safety net.
 pattern_template = '''(?ix)
 (?: \b(?:my[\p{Zs}\t]+name[\p{Zs}\t]+is|mein[\p{Zs}\t]+name[\p{Zs}\t]+ist|ich[\p{Zs}\t]+hei(?:ß|ss)e)
     [\p{Zs}\t]+({locale.chat_ambiguous_given}(?:[\p{Zs}\t]+{locale.chat_surnames})?)
     (?:\z|[,;!?)\]"\r\n]|[.:](?:\s|\z))
   | (?:\b(?:my[\p{Zs}\t]+name[\p{Zs}\t]+is|mein[\p{Zs}\t]+name[\p{Zs}\t]+ist|ich[\p{Zs}\t]+hei(?:ß|ss)e|ask|frage?|cc:?)
       |(?:\A|[\s(])@[a-z0-9_]+(?:[.-][a-z0-9_]+)*[:,]?)
-    [\p{Zs}\t]+(?:
-       ({locale.chat_distinct_given}[\p{Zs}\t]+{locale.chat_surnames})
-       (?:\z|[,;!?)\]"\r\n]|[.:](?:\s|\z)|['’]s\b|[\p{Zs}\t]+(?:about|to|for|whether|if|on|nach|ob|wegen|zu|für|is|was|can|could|may|might|must|shall|should|will|would|ist|war|wird|kann|darf|mag|muss|soll)\b)
-     | ({locale.chat_distinct_given})(?:\z|[\s,;!?)\]"]|[.:](?:\s|\z)|['’]s\b))
+    [\p{Zs}\t]+({locale.chat_distinct_given}(?:[\p{Zs}\t]+{locale.chat_surnames})?)
+    (?:\z|[,;!?)\]"\r\n]|[.:](?:\s|\z)|['’]s\b|[\p{Zs}\t]+(?:about|to|for|whether|if|on|nach|ob|wegen|zu|für|is|was|can|could|may|might|must|shall|should|will|would|ist|war|wird|kann|darf|mag|muss|soll)\b)
 )'''
-capture_groups = [1, 2, 3]
+capture_groups = [1, 2]
 
 [recognizers.scoring]
 base = 0.88

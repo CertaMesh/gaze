@@ -407,7 +407,10 @@ states, companies, first names or surnames. Rule-based `Name` coverage is limite
 to email display names and cued names; `Location` and `Organization` are NER-only.
 `name.chat_cue` uses US name frequency lists, not a general EN/DE name lexicon.
 It accepts listed name-words in explicit introductions only when the repeat sweep
-will leave their ordinary uses alone. It does not cover every compound, inflection
+will leave their ordinary uses alone. If punctuation or a recognized following
+word does not establish where the name ends, the rule leaves the phrase intact
+for downstream detectors rather than hiding just a given name. Without another
+detector that phrase may remain raw. It does not cover every compound, inflection
 or surname continuation. A name followed by an ordinary word that is also a
 surname can still be ambiguous (for example, “rose to the challenge”).
 The archived no-OPF audit found `STREET`, `CITY`, `SURNAME`, `FIRSTNAME`, `STATE`

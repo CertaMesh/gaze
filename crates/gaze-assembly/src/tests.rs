@@ -1231,6 +1231,8 @@ fn chat_cues_protect_the_name_not_the_handle_or_ordinary_word() {
         ("ask for help", None),
         ("please cc the service desk", None),
         ("my name is missing from the list", None),
+        // Leave an unresolved phrase intact for a later full-name detector.
+        ("@shift_bot elena schmidt erscheint morgen.", None),
         ("@shift_bot\nelena", None),
         ("@shift_bot elena_v2", None),
         ("@shift_bot elena.invalid", None),
