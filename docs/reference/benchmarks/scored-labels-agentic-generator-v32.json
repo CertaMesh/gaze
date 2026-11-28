@@ -70,7 +70,7 @@
       "scored": true,
       "category": "direct_identifier",
       "ruling": "settled",
-      "reason": "Given name of a person in an email header, agent payload or chat. In chat introductions and requests, a supplied given name is gold even if lowercase, isolated or also an ordinary word. The same word used in its dictionary sense is benign. Score name parts separately without whitespace or punctuation."
+      "reason": "Given name of the sender in an email header or agent payload."
     },
     {
       "label": "IBAN",

@@ -69,13 +69,30 @@ def test_partitions_have_disjoint_text_and_values():
 
 
 @pytest.mark.parametrize("partition,digest", [
-    ("dev", "14c6d8bdf320efce893ce993e9b3c2da61f72d73dc097d7044c2361998f5896f"),
-    ("test", "0bc390fe15428d1c69d4250ae1e134b9f7102f97dc30a5ac9874affc204d980f"),
+    ("dev", "58333493d84c3753eb2163a14002670a95d010260c1bca495579d30034afacc6"),
+    ("test", "5c259f8e24cbf4f691cddafbb4ac61f90d4b5112d0bfdc40cf90d73517b873cc"),
 ])
 def test_v32_corpus_and_contract_are_frozen(partition, digest):
     rows = api.records_as_of(32, api.generate(partition))
     assert hashlib.sha256(api.corpus_bytes(rows)).hexdigest() == digest
-    assert api.load_contract(ROOT, version=32).sha256 == "882911932297d6f459d34f5971a9ec7266eda9290a23afcf838f88d4776366d1"
+    assert api.load_contract(ROOT, version=32).sha256 == "8c3ac7f6c8a62ac5c11af9897cfadbcccdfd8b1a9a7a784d36336958ceb1b3c1"
+
+
+@pytest.mark.parametrize("partition,chat_v32,chat_v33", [
+    ("dev", "14c6d8bdf320efce893ce993e9b3c2da61f72d73dc097d7044c2361998f5896f",
+     "408d1a6720d2d2e33ddc3d62faa8eeca6c484886a1d7d3d19f89649a6eb9cd2b"),
+    ("test", "0bc390fe15428d1c69d4250ae1e134b9f7102f97dc30a5ac9874affc204d980f",
+     "753a918d23ce7eebd8cce61bed415d9e65aa3a547c98090f0023ed2b4c2f34bb"),
+])
+def test_integrated_cells_preserve_chat_prereleases(partition, chat_v32, chat_v33):
+    integrated = api.records_as_of(34, api.generate(partition))
+    # The chat branch extended v31 independently. Never alias either prerelease to main's v32.
+    prior = [r for r in integrated if not r.surface.startswith(("address_gap_", "inventory_count_"))]
+    assert hashlib.sha256(api.corpus_bytes(prior)).hexdigest() == chat_v33
+    without_boundaries = [r for r in prior if not r.surface.startswith(cells.BOUNDARY_PREFIX)]
+    assert hashlib.sha256(api.corpus_bytes(without_boundaries)).hexdigest() == chat_v32
+    with pytest.raises(api.LayerError, match="prerelease"):
+        api.records_as_of(33, integrated)
 
 
 @pytest.mark.parametrize("partition", api.PARTITIONS)
