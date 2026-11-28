@@ -127,10 +127,7 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
         "manifest missing Email span"
     );
     assert!(
-        manifest
-            .spans
-            .iter()
-            .any(|s| matches!(&s.class, PiiClass::Custom(name) if name == "phone")),
+        manifest.spans.iter().any(|s| s.class == PiiClass::Phone),
         "manifest missing Custom(phone) span"
     );
     assert!(

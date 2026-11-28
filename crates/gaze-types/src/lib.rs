@@ -112,14 +112,20 @@ impl std::error::Error for RecognizerRuntimeError {}
 
 /// The category of a detected PII span.
 ///
-/// Built-in variants: `Email`, `Name`, `Location`, `Organization`. Tenant-specific PII
-/// (case references, titles, internal codes) is carried as `PiiClass::Custom(String)`.
-/// **There is no `Phone` variant** -- phone detection is provided by recognizers in
-/// `gaze-recognizers` and surfaces as either a `Custom("phone")` class or a class
-/// defined by a rulepack.
+/// Built-in variants: `Email`, `Name`, `Location`, `Organization`. Every class a
+/// shipped rulepack emits, such as `Phone`, `Iban` or `PostalCode`, has its own
+/// first-class variant. Collision-family tokens use `Ambiguous(family)`. Tenant
+/// classes that Gaze does not ship (case references, titles, internal codes) are
+/// carried as `PiiClass::Custom(String)`.
 ///
-/// `PiiClass` is exhaustive. Match every variant explicitly so new built-in classes
-/// force call sites to review their handling at compile time:
+/// First-class and family variants keep the legacy `custom:` wire spelling:
+/// `Phone` serializes as `{"Custom":"phone"}`, renders as `Custom:phone` and
+/// parses from `custom:phone`. Constructors normalize, and equality, ordering
+/// and hashing compare by that spelling, so `PiiClass::Custom("phone".into())`
+/// equals `PiiClass::Phone`.
+///
+/// `PiiClass` is exhaustive. Match every variant explicitly, or use a wildcard for
+/// the `custom:` classes, so new classes force call sites to review their handling:
 ///
 /// ```rust
 /// use gaze_types::PiiClass;
@@ -130,14 +136,16 @@ impl std::error::Error for RecognizerRuntimeError {}
 ///         PiiClass::Name         => "name",
 ///         PiiClass::Location     => "location",
 ///         PiiClass::Organization => "org",
-///         PiiClass::Custom(_)    => "pii",
+///         PiiClass::Phone        => "phone",
+///         _                      => "pii",
 ///     }
 /// }
 /// ```
 ///
 /// Policy TOML uses the lowercase forms `email` / `name` / `location` / `organization`,
-/// and tenant classes are spelled like `custom:case_ref` (lowercase, snake_case).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// and every other class is spelled like `custom:phone` or `custom:case_ref`
+/// (lowercase, snake_case). Families are spelled `custom:family:<name>`.
+#[derive(Debug, Clone)]
 pub enum PiiClass {
     /// Email address class.
     Email,
@@ -147,8 +155,124 @@ pub enum PiiClass {
     Location,
     /// Organization class.
     Organization,
-    /// Tenant- or policy-defined class.
+    /// Postal code. Wire spelling `custom:postal_code`.
+    PostalCode,
+    /// Phone number. Wire spelling `custom:phone`.
+    Phone,
+    /// API key, secret or other security token. Wire spelling `custom:security_token`.
+    SecurityToken,
+    /// Password. Wire spelling `custom:password`.
+    Password,
+    /// Payment card number. Wire spelling `custom:credit_card`.
+    CreditCard,
+    /// VAT identification number. Wire spelling `custom:vat_id`.
+    VatId,
+    /// Tax number. Wire spelling `custom:tax_number`.
+    TaxNumber,
+    /// US Social Security number. Wire spelling `custom:ssn`.
+    Ssn,
+    /// National identity document number. Wire spelling `custom:national_id`.
+    NationalId,
+    /// IP address. Wire spelling `custom:ip_address`.
+    IpAddress,
+    /// International bank account number. Wire spelling `custom:iban`.
+    Iban,
+    /// Driver licence number. Wire spelling `custom:driver_license`.
+    DriverLicense,
+    /// Date of birth. Wire spelling `custom:birth_date`.
+    BirthDate,
+    /// Age of a person. Wire spelling `custom:age`.
+    Age,
+    /// URL. Wire spelling `custom:url`.
+    Url,
+    /// German tax identification number (Steuer-ID). Wire spelling `custom:steuer_id`.
+    SteuerId,
+    /// Passport number. Wire spelling `custom:passport`.
+    Passport,
+    /// Indian permanent account number (PAN). Wire spelling `custom:pan`.
+    Pan,
+    /// French social security number (NIR). Wire spelling `custom:nir`.
+    Nir,
+    /// UK National Insurance number. Wire spelling `custom:nino`.
+    Nino,
+    /// UK NHS number. Wire spelling `custom:nhs_number`.
+    NhsNumber,
+    /// Ethereum address. Wire spelling `custom:eth_address`.
+    EthAddress,
+    /// Brazilian individual taxpayer number (CPF). Wire spelling `custom:cpf`.
+    Cpf,
+    /// Brazilian company taxpayer number (CNPJ). Wire spelling `custom:cnpj`.
+    Cnpj,
+    /// Dutch citizen service number (BSN). Wire spelling `custom:bsn`.
+    Bsn,
+    /// Indian Aadhaar number. Wire spelling `custom:aadhaar`.
+    Aadhaar,
+    /// Customer identifier. Wire spelling `custom:customer_id`.
+    CustomerId,
+    /// Employee identifier. Wire spelling `custom:employee_id`.
+    EmployeeId,
+    /// Record identifier. Wire spelling `custom:record_id`.
+    RecordId,
+    /// Collision-family class for an unresolved rivalry. Holds the family name
+    /// without the `family:` prefix. Wire spelling `custom:family:<name>`.
+    Ambiguous(String),
+    /// Tenant- or policy-defined class that Gaze does not ship.
     Custom(String),
+}
+
+/// The one table that maps first-class variants to their legacy `custom:` names.
+macro_rules! first_class_table {
+    ($($variant:ident => $name:literal,)*) => {
+        const FIRST_CLASS_VARIANTS: &[PiiClass] = &[$(PiiClass::$variant),*];
+
+        impl PiiClass {
+            fn first_class_name(&self) -> Option<&'static str> {
+                match self {
+                    $(Self::$variant => Some($name),)*
+                    _ => None,
+                }
+            }
+
+            fn first_class_from_name(name: &str) -> Option<Self> {
+                match name {
+                    $($name => Some(Self::$variant),)*
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+first_class_table! {
+    PostalCode => "postal_code",
+    Phone => "phone",
+    SecurityToken => "security_token",
+    Password => "password",
+    CreditCard => "credit_card",
+    VatId => "vat_id",
+    TaxNumber => "tax_number",
+    Ssn => "ssn",
+    NationalId => "national_id",
+    IpAddress => "ip_address",
+    Iban => "iban",
+    DriverLicense => "driver_license",
+    BirthDate => "birth_date",
+    Age => "age",
+    Url => "url",
+    SteuerId => "steuer_id",
+    Passport => "passport",
+    Pan => "pan",
+    Nir => "nir",
+    Nino => "nino",
+    NhsNumber => "nhs_number",
+    EthAddress => "eth_address",
+    Cpf => "cpf",
+    Cnpj => "cnpj",
+    Bsn => "bsn",
+    Aadhaar => "aadhaar",
+    CustomerId => "customer_id",
+    EmployeeId => "employee_id",
+    RecordId => "record_id",
 }
 
 /// A custom class must contain at least one ASCII letter or digit.
@@ -330,6 +454,19 @@ impl PiiClass {
         }
     }
 
+    /// Maps a legacy `custom:` name onto its first-class or family variant.
+    ///
+    /// Names that Gaze does not ship stay `Custom`.
+    fn from_legacy_custom_name(name: String) -> Self {
+        if let Some(class) = Self::first_class_from_name(&name) {
+            class
+        } else if let Some(family) = name.strip_prefix("family:") {
+            Self::Ambiguous(family.to_string())
+        } else {
+            Self::Custom(name)
+        }
+    }
+
     /// Returns the built-in class variants.
     pub fn builtin_variants() -> &'static [PiiClass] {
         &[
@@ -340,8 +477,14 @@ impl PiiClass {
         ]
     }
 
+    /// Returns the first-class variants for classes the shipped rulepacks emit.
+    pub fn first_class_variants() -> &'static [PiiClass] {
+        FIRST_CLASS_VARIANTS
+    }
+
     /// Builds a normalized custom class name.
     ///
+    /// A name Gaze ships, such as `phone`, yields its first-class variant.
     /// Returns [`EmptyCustomClassName`] when no ASCII letter or digit remains.
     pub fn custom(name: &str) -> Result<Self, EmptyCustomClassName> {
         let mut normalized = String::new();
@@ -358,7 +501,7 @@ impl PiiClass {
             }
         }
 
-        let class = Self::Custom(normalized);
+        let class = Self::from_legacy_custom_name(normalized);
         class.validate_custom_name()?;
         Ok(class)
     }
@@ -374,30 +517,67 @@ impl PiiClass {
 
     /// Builds a collision-family class without normalizing its reserved namespace.
     pub fn family(name: &str) -> Self {
-        Self::Custom(format!("family:{}", name.trim()))
+        Self::Ambiguous(name.trim().to_string())
     }
 
-    /// Returns the normalized custom class name for custom classes.
+    /// Returns the adopter class name for `Custom` classes.
+    ///
+    /// First-class and family variants return `None`; use
+    /// [`PiiClass::legacy_custom_name`] for their `custom:` spelling.
     pub fn as_custom_name(&self) -> Option<&str> {
         match self {
             Self::Custom(name) => Some(name.as_str()),
-            Self::Email | Self::Name | Self::Location | Self::Organization => None,
+            _ => None,
         }
     }
 
     /// Returns the collision-family name for family classes.
     pub fn as_family_name(&self) -> Option<&str> {
-        self.as_custom_name()?.strip_prefix("family:")
+        match self {
+            Self::Ambiguous(family) => Some(family.as_str()),
+            Self::Custom(name) => name.strip_prefix("family:"),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` for every class spelled `custom:<name>` on the wire:
+    /// first-class variants, families and adopter classes.
+    pub fn is_custom_like(&self) -> bool {
+        !matches!(
+            self,
+            Self::Email | Self::Name | Self::Location | Self::Organization
+        )
+    }
+
+    /// Returns the name after `custom:` for every custom-like class, for example
+    /// `phone` for [`PiiClass::Phone`] and `family:<name>` for a family.
+    ///
+    /// Returns `None` for the four built-in classes.
+    pub fn legacy_custom_name(&self) -> Option<std::borrow::Cow<'_, str>> {
+        use std::borrow::Cow;
+        match self {
+            Self::Email | Self::Name | Self::Location | Self::Organization => None,
+            Self::Ambiguous(family) => Some(Cow::Owned(format!("family:{family}"))),
+            Self::Custom(name) => Some(Cow::Borrowed(name.as_str())),
+            first_class => first_class.first_class_name().map(Cow::Borrowed),
+        }
+    }
+
+    fn builtin_rank(&self) -> u8 {
+        match self {
+            Self::Email => 0,
+            Self::Name => 1,
+            Self::Location => 2,
+            Self::Organization => 3,
+            _ => 4,
+        }
     }
 
     /// Returns the audit/token display label for this class.
     pub fn class_name(&self) -> String {
-        match self {
-            Self::Email => BUILTIN_CLASS_NAMES[0].to_string(),
-            Self::Name => BUILTIN_CLASS_NAMES[1].to_string(),
-            Self::Location => BUILTIN_CLASS_NAMES[2].to_string(),
-            Self::Organization => BUILTIN_CLASS_NAMES[3].to_string(),
-            Self::Custom(name) => format!("Custom:{name}"),
+        match self.legacy_custom_name() {
+            Some(name) => format!("Custom:{name}"),
+            None => BUILTIN_CLASS_NAMES[usize::from(self.builtin_rank())].to_string(),
         }
     }
 
@@ -408,7 +588,7 @@ impl PiiClass {
             Self::Name => "name".to_string(),
             Self::Location => "location".to_string(),
             Self::Organization => "organization".to_string(),
-            Self::Custom(name) => format!("custom:{name}"),
+            other => format!("custom:{}", other.legacy_custom_name().unwrap_or_default()),
         }
     }
 
@@ -421,10 +601,85 @@ impl PiiClass {
             "organization" | "Organization" => Some(Self::Organization),
             custom if custom.starts_with("custom:") => {
                 let name = &custom["custom:".len()..];
-                (!name.is_empty()).then(|| Self::Custom(name.to_string()))
+                (!name.is_empty()).then(|| Self::from_legacy_custom_name(name.to_string()))
             }
             _ => None,
         }
+    }
+}
+
+// Equality, ordering and hashing compare the wire spelling, so a hand-built
+// `Custom("phone")` equals `Phone` and the order matches the historical derived
+// order: the four built-ins first, then every custom-like class by legacy name.
+impl PartialEq for PiiClass {
+    fn eq(&self, other: &Self) -> bool {
+        self.builtin_rank() == other.builtin_rank()
+            && self.legacy_custom_name() == other.legacy_custom_name()
+    }
+}
+
+impl Eq for PiiClass {}
+
+impl std::hash::Hash for PiiClass {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.builtin_rank().hash(state);
+        self.legacy_custom_name().hash(state);
+    }
+}
+
+impl PartialOrd for PiiClass {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PiiClass {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.builtin_rank()
+            .cmp(&other.builtin_rank())
+            .then_with(|| self.legacy_custom_name().cmp(&other.legacy_custom_name()))
+    }
+}
+
+/// Private serde mirror of the historical `PiiClass` shape. Snapshots and
+/// manifests depend on this exact wire form.
+#[derive(Serialize, Deserialize)]
+enum PiiClassWire<'a> {
+    Email,
+    Name,
+    Location,
+    Organization,
+    Custom(std::borrow::Cow<'a, str>),
+}
+
+impl Serialize for PiiClass {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let wire = match self {
+            Self::Email => PiiClassWire::Email,
+            Self::Name => PiiClassWire::Name,
+            Self::Location => PiiClassWire::Location,
+            Self::Organization => PiiClassWire::Organization,
+            other => PiiClassWire::Custom(other.legacy_custom_name().unwrap_or_default()),
+        };
+        wire.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PiiClass {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match PiiClassWire::deserialize(deserializer)? {
+            PiiClassWire::Email => Self::Email,
+            PiiClassWire::Name => Self::Name,
+            PiiClassWire::Location => Self::Location,
+            PiiClassWire::Organization => Self::Organization,
+            PiiClassWire::Custom(name) => Self::from_legacy_custom_name(name.into_owned()),
+        })
     }
 }
 
@@ -503,6 +758,59 @@ mod pii_class_tests {
                     .unwrap()
                     .into_inner(),
                 class
+            );
+        }
+    }
+
+    #[test]
+    fn shipped_names_normalize_to_first_class_variants() {
+        use std::collections::HashSet;
+
+        assert_eq!(PiiClass::first_class_variants().len(), 29);
+        assert!(matches!(PiiClass::custom("phone"), Ok(PiiClass::Phone)));
+        assert!(matches!(PiiClass::custom(" Phone "), Ok(PiiClass::Phone)));
+        assert_eq!(PiiClass::custom("phone").unwrap(), PiiClass::Phone);
+        assert_eq!(PiiClass::Custom("phone".into()), PiiClass::Phone);
+        assert!(matches!(
+            serde_json::from_str::<PiiClass>(r#"{"Custom":"iban"}"#).unwrap(),
+            PiiClass::Iban
+        ));
+        assert!(matches!(
+            PiiClass::from_policy_name("custom:iban"),
+            Some(PiiClass::Iban)
+        ));
+        assert!(matches!(
+            PiiClass::from_canonical_str("custom:postal_code"),
+            Some(PiiClass::PostalCode)
+        ));
+        assert!(matches!(
+            PiiClass::from_canonical_str("custom:family:payment-card-or-iban"),
+            Some(PiiClass::Ambiguous(family)) if family == "payment-card-or-iban"
+        ));
+        assert!(matches!(
+            PiiClass::custom("case_ref"),
+            Ok(PiiClass::Custom(name)) if name == "case_ref"
+        ));
+        assert_eq!(PiiClass::Phone.as_custom_name(), None);
+        assert_eq!(
+            PiiClass::Phone.legacy_custom_name().as_deref(),
+            Some("phone")
+        );
+        assert_eq!(PiiClass::Email.legacy_custom_name(), None);
+        assert!(PiiClass::Phone.is_custom_like());
+        assert!(PiiClass::family("x").is_custom_like());
+        assert!(!PiiClass::Email.is_custom_like());
+        assert_eq!(PiiClass::Custom("family:x".into()), PiiClass::family("x"));
+
+        let set: HashSet<PiiClass> = [PiiClass::Phone, PiiClass::Custom("phone".into())]
+            .into_iter()
+            .collect();
+        assert_eq!(set.len(), 1);
+
+        for class in PiiClass::first_class_variants() {
+            assert_eq!(
+                PiiClass::from_policy_name(&class.to_canonical_str()).as_ref(),
+                Some(class)
             );
         }
     }

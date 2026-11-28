@@ -124,12 +124,9 @@ fn clean_cell(cell: &str) -> String {
 }
 
 fn class_name(class: &PiiClass) -> String {
-    match class {
-        PiiClass::Email => "Email".to_string(),
-        PiiClass::Name => "Name".to_string(),
-        PiiClass::Location => "Location".to_string(),
-        PiiClass::Organization => "Organization".to_string(),
-        PiiClass::Custom(name) => format!("custom:{name}"),
+    match class.legacy_custom_name() {
+        Some(name) => format!("custom:{name}"),
+        None => class.class_name(),
     }
 }
 

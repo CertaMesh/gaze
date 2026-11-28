@@ -789,13 +789,7 @@ impl From<SessionSnapshotEntry> for EntryJson {
 }
 
 pub(crate) fn entry_class_to_string(class: &PiiClass) -> String {
-    match class {
-        PiiClass::Email => "Email".to_string(),
-        PiiClass::Name => "Name".to_string(),
-        PiiClass::Location => "Location".to_string(),
-        PiiClass::Organization => "Organization".to_string(),
-        PiiClass::Custom(name) => format!("Custom:{name}"),
-    }
+    class.class_name()
 }
 
 #[derive(Serialize)]

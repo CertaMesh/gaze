@@ -214,10 +214,10 @@ fn private_class(
     session: &gaze::Session,
     class: &gaze::PiiClass,
 ) -> Result<gaze::PiiClass, HostContextError> {
-    match class {
-        gaze::PiiClass::Custom(name)
+    match class.legacy_custom_name() {
+        Some(name)
             if !matches!(
-                name.as_str(),
+                name.as_ref(),
                 "phone"
                     | "iban"
                     | "credit_card"
@@ -231,7 +231,7 @@ fn private_class(
             Ok(gaze::PiiClass::Custom(opaque_name(
                 session,
                 CLASS_NAMESPACE,
-                name,
+                &name,
             )?))
         }
         _ => Ok(class.clone()),

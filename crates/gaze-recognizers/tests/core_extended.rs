@@ -632,7 +632,7 @@ fn overlapping_phone_recognizers_pick_single_winners_without_span_loss() {
     let winner_ids = entries
         .iter()
         .filter(|entry| !entry.conflict_loser)
-        .filter(|entry| matches!(&entry.class, PiiClass::Custom(name) if name == "phone"))
+        .filter(|entry| entry.class == PiiClass::Phone)
         .filter_map(|entry| entry.recognizer_id.as_deref())
         .collect::<Vec<_>>();
     assert_eq!(
@@ -647,7 +647,7 @@ fn overlapping_phone_recognizers_pick_single_winners_without_span_loss() {
     assert!(
         entries.iter().any(|entry| {
             entry.conflict_loser
-                && matches!(&entry.class, PiiClass::Custom(name) if name == "phone")
+                && entry.class == PiiClass::Phone
                 && entry.recognizer_id.as_deref() == Some("phone.e164.spaced")
         }),
         "expected phone.e164.spaced to lose at least one same-class overlap: {entries:?}"
@@ -1332,7 +1332,7 @@ fn de_vat_iban_and_steuer_id_keep_distinct_spans_and_classes() {
             entries.iter().any(|entry| {
                 !entry.conflict_loser
                     && entry.recognizer_id.as_deref() == Some(recognizer_id)
-                    && matches!(&entry.class, PiiClass::Custom(name) if name == class)
+                    && entry.class.to_canonical_str() == format!("custom:{class}")
             }),
             "missing winner {recognizer_id}/{class}: {entries:?}"
         );

@@ -5866,7 +5866,7 @@ fn street_corroborated_house_numbers(
 fn is_address_anchor(class: &crate::PiiClass) -> bool {
     matches!(class, crate::PiiClass::Location)
         || matches!(
-            class.as_custom_name(),
+            class.legacy_custom_name().as_deref(),
             Some("postal_code" | "building_number")
         )
 }
@@ -5915,7 +5915,7 @@ fn address_block_pieces(
         .iter()
         .map(|(span, _, class)| crate::address_block::Anchor {
             span: span.clone(),
-            kind: if class.as_custom_name() == Some("postal_code") {
+            kind: if matches!(class, crate::PiiClass::PostalCode) {
                 crate::address_block::AnchorKind::Postcode
             } else {
                 crate::address_block::AnchorKind::Place
@@ -6103,7 +6103,13 @@ fn generalize_token(class: &PiiClass) -> String {
         PiiClass::Name => "[NAME]".to_string(),
         PiiClass::Location => "[LOCATION]".to_string(),
         PiiClass::Organization => "[ORGANIZATION]".to_string(),
-        PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
+        other => format!(
+            "[{}]",
+            other
+                .legacy_custom_name()
+                .unwrap_or_default()
+                .to_ascii_uppercase()
+        ),
     }
 }
 
@@ -8753,6 +8759,18 @@ mod tests {
     fn generalize_token_custom_class_preserves_identity() {
         // Regression guard: custom classes must not collapse to an indistinct [PII].
         assert_eq!(generalize_token(&PiiClass::Custom("foo".into())), "[FOO]");
+        assert_eq!(
+            generalize_token(&PiiClass::custom("phone").unwrap()),
+            "[PHONE]"
+        );
+        assert_eq!(
+            generalize_token(&PiiClass::custom("postal_code").unwrap()),
+            "[POSTAL_CODE]"
+        );
+        assert_eq!(
+            generalize_token(&PiiClass::family("payment-card-or-iban")),
+            "[FAMILY:PAYMENT-CARD-OR-IBAN]"
+        );
     }
 
     #[test]

@@ -96,7 +96,7 @@ mod tests {
             PiiClass::Name => ":Name_",
             PiiClass::Organization => ":Organization_",
             PiiClass::Location => ":Location_",
-            PiiClass::Custom(_) => ":Custom:",
+            _ => ":Custom:",
         }
     }
 
