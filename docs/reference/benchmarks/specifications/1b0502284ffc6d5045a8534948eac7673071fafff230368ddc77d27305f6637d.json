@@ -1,21 +1,21 @@
 {
-  "id": "gaze-benchmark-v1:fc8afaaed0057110486517205e44e8aa65f52f23a4253da1fd68441d894f6c6f",
+  "id": "gaze-benchmark-v1:1b0502284ffc6d5045a8534948eac7673071fafff230368ddc77d27305f6637d",
   "schema_version": 1,
   "inputs": {
     "corpus_sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
     "generator": {
       "generator": "scripts/bench/agentic_layers.py",
-      "generator_version": 32,
+      "generator_version": 33,
       "partition": "test",
       "seed": 2026092602,
       "docs_per_family": 10,
-      "documents": 42190,
+      "documents": 42224,
       "documents_by_layer": {
-        "A": 20177,
-        "D": 9212,
+        "A": 20195,
+        "D": 9228,
         "R": 12801
       },
-      "corpus_sha256": "2ec777e6577f7e304f4d6a20a85f34f63bf8d06f1c00c7c77fcb9ac5a0c0744b",
+      "corpus_sha256": "047f14ef2b7d85418d03a2e1f84fbf1b28c9dca04f7fde1032438ed22b36e3ce",
       "synthetic_only": true
     },
     "seed": 20260710,
@@ -24,10 +24,10 @@
       "scored-labels-v2": "32564dd1afb00ec34749b298d1557733eaad241535acc3bfa45ad444d5b16356",
       "scored-labels-v3": "25b4a317d3a7ad8e099af2f5d4203cc03e12f469c902041a374aae48917e1acf",
       "scored-labels-v4": "e6364bda948395de27779b88ed9cee3fc5f50933065646741d8613694a9d2632",
-      "generated": "d8545ee40670f275aa45a751a0b658c24c96232149973340b5d6dc0293c15496"
+      "generated": "dc7d67b040eb252356ab0249ec821dc0f209e5e262098afc354a8ccf84f1294b"
     },
     "harness": {
-      "scripts/bench/agentic_layers.py": "944af57caa8ce24d8b7c6d4dbe3af5a3f0e6bc4f91f188583442d2f72beaeac8",
+      "scripts/bench/agentic_layers.py": "2e23a32aa70995c47e72604de95bc27bfed903596a5567d87b6a929946f0017e",
       "scripts/bench/audit_name_record_boundaries.py": "b980fd2677274af33e5bbf398d07568152d44927f564158b74ee296878a0c0c6",
       "scripts/bench/bench_json.py": "44741a08da4b4f1da3eb89970c3c2ea7e8774cb26b82249a48ae2429447c4f58",
       "scripts/bench/bench_subprocess.py": "42afd1d372fa19e044cc38acd7887139e9a55c972ab45f483d0923c7ccf1305f",
@@ -126,7 +126,7 @@
       "scripts/bench/probe_government_id_mutants.py": "8a94343e6af1af2a3e4730d09fdfb828fa1299f947141ab657673290c3b4771e",
       "scripts/bench/probe_postal_coverage.py": "f484620e3c7d2f4f100d0b99619a9c05754cb0a9813461cb1e757082a48af364",
       "scripts/bench/producer_build_binding.py": "db267264b37473f81f0cb6db610f48fd2941ad176ed72ba38c8354e7efbcf411",
-      "scripts/bench/prose_credential_cells.py": "fc2a878093b5d466921390bfc2380862d9db1660c12e45ec45656c1d97665c7a",
+      "scripts/bench/prose_credential_cells.py": "0d74542ea87f99c79ca3c633f0e2b78ff0c4dca55ac1b92242d67bc7e99b6fac",
       "scripts/bench/prove_refusal_history.py": "7853d4ac0b21d124c7bc01bb4e5393fd7c76fe7d32b7ae974002fd1591c2c697",
       "scripts/bench/proxy_request_order.py": "4ee000a628bc3473b1d4e263bd43ac75d90ded20760c66ae0f5322509094baf8",
       "scripts/bench/publish_mcp_operation_evidence.py": "9c0a379c9283855f1527b63df9770a50151fd112c7b4e196c79cbc36837ad5cd",
@@ -393,14 +393,14 @@
         "descriptors_sha256": "e460efbaae35166e60247b0f8e86be8690672f57e9bbfb95959d96b14a79bff4"
       },
       "A": {
-        "documents": 20177,
-        "document_ids_sha256": "e449581ca647833d2459b6408e23888e0449d47d43736e0a56830c15fb351c16",
-        "descriptors_sha256": "8808c504defe1800312c45f3ca28dab339e77aebdf5d72f6576cd7f195ea1723"
+        "documents": 20195,
+        "document_ids_sha256": "a8327abec680a676d9340303bf61dbf6ca39498424bcd1986d5cd5e1c381f058",
+        "descriptors_sha256": "b7ba7b40f061c2b195d4eadafaad3ff1b0708b53da09f53a86a59e1944aab93b"
       },
       "D": {
-        "documents": 9212,
-        "document_ids_sha256": "256102c488427e6b0d00f28e012585feab40e8c81d716c7a5928e49a19ee8a4a",
-        "descriptors_sha256": "b66d96612b6b1f47ef11419940baa47390f0830fd48ef169af19600c9da05fe3"
+        "documents": 9228,
+        "document_ids_sha256": "d6607b1924d9947d7b56bd4e9a1f3e7dd014c75835d84b9e9d0145236892076c",
+        "descriptors_sha256": "81d1f0cd62f4b0ba6f90c80e7598b28c4e29996a97014c0c2b0659898a714654"
       },
       "R": {
         "documents": 12801,

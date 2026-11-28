@@ -1,0 +1,1 @@
+- Address blocks protect missing suite and house numbers inside corroborated comma-separated addresses without consuming table or list separators.

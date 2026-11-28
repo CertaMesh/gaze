@@ -784,10 +784,11 @@ differs from the JSON structure census one only in the `known_record_cells.py` a
 the generated English name-word dictionary. That dictionary is a crate asset,
 not a harness input; the pinned v7 corpus hash, not the specification, detects
 any change to it.
-The [sub-specification specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
+The [capture closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
-The [current specification](../../docs/reference/benchmarks/specifications/fc8afaaed0057110486517205e44e8aa65f52f23a4253da1fd68441d894f6c6f.json)
-adds generator v32's credential-form and agent-text cells to it and the prose
+The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated addresses and benign table and list cells.
+The [current specification](../../docs/reference/benchmarks/specifications/1b0502284ffc6d5045a8534948eac7673071fafff230368ddc77d27305f6637d.json)
+adds generator v33's credential-form and agent-text cells to it and the prose
 credential recognizers to the validation vocabulary.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,

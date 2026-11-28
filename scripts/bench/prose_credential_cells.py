@@ -245,7 +245,7 @@ def records(api, partition):
     return result
 
 
-# Generator v32: credential forms the v31 cells do not write, and agent and coding text that
+# Generator v33: credential forms the v31 cells do not write, and agent and coding text that
 # names a credential beside values that are not one.
 AGENT_TEXT_PREFIX = "credential_agent_text_"
 AGENT_TEXT = {
