@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Range;
 
@@ -609,7 +610,11 @@ pub struct ResponseTransformContext<'a> {
     format: WireFormat,
     limits: CodecLimits,
     inspection_projection_requested: bool,
+    restore_tools: &'a BTreeSet<String>,
 }
+
+/// No declared tools: every tool's input keeps its tokens.
+static NO_RESTORE_TOOLS: BTreeSet<String> = BTreeSet::new();
 
 impl<'a> ResponseTransformContext<'a> {
     #[must_use]
@@ -625,7 +630,18 @@ impl<'a> ResponseTransformContext<'a> {
             format,
             limits,
             inspection_projection_requested: false,
+            restore_tools: &NO_RESTORE_TOOLS,
         }
+    }
+
+    /// Declares the tools whose input restores; see [`crate::ProxyConfig::with_restore_tools`].
+    pub(crate) fn set_restore_tools(&mut self, tools: &'a BTreeSet<String>) {
+        self.restore_tools = tools;
+    }
+
+    /// Whether the input of a call to `tool` restores.
+    pub(crate) fn restores_tool_input(&self, tool: Option<&str>) -> bool {
+        tool.is_some_and(|tool| self.restore_tools.contains(tool))
     }
 
     #[must_use]

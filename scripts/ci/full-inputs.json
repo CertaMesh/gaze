@@ -1,6 +1,6 @@
 {
   "gate_readers": {
-    ".github/workflows/tutorials.yml": "ca590350e59940398c3e788cafac94a84e8e08948b098b2f418f7a23b4f7559b",
+    ".github/workflows/tutorials.yml": "f9e1344eafe0b1805e3bd4697ed9d91692e9a493243a6a3856099b686816e2b7",
     "crates/xtask/src/bundle_tokenization_drift.rs": "3aebd10dd48cc49b187622368f7710dddb517b19646a2c32de7a5b28a5815900",
     "crates/xtask/src/cargo_metadata_audit_isolation.rs": "3aff57b17acdadfa691ed299c4e6a19e91331da3040d6c07c1c2a19bfb065f9b",
     "crates/xtask/src/ci_feature_matrix.rs": "1da381ee3f0222286b005802c36f5ab6eab7bca9e5eaa36827e2a751c7f7bf75",
@@ -412,6 +412,7 @@
     "docs/reference/benchmarks/gates/mcp-operation-order/whitespace-diagnostic.json",
     "docs/reference/benchmarks/gates/nym-inference-reuse/README.md",
     "docs/reference/benchmarks/gates/nym-inference-reuse/bounded-proof.json",
+    "docs/reference/benchmarks/gates/nym-intra-threads/README.md",
     "docs/reference/benchmarks/gold-gap-sample-v3.json",
     "docs/reference/benchmarks/government-id-cells.md",
     "docs/reference/benchmarks/history-generator-v29/history.json",
