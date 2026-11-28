@@ -12,11 +12,19 @@
 //!
 //! Lifecycle:
 //! - **Open:** the first call for an id builds its host through the factory,
-//!   which receives the id so it can bind per-conversation resources or import
-//!   that conversation's trusted snapshot. The factory runs outside the registry
-//!   lock; when two calls race to open one id, the first inserted host wins and
-//!   the other is dropped unused, so the factory must be safe to run twice for
-//!   one id (for example, read a snapshot without consuming it). Every host it
+//!   which receives the id and the opening [`Principal`] so it can bind
+//!   per-conversation resources or import that conversation's trusted snapshot.
+//!   The conversation then belongs to that principal: a call for the same id from
+//!   any other principal id is refused with
+//!   [`ConversationError::PrincipalMismatch`]. Ownership lives only as long as
+//!   the entry: after close, expiry or a restart, the id opens for whichever
+//!   principal calls next. A factory that imports a snapshot must check that the
+//!   snapshot's recorded owner equals the principal id it receives, and build an
+//!   empty Session otherwise. The factory runs outside the registry lock; when
+//!   two calls race to open one id, the first inserted host wins, the other is
+//!   dropped unused, and a racing call from another principal is refused. So the
+//!   factory must be safe to run twice for one id (for example, read a snapshot
+//!   without consuming it). Every host it
 //!   builds must list the same tools: `tools/list` for a conversation that is not
 //!   live reads the catalog of the first host built.
 //! - **Close:** [`ConversationRegistry::close`] drops the entry. A later call with
@@ -25,8 +33,9 @@
 //!   is still in its factory; that open inserts afterwards.
 //! - **Expiry:** an entry unused for [`ConversationLimits::idle_timeout`] is
 //!   dropped on the next registry access, with the same effect as close.
-//! - **Capacity:** at [`ConversationLimits::max_conversations`] live entries a new
-//!   id is refused with [`ConversationError::Capacity`]. Live conversations are
+//! - **Capacity:** at [`ConversationLimits::max_conversations`] live entries (never
+//!   zero; [`ConversationLimits::new`] refuses zero limits) a new id is refused
+//!   with [`ConversationError::Capacity`]. Live conversations are
 //!   never evicted to make room, because that would silently drop their restore
 //!   authority.
 //! - **Restart:** the registry is memory-only. After a restart every id starts
@@ -40,6 +49,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::auth::Principal;
 use crate::frontend::DispatchHost;
 
 /// Host-authenticated identity of one conversation. `Debug` never prints the id.
@@ -70,14 +80,13 @@ impl std::fmt::Debug for ConversationId {
     }
 }
 
-/// Bounds on the live conversations a [`ConversationRegistry`] holds.
+/// Bounds on the live conversations a [`ConversationRegistry`] holds. Both are
+/// nonzero: a zero capacity or idle timeout would give every call a fresh,
+/// unrestorable Session, so [`Self::new`] refuses them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct ConversationLimits {
-    /// Most live conversations. Opening one more is refused.
-    pub max_conversations: usize,
-    /// A conversation unused for this long is closed.
-    pub idle_timeout: Duration,
+    max_conversations: usize,
+    idle_timeout: Duration,
 }
 
 impl ConversationLimits {
@@ -86,18 +95,37 @@ impl ConversationLimits {
     /// Default idle timeout: 30 minutes.
     pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
-    /// Limits with the given capacity and idle timeout.
-    pub fn new(max_conversations: usize, idle_timeout: Duration) -> Self {
-        Self {
+    /// Limits with the given capacity and idle timeout. Refuses zero for either.
+    pub fn new(
+        max_conversations: usize,
+        idle_timeout: Duration,
+    ) -> Result<Self, ConversationError> {
+        if max_conversations == 0 || idle_timeout.is_zero() {
+            return Err(ConversationError::InvalidLimits);
+        }
+        Ok(Self {
             max_conversations,
             idle_timeout,
-        }
+        })
+    }
+
+    /// Most live conversations. Opening one more is refused.
+    pub fn max_conversations(&self) -> usize {
+        self.max_conversations
+    }
+
+    /// A conversation unused for this long is closed.
+    pub fn idle_timeout(&self) -> Duration {
+        self.idle_timeout
     }
 }
 
 impl Default for ConversationLimits {
     fn default() -> Self {
-        Self::new(Self::DEFAULT_MAX_CONVERSATIONS, Self::DEFAULT_IDLE_TIMEOUT)
+        Self {
+            max_conversations: Self::DEFAULT_MAX_CONVERSATIONS,
+            idle_timeout: Self::DEFAULT_IDLE_TIMEOUT,
+        }
     }
 }
 
@@ -111,17 +139,28 @@ pub enum ConversationError {
     /// The factory failed to build a host for a new conversation.
     #[error("conversation host construction failed: {0}")]
     Factory(#[source] Box<dyn std::error::Error + Send + Sync>),
+    /// The conversation is live and belongs to a different principal.
+    #[error("conversation belongs to another principal")]
+    PrincipalMismatch,
+    /// A capacity or idle timeout of zero.
+    #[error("conversation limits must be nonzero")]
+    InvalidLimits,
 }
 
 /// Builds one isolated host, with its own [`gaze::Session`], for the given
-/// conversation. Resident pipelines, registries and model handles may be shared
-/// between hosts. Never return a host whose Session another conversation uses.
-pub type ConversationFactory = dyn Fn(&ConversationId) -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
+/// conversation and the principal that opens it. Resident pipelines, registries
+/// and model handles may be shared between hosts. Never return a host whose
+/// Session another conversation uses.
+pub type ConversationFactory = dyn Fn(
+        &ConversationId,
+        &Principal,
+    ) -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
     + Send
     + Sync;
 
 struct Entry {
     host: Arc<dyn DispatchHost>,
+    owner: String,
     last_used: Instant,
 }
 
@@ -140,6 +179,7 @@ impl ConversationRegistry {
     where
         F: Fn(
                 &ConversationId,
+                &Principal,
             )
                 -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
             + Send
@@ -159,13 +199,20 @@ impl ConversationRegistry {
         self.limits
     }
 
-    /// The host for `id`, opening the conversation when it is not live.
-    pub fn host(&self, id: &ConversationId) -> Result<Arc<dyn DispatchHost>, ConversationError> {
-        if let Some(host) = self.live(id)? {
+    /// The host for `id`, opening the conversation for `principal` when it is not
+    /// live. A live conversation answers only the principal that opened it; any
+    /// other principal is refused with [`ConversationError::PrincipalMismatch`],
+    /// so a forged or leaked id does not reach another caller's Session.
+    pub fn host(
+        &self,
+        principal: &Principal,
+        id: &ConversationId,
+    ) -> Result<Arc<dyn DispatchHost>, ConversationError> {
+        if let Some(host) = self.live(principal, id)? {
             return Ok(host);
         }
         // Build outside the lock so a slow factory never blocks other conversations.
-        let host = (self.factory)(id).map_err(|error| {
+        let host = (self.factory)(id, principal).map_err(|error| {
             tracing::warn!(target: "gaze_mcp_core::conversation", "conversation host construction failed");
             ConversationError::Factory(error)
         })?;
@@ -173,6 +220,9 @@ impl ConversationRegistry {
         let now = Instant::now();
         let mut entries = self.swept(now);
         if let Some(entry) = entries.get_mut(id) {
+            if entry.owner != principal.id {
+                return Err(ConversationError::PrincipalMismatch);
+            }
             entry.last_used = now;
             return Ok(entry.host.clone());
         }
@@ -183,18 +233,16 @@ impl ConversationRegistry {
             id.clone(),
             Entry {
                 host: host.clone(),
+                owner: principal.id.clone(),
                 last_used: now,
             },
         );
         Ok(host)
     }
 
-    /// The tool catalog, read from a live or earlier-built host without opening a
-    /// conversation. `None` until the factory has built any host.
-    pub fn tools(&self, id: Option<&ConversationId>) -> Option<Vec<crate::ToolDescriptor>> {
-        if let Some(host) = id.and_then(|id| self.lock().get(id).map(|entry| entry.host.clone())) {
-            return Some(host.list_tools());
-        }
+    /// The tool catalog of the first host built, without opening a conversation.
+    /// `None` until the factory has built any host.
+    pub fn tools(&self) -> Option<Vec<crate::ToolDescriptor>> {
         self.catalog.get().cloned()
     }
 
@@ -202,11 +250,15 @@ impl ConversationRegistry {
     /// conversation would have to be opened (and capacity allows it).
     fn live(
         &self,
+        principal: &Principal,
         id: &ConversationId,
     ) -> Result<Option<Arc<dyn DispatchHost>>, ConversationError> {
         let now = Instant::now();
         let mut entries = self.swept(now);
         if let Some(entry) = entries.get_mut(id) {
+            if entry.owner != principal.id {
+                return Err(ConversationError::PrincipalMismatch);
+            }
             entry.last_used = now;
             return Ok(Some(entry.host.clone()));
         }
@@ -286,13 +338,17 @@ mod tests {
         let built = Arc::new(AtomicUsize::new(0));
         let counter = built.clone();
         let registry = ConversationRegistry::new(
-            move |_| {
+            move |_, _| {
                 counter.fetch_add(1, Ordering::SeqCst);
                 Ok(Arc::new(Host) as Arc<dyn DispatchHost>)
             },
             limits,
         );
         (registry, built)
+    }
+
+    fn owner() -> Principal {
+        Principal::new("synthetic-owner")
     }
 
     fn same(a: &Arc<dyn DispatchHost>, b: &Arc<dyn DispatchHost>) -> bool {
@@ -304,10 +360,10 @@ mod tests {
         let (registry, built) = registry(ConversationLimits::default());
         let a = ConversationId::new("a");
         let b = ConversationId::new("b");
-        let a1 = registry.host(&a).unwrap();
-        let b1 = registry.host(&b).unwrap();
+        let a1 = registry.host(&owner(), &a).unwrap();
+        let b1 = registry.host(&owner(), &b).unwrap();
         assert!(!same(&a1, &b1));
-        assert!(same(&a1, &registry.host(&a).unwrap()));
+        assert!(same(&a1, &registry.host(&owner(), &a).unwrap()));
         assert_eq!(built.load(Ordering::SeqCst), 2);
     }
 
@@ -315,53 +371,55 @@ mod tests {
     fn close_then_reopen_builds_a_fresh_host() {
         let (registry, built) = registry(ConversationLimits::default());
         let a = ConversationId::new("a");
-        let first = registry.host(&a).unwrap();
+        let first = registry.host(&owner(), &a).unwrap();
         assert!(registry.close(&a));
         assert!(!registry.close(&a));
         assert!(registry.is_empty());
-        assert!(!same(&first, &registry.host(&a).unwrap()));
+        assert!(!same(&first, &registry.host(&owner(), &a).unwrap()));
         assert_eq!(built.load(Ordering::SeqCst), 2);
     }
 
     #[test]
     fn capacity_refuses_new_ids_but_serves_live_ones() {
-        let (registry, built) = registry(ConversationLimits::new(1, Duration::from_secs(60)));
+        let (registry, built) =
+            registry(ConversationLimits::new(1, Duration::from_secs(60)).unwrap());
         let a = ConversationId::new("a");
-        let live = registry.host(&a).unwrap();
+        let live = registry.host(&owner(), &a).unwrap();
         assert!(matches!(
-            registry.host(&ConversationId::new("b")),
+            registry.host(&owner(), &ConversationId::new("b")),
             Err(ConversationError::Capacity)
         ));
-        assert!(same(&live, &registry.host(&a).unwrap()));
+        assert!(same(&live, &registry.host(&owner(), &a).unwrap()));
         registry.close(&a);
-        registry.host(&ConversationId::new("b")).unwrap();
+        registry.host(&owner(), &ConversationId::new("b")).unwrap();
         assert_eq!(built.load(Ordering::SeqCst), 2);
     }
 
     #[test]
     fn idle_conversations_expire_and_free_capacity() {
-        let (registry, _) = registry(ConversationLimits::new(1, Duration::from_millis(20)));
+        let (registry, _) =
+            registry(ConversationLimits::new(1, Duration::from_millis(20)).unwrap());
         let a = ConversationId::new("a");
-        let first = registry.host(&a).unwrap();
+        let first = registry.host(&owner(), &a).unwrap();
         std::thread::sleep(Duration::from_millis(40));
         // The expired entry no longer counts against capacity.
-        registry.host(&ConversationId::new("b")).unwrap();
+        registry.host(&owner(), &ConversationId::new("b")).unwrap();
         assert!(matches!(
-            registry.host(&a),
+            registry.host(&owner(), &a),
             Err(ConversationError::Capacity)
         ));
         std::thread::sleep(Duration::from_millis(40));
-        assert!(!same(&first, &registry.host(&a).unwrap()));
+        assert!(!same(&first, &registry.host(&owner(), &a).unwrap()));
     }
 
     #[test]
     fn factory_failure_opens_nothing() {
         let registry = ConversationRegistry::new(
-            |_| Err("synthetic factory failure".into()),
+            |_, _| Err("synthetic factory failure".into()),
             ConversationLimits::default(),
         );
         assert!(matches!(
-            registry.host(&ConversationId::new("a")),
+            registry.host(&owner(), &ConversationId::new("a")),
             Err(ConversationError::Factory(_))
         ));
         assert!(registry.is_empty());
@@ -372,30 +430,119 @@ mod tests {
         let opened = Arc::new(Mutex::new(Vec::new()));
         let seen = opened.clone();
         let registry = ConversationRegistry::new(
-            move |id: &ConversationId| {
-                seen.lock().unwrap().push(id.as_str().to_owned());
+            move |id: &ConversationId, principal: &Principal| {
+                seen.lock()
+                    .unwrap()
+                    .push(format!("{}@{}", id.as_str(), principal.id));
                 Ok(Arc::new(Host) as Arc<dyn DispatchHost>)
             },
             ConversationLimits::default(),
         );
         assert!(
-            registry.tools(None).is_none(),
+            registry.tools().is_none(),
             "no catalog before any host exists"
         );
-        registry.host(&ConversationId::new("a")).unwrap();
-        registry.host(&ConversationId::new("a")).unwrap();
-        registry.host(&ConversationId::new("b")).unwrap();
-        assert_eq!(*opened.lock().unwrap(), ["a", "b"]);
-        // Listing tools for an unknown conversation reads the catalog without opening it.
-        assert!(registry.tools(Some(&ConversationId::new("c"))).is_some());
+        registry.host(&owner(), &ConversationId::new("a")).unwrap();
+        registry.host(&owner(), &ConversationId::new("a")).unwrap();
+        registry.host(&owner(), &ConversationId::new("b")).unwrap();
+        assert_eq!(
+            *opened.lock().unwrap(),
+            ["a@synthetic-owner", "b@synthetic-owner"]
+        );
+        // Listing tools reads the catalog without opening a conversation.
+        assert!(registry.tools().is_some());
         assert_eq!(registry.len(), 2);
+    }
+
+    #[test]
+    fn a_live_conversation_answers_only_its_principal() {
+        let (registry, built) = registry(ConversationLimits::default());
+        let a = ConversationId::new("a");
+        let mine = registry.host(&owner(), &a).unwrap();
+        let intruder = Principal::new("synthetic-intruder");
+        assert!(matches!(
+            registry.host(&intruder, &a),
+            Err(ConversationError::PrincipalMismatch)
+        ));
+        // Roles do not matter; the principal id owns the conversation.
+        let same_owner = Principal::with_roles("synthetic-owner", vec!["operator".into()]);
+        assert!(same(&mine, &registry.host(&same_owner, &a).unwrap()));
+        assert_eq!(
+            built.load(Ordering::SeqCst),
+            1,
+            "a refused call builds nothing"
+        );
+        // After close, the id is free for a new owner, with a fresh host.
+        registry.close(&a);
+        assert!(!same(&mine, &registry.host(&intruder, &a).unwrap()));
+        assert!(matches!(
+            registry.host(&owner(), &a),
+            Err(ConversationError::PrincipalMismatch)
+        ));
+    }
+
+    #[test]
+    fn two_principals_racing_to_open_one_id_never_share_it() {
+        // Both factories run before either inserts, so only the insert-path
+        // owner check can refuse the second principal.
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let gate = barrier.clone();
+        let registry = Arc::new(ConversationRegistry::new(
+            move |_, _| {
+                gate.wait();
+                Ok(Arc::new(Host) as Arc<dyn DispatchHost>)
+            },
+            ConversationLimits::default(),
+        ));
+        let id = ConversationId::new("raced");
+        let open = |who: &'static str| {
+            let (registry, id) = (registry.clone(), id.clone());
+            std::thread::spawn(move || registry.host(&Principal::new(who), &id))
+        };
+        let (a, b) = (open("synthetic-a"), open("synthetic-b"));
+        let results = [a.join().unwrap(), b.join().unwrap()];
+        let refused = results
+            .iter()
+            .filter(|r| matches!(r, Err(ConversationError::PrincipalMismatch)))
+            .count();
+        assert_eq!(refused, 1);
+        assert!(results.iter().any(Result::is_ok));
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn zero_limits_are_refused() {
+        for (max, idle) in [
+            (0, Duration::from_secs(60)),
+            (1, Duration::ZERO),
+            (0, Duration::ZERO),
+        ] {
+            assert!(matches!(
+                ConversationLimits::new(max, idle),
+                Err(ConversationError::InvalidLimits)
+            ));
+        }
+        let limits = ConversationLimits::new(1, Duration::from_millis(1)).unwrap();
+        assert_eq!(
+            (limits.max_conversations(), limits.idle_timeout()),
+            (1, Duration::from_millis(1))
+        );
+        let defaults = ConversationLimits::default();
+        assert_eq!(
+            defaults.max_conversations(),
+            ConversationLimits::DEFAULT_MAX_CONVERSATIONS
+        );
+        assert_eq!(
+            defaults.idle_timeout(),
+            ConversationLimits::DEFAULT_IDLE_TIMEOUT
+        );
     }
 
     #[test]
     fn debug_never_prints_the_id() {
         let id = ConversationId::new("private-conversation-canary");
         let (registry, _) = registry(ConversationLimits::default());
-        registry.host(&id).unwrap();
+        registry.host(&owner(), &id).unwrap();
         assert!(!format!("{id:?} {registry:?}").contains("canary"));
     }
 }
