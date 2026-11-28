@@ -116,7 +116,7 @@ fn conversations(limits: ConversationLimits) -> (ConversationRegistry, Arc<Mutex
     let built = Arc::new(Mutex::new(Vec::new()));
     let seen = built.clone();
     let registry = ConversationRegistry::new(
-        move |_: &ConversationId| {
+        move |_: &ConversationId, _: &Principal| {
             let host = Arc::new(Host {
                 shared: shared.clone(),
                 session: gaze::Session::new(gaze::Scope::Ephemeral)?,
@@ -131,7 +131,7 @@ fn conversations(limits: ConversationLimits) -> (ConversationRegistry, Arc<Mutex
 
 async fn lookup(registry: &ConversationRegistry, id: &ConversationId) -> String {
     let response = registry
-        .host(id)
+        .host(&Principal::new("synthetic-agent"), id)
         .unwrap()
         .dispatch(
             &Principal::new("synthetic-agent"),
@@ -191,7 +191,8 @@ async fn a_closed_conversation_reopens_without_its_old_mappings() {
 
 #[tokio::test]
 async fn an_expired_conversation_reopens_without_its_old_mappings() {
-    let (registry, built) = conversations(ConversationLimits::new(4, Duration::from_millis(20)));
+    let (registry, built) =
+        conversations(ConversationLimits::new(4, Duration::from_millis(20)).unwrap());
     let a = ConversationId::new("conversation-a");
     let before = lookup(&registry, &a).await;
     std::thread::sleep(Duration::from_millis(40));

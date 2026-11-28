@@ -146,8 +146,12 @@ that id before dispatch; the id never grants access or selects a Session.
 
 Private context requires one `Session` per conversation. Sharing a host across
 conversations shares Rule-evidence mappings, HMAC labels, and restore authority.
-Audit session ids do not partition this state. The built-in
-`Frontend::serve(host, ...)` HTTP path reuses the supplied host for every caller.
+Audit session ids do not partition this state. The built-in HTTP transport
+therefore refuses `Frontend::serve(host, ...)` with
+`RmcpFrontendError::SharedHttpHost`; `RmcpFrontend::serve_conversations` serves
+it with one conversation per resolved principal id, and refuses a resolver whose
+`PrincipalResolver::distinguishes_callers` is false, such as
+`FixedPrincipalResolver`.
 
 For private conversations, keep a `gaze_mcp_core::ConversationRegistry` whose
 factory builds a host with a fresh `Session`, and serve it with
@@ -157,7 +161,9 @@ conversation's host and refuses a call without one:
 
 ```rust,no_run
 use std::sync::Arc;
-use gaze_mcp_core::{ConversationId, ConversationLimits, ConversationRegistry, DispatchHost};
+use gaze_mcp_core::{
+	ConversationId, ConversationLimits, ConversationRegistry, DispatchHost, Principal,
+};
 use gaze_mcp_rmcp::RmcpFrontend;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
@@ -165,7 +171,7 @@ use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
 # #[cfg(feature = "transport-http")]
 # fn embed_http(
 # 	frontend: RmcpFrontend,
-# 	new_conversation_host: impl Fn(&ConversationId) -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
+# 	new_conversation_host: impl Fn(&ConversationId, &Principal) -> Result<Arc<dyn DispatchHost>, Box<dyn std::error::Error + Send + Sync>>
 # 		+ Send + Sync + 'static,
 # ) {
 // The factory builds a host with its own Session for the conversation it is given.
@@ -185,11 +191,14 @@ let service = StreamableHttpService::new(
 Enable `gaze-mcp-rmcp/transport-http` and add `rmcp` with
 `transport-streamable-http-server` to use this example. Resident policies,
 pipelines, and model handles can be shared between hosts. Derive the conversation
-id from an authenticated identity, never from tool arguments or `_meta`. Close a
+id from an authenticated identity, never from tool arguments or `_meta`. A live
+conversation answers only the principal that opened it. Close a
 conversation with `ConversationRegistry::close`; idle conversations expire after
-`ConversationLimits::idle_timeout`. The factory receives the `ConversationId`,
-so after expiry or a restart it can import only that conversation's trusted
-snapshot into the new host. It runs outside the registry lock; keep it bounded,
+`ConversationLimits::idle_timeout`. Ownership is not persisted, so after expiry
+or a restart any principal can reopen an id. The factory receives the
+`ConversationId` and the opening `Principal`: import that conversation's trusted
+snapshot only when its recorded owner equals the principal id, and otherwise
+build an empty Session. It runs outside the registry lock; keep it bounded,
 because the call that opened the conversation waits for it.
 
 ## rmcp version policy

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import copy
 import importlib.metadata
 import json
@@ -16,6 +17,10 @@ from capture_identity import digest, file_digest
 
 SCHEMA_VERSION = 1
 PREFIX = "gaze-benchmark-v1:"
+LAYER_PREFIX = "gaze-benchmark-layer-v1:"
+# Programs that capture, replay, gate or certify the C/A/D/R layers.
+CLOSURE_ENTRY_POINTS = ("run_no_opf_benchmark", "rescore", "rescore_past_release",
+                        "agentic_layers", "benchmark_certification")
 PROTOCOL = Path("scripts/bench/benchmark-protocol.json")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 
@@ -92,9 +97,13 @@ def validate(value: object) -> dict:
         inputs = value["inputs"]
         fields = {"corpus_sha256", "generator", "seed", "contracts", "harness",
                   "record_schema", "protocol", "population"}
+        optional = {"validation_vocabulary", "measuring_runtime", "capture_closure"}
+        closure = inputs.get("capture_closure", []) if isinstance(inputs, dict) else None
         if (not isinstance(inputs, dict)
                 or not fields <= set(inputs)
-                or set(inputs) - fields - {"validation_vocabulary", "measuring_runtime"}
+                or set(inputs) - fields - optional
+                or not isinstance(closure, list) or closure != sorted(set(closure))
+                or not isinstance(inputs["harness"], dict) or not set(closure) <= set(inputs["harness"])
                 or not HEX64.fullmatch(inputs["corpus_sha256"])
                 or type(inputs["seed"]) is not int
                 or not inputs["contracts"] or not inputs["harness"]
@@ -123,6 +132,91 @@ def require_same(left: Mapping, right: Mapping, *, required: bool = True) -> str
     if a != b:
         raise SpecError("benchmark_spec_mismatch")
     return a
+
+
+def layer_specs(value: Mapping) -> dict[str, str]:
+    """One sub-specification per measured layer, derived from a validated manifest.
+
+    Each binds the shared measuring semantics (capture closure, contracts,
+    vocabulary, runtime, record schema, protocol and seed) plus that layer's
+    inputs: the corpus for C, the generator manifest and generated contract for
+    A/D/R, and the layer's canonical population. Harness files outside the
+    capture closure cannot reach these layers and are left out. Manifests that
+    predate the closure bind every harness file.
+    """
+    inputs = validate(value)["inputs"]
+    closure = inputs["capture_closure"] if "capture_closure" in inputs else sorted(inputs["harness"])
+    shared = {"schema_version": value["schema_version"], "seed": inputs["seed"],
+              "record_schema": inputs["record_schema"], "protocol": inputs["protocol"],
+              "validation_vocabulary": inputs.get("validation_vocabulary"),
+              "measuring_runtime": inputs.get("measuring_runtime"),
+              "contracts": {key: item for key, item in inputs["contracts"].items() if key != "generated"},
+              "harness": {path: inputs["harness"][path] for path in closure}}
+    result = {}
+    for layer, block in sorted(inputs["population"].items()):
+        own = ({"corpus_sha256": inputs["corpus_sha256"]} if layer == "C" else
+               {"generator": inputs["generator"], "generated_contract": inputs["contracts"].get("generated")})
+        result[layer] = LAYER_PREFIX + digest({"shared": shared, "layer": layer,
+                                               "population": block, **own})
+    return result
+
+
+def layer_identity(card: Mapping, *, required: bool = False) -> dict[str, str] | None:
+    value = card.get("benchmark_spec")
+    if value is None:
+        if required:
+            raise SpecError("benchmark_spec_unavailable")
+        return None
+    return layer_specs(value)
+
+
+def require_same_layers(left: Mapping, right: Mapping, *, required: bool = True) -> dict[str, str] | None:
+    """Gate admission: equal sub-specifications for every measured layer, not equal full IDs."""
+    a, b = layer_identity(left, required=required), layer_identity(right, required=required)
+    if a != b:
+        raise SpecError("benchmark_spec_mismatch")
+    return a
+
+
+def capture_closure(root: Path) -> list[str]:
+    """Harness files reachable from the C/A/D/R entry points, plus every data/config input.
+
+    The closure follows static imports of top-level local modules, including
+    imports inside functions. Imports it could not follow are refused: relative
+    imports, imports of a local subpackage, and runtime module loaders. The only
+    `exec` in the closure runs retained generator sources pinned by SHA-256.
+    """
+    bench = root / "scripts/bench"
+    local = {path.stem: path for path in bench.glob("*.py")}
+    packages = {path.parent.relative_to(bench).parts[0] for path in bench.rglob("*.py")
+                if path.parent != bench}
+    seen: set[str] = set()
+    pending = list(CLOSURE_ENTRY_POINTS)
+    while pending:
+        name = pending.pop()
+        if name in seen or name not in local:
+            continue
+        seen.add(name)
+        for node in ast.walk(ast.parse(local[name].read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    raise SpecError("capture_closure_unresolved")
+                modules = [node.module or ""]
+            elif (isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
+                  and getattr(node.func, "id", getattr(node.func, "attr", None))
+                  in ("import_module", "__import__", "run_path", "run_module",
+                      "spec_from_file_location", "SourceFileLoader", "exec_module", "load_module")):
+                raise SpecError("capture_closure_unresolved")
+            else:
+                continue
+            if any(module.split(".")[0] in packages for module in modules):
+                raise SpecError("capture_closure_unresolved")
+            pending += [module.split(".")[0] for module in modules if module.split(".")[0] in local]
+    paths = [local[name] for name in seen] + sorted(bench.glob("*.json"))
+    paths += [bench / "pyproject.toml", bench / "uv.lock"]
+    return sorted(path.relative_to(root).as_posix() for path in paths)
 
 
 def population(documents, layer: str = "C") -> dict:
@@ -161,6 +255,7 @@ def measuring_inputs(root: Path) -> dict:
     sources += [bench / "pyproject.toml", bench / "uv.lock"]
     return {
         "harness": {path.relative_to(root).as_posix(): file_digest(path) for path in sources},
+        "capture_closure": capture_closure(root),
         "validation_vocabulary": sorted(score.load_committed_source_id_vocabulary(root)),
         "measuring_runtime": require_runtime(),
     }

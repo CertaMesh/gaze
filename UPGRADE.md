@@ -167,12 +167,30 @@ request extensions. The host selects the Session independently of that id.
 literals must set it or end with `..HostCallContext::default()`.
 
 A host that serves several conversations must not share one `Session` across
-them. Build a `gaze_mcp_core::ConversationRegistry` whose factory receives the
-`ConversationId` and returns a host with that conversation's own Session, then
+them. Build a `gaze_mcp_core::ConversationRegistry` whose factory,
+`Fn(&ConversationId, &Principal)`, returns a host with that conversation's own
+Session, then
 serve it with `RmcpFrontend::into_conversation_handler`. Middleware sets
 `HostCallContext::conversation` from an authenticated identity; calls without it
 fail with `conversation-required`. Do not build hosts in the rmcp service factory
 for isolation: under protocol 2026-07-28 rmcp calls it once per request.
+
+A live conversation answers only the principal id that opened it; another
+principal gets `conversation-forbidden`. Ownership is not persisted: a factory
+that imports a snapshot must check that its recorded owner equals the principal
+id, and build an empty Session otherwise. `ConversationLimits::new(max, idle)` returns a
+`Result` and refuses zero for either value; its fields are now private, so read
+them with `max_conversations()` and `idle_timeout()`.
+
+The built-in HTTP transport no longer shares one host across callers.
+`Frontend::serve(host, ...)` on `RmcpFrontend::http(..)` now returns
+`RmcpFrontendError::SharedHttpHost`. Serve it with
+`RmcpFrontend::serve_conversations(registry, shutdown)` instead, which opens one
+conversation per resolved principal id. It refuses HTTP with the same error when
+`PrincipalResolver::distinguishes_callers` is false, as it is for
+`FixedPrincipalResolver`, because every caller would resolve to one principal.
+Give each HTTP caller its own principal, and override `distinguishes_callers`
+to return false in a resolver that does not.
 
 ### Action required: replace positional context arrays
 

@@ -73,27 +73,25 @@ class CacheReviewTests(unittest.TestCase):
                           document_ids=['synthetic-one'], threshold=0.5,
                           source_environment={'RUSTFLAGS':'synthetic-flags', 'CARGO_HOME':str(cargo_home)},
                           binary=root/'detector', validator_probe=root/'validator', davlan_model=root/'model',
-                          benchmark_spec_id='synthetic-spec')
+                          layer_specs={'C': 'synthetic-spec'})
             with mock.patch.object(runner, 'source_tree_identity', side_effect=lambda _: (dict(identity), None)), \
                  mock.patch.object(runner.capture_identity, 'native_runtime', return_value={'fixture': True}):
                 key, reason = runner.observation_cache_key(**inputs)
                 self.assertIsNone(reason)
-                expected = dict(identity, benchmark_spec_id='synthetic-spec', policy_sha256=policy_sha, seed=inputs['args'].seed,
+                expected = dict(layer_specs={'C': 'synthetic-spec'}, policy_sha256=policy_sha, seed=inputs['args'].seed,
                                 corpus_sha256='5'*64, scored_labels_sha256='6'*64,
                                 agentic_scored_labels_sha256='8'*64,
                                 model_bundle_sha256={'synthetic':'7'*64}, release=True,
                                 ner_threshold=0.5,
                                 environment=runner.observation_environment_identity(inputs['source_environment']))
                 expected['document_ids_sha256'] = runner.hashlib.sha256(b'["synthetic-one"]').hexdigest()
-                expected['cargo_config_sha256'] = {'repository':score.sha256_file(root/'.cargo/config.toml'),
-                                                   'cargo_home':score.sha256_file(cargo_home/'config.toml')}
                 for name, value in expected.items():
                     self.assertEqual(key[name], value, name)
                 record = root/'record'
                 record.write_bytes(b'synthetic observation')
                 cache.store(root/'cache', key, record)
                 mutations = {
-                    'benchmark_spec_id': lambda x: x.update(benchmark_spec_id='changed-spec'),
+                    'layer_specs': lambda x: x.update(layer_specs={'C': 'changed-spec'}),
                     'policy_sha256': lambda x: x.update(policy_sha256='a'*64),
                     'seed': lambda x: setattr(x['args'], 'seed', x['args'].seed+1),
                     'corpus_sha256': lambda x: x.update(corpus_sha256='a'*64),
@@ -114,18 +112,17 @@ class CacheReviewTests(unittest.TestCase):
                         continue
                     self.assertNotEqual(key[name], candidate[name], name)
                     self.assertIsNone(cache.lookup(root/'cache', candidate)[0], name)
+                # Commits, trees, docs and Cargo build inputs reach detection only
+                # through the built executables' bytes, which the key binds.
                 for name in identity:
-                    before = identity[name]
+                    self.assertNotIn(name, key)
                     identity[name] = 'a'*40
-                    candidate, _ = runner.observation_cache_key(**inputs)
-                    self.assertNotEqual(key[name],candidate[name])
-                    self.assertIsNone(cache.lookup(root/'cache',candidate)[0])
-                    identity[name] = before
-                for path in (root/'.cargo/config.toml', cargo_home/'config.toml'):
-                    path.write_text('changed config')
-                    candidate, _ = runner.observation_cache_key(**inputs)
-                    self.assertNotEqual(key['cargo_config_sha256'],candidate['cargo_config_sha256'])
-                    self.assertIsNone(cache.lookup(root/'cache',candidate)[0])
+                for path in (root/'.cargo/config.toml', cargo_home/'config.toml', root/'Cargo.lock',
+                             root/'docs/reference/benchmarks/README.md'):
+                    path.write_text('changed unrelated input')
+                self.assertEqual(runner.observation_cache_key(**inputs)[0], key)
+                (root/'detector').write_text('changed executable')
+                self.assertIsNone(cache.lookup(root/'cache', runner.observation_cache_key(**inputs)[0])[0])
 
     def test_dirty_or_changed_inputs_are_never_stored(self):
         key = {'revision': 'original', 'binary_sha256': 'synthetic', 'policy_sha256': 'synthetic'}
