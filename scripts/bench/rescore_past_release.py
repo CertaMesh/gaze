@@ -53,6 +53,7 @@ import gaze_bench_score as score  # noqa: E402
 import scorecard_record as records  # noqa: E402
 import subject_build
 import benchmark_cache
+import capture_identity
 import past_capture
 import stage_timing as stages
 import benchmark_spec  # noqa: E402
@@ -299,6 +300,10 @@ def _run(args: argparse.Namespace) -> Path:
         evidence.cache.update(status="hit" if status == "hit" else "miss", reason=status)
         if status == "hit":
             try:
+                header, _ = records._read(output_record)
+                records.rebind_reuse(output_record, spec, build_receipt["binary_sha256"], {
+                    "runner_provenance": {**header["scorecard"]["runner_provenance"],
+                                          "harness_revision": harness}})
                 candidate = records.rescore(output_record, contract,
                     prepared.contract if prepared else None, max_workers=1)
                 header, _ = records._read(output_record)
@@ -377,6 +382,7 @@ def _run(args: argparse.Namespace) -> Path:
         "model_bundles": bundles,
         "policy_dependencies": dependency_provenance,
         "hardware": platform.platform() + "; " + platform.processor(),
+        "machine": capture_identity.machine_identity(),
         "warmup_count": args.warmups,
         "measured_repetitions": 1,
     }

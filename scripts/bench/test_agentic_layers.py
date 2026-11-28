@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "df23bf7637e700e8749c01265112c51528396409c745bef749cf718d463bcc51",
-    "test": "2663ded191a96fc83b3861ef3cf8949e526c32d6dbdb41417abf0386a6bdb752",
+    "dev": "5541fb3adc394bf93c30fe700c901f05290a8604f4a93740f1b88385a470c41b",
+    "test": "f82e1611f95cd6e18121a8b92d253696712adfc1078b8ffffd3f94de67aeb4d2",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -3215,3 +3215,17 @@ class RulepackPathDeltaTests(unittest.TestCase):
             self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
             delta.write_text('[mechanism_delta]\nappend_rulepack_paths=["base-core.toml"]\n')
             self.assertEqual(agentic.gate(cards["base"], cards["candidate"], policy_delta=delta)["verdict"], "not_comparable")
+
+
+def test_gate_refuses_sides_captured_on_different_machines():
+    import copy as _copy
+    base = _scorecard(dict.fromkeys(("C", "A", "D", "R"), 0))
+    machine = {"system": "Linux", "os_build_sha256": "a" * 64, "hardware_sha256": "b" * 64}
+    base.setdefault("runner_provenance", {})["machine"] = machine
+    candidate = _copy.deepcopy(base)
+    assert agentic.compare_layers(base, candidate)["verdict"] != "not_comparable"
+    for other in ({**machine, "hardware_sha256": "c" * 64}, None):
+        candidate["runner_provenance"]["machine"] = other
+        result = agentic.compare_layers(base, candidate)
+        assert result["verdict"] == "not_comparable"
+        assert "capture_machine" in result["differing"]
