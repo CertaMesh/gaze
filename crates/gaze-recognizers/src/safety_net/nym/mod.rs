@@ -452,6 +452,11 @@ fn span_to_disposition(
             SafetyNetRefusalReason::NymPaginationKeyV1,
         ));
     }
+    if is_overlong_plate_digit_run(clean_text, &span) {
+        return Ok(SpanDisposition::Refused(
+            SafetyNetRefusalReason::NymLicensePlateDigitRunV1,
+        ));
+    }
     let range = span.start..span.end;
     let Some(kind) = context.manifest.diff_against(&range, &class) else {
         return Ok(SpanDisposition::Covered);
@@ -465,6 +470,26 @@ fn span_to_disposition(
         labels.join(";"),
         context.field_path.map(str::to_string),
     )))
+}
+
+/// The longest all-digit registration in a standard plate scheme we know of. All-digit plates
+/// exist (short US and Delaware-style numbers, some trailer and dealer plates); Israel's
+/// current `123-45-678` scheme is the longest at eight digits.
+const MAX_ALL_DIGIT_PLATE: usize = 8;
+
+/// `LICENSE_PLATE` is the wrong label for a standalone run of more than
+/// [`MAX_ALL_DIGIT_PLATE`] ASCII digits. Decode takes the argmax over all labels, so a span
+/// reaches this guard only when the model already ranked the identifier labels (SSN, phone,
+/// account number, government ID) lower than plate. Only the plate label is refused: the same
+/// run stays eligible for every primary recognizer. A run touching a letter or digit outside
+/// the span is part of a longer token and is left to the model.
+fn is_overlong_plate_digit_run(text: &str, span: &NymSpan) -> bool {
+    let value = &text[span.start..span.end];
+    span.label == NymLabel::LicensePlate
+        && value.len() > MAX_ALL_DIGIT_PLATE
+        && value.bytes().all(|byte| byte.is_ascii_digit())
+        && !gaze_types::is_inside_word(text, span.start)
+        && !gaze_types::is_inside_word(text, span.end)
 }
 
 // V1 is deliberately finite: every member is metadata, even when its value is a single digit.
@@ -1053,6 +1078,54 @@ mod tests {
         assert_eq!(suspect.class, PiiClass::custom("license_plate").unwrap());
         assert_eq!(suspect.kind, LeakKind::Uncovered);
         assert_eq!(raw_label(NymLabel::DateOfBirth, 0.9), "DATE_OF_BIRTH>=0.9");
+    }
+
+    #[test]
+    fn nym_license_plate_refuses_only_standalone_digit_runs_longer_than_a_plate() {
+        let refused = |text: &str, value: &str| {
+            matches!(
+                disposition_for(text, value, NymLabel::LicensePlate, None),
+                SpanDisposition::Refused(SafetyNetRefusalReason::NymLicensePlateDigitRunV1)
+            )
+        };
+        // Nine digits and more: equipment serials and references, in JSON, logs and prose.
+        assert!(refused(
+            r#"{"deviceSerial": "482019375", "page": 1}"#,
+            "482019375"
+        ));
+        assert!(refused("vehicle ID: 000412907", "000412907"));
+        assert!(refused("ref 12345678901234", "12345678901234"));
+        // Up to eight digits is a real all-digit plate shape.
+        for (text, value) in [("plate 123456", "123456"), ("plate 12345678", "12345678")] {
+            assert!(
+                matches!(
+                    disposition_for(text, value, NymLabel::LicensePlate, None),
+                    SpanDisposition::Suspect(_)
+                ),
+                "{text}"
+            );
+        }
+        // Letters, separators, or a run cut out of a longer token stay with the model.
+        for (text, value) in [
+            ("Kennzeichen MAB123456789", "AB123456789"),
+            ("plate 123 456 789", "123 456 789"),
+            ("plate 1234-56789", "1234-56789"),
+            ("code X123456789", "123456789"),
+            ("serial 1234567890", "123456789"),
+            ("plate ١٢٣٤٥٦٧٨٩", "١٢٣٤٥٦٧٨٩"),
+        ] {
+            assert!(!refused(text, value), "{text}");
+        }
+        // Another label on the same run is not this veto's business.
+        assert!(matches!(
+            disposition_for(
+                "Hausnummer 482019375",
+                "482019375",
+                NymLabel::BuildingNumber,
+                None
+            ),
+            SpanDisposition::Suspect(_)
+        ));
     }
 
     #[test]
