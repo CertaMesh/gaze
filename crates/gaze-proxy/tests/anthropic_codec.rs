@@ -855,17 +855,18 @@ fn response_rejects_provider_numbers_collisions_and_raw_signed_pii() {
     let collision = format!(
         r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"tool_use","id":"toolu_1","name":"lookup","input":{{"{key_token}":"a","alice@example.invalid":"b"}}}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":2}}}}"#
     );
+    // Keys collide only when they restore, which is only for a declared tool.
+    let declared = std::collections::BTreeSet::from(["lookup".to_owned()]);
     let mut allow_all = AllowAllResidualValidator;
+    let mut context = ResponseTransformContext::new(
+        &snapshot,
+        &mut allow_all,
+        WireFormat::Json,
+        CodecLimits::default(),
+    );
+    context.set_restore_tools(&declared);
     let error = codec
-        .restore_response(
-            collision.as_bytes(),
-            &mut ResponseTransformContext::new(
-                &snapshot,
-                &mut allow_all,
-                WireFormat::Json,
-                CodecLimits::default(),
-            ),
-        )
+        .restore_response(collision.as_bytes(), &mut context)
         .unwrap_err();
     assert_eq!(error.code(), CodecErrorCode::TransformedKeyCollision);
 
@@ -1704,4 +1705,38 @@ fn context_instructions_join_the_complete_prompt_proof() {
         .unwrap_err();
     assert_eq!(error.code(), CodecErrorCode::ControlWouldMutate);
     assert_eq!(error.phase(), CodecPhase::RequestProof);
+}
+
+#[test]
+fn withheld_fields_keep_tokens_but_still_refuse_tokens_the_session_never_minted() {
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let token = transaction.tokenize(&PiiClass::Email, EMAIL).unwrap();
+    let snapshot = transaction.commit().unwrap();
+    let response = |value: &str| {
+        format!(
+            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"tool_use","id":"toolu_1","name":"undeclared","input":{{"to":"{value}"}}}},{{"type":"tool_result","tool_use_id":"toolu_0","content":"{value}"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":2}}}}"#
+        )
+    };
+    let restore = |body: String| {
+        let mut residual = SyntheticResidualValidator;
+        let mut context = ResponseTransformContext::new(
+            &snapshot,
+            &mut residual,
+            WireFormat::Json,
+            CodecLimits::default(),
+        );
+        codec
+            .restore_response(body.as_bytes(), &mut context)
+            .map(|proved| String::from_utf8(proved.bytes().to_vec()).unwrap())
+    };
+    let output = restore(response(&token)).unwrap();
+    assert_eq!(output.matches(token.as_str()).count(), 2);
+    assert!(!output.contains(EMAIL));
+    let forged = token.replace("Email_1", "Email_9");
+    assert_eq!(
+        restore(response(&forged)).unwrap_err().code(),
+        CodecErrorCode::RestoreFailedClosed
+    );
 }

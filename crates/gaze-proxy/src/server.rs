@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -25,8 +25,8 @@ use tokio::sync::RwLock;
 use url::{Host, Url};
 
 use crate::adapter::{
-    CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent, SseStreamKey,
-    SurfaceSyntax,
+    CoveragePolicy, ProtocolContract, ProviderAdapter, RestoreSink, SessionPolicy, SseEvent,
+    SseStreamKey, SurfaceSyntax,
 };
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
@@ -2515,16 +2515,24 @@ async fn proxy_inner(
 
     let is_sse = content_type.contains("text/event-stream");
     let body = if is_sse {
-        transform_sse(&adapter, &session, &bytes, json_output, &mut |body| {
-            validate_legacy_response_models(
-                &state.pipeline,
-                &session,
-                body,
-                adapter.name(),
-                locale_chain,
-                dictionaries,
-            )
-        })?
+        let restore_tools = state.config.restore_tools.clone();
+        transform_sse(
+            &adapter,
+            &session,
+            &bytes,
+            json_output,
+            &restore_tools,
+            &mut |body| {
+                validate_legacy_response_models(
+                    &state.pipeline,
+                    &session,
+                    body,
+                    adapter.name(),
+                    locale_chain,
+                    dictionaries,
+                )
+            },
+        )?
     } else {
         let mut response_json: Value =
             serde_json::from_slice(&bytes).map_err(|source| ProxyError::InvalidJson { source })?;
@@ -2540,6 +2548,7 @@ async fn proxy_inner(
             &session,
             adapter.response_pii_surfaces(&mut response_json),
             json_output,
+            &state.config.restore_tools,
         );
         serde_json::to_vec(&response_json).map_err(|source| ProxyError::InvalidJson { source })?
     };
@@ -2708,6 +2717,7 @@ async fn direct_proxy_inner(
             Arc::clone(&state.pipeline),
             state.config.locale_chain.clone(),
             state.config.dictionaries().clone(),
+            Arc::clone(&state.config.restore_tools),
             opened,
             runtime.codec_limits,
             runtime.client_config.max_response_bytes,
@@ -2721,6 +2731,7 @@ async fn direct_proxy_inner(
         &state.pipeline,
         state.config.locale_chain(),
         state.config.dictionaries(),
+        &state.config.restore_tools,
         codec,
         executed,
         runtime.codec_limits,
@@ -2735,6 +2746,7 @@ fn stage_and_replay_direct_sse(
     pipeline: Arc<Pipeline>,
     locale_chain: gaze::LocaleChain,
     dictionaries: DictionaryBundle,
+    restore_tools: Arc<BTreeSet<String>>,
     opened: CommittedDirectSse,
     limits: CodecLimits,
     max_response_bytes: usize,
@@ -2774,6 +2786,7 @@ fn stage_and_replay_direct_sse(
             )?;
             let mut context =
                 ResponseTransformContext::new(&snapshot, &mut residual, WireFormat::Sse, limits);
+            context.set_restore_tools(&restore_tools);
             if inspection
                 .as_ref()
                 .is_some_and(ProxyInspectionLogicalV1::owner_restored_response_projection_selected)
@@ -2974,10 +2987,12 @@ fn canonical_session_identifier(headers: &HeaderMap) -> Result<&str, DirectProxy
     Ok(value)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn restore_direct_response(
     pipeline: &Pipeline,
     locale_chain: &[LocaleTag],
     dictionaries: &DictionaryBundle,
+    restore_tools: &BTreeSet<String>,
     codec: &dyn BodyCodec,
     mut executed: CommittedDirectResponse,
     limits: CodecLimits,
@@ -2988,6 +3003,7 @@ fn restore_direct_response(
         PipelineResponseResidualValidator::new(pipeline, locale_chain, dictionaries)?;
     let mut context =
         ResponseTransformContext::new(&executed.snapshot, &mut residual, head.format(), limits);
+    context.set_restore_tools(restore_tools);
     if inspection
         .as_deref()
         .is_some_and(ProxyInspectionLogicalV1::owner_restored_response_projection_selected)
@@ -3733,20 +3749,50 @@ fn validate_legacy_response_models(
     Ok(())
 }
 
-/// Restores every surface in its own syntax. `json_output` is the request's
-/// [`ProviderAdapter::requests_json_output`] answer, which resolves
+/// Restores every surface whose sink restores, in its own syntax. `json_output` is the
+/// request's [`ProviderAdapter::requests_json_output`] answer, which resolves
 /// [`SurfaceSyntax::ModelOutput`].
 fn restore_surfaces(
     session: &Session,
     surfaces: Vec<crate::adapter::PiiSurface<'_>>,
     json_output: bool,
+    restore_tools: &BTreeSet<String>,
 ) {
     for surface in surfaces {
+        if !sink_restores(&surface.sink, restore_tools) {
+            continue;
+        }
         *surface.text = restore_text(
             session,
             surface.text,
             restores_into_json_string(surface.syntax, json_output),
         );
+    }
+}
+
+/// Whether a surface going to `sink` restores: assistant text does, a tool's arguments only for
+/// a declared tool, and everything else keeps its tokens.
+fn sink_restores(sink: &RestoreSink, restore_tools: &BTreeSet<String>) -> bool {
+    match sink {
+        RestoreSink::Display => true,
+        RestoreSink::ToolInput(Some(tool)) => restore_tools.contains(tool),
+        _ => false,
+    }
+}
+
+/// The sink of a joined stream, from the sinks of its fragments: one kind throughout, with at
+/// most one tool name. Anything else keeps the stream's tokens.
+fn merge_stream_sink(current: Option<RestoreSink>, next: &RestoreSink) -> RestoreSink {
+    match (current, next) {
+        (None, next) => next.clone(),
+        (Some(RestoreSink::Display), RestoreSink::Display) => RestoreSink::Display,
+        (Some(RestoreSink::ToolInput(a)), RestoreSink::ToolInput(b)) => match (a, b) {
+            (None, b) => RestoreSink::ToolInput(b.clone()),
+            (Some(a), None) => RestoreSink::ToolInput(Some(a)),
+            (Some(a), Some(b)) if a == *b => RestoreSink::ToolInput(Some(a)),
+            _ => RestoreSink::Withheld,
+        },
+        _ => RestoreSink::Withheld,
     }
 }
 
@@ -3824,6 +3870,7 @@ fn transform_sse(
     session: &Session,
     bytes: &[u8],
     json_output: bool,
+    restore_tools: &BTreeSet<String>,
     validate_models: &mut impl FnMut(&Value) -> Result<(), ProxyError>,
 ) -> Result<Vec<u8>, ProxyError> {
     let text = std::str::from_utf8(bytes).map_err(|err| ProxyError::SsePartialFrame {
@@ -3868,15 +3915,42 @@ fn transform_sse(
         validate_models(&event.data)?;
     }
 
-    // Pass 1: the logical text of every stream, in event order.
+    // Pass 1: the logical text and sink of every stream, in event order, and the tool name
+    // each stream is bound to. A stream bound to two names is bound to none.
     let mut streams = HashMap::<SseStreamKey, String>::new();
+    let mut stream_sinks = HashMap::<SseStreamKey, RestoreSink>::new();
+    let mut tool_names = HashMap::<SseStreamKey, Option<String>>::new();
+    let mut bind = |stream: SseStreamKey, tool: &str| {
+        tool_names
+            .entry(stream)
+            .and_modify(|bound| {
+                if bound.as_deref() != Some(tool) {
+                    *bound = None;
+                }
+            })
+            .or_insert_with(|| Some(tool.to_owned()));
+    };
     let mut ambiguous = HashSet::new();
     for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
+        // A name whose call cannot be identified may rename any compatible stream.
+        for (stream, tool) in adapter.sse_event_tool_calls(event) {
+            if stream.is_ambiguous() {
+                ambiguous.insert(stream);
+            } else {
+                bind(stream, &tool);
+            }
+        }
         for fragment in adapter.sse_event_stream_surfaces(event) {
             if let Some(stream) = fragment.stream {
                 if stream.is_ambiguous() {
                     ambiguous.insert(stream);
                 } else {
+                    if let RestoreSink::ToolInput(Some(tool)) = &fragment.surface.sink {
+                        bind(stream.clone(), tool);
+                    }
+                    let sink =
+                        merge_stream_sink(stream_sinks.remove(&stream), &fragment.surface.sink);
+                    stream_sinks.insert(stream.clone(), sink);
                     streams
                         .entry(stream)
                         .or_default()
@@ -3885,6 +3959,19 @@ fn transform_sse(
             }
         }
     }
+    // A joined stream restores when its sink does, with a tool call named by its binding.
+    let restoring_streams: HashSet<SseStreamKey> = stream_sinks
+        .into_iter()
+        .filter_map(|(stream, sink)| {
+            let sink = match sink {
+                RestoreSink::ToolInput(_) => {
+                    RestoreSink::ToolInput(tool_names.get(&stream).cloned().flatten())
+                }
+                sink => sink,
+            };
+            sink_restores(&sink, restore_tools).then_some(stream)
+        })
+        .collect();
 
     // An unidentified fragment may belong to any compatible stream, including streams not
     // seen until later. Fall back for the whole affected stream, never bridge across it.
@@ -3897,18 +3984,34 @@ fn transform_sse(
         })
         .cloned()
         .collect();
-    streams.retain(|stream, _| !ambiguous_streams.contains(stream));
+    streams.retain(|stream, _| {
+        !ambiguous_streams.contains(stream) && restoring_streams.contains(stream)
+    });
 
-    // Pass 2: restore complete/ambiguous surfaces in place, and trusted streams once.
+    // Pass 2: restore complete/ambiguous surfaces in place, and trusted streams once. A
+    // surface or stream whose sink does not restore keeps its text, tokens included.
     for event in frames.iter_mut().filter_map(|frame| frame.event.as_mut()) {
         for fragment in adapter.sse_event_stream_surfaces(event) {
             let surface = fragment.surface;
             let into_json_string = restores_into_json_string(surface.syntax, json_output);
+            let streamed = fragment.stream.is_some();
             let logical = match fragment.stream {
                 Some(stream) if !stream.is_ambiguous() && !ambiguous_streams.contains(&stream) => {
+                    if !restoring_streams.contains(&stream) {
+                        continue;
+                    }
                     streams.remove(&stream)
                 }
-                _ => Some(std::mem::take(surface.text)),
+                _ => {
+                    // A tool-call fragment restores only through its stream's name binding,
+                    // which an ambiguous stream does not have.
+                    let unbound_tool_fragment =
+                        streamed && matches!(surface.sink, RestoreSink::ToolInput(_));
+                    if unbound_tool_fragment || !sink_restores(&surface.sink, restore_tools) {
+                        continue;
+                    }
+                    Some(std::mem::take(surface.text))
+                }
             };
             *surface.text = match logical {
                 Some(logical) => restore_text(session, &logical, into_json_string),
@@ -4460,18 +4563,8 @@ mod tests {
             &session,
             crate::RequestSurfaces {
                 strings: vec![
-                    crate::adapter::PiiSurface {
-                        field_path: "$.first".into(),
-                        field: None,
-                        text: &mut first,
-                        syntax: SurfaceSyntax::Text,
-                    },
-                    crate::adapter::PiiSurface {
-                        field_path: "$.second".into(),
-                        field: None,
-                        text: &mut second,
-                        syntax: SurfaceSyntax::Text,
-                    },
+                    crate::adapter::PiiSurface::new("$.first", &mut first, SurfaceSyntax::Text),
+                    crate::adapter::PiiSurface::new("$.second", &mut second, SurfaceSyntax::Text),
                 ],
             },
             &[LocaleTag::Global],
@@ -6130,6 +6223,7 @@ mod tests {
             &pipeline,
             &[LocaleTag::Global],
             &DictionaryBundle::default(),
+            &BTreeSet::new(),
             &crate::codecs::anthropic::AnthropicMessagesCodec,
             executed,
             CodecLimits::default(),

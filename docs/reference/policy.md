@@ -1063,6 +1063,7 @@ environment.
 ```toml
 [proxy]
 anthropic_betas = ["claude-code-20250219", "effort-2025-11-24"]
+restore_tools = ["save_contact"]
 ```
 
 `anthropic_betas` defaults to an empty array of strings. Each entry permits exactly
@@ -1070,6 +1071,15 @@ one value in the Anthropic proxy's comma-separated `anthropic-beta` header.
 The proxy validates entries at startup. Empty entries, commas and non-visible
 ASCII are rejected. Repeatable `proxy serve --anthropic-beta` values extend
 this list. Entries never bypass body inspection or enable unknown fields.
+
+`restore_tools` defaults to an empty array. Proxy restore is sink-scoped: the
+assistant text the client shows its user restores, and a model's tool-call
+arguments restore only when this list names the tool exactly. The arguments of
+every other tool, tool results, documents, reasoning and thought summaries keep
+their tokens, so originals never reach a tool or service you did not declare.
+A token the model writes into one of those places stays a token. Declare only
+the tools that must act on original values. Names match exactly; `gaze proxy
+serve` rejects empty or padded names at startup.
 
 See the [Anthropic contract](../explanation/proxy/anthropic-messages-contract.md)
 for supported request schemas and explicit refusals.
