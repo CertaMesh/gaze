@@ -787,7 +787,8 @@ any change to it.
 The [capture-closure specification](../../docs/reference/benchmarks/specifications/0ab3d4fd1c56b40e6248fd718aa4838327dc551c50351cacb80a1b116855cbf0.json)
 adds `capture_closure`, which makes per-layer sub-specifications possible (see below).
 The [comma-address specification](../../docs/reference/benchmarks/specifications/bf210cfc9d84d50a740b0536992466edd593237ab61b548d9207ce03892aa609.json) adds comma-separated address and benign table cells.
-The [current specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [generator v33 specification](../../docs/reference/benchmarks/specifications/b75c0525a54b518f896f859c850f5ef075fa7455002529e4cc93e0911e2c1a12.json) adds generator v33's prose ID cells and pins their rule IDs. Identical values appear as personal logins, release tags and software counters.
+The [current specification](../../docs/reference/benchmarks/specifications/cbaaef175ec449ec5586be7255e65ff8c575a28883a2a530d27246d1d9fb0ecc.json) adds generator v34's escaped-separator identifiers, benign controls and exact-source repeats.
 Previous manifests retain their original identities.
 Preserve old manifests when the specification changes. Binary, policy, models, host,
 and measured Git revision remain subject provenance. Changing those subject

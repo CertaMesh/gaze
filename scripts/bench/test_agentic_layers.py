@@ -30,8 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # generator_version and these hashes together: a silent corpus change would
 # make base and candidate scorecards measure different documents.
 PINNED_CORPUS_SHA256 = {
-    "dev": "01f148c88b6f438f66cea88e98ef5d160480b7c2fcb23250473ee16badbc2b6a",
-    "test": "30c18e267516f1203e9592285a83d5a1563c0f7365618024fb101e6840e95ee2",
+    "dev": "c957986e73229ad76a4c7603d215669fd500aaa9ef5253299e82d7902258d2db",
+    "test": "f44525cc22a5737121f1662b0424d8835f068e1ee07d37917438f26b8c9462ab",
 }
 # v9: everything before the URL cells.
 V9_CORPUS_SHA256 = {
@@ -469,6 +469,12 @@ class RepeatSliceTests(unittest.TestCase):
     def test_layer_a_and_d_records_carry_no_decoy_key(self) -> None:
         # Address cells record their benign designators as decoys.
         for record in agentic.generate("test"):
+            if record.layer == "D" and record.surface.startswith(agentic.escaped_separators.SURFACE_PREFIX):
+                # This slice annotates the complete source spelling of its benign twin.
+                decoy, = record.decoys
+                self.assertFalse(record.gold)
+                self.assertEqual(record.text.encode()[decoy.start:decoy.end], decoy.value.encode())
+                continue
             if record.surface == "inventory_count_csv":
                 (count,) = record.decoys
                 self.assertEqual(record.gold, ())
