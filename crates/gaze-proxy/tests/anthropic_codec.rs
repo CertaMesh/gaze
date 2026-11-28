@@ -78,6 +78,41 @@ impl ResponseResidualValidator for SyntheticResidualValidator {
     }
 }
 
+/// Refuses every complete address (`local@domain`) outside an authorized range, as the pipeline's residual
+/// does: a format-preserving fake (`email1.<hex>@gaze-fake.invalid`) is email-shaped too.
+struct EmailShapedResidualValidator;
+
+impl ResponseResidualValidator for EmailShapedResidualValidator {
+    fn validate(
+        &mut self,
+        value: &str,
+        authorized_output_ranges: &[std::ops::Range<usize>],
+    ) -> Result<(), CodecErrorCode> {
+        let is_word = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '@');
+        let mut start = None;
+        for (index, c) in value.char_indices().chain([(value.len(), ' ')]) {
+            match (is_word(c), start) {
+                (true, None) => start = Some(index),
+                (false, Some(begin)) => {
+                    start = None;
+                    let covered = authorized_output_ranges
+                        .iter()
+                        .any(|range| range.start <= begin && range.end >= index);
+                    let word = &value[begin..index];
+                    let address = word
+                        .find('@')
+                        .is_some_and(|at| at > 0 && at + 1 < word.len());
+                    if address && !covered {
+                        return Err(CodecErrorCode::ProviderOriginPii);
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
+
 struct AllowAllResidualValidator;
 
 impl ResponseResidualValidator for AllowAllResidualValidator {
@@ -1738,5 +1773,55 @@ fn withheld_fields_keep_tokens_but_still_refuse_tokens_the_session_never_minted(
     assert_eq!(
         restore(response(&forged)).unwrap_err().code(),
         CodecErrorCode::RestoreFailedClosed
+    );
+}
+
+#[test]
+fn withheld_string_arrays_prove_the_restored_reading_like_their_elements() {
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let fake = transaction
+        .format_preserving_fake(&PiiClass::Email, EMAIL)
+        .unwrap();
+    // An original the mutable-text guard rejects; its emitted token is what the guard reads.
+    let link = transaction
+        .tokenize(
+            &PiiClass::Custom("report_link".into()),
+            "https://example.invalid/report",
+        )
+        .unwrap();
+    let snapshot = transaction.commit().unwrap();
+    // `elements` are the array's JSON string elements, written between its brackets.
+    let response = |elements: &str| {
+        format!(
+            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"tool_use","id":"toolu_1","name":"undeclared","input":{{"to":[{elements}]}}}},{{"type":"tool_result","tool_use_id":"toolu_0","content":[{elements}]}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":2}}}}"#
+        )
+    };
+    let quoted = |value: &str| format!("\"{value}\"");
+    let restore = |body: String| {
+        let mut residual = EmailShapedResidualValidator;
+        let mut context = ResponseTransformContext::new(
+            &snapshot,
+            &mut residual,
+            WireFormat::Json,
+            CodecLimits::default(),
+        );
+        codec
+            .restore_response(body.as_bytes(), &mut context)
+            .map(|proved| String::from_utf8(proved.bytes().to_vec()).unwrap())
+    };
+    let output = restore(response(&quoted(&fake))).unwrap();
+    assert_eq!(output.matches(fake.as_str()).count(), 2);
+    assert!(!output.contains(EMAIL));
+    let output = restore(response(&quoted(&link))).unwrap();
+    assert_eq!(output.matches(link.as_str()).count(), 2);
+    assert!(!output.contains("https://"));
+    // The joined proof still runs: each half of this address passes alone, the array refuses.
+    assert_eq!(
+        restore(response(r#""carol","@example.invalid""#))
+            .unwrap_err()
+            .code(),
+        CodecErrorCode::ProviderOriginPii
     );
 }
